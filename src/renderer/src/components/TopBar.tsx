@@ -45,7 +45,7 @@ export function TopBar({
   const itemName = getItemName()
 
   return (
-    <div className="app-drag-region flex h-[44px] shrink-0 items-center border-b border-[var(--line)] bg-[var(--panel)]">
+    <div className="app-drag-region flex h-[44px] w-full shrink-0 items-center border-b border-[var(--line)] bg-[var(--panel)]">
       {/* Left spacer for traffic lights */}
       <div className="w-[80px] shrink-0" />
 

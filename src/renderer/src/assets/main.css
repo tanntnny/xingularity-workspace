@@ -164,6 +164,12 @@
     background-color: var(--background);
     color: var(--foreground);
   }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 }
 
 /* Electron window drag regions */

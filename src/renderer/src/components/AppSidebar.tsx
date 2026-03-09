@@ -38,18 +38,15 @@ export function AppSidebar({ activePage, onChange, notesCount }: AppSidebarProps
 
   return (
     <Sidebar collapsible="icon">
-      {/* Empty spacer for top bar area - traffic lights live in TopBar now */}
-      <SidebarHeader className="app-drag-region h-[44px] shrink-0" />
-
-      {/* Sidebar title row - separate from top bar */}
-      <div className="flex h-[50px] shrink-0 items-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:justify-center">
+      {/* Sidebar title row - matches content header height */}
+      <SidebarHeader className="flex h-[60px] shrink-0 items-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:justify-center">
         <span className="text-base font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
           Beacon
         </span>
         <span className="text-base font-semibold text-sidebar-foreground hidden group-data-[collapsible=icon]:block">
           B
         </span>
-      </div>
+      </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>

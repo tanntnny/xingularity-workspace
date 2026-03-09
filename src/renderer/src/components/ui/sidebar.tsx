@@ -199,7 +199,7 @@ const Sidebar = React.forwardRef<
       return (
         <div
           className={cn(
-            'fixed inset-0 z-50 bg-black/50 transition-opacity',
+            'fixed top-[44px] inset-x-0 bottom-0 z-50 bg-black/50 transition-opacity',
             openMobile ? 'opacity-100' : 'pointer-events-none opacity-0'
           )}
           onClick={() => setOpenMobile(false)}
@@ -208,7 +208,7 @@ const Sidebar = React.forwardRef<
             data-sidebar="sidebar"
             data-mobile="true"
             className={cn(
-              'fixed inset-y-0 z-50 flex h-svh w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out',
+              'fixed top-[44px] bottom-0 z-50 flex h-[calc(100svh-44px)] w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out',
               side === 'left'
                 ? 'left-0 border-r border-sidebar-border'
                 : 'right-0 border-l border-sidebar-border',
@@ -243,7 +243,7 @@ const Sidebar = React.forwardRef<
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            'relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear',
+            'relative h-[calc(100svh-44px)] w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear',
             'group-data-[collapsible=offcanvas]:w-0',
             'group-data-[side=right]:rotate-180',
             variant === 'floating' || variant === 'inset'
@@ -253,7 +253,7 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            'fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex',
+            'fixed top-[44px] bottom-0 z-10 hidden h-[calc(100svh-44px)] w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex',
             side === 'left'
               ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
               : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
@@ -418,7 +418,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
         ref={ref}
         data-sidebar="content"
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden border-t border-[var(--line)]',
+          'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
           className
         )}
         {...props}

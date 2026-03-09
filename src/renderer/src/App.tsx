@@ -1514,7 +1514,7 @@ function App(): ReactElement {
         <SidebarInset className="text-[var(--text)] antialiased [font-family:var(--app-font-family)] [background:radial-gradient(circle_at_7%_20%,var(--bg-radial-a)_0%,transparent_42%),radial-gradient(circle_at_95%_82%,var(--bg-radial-b)_0%,transparent_38%),var(--bg)]">
           <div className="flex h-full flex-col">
             {/* Header Row */}
-            <div className="app-drag-region flex h-[74px] shrink-0 border-b border-[var(--line)]">
+            <div className="app-drag-region flex h-[60px] shrink-0 border-b border-[var(--line)]">
               {/* Middle panel header */}
               <header className={`${headerCellClass} w-[320px] shrink-0 border-r`}>
                 <div className="app-no-drag flex items-center gap-2">
@@ -1866,7 +1866,7 @@ function App(): ReactElement {
             <div className="flex flex-1 min-h-0">
               {/* Middle panel - hidden on calendar page */}
               {activePage !== 'calendar' && (
-                <section className={`${bodyCellClass} w-[320px] shrink-0 border-r`}>
+                <section className={`${bodyCellClass} w-[320px] shrink-0 border-r overflow-y-auto`}>
                   {activePage === 'notes' ? (
                     <NotePreviewList
                       notes={notes}
@@ -2025,20 +2025,7 @@ function App(): ReactElement {
                   )
                 ) : activePage === 'calendar' ? (
                   <div className="flex h-full">
-                    <div className="flex-1 overflow-hidden">
-                      <CalendarMonthView
-                        selectedDate={selectedCalendarDate}
-                        tasksByDate={tasksByDate}
-                        onSelectDate={setSelectedCalendarDate}
-                        onRescheduleTask={(taskId, newDate) => {
-                          void rescheduleCalendarTask(taskId, newDate)
-                        }}
-                        onToggleTask={(taskId) => {
-                          void toggleCalendarTask(taskId)
-                        }}
-                      />
-                    </div>
-                    <div className="w-80 shrink-0 border-l border-[var(--line)]">
+                    <div className="w-80 shrink-0 border-r border-[var(--line)]">
                       <UnscheduledTaskList
                         tasks={unscheduledTasks}
                         onToggle={(taskId) => {
@@ -2055,6 +2042,19 @@ function App(): ReactElement {
                         }}
                         onCreate={(title) => {
                           void createUnscheduledTask(title)
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <CalendarMonthView
+                        selectedDate={selectedCalendarDate}
+                        tasksByDate={tasksByDate}
+                        onSelectDate={setSelectedCalendarDate}
+                        onRescheduleTask={(taskId, newDate) => {
+                          void rescheduleCalendarTask(taskId, newDate)
+                        }}
+                        onToggleTask={(taskId) => {
+                          void toggleCalendarTask(taskId)
                         }}
                       />
                     </div>

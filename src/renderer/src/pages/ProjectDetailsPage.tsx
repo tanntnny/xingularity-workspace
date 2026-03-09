@@ -809,14 +809,14 @@ export function ProjectDetailsPage({
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex flex-col shrink-0 bg-[var(--panel)] px-8 py-2 gap-2">
-        <div className="flex items-center border-y border-[var(--line)] py-2">
+      <div className="flex flex-col shrink-0 gap-2 bg-[var(--panel)] px-8 py-2">
+        <div className="flex items-center justify-between gap-2 border-y border-[var(--line)] py-2">
           <ButtonGroup
             variant="default"
             size="default"
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
-            className="rounded-xl bg-[color-mix(in_srgb,var(--panel-2)_78%,var(--panel))]"
+            className="rounded-xl border border-[var(--line)] bg-[color-mix(in_srgb,var(--panel-2)_78%,var(--panel))]"
           >
             <ButtonGroupItem
               value="milestones"
@@ -831,6 +831,81 @@ export function ProjectDetailsPage({
               Project Notes
             </ButtonGroupItem>
           </ButtonGroup>
+
+          <div className="flex items-center gap-2">
+            {activeTab === 'milestones' && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                onClick={() => setIsCreatingMilestone(true)}
+              >
+                + New milestone
+              </button>
+            )}
+
+            {activeTab === 'notes' && (
+              <>
+                {onAddTagToNote && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                      onClick={() => setIsNotePickerOpen((current) => !current)}
+                    >
+                      <Link size={14} className="mr-1" />
+                      Link Existing
+                    </button>
+                    {isNotePickerOpen && (
+                      <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-2 shadow-xl">
+                        <input
+                          type="text"
+                          placeholder="Search notes..."
+                          value={notePickerSearchQuery}
+                          onChange={(e) => setNotePickerSearchQuery(e.target.value)}
+                          className="mb-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                          autoFocus
+                        />
+                        {availableNotesForAssociation.length === 0 ? (
+                          <p className="px-2 py-3 text-center text-xs text-[var(--muted)]">
+                            {notePickerSearchQuery.trim()
+                              ? 'No matching notes found'
+                              : 'All notes are already linked'}
+                          </p>
+                        ) : (
+                          <div className="max-h-48 overflow-y-auto">
+                            {availableNotesForAssociation.map((note) => (
+                              <button
+                                key={note.relPath}
+                                type="button"
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--accent-soft)]"
+                                onClick={() => {
+                                  onAddTagToNote(note.relPath, projectTag)
+                                  setIsNotePickerOpen(false)
+                                  setNotePickerSearchQuery('')
+                                }}
+                              >
+                                <FileText size={14} className="shrink-0 text-[var(--muted)]" />
+                                <span className="truncate">{note.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                  onClick={onCreateProjectNote}
+                >
+                  <Plus size={14} className="mr-1" />
+                  New Note
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -838,68 +913,8 @@ export function ProjectDetailsPage({
       {activeTab === 'notes' && (
         <section className="px-8 pb-6">
           <div className="p-4">
-            <div className="flex items-center justify-end gap-2">
-              {onAddTagToNote && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
-                    onClick={() => setIsNotePickerOpen((current) => !current)}
-                  >
-                    <Link size={14} className="mr-1" />
-                    Link Existing
-                  </button>
-                  {isNotePickerOpen && (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-2 shadow-xl">
-                      <input
-                        type="text"
-                        placeholder="Search notes..."
-                        value={notePickerSearchQuery}
-                        onChange={(e) => setNotePickerSearchQuery(e.target.value)}
-                        className="mb-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                        autoFocus
-                      />
-                      {availableNotesForAssociation.length === 0 ? (
-                        <p className="px-2 py-3 text-center text-xs text-[var(--muted)]">
-                          {notePickerSearchQuery.trim()
-                            ? 'No matching notes found'
-                            : 'All notes are already linked'}
-                        </p>
-                      ) : (
-                        <div className="max-h-48 overflow-y-auto">
-                          {availableNotesForAssociation.map((note) => (
-                            <button
-                              key={note.relPath}
-                              type="button"
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--accent-soft)]"
-                              onClick={() => {
-                                onAddTagToNote(note.relPath, projectTag)
-                                setIsNotePickerOpen(false)
-                                setNotePickerSearchQuery('')
-                              }}
-                            >
-                              <FileText size={14} className="shrink-0 text-[var(--muted)]" />
-                              <span className="truncate">{note.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                className="inline-flex items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
-                onClick={onCreateProjectNote}
-              >
-                <Plus size={14} className="mr-1" />
-                New Note
-              </button>
-            </div>
-
             {projectNotes.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] p-6 text-center">
+              <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] p-6 text-center">
                 <FileText size={32} className="mx-auto mb-2 text-[var(--muted)]" />
                 <p className="text-sm text-[var(--muted)]">No notes linked to this project yet.</p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
@@ -907,7 +922,7 @@ export function ProjectDetailsPage({
                 </p>
               </div>
             ) : (
-              <div className="mt-3 space-y-2">
+              <div className="space-y-2">
                 {projectNotes.map((note) => (
                   <div
                     key={note.relPath}
@@ -962,19 +977,8 @@ export function ProjectDetailsPage({
       {activeTab === 'milestones' && (
         <section className="px-8 pb-8">
           <div className="p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-[var(--text)]">Milestones</h3>
-              <button
-                type="button"
-                className="inline-flex items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
-                onClick={() => setIsCreatingMilestone(true)}
-              >
-                + New milestone
-              </button>
-            </div>
-
             {isCreatingMilestone ? (
-              <div className="mt-3 rounded-xl border border-dashed border-[var(--accent)] bg-[var(--panel)] p-3">
+              <div className="rounded-xl border border-dashed border-[var(--accent)] bg-[var(--panel)] p-3">
                 <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
                   <input
                     type="text"

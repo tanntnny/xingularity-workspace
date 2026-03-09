@@ -1,5 +1,5 @@
 import { ReactElement, useState, useRef, useEffect, DragEvent } from 'react'
-import { Check, Circle, Trash2, Flag, Plus, Pencil } from 'lucide-react'
+import { Check, Trash2, Flag, Plus, Pencil, CalendarPlus } from 'lucide-react'
 import { CalendarTask, TaskPriority } from '../../../shared/types'
 import {
   ContextMenu,
@@ -12,10 +12,28 @@ import {
   ContextMenuTrigger
 } from './ui/context-menu'
 
-const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string }> = {
-  high: { label: 'High', color: '#ef4444' },
-  medium: { label: 'Medium', color: '#f59e0b' },
-  low: { label: 'Low', color: '#22c55e' }
+const PRIORITY_CONFIG: Record<
+  TaskPriority,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  high: {
+    label: 'High',
+    color: '#ef4444',
+    bg: 'bg-red-50 dark:bg-red-950/30',
+    border: 'border-red-200 dark:border-red-800/50'
+  },
+  medium: {
+    label: 'Medium',
+    color: '#f59e0b',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    border: 'border-amber-200 dark:border-amber-800/50'
+  },
+  low: {
+    label: 'Low',
+    color: '#22c55e',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    border: 'border-emerald-200 dark:border-emerald-800/50'
+  }
 }
 
 interface UnscheduledTaskListProps {
@@ -93,19 +111,27 @@ export function UnscheduledTaskList({
   }
 
   const pendingCount = tasks.filter((t) => !t.completed).length
+  const completedCount = tasks.filter((t) => t.completed).length
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden bg-[var(--panel)]">
       {/* Header */}
-      <div className="shrink-0 border-b border-[var(--line)] px-4 py-3">
-        <h2 className="text-base font-semibold text-[var(--text)]">Unscheduled Tasks</h2>
-        <p className="mt-0.5 text-xs text-[var(--muted)]">
-          {pendingCount} pending · Drag to calendar to schedule
-        </p>
+      <div className="shrink-0 px-4 py-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
+            <CalendarPlus size={16} className="text-[var(--accent)]" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--text)]">Unscheduled</h2>
+            <p className="text-xs text-[var(--muted)]">
+              {pendingCount} pending{completedCount > 0 && ` · ${completedCount} done`}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Add task input */}
-      <div className="shrink-0 border-b border-[var(--line)] px-4 py-3">
+      <div className="shrink-0 px-4 pb-3">
         <div className="flex gap-2">
           <input
             type="text"
@@ -116,23 +142,29 @@ export function UnscheduledTaskList({
                 handleCreateTask()
               }
             }}
-            placeholder="Add a new task..."
-            className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] placeholder-[var(--muted)] outline-none focus:border-[var(--accent)]"
+            placeholder="Add a task..."
+            className="flex-1 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--muted)] outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
           />
           <button
             type="button"
             onClick={handleCreateTask}
             disabled={!newTaskTitle.trim()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-white disabled:opacity-50 disabled:hover:bg-[var(--accent-soft)] disabled:hover:text-[var(--accent)]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-sm transition-all hover:bg-[var(--accent)]/90 hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[var(--accent)]"
             title="Add task"
           >
             <Plus size={18} />
           </button>
         </div>
+        <p className="mt-2 text-center text-[11px] text-[var(--muted)]">
+          Drag tasks to the calendar to schedule
+        </p>
       </div>
 
+      {/* Divider */}
+      <div className="mx-4 border-t border-[var(--line)]" />
+
       {/* Task list */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex-1 overflow-auto px-4 py-3">
         <div className="flex flex-col gap-2">
           {tasks.map((task) => {
             const isEditing = editingTaskId === task.id
@@ -148,28 +180,28 @@ export function UnscheduledTaskList({
                       e.dataTransfer.setData('text/plain', task.id)
                       e.dataTransfer.effectAllowed = 'move'
                     }}
-                    className={`flex w-full cursor-grab items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors active:cursor-grabbing ${
+                    className={`group flex w-full cursor-grab items-start gap-3 rounded-xl border p-3 shadow-sm transition-all duration-150 active:cursor-grabbing active:shadow-md ${
                       task.completed
                         ? 'border-[var(--line)] bg-[var(--panel-2)] opacity-60'
-                        : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                        : `${priorityConfig.bg} ${priorityConfig.border} hover:shadow-md`
                     }`}
                   >
                     {/* Checkbox */}
                     <button
                       type="button"
                       onClick={() => onToggle(task.id)}
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                         task.completed
                           ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                          : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
+                          : 'border-[var(--line-strong)] bg-[var(--panel)] hover:border-[var(--accent)] hover:scale-110'
                       }`}
                       title={task.completed ? 'Mark as pending' : 'Mark as complete'}
                     >
-                      {task.completed ? <Check size={12} /> : <Circle size={12} />}
+                      {task.completed ? <Check size={12} strokeWidth={3} /> : null}
                     </button>
 
                     {/* Task content */}
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                       {isEditing ? (
                         <input
                           ref={editInputRef}
@@ -184,13 +216,13 @@ export function UnscheduledTaskList({
                               cancelEdit()
                             }
                           }}
-                          className="w-full rounded-md border border-[var(--accent-line)] bg-[var(--panel)] px-2 py-1 text-sm font-medium text-[var(--text)] outline-none"
+                          className="w-full rounded-lg border border-[var(--accent-line)] bg-[var(--panel)] px-2 py-1 text-sm font-medium text-[var(--text)] outline-none"
                         />
                       ) : (
                         <button
                           type="button"
                           onClick={() => startEditing(task)}
-                          className={`truncate text-left text-sm font-medium text-[var(--text)] hover:text-[var(--accent)] ${
+                          className={`truncate text-left text-sm font-medium text-[var(--text)] transition-colors hover:text-[var(--accent)] ${
                             task.completed ? 'line-through' : ''
                           }`}
                           title="Click to edit"
@@ -204,16 +236,19 @@ export function UnscheduledTaskList({
                         <button
                           type="button"
                           onClick={() => setPriorityMenuTaskId(showPriorityMenu ? null : task.id)}
-                          className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-[11px] text-[var(--muted)] hover:border-[var(--accent)]"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]"
                           title="Change priority"
                         >
-                          <Flag size={10} style={{ color: priorityConfig.color }} />
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: priorityConfig.color }}
+                          />
                           {priorityConfig.label}
                         </button>
                         {showPriorityMenu && (
                           <div
                             ref={priorityMenuRef}
-                            className="absolute left-0 top-full z-10 mt-1 w-24 rounded-lg border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                            className="absolute left-0 top-full z-10 mt-1 w-28 rounded-xl border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
                           >
                             {(['high', 'medium', 'low'] as TaskPriority[]).map((priority) => {
                               const config = PRIORITY_CONFIG[priority]
@@ -225,11 +260,16 @@ export function UnscheduledTaskList({
                                     onUpdatePriority(task.id, priority)
                                     setPriorityMenuTaskId(null)
                                   }}
-                                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--panel-2)] ${
-                                    task.priority === priority ? 'bg-[var(--accent-soft)]' : ''
+                                  className={`flex w-full items-center gap-2 px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--panel-2)] ${
+                                    task.priority === priority
+                                      ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                                      : 'text-[var(--text)]'
                                   }`}
                                 >
-                                  <Flag size={10} style={{ color: config.color }} />
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: config.color }}
+                                  />
                                   {config.label}
                                 </button>
                               )
@@ -239,11 +279,11 @@ export function UnscheduledTaskList({
                       </div>
                     </div>
 
-                    {/* Delete button */}
+                    {/* Delete button - visible on hover */}
                     <button
                       type="button"
                       onClick={() => onDelete(task.id)}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-red-400 hover:text-red-500"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-transparent bg-transparent text-[var(--muted)] opacity-0 transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:hover:border-red-800 dark:hover:bg-red-950/30"
                       title="Delete task"
                     >
                       <Trash2 size={14} />
@@ -268,7 +308,10 @@ export function UnscheduledTaskList({
                             key={priority}
                             onClick={() => onUpdatePriority(task.id, priority)}
                           >
-                            <Flag className="mr-2 h-4 w-4" style={{ color: config.color }} />
+                            <span
+                              className="mr-2 h-2 w-2 rounded-full"
+                              style={{ backgroundColor: config.color }}
+                            />
                             {config.label}
                             {task.priority === priority && <Check className="ml-auto h-4 w-4" />}
                           </ContextMenuItem>
@@ -291,8 +334,14 @@ export function UnscheduledTaskList({
 
           {/* Empty state */}
           {tasks.length === 0 && (
-            <div className="py-8 text-center text-sm text-[var(--muted)]">
-              No unscheduled tasks. Add one above or drag tasks here from the calendar.
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--panel-2)]">
+                <CalendarPlus size={24} className="text-[var(--muted)]" />
+              </div>
+              <p className="text-sm font-medium text-[var(--text)]">No unscheduled tasks</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Add a task above or drag from calendar
+              </p>
             </div>
           )}
         </div>
