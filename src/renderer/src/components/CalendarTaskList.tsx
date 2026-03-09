@@ -558,7 +558,7 @@ export function CalendarTaskList({
                         <button
                           type="button"
                           onClick={() => startEditing(task)}
-                          className={`truncate text-left text-base font-medium text-[var(--text)] hover:text-[var(--accent)] ${
+                          className={`w-full text-left text-base font-medium text-[var(--text)] hover:text-[var(--accent)] whitespace-normal break-words ${
                             task.completed ? 'line-through' : ''
                           }`}
                           title="Click to edit"
@@ -886,7 +886,7 @@ export function CalendarTaskList({
 
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <span
-                    className={`truncate text-base font-medium text-[var(--text)] ${
+                    className={`text-base font-medium text-[var(--text)] whitespace-normal break-words ${
                       item.completed ? 'line-through' : ''
                     }`}
                   >

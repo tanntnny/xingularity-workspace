@@ -30,8 +30,6 @@ const PRIORITY_COLORS: Record<TaskPriority, { bg: string; border: string; dot: s
   }
 }
 
-const MAX_VISIBLE_TASKS = 3
-
 export function CalendarMonthView({
   selectedDate,
   tasksByDate,
@@ -88,9 +86,6 @@ export function CalendarMonthView({
             const isToday = iso === todayIso
             const tasks = tasksByDate[iso] || []
             const isDragOver = dragOverDate === iso
-            const visibleTasks = tasks.slice(0, MAX_VISIBLE_TASKS)
-            const hiddenCount = tasks.length - MAX_VISIBLE_TASKS
-
             // Calculate corner rounding for edge cells
             const isLastRow = index >= 35
             const isFirstCol = index % 7 === 0
@@ -153,8 +148,8 @@ export function CalendarMonthView({
                 </div>
 
                 {/* Task list - mini cards */}
-                <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
-                  {visibleTasks.map((task) => {
+                <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-0.5">
+                  {tasks.map((task) => {
                     const priorityStyle = PRIORITY_COLORS[task.priority || 'medium']
 
                     return (
@@ -198,7 +193,7 @@ export function CalendarMonthView({
 
                         {/* Title */}
                         <span
-                          className={`truncate text-xs font-medium ${
+                          className={`text-xs font-medium whitespace-normal break-words leading-tight ${
                             task.completed
                               ? 'text-[var(--muted)] line-through'
                               : 'text-[var(--text)]'
@@ -209,15 +204,6 @@ export function CalendarMonthView({
                       </div>
                     )
                   })}
-
-                  {/* Hidden count indicator */}
-                  {hiddenCount > 0 && (
-                    <div className="flex items-center gap-1 px-1 py-0.5">
-                      <span className="text-xs font-medium text-[var(--muted)]">
-                        +{hiddenCount} more
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             )

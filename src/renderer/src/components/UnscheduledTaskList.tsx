@@ -222,7 +222,7 @@ export function UnscheduledTaskList({
                         <button
                           type="button"
                           onClick={() => startEditing(task)}
-                          className={`truncate text-left text-sm font-medium text-[var(--text)] transition-colors hover:text-[var(--accent)] ${
+                          className={`w-full text-left text-sm font-medium text-[var(--text)] transition-colors hover:text-[var(--accent)] whitespace-normal break-words ${
                             task.completed ? 'line-through' : ''
                           }`}
                           title="Click to edit"

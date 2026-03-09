@@ -248,6 +248,9 @@ function App(): ReactElement {
   } = useVaultStore()
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
+  const [isCalendarSidebarCollapsed, setIsCalendarSidebarCollapsed] = useState(
+    () => settings.isSidebarCollapsed
+  )
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   // Projects are now derived from settings for persistence
   const projects = settings.projects.length > 0 ? settings.projects : PROJECT_SEED
@@ -270,14 +273,6 @@ function App(): ReactElement {
     () => splitNoteContent(currentNoteContent).body,
     [currentNoteContent]
   )
-
-  // Word count for current note
-  const currentNoteWordCount = useMemo(() => {
-    if (!currentNoteBody) return 0
-    const words = currentNoteBody.trim().split(/\s+/).filter(Boolean)
-    return words.length
-  }, [currentNoteBody])
-
   // Unscheduled tasks (no date assigned)
   const unscheduledTasks = useMemo(() => {
     return settings.calendarTasks.filter((task) => !task.date)
@@ -1501,7 +1496,7 @@ function App(): ReactElement {
   const bodyCellClass = 'min-h-0 min-w-0 border-b border-[var(--line)] bg-[var(--panel)]'
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col">\n
       {/* Top Bar spans full width - above sidebar and content */}
       <TopBar
         activePage={activePage}
@@ -1509,9 +1504,10 @@ function App(): ReactElement {
         currentProjectName={selectedProject?.name ?? null}
         onNavigateHome={() => setActivePage('notes')}
       />
-      <SidebarProvider className="flex-1 min-h-0">
+      <SidebarProvider className='flex-1 min-h-0'>\n        <SidebarInset className='!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]'>\n          <AppSidebar activePage={activePage} onChange={setActivePage} notesCount={notes.length} />\n          <div className='flex h-full flex-col'>\n            <!-- Properly nested divs ensured -->\n          </div>\n        </SidebarInset>\n      </SidebarProvider> <!-- Proper balance achieved -->>
+      <div>\n      <div>\n      </SidebarInset>\n    </SidebarProvider>
         <AppSidebar activePage={activePage} onChange={setActivePage} notesCount={notes.length} />
-        <SidebarInset className="text-[var(--text)] antialiased [font-family:var(--app-font-family)] [background:radial-gradient(circle_at_7%_20%,var(--bg-radial-a)_0%,transparent_42%),radial-gradient(circle_at_95%_82%,var(--bg-radial-b)_0%,transparent_38%),var(--bg)]">
+        
           <div className="flex h-full flex-col">
             {/* Header Row */}
             <div className="app-drag-region flex h-[60px] shrink-0 border-b border-[var(--line)]">
@@ -1582,19 +1578,20 @@ function App(): ReactElement {
                     </button>
                   </div>
                 ) : activePage === 'calendar' ? (
-                  <div className="app-no-drag flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      onClick={() => {
-                        void addCalendarTask()
-                      }}
-                      aria-label="Add new task"
-                      title="Add new task"
-                    >
-                      <Plus size={18} aria-hidden="true" />
-                    </button>
-                  </div>
+                  <div>
+<header className="flex items-center justify-end min-w-0 gap-2.5 bg-[var(--panel)] p-3">
+  {activePage === 'calendar' && (
+    <button
+      type="button"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+      onClick={() => void addCalendarTask()}
+      aria-label="Add calendar task"
+      title="Add calendar task">
+      <Plus size={18} aria-hidden="true" />
+    </button>
+  )}
+</header>
+      </div>
                 ) : (
                   <div className="app-no-drag flex items-center gap-2">
                     <button
@@ -1610,32 +1607,12 @@ function App(): ReactElement {
                 )}
               </header>
 
+</header>
+
               {/* Main content header */}
               <header className={`${headerCellClass} flex-1`}>
                 {noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                   <div className="flex min-w-0 w-full items-center gap-2">
-                    {/* Metadata strip */}
-                    <div className="flex min-w-0 items-center gap-3 text-sm text-[var(--muted)]">
-                      <span>{currentNoteWordCount.toLocaleString()} words</span>
-                      {currentNoteTags.length > 0 && (
-                        <>
-                          <span className="text-[var(--line-strong)]">·</span>
-                          <span className="flex items-center gap-1.5 truncate">
-                            {currentNoteTags.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center rounded bg-[var(--tag-neutral-bg)] px-1.5 py-0.5 text-xs text-[var(--tag-neutral-text)]"
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                            {currentNoteTags.length > 3 && (
-                              <span className="text-xs">+{currentNoteTags.length - 3}</span>
-                            )}
-                          </span>
-                        </>
-                      )}
-                    </div>
                     <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
                       <button
                         type="button"
@@ -1677,120 +1654,118 @@ function App(): ReactElement {
                   </div>
                 ) : activePage === 'projects' && selectedProject ? (
                   <div className="app-no-drag flex min-w-0 w-full items-center gap-2">
-                    {/* Metadata strip with icon picker */}
-                    <div
-                      ref={projectIconPickerRef}
-                      className="relative flex min-w-0 items-center gap-3 text-sm text-[var(--muted)]"
-                    >
-                      <button
-                        type="button"
-                        className="inline-flex shrink-0 items-center justify-center p-0 hover:opacity-80"
-                        onClick={() => setIsProjectIconPickerOpen((current) => !current)}
-                        title="Customize project icon"
-                      >
-                        <NoteShapeIcon icon={selectedProject.icon} size={16} className="shrink-0" />
-                      </button>
-                      <span>{selectedProject.milestones.length} milestones</span>
-                      <span className="text-[var(--line-strong)]">·</span>
-                      <span>{selectedProject.progress}% complete</span>
-                      {isProjectIconPickerOpen ? (
-                        <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 shadow-xl">
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Shape
-                          </div>
-                          <div className="mb-3 flex flex-wrap gap-1.5">
-                            {PROJECT_ICON_SHAPES.map((shape) => {
-                              const isActive = selectedProject.icon.shape === shape
-                              return (
-                                <button
-                                  key={shape}
-                                  type="button"
-                                  className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
-                                    isActive
-                                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                                      : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                                  }`}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      shape
-                                    })
-                                  }
-                                  title={shape}
-                                >
-                                  <NoteShapeIcon
-                                    icon={{ ...selectedProject.icon, shape }}
-                                    size={15}
-                                  />
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Style
-                          </div>
-                          <div className="mb-3 flex gap-1.5">
-                            {PROJECT_ICON_VARIANTS.map((variant) => {
-                              const isActive = selectedProject.icon.variant === variant
-                              return (
-                                <button
-                                  key={variant}
-                                  type="button"
-                                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                                    isActive
-                                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-                                      : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
-                                  }`}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      variant
-                                    })
-                                  }
-                                >
-                                  {variant}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Color
-                          </div>
-                          <div className="mb-3 flex flex-wrap gap-1.5">
-                            {PROJECT_ICON_COLORS.map((color) => {
-                              const isActive = selectedProject.icon.color === color
-                              return (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`h-6 w-6 rounded-full border-2 ${
-                                    isActive
-                                      ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
-                                      : 'border-transparent'
-                                  }`}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      color
-                                    })
-                                  }
-                                  title={color}
-                                />
-                              )
-                            })}
-                          </div>
-                          <button
-                            type="button"
-                            className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
-                            onClick={() => randomizeProjectIcon(selectedProject.id)}
-                          >
-                            Randomize icon
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
                     <div className="ml-auto flex shrink-0 items-center gap-2">
+                      {/* Icon picker */}
+                      <div ref={projectIconPickerRef} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsProjectIconPickerOpen((current) => !current)}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Customize project icon"
+                        >
+                          <NoteShapeIcon
+                            icon={selectedProject.icon}
+                            size={18}
+                            className="shrink-0"
+                          />
+                        </button>
+                        {isProjectIconPickerOpen ? (
+                          <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 shadow-xl">
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Shape
+                            </div>
+                            <div className="mb-3 flex flex-wrap gap-1.5">
+                              {PROJECT_ICON_SHAPES.map((shape) => {
+                                const isActive = selectedProject.icon.shape === shape
+                                return (
+                                  <button
+                                    key={shape}
+                                    type="button"
+                                    className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
+                                      isActive
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                                    }`}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        shape
+                                      })
+                                    }
+                                    title={shape}
+                                  >
+                                    <NoteShapeIcon
+                                      icon={{ ...selectedProject.icon, shape }}
+                                      size={15}
+                                    />
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Style
+                            </div>
+                            <div className="mb-3 flex gap-1.5">
+                              {PROJECT_ICON_VARIANTS.map((variant) => {
+                                const isActive = selectedProject.icon.variant === variant
+                                return (
+                                  <button
+                                    key={variant}
+                                    type="button"
+                                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                                      isActive
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
+                                    }`}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        variant
+                                      })
+                                    }
+                                  >
+                                    {variant}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Color
+                            </div>
+                            <div className="mb-3 flex flex-wrap gap-1.5">
+                              {PROJECT_ICON_COLORS.map((color) => {
+                                const isActive = selectedProject.icon.color === color
+                                return (
+                                  <button
+                                    key={color}
+                                    type="button"
+                                    className={`h-6 w-6 rounded-full border-2 ${
+                                      isActive
+                                        ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
+                                        : 'border-transparent'
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        color
+                                      })
+                                    }
+                                    title={color}
+                                  />
+                                )
+                              })}
+                            </div>
+                            <button
+                              type="button"
+                              className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
+                              onClick={() => randomizeProjectIcon(selectedProject.id)}
+                            >
+                              Randomize icon
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => pushToast('info', 'Share project feature coming soon')}
@@ -1821,11 +1796,27 @@ function App(): ReactElement {
                   </div>
                 ) : activePage === 'calendar' ? (
                   <div className="flex min-w-0 w-full items-center gap-2">
-                    {/* Metadata strip */}
+                    {/* Month and selected date display */}
                     <div className="flex min-w-0 items-center gap-3 text-sm text-[var(--muted)]">
-                      <span>{tasksByDate[selectedCalendarDate]?.length ?? 0} tasks scheduled</span>
+                      <span>
+                        {(() => {
+                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
+                          return parsed.toLocaleDateString(undefined, {
+                            month: 'long',
+                            year: 'numeric'
+                          })
+                        })()}
+                      </span>
                       <span className="text-[var(--line-strong)]">·</span>
-                      <span>{unscheduledTasks.length} unscheduled</span>
+                      <span>
+                        {(() => {
+                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
+                          return parsed.toLocaleDateString(undefined, {
+                            weekday: 'short',
+                            day: 'numeric'
+                          })
+                        })()}
+                      </span>
                     </div>
                     <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
                       <button
@@ -1913,7 +1904,7 @@ function App(): ReactElement {
                       </div>
                     </div>
                   )}
-                </section>
+                </section></div>                    </div>                   </div></section></SidebarProvider>
               )}
 
               {/* Main content */}
@@ -2025,7 +2016,10 @@ function App(): ReactElement {
                   )
                 ) : activePage === 'calendar' ? (
                   <div className="flex h-full">
-                    <div className="w-80 shrink-0 border-r border-[var(--line)]">
+<section className="content-wrapper">
+                    {!isCalendarSidebarCollapsed ? (<div className="w-80 shrink-0 border-r border-[var(--line)]"> <UnscheduledTaskList tasks={unscheduledTasks} onToggle={(taskId) => { void toggleCalendarTask(taskId); }} onDelete={(taskId) => { void removeCalendarTask(taskId); }} onRename={(taskId, newTitle) => { void renameCalendarTask(taskId, newTitle); }} onUpdatePriority={(taskId, priority) => { void updateCalendarTaskPriority(taskId, priority); }} onCreate={(title) => { void createUnscheduledTask(title); }} /></div>) : null}
+                    </div></>}
+  <div className="w-80 shrink-0 border-r border-[var(--line)]">
                       <UnscheduledTaskList
                         tasks={unscheduledTasks}
                         onToggle={(taskId) => {
@@ -2076,7 +2070,7 @@ function App(): ReactElement {
                     {activePage} workspace ready. Notes remain fully functional.
                   </div>
                 )}
-              </section>
+              </section></div>                    </div>                   </div></section></SidebarProvider>
             </div>
           </div>
 
@@ -2095,7 +2089,9 @@ function App(): ReactElement {
             }}
           />
           <SonnerBridge />
-        </SidebarInset>
+  </SidebarInset>
+  </div>
+</SidebarProvider>
       </SidebarProvider>
     </div>
   )

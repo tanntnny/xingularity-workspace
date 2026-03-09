@@ -127,6 +127,7 @@ export interface FileMapEntry {
 export type FileMap = Record<string, FileMapEntry>
 
 export interface AppSettings {
+  isSidebarCollapsed: boolean // Tracks if the calendar sidebar is collapsed
   lastVaultPath: Maybe<string>
   fontFamily: string
   calendarTasks: CalendarTask[]
@@ -135,6 +136,7 @@ export interface AppSettings {
 }
 
 export interface AppSettingsUpdate {
+  isSidebarCollapsed?: boolean // Optional
   fontFamily?: string
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
