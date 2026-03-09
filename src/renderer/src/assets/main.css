@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --app-font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+
+    /* Original Beacon color palette */
+    --bg: #ffffff;
+    --bg-radial-a: #ffffff;
+    --bg-radial-b: #f6f6f6;
+
+    --panel: #ffffff;
+    --panel-2: #f8f8f8;
+    --panel-3: #ededed;
+
+    --line: #d9d9d9;
+    --line-strong: #bdbdbd;
+
+    --text: #101010;
+    --muted: #5d5d5d;
+
+    --accent: #4f46e5;
+    --accent-soft: #e8eaff;
+    --accent-line: #818cf8;
+
+    --tag-neutral-bg: #f3f4f6;
+    --tag-neutral-line: #d1d5db;
+    --tag-neutral-text: #374151;
+
+    --tag-0-bg: #e0f2fe;
+    --tag-0-line: #7dd3fc;
+    --tag-0-text: #075985;
+    --tag-1-bg: #dcfce7;
+    --tag-1-line: #86efac;
+    --tag-1-text: #166534;
+    --tag-2-bg: #fef3c7;
+    --tag-2-line: #fcd34d;
+    --tag-2-text: #92400e;
+    --tag-3-bg: #ffe4e6;
+    --tag-3-line: #fda4af;
+    --tag-3-text: #9f1239;
+    --tag-4-bg: #e0e7ff;
+    --tag-4-line: #a5b4fc;
+    --tag-4-text: #3730a3;
+    --tag-5-bg: #ccfbf1;
+    --tag-5-line: #5eead4;
+    --tag-5-text: #115e59;
+
+    --danger: #dc2626;
+
+    /* Shadcn CSS variable mappings */
+    --background: var(--bg);
+    --foreground: var(--text);
+
+    --card: var(--panel);
+    --card-foreground: var(--text);
+
+    --popover: var(--panel);
+    --popover-foreground: var(--text);
+
+    --primary: var(--accent);
+    --primary-foreground: #ffffff;
+
+    --secondary: var(--panel-2);
+    --secondary-foreground: var(--text);
+
+    --muted-color: var(--panel-2);
+    --muted-foreground: var(--muted);
+
+    --accent-color: var(--accent-soft);
+    --accent-foreground: var(--accent);
+
+    --destructive: var(--danger);
+    --destructive-foreground: #ffffff;
+
+    --border: var(--line);
+    --input: var(--line);
+    --ring: var(--accent-line);
+
+    --radius: 0.75rem;
+
+    /* Sidebar specific variables */
+    --sidebar-background: var(--panel);
+    --sidebar-foreground: var(--text);
+    --sidebar-primary: var(--accent);
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: var(--accent-soft);
+    --sidebar-accent-foreground: var(--accent);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--ring);
+  }
+}
+
+@layer base {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --bg-radial-a: #000000;
+      --bg-radial-b: #070707;
+
+      --panel: #0b0b0b;
+      --panel-2: #141414;
+      --panel-3: #1d1d1d;
+
+      --line: #2f2f2f;
+      --line-strong: #474747;
+
+      --text: #ffffff;
+      --muted: #b5b5b5;
+
+      --accent: #a5b4fc;
+      --accent-soft: #1a1d36;
+      --accent-line: #6366f1;
+
+      --tag-neutral-bg: #1f2937;
+      --tag-neutral-line: #4b5563;
+      --tag-neutral-text: #e5e7eb;
+
+      --tag-0-bg: #082f49;
+      --tag-0-line: #0369a1;
+      --tag-0-text: #bae6fd;
+      --tag-1-bg: #052e16;
+      --tag-1-line: #15803d;
+      --tag-1-text: #bbf7d0;
+      --tag-2-bg: #422006;
+      --tag-2-line: #b45309;
+      --tag-2-text: #fde68a;
+      --tag-3-bg: #4c0519;
+      --tag-3-line: #be123c;
+      --tag-3-text: #fecdd3;
+      --tag-4-bg: #1e1b4b;
+      --tag-4-line: #4f46e5;
+      --tag-4-text: #c7d2fe;
+      --tag-5-bg: #042f2e;
+      --tag-5-line: #0f766e;
+      --tag-5-text: #99f6e4;
+
+      --danger: #ef4444;
+
+      /* Dark mode Shadcn mappings (auto-inherited from CSS var references) */
+      --primary-foreground: #0b0b0b;
+      --destructive-foreground: #0b0b0b;
+
+      /* Dark mode sidebar variables */
+      --sidebar-background: var(--panel);
+      --sidebar-foreground: var(--text);
+      --sidebar-primary: var(--accent);
+      --sidebar-primary-foreground: #0b0b0b;
+      --sidebar-accent: var(--accent-soft);
+      --sidebar-accent-foreground: var(--accent);
+      --sidebar-border: var(--line);
+      --sidebar-ring: var(--ring);
+    }
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
+/* Electron window drag regions */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
