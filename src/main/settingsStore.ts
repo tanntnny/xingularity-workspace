@@ -5,6 +5,7 @@ import { AppSettings } from '../shared/types'
 
 function createDefaultSettings(): AppSettings {
   return {
+    isSidebarCollapsed: false,
     lastVaultPath: null,
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],

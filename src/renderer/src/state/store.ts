@@ -40,6 +40,7 @@ export const useVaultStore = create<VaultState>((set) => ({
   searchResults: [],
   commandPaletteOpen: false,
   settings: {
+    isSidebarCollapsed: false,
     lastVaultPath: null,
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],

@@ -15,6 +15,7 @@ interface TopBarProps {
   currentNoteName: string | null
   currentProjectName: string | null
   onNavigateHome: () => void
+  currentMonthLabel?: string | null
 }
 
 const PAGE_LABELS: Record<AppPage, string> = {
@@ -29,7 +30,8 @@ export function TopBar({
   activePage,
   currentNoteName,
   currentProjectName,
-  onNavigateHome
+  onNavigateHome,
+  currentMonthLabel
 }: TopBarProps): ReactElement {
   // Determine the third breadcrumb item (specific item name)
   const getItemName = (): string | null => {
@@ -69,7 +71,28 @@ export function TopBar({
 
             <BreadcrumbSeparator className="text-[var(--line-strong)]" />
 
-            {itemName ? (
+            {activePage === 'calendar' ? (
+              <>
+                <BreadcrumbItem>
+                  <BreadcrumbLink
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    className="text-[var(--muted)] hover:text-[var(--text)]"
+                  >
+                    {PAGE_LABELS[activePage]}
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+
+                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="text-[var(--text)]">
+                    {/** fall back to page label if month not provided */}
+                    {currentMonthLabel ?? PAGE_LABELS[activePage]}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            ) : itemName ? (
               <>
                 <BreadcrumbItem>
                   <BreadcrumbLink

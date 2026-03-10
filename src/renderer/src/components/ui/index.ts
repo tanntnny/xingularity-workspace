@@ -97,6 +97,17 @@ export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
 
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption
+} from './table'
+
 export { Toaster } from './sonner'
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip'

@@ -65,6 +65,7 @@ export interface CalendarTask {
   id: string
   title: string
   date?: string // Optional - undefined means unscheduled
+  endDate?: string // Optional - if set, task spans from `date` through `endDate`
   completed: boolean
   createdAt: string
   priority: TaskPriority

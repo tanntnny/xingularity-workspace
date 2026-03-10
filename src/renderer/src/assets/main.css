@@ -91,21 +91,25 @@
     --sidebar-accent-foreground: var(--accent);
     --sidebar-border: var(--line);
     --sidebar-ring: var(--ring);
+    --sidebar-active-bg-start: #f1f2f3;
+    --sidebar-active-bg-end: #e2e4e7;
+    --sidebar-active-border-start: #d3d6db;
+    --sidebar-active-border-end: #bcc1c8;
   }
 }
 
 @layer base {
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #000000;
-      --bg-radial-a: #000000;
-      --bg-radial-b: #070707;
+      --bg: #07080a;
+      --bg-radial-a: #07080a;
+      --bg-radial-b: #07080a;
 
-      --panel: #0b0b0b;
+      --panel: #07080a;
       --panel-2: #141414;
       --panel-3: #1d1d1d;
 
-      --line: #2f2f2f;
+      --line: #18191c;
       --line-strong: #474747;
 
       --text: #ffffff;
@@ -145,7 +149,7 @@
       --destructive-foreground: #0b0b0b;
 
       /* Dark mode sidebar variables */
-      --sidebar-background: var(--panel);
+      --sidebar-background: #0b0c0d;
       --sidebar-foreground: var(--text);
       --sidebar-primary: var(--accent);
       --sidebar-primary-foreground: #0b0b0b;
@@ -153,6 +157,10 @@
       --sidebar-accent-foreground: var(--accent);
       --sidebar-border: var(--line);
       --sidebar-ring: var(--ring);
+      --sidebar-active-bg-start: #191b1e;
+      --sidebar-active-bg-end: #101214;
+      --sidebar-active-border-start: #3f4349;
+      --sidebar-active-border-end: #262a2f;
     }
   }
 

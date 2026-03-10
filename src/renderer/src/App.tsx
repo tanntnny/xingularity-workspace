@@ -43,8 +43,7 @@ import { ProjectPreviewList } from './components/ProjectPreviewList'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
 import type { AppPage } from './components/AppSidebar'
-import { TopBar } from './components/TopBar'
-import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
+import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
@@ -248,9 +247,10 @@ function App(): ReactElement {
   } = useVaultStore()
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
-  const [isCalendarSidebarCollapsed, setIsCalendarSidebarCollapsed] = useState(
+  const [_isCalendarSidebarCollapsed, _setIsCalendarSidebarCollapsed] = useState(
     () => settings.isSidebarCollapsed
   )
+  const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   // Projects are now derived from settings for persistence
   const projects = settings.projects.length > 0 ? settings.projects : PROJECT_SEED
@@ -262,9 +262,6 @@ function App(): ReactElement {
   const projectIconPickerRef = useRef<HTMLDivElement | null>(null)
 
   const noteIsOpen = Boolean(currentNotePath)
-  const currentNoteName = currentNotePath
-    ? (currentNotePath.split('/').pop() ?? currentNotePath).replace(/\.md$/i, '')
-    : ''
   const currentNoteTags = useMemo(
     () => listTagsFromMarkdown(currentNoteContent),
     [currentNoteContent]
@@ -278,20 +275,8 @@ function App(): ReactElement {
     return settings.calendarTasks.filter((task) => !task.date)
   }, [settings.calendarTasks])
 
-  // Tasks grouped by date for the calendar view
-  const tasksByDate = useMemo(() => {
-    const grouped: Record<string, CalendarTask[]> = {}
-
-    for (const task of settings.calendarTasks) {
-      if (task.date) {
-        if (!grouped[task.date]) {
-          grouped[task.date] = []
-        }
-        grouped[task.date].push(task)
-      }
-    }
-
-    return grouped
+  const scheduledCalendarTasks = useMemo(() => {
+    return settings.calendarTasks.filter((task) => Boolean(task.date))
   }, [settings.calendarTasks])
 
   const selectedProject = useMemo(
@@ -483,25 +468,7 @@ function App(): ReactElement {
     }
   }
 
-  const addCalendarTask = async (): Promise<void> => {
-    const title = window.prompt('Task title')?.trim()
-    if (!title) {
-      return
-    }
-
-    const nextTask: CalendarTask = {
-      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title,
-      date: selectedCalendarDate,
-      completed: false,
-      createdAt: new Date().toISOString(),
-      priority: 'medium',
-      reminders: []
-    }
-
-    await persistCalendarTasks([...settings.calendarTasks, nextTask])
-    pushToast('success', 'Task added')
-  }
+  // (was addCalendarTask) Add scheduled task via modal prompt — removed in favor of header input for unscheduled tasks
 
   // Create an unscheduled task (no date)
   const createUnscheduledTask = async (title: string): Promise<void> => {
@@ -518,6 +485,13 @@ function App(): ReactElement {
     }
 
     await persistCalendarTasks([...settings.calendarTasks, nextTask])
+  }
+
+  const addUnscheduledFromHeader = async (): Promise<void> => {
+    const trimmed = calendarHeaderNewTask.trim()
+    if (!trimmed) return
+    await createUnscheduledTask(trimmed)
+    setCalendarHeaderNewTask('')
   }
 
   const toggleCalendarTask = async (taskId: string): Promise<void> => {
@@ -551,18 +525,82 @@ function App(): ReactElement {
     await persistCalendarTasks(nextTasks)
   }
 
+  const updateCalendarTaskTime = async (
+    taskId: string,
+    time: string | undefined
+  ): Promise<void> => {
+    const nextTasks = settings.calendarTasks.map((task) =>
+      task.id === taskId ? { ...task, time } : task
+    )
+    await persistCalendarTasks(nextTasks)
+  }
+
   const rescheduleCalendarTask = async (
     taskId: string,
     newDate: string | undefined
   ): Promise<void> => {
-    const nextTasks = settings.calendarTasks.map((task) =>
-      task.id === taskId ? { ...task, date: newDate } : task
-    )
+    const nextTasks = settings.calendarTasks.map((task) => {
+      if (task.id !== taskId) {
+        return task
+      }
+
+      if (!newDate) {
+        return { ...task, date: undefined, endDate: undefined }
+      }
+
+      if (!task.date) {
+        return { ...task, date: newDate, endDate: undefined }
+      }
+
+      const existingEndDate = task.endDate && task.endDate >= task.date ? task.endDate : task.date
+      const durationDays = diffIsoDays(task.date, existingEndDate)
+      const movedEndDate = addIsoDays(newDate, durationDays)
+
+      return {
+        ...task,
+        date: newDate,
+        endDate: durationDays > 0 ? movedEndDate : undefined
+      }
+    })
     await persistCalendarTasks(nextTasks)
     // If scheduling to a date, switch to that date
     if (newDate) {
       setSelectedCalendarDate(newDate)
     }
+  }
+
+  const resizeCalendarTaskStart = async (taskId: string, newStartDate: string): Promise<void> => {
+    const nextTasks = settings.calendarTasks.map((task) => {
+      if (task.id !== taskId || !task.date) {
+        return task
+      }
+
+      const currentEnd = task.endDate && task.endDate >= task.date ? task.endDate : task.date
+      const clampedStart = newStartDate > currentEnd ? currentEnd : newStartDate
+
+      return {
+        ...task,
+        date: clampedStart,
+        endDate: currentEnd > clampedStart ? currentEnd : undefined
+      }
+    })
+    await persistCalendarTasks(nextTasks)
+  }
+
+  const resizeCalendarTaskEnd = async (taskId: string, newEndDate: string): Promise<void> => {
+    const nextTasks = settings.calendarTasks.map((task) => {
+      if (task.id !== taskId || !task.date) {
+        return task
+      }
+
+      const clampedEnd = newEndDate < task.date ? task.date : newEndDate
+
+      return {
+        ...task,
+        endDate: clampedEnd > task.date ? clampedEnd : undefined
+      }
+    })
+    await persistCalendarTasks(nextTasks)
   }
 
   const goToPrevMonth = (): void => {
@@ -1491,129 +1529,51 @@ function App(): ReactElement {
     throw new Error('Could not create a unique note name')
   }
 
-  const headerCellClass =
-    'flex min-h-0 min-w-0 items-center justify-between gap-2.5 bg-[var(--panel)] p-3'
-  const bodyCellClass = 'min-h-0 min-w-0 border-b border-[var(--line)] bg-[var(--panel)]'
+  const headerClass =
+    'app-drag-region flex h-[80px] shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--panel)] px-3'
 
   return (
-    <div className="flex h-screen flex-col">\n
-      {/* Top Bar spans full width - above sidebar and content */}
-      <TopBar
-        activePage={activePage}
-        currentNoteName={currentNotePath ? currentNoteName : null}
-        currentProjectName={selectedProject?.name ?? null}
-        onNavigateHome={() => setActivePage('notes')}
-      />
-      <SidebarProvider className='flex-1 min-h-0'>\n        <SidebarInset className='!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]'>\n          <AppSidebar activePage={activePage} onChange={setActivePage} notesCount={notes.length} />\n          <div className='flex h-full flex-col'>\n            <!-- Properly nested divs ensured -->\n          </div>\n        </SidebarInset>\n      </SidebarProvider> <!-- Proper balance achieved -->>
-      <div>\n      <div>\n      </SidebarInset>\n    </SidebarProvider>
+    <div className="flex h-screen">
+      <SidebarProvider className="h-full">
         <AppSidebar activePage={activePage} onChange={setActivePage} notesCount={notes.length} />
-        
-          <div className="flex h-full flex-col">
-            {/* Header Row */}
-            <div className="app-drag-region flex h-[60px] shrink-0 border-b border-[var(--line)]">
-              {/* Middle panel header */}
-              <header className={`${headerCellClass} w-[320px] shrink-0 border-r`}>
-                <div className="app-no-drag flex items-center gap-2">
-                  <SidebarTrigger className="-ml-1" />
+
+        <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
+          <div className="flex h-full min-w-0">
+            <section className="flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]">
+              <header className={headerClass}>
+                <div className="app-no-drag flex min-w-0 items-center gap-3">
+                  {activePage === 'calendar' ? (
+                    <>
+                      <span className="text-sm text-[var(--muted)]">
+                        {(() => {
+                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
+                          return parsed.toLocaleDateString(undefined, {
+                            month: 'long',
+                            year: 'numeric'
+                          })
+                        })()}
+                      </span>
+                      <span className="text-[var(--line-strong)]">·</span>
+                      <span className="text-sm text-[var(--muted)]">
+                        {(() => {
+                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
+                          return parsed.toLocaleDateString(undefined, {
+                            weekday: 'short',
+                            day: 'numeric'
+                          })
+                        })()}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="truncate text-base font-semibold text-[var(--text)]">
+                      {middleHeaderTitle}
+                    </span>
+                  )}
                 </div>
-                {activePage === 'notes' ? (
-                  <div className="app-no-drag flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      onClick={promptAndRunSearch}
-                      aria-label="Search notes"
-                      title="Search notes"
-                    >
-                      <Search size={16} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      onClick={() => {
-                        void createNote()
-                      }}
-                      aria-label="Add new note"
-                      title="Add new note"
-                    >
-                      <Plus size={18} aria-hidden="true" />
-                    </button>
-                  </div>
-                ) : activePage === 'projects' ? (
-                  <div className="app-no-drag flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      onClick={promptAndRunProjectSearch}
-                      aria-label="Search projects"
-                      title="Search projects"
-                    >
-                      <Search size={16} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      onClick={createProject}
-                      aria-label="Add new project"
-                      title="Add new project"
-                    >
-                      <Plus size={18} aria-hidden="true" />
-                    </button>
-                  </div>
-                ) : activePage === 'resources' ? (
-                  <div className="app-no-drag flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                      onClick={() => notifyUnavailableTool('Add resource link')}
-                    >
-                      Add Link
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                      onClick={() => notifyUnavailableTool('Upload resource file')}
-                    >
-                      Upload
-                    </button>
-                  </div>
-                ) : activePage === 'calendar' ? (
-                  <div>
-<header className="flex items-center justify-end min-w-0 gap-2.5 bg-[var(--panel)] p-3">
-  {activePage === 'calendar' && (
-    <button
-      type="button"
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-      onClick={() => void addCalendarTask()}
-      aria-label="Add calendar task"
-      title="Add calendar task">
-      <Plus size={18} aria-hidden="true" />
-    </button>
-  )}
-</header>
-      </div>
-                ) : (
-                  <div className="app-no-drag flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                      onClick={() => {
-                        void updateFontFamily(FONT_OPTIONS[0].value)
-                      }}
-                    >
-                      Reset Font
-                    </button>
-                  </div>
-                )}
-              </header>
 
-</header>
-
-              {/* Main content header */}
-              <header className={`${headerCellClass} flex-1`}>
-                {noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-                  <div className="flex min-w-0 w-full items-center gap-2">
-                    <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
+                <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
+                  {noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
+                    <>
                       <button
                         type="button"
                         onClick={() => setIsPreviewMode(!isPreviewMode)}
@@ -1650,12 +1610,9 @@ function App(): ReactElement {
                       >
                         <Trash2 size={18} />
                       </button>
-                    </div>
-                  </div>
-                ) : activePage === 'projects' && selectedProject ? (
-                  <div className="app-no-drag flex min-w-0 w-full items-center gap-2">
-                    <div className="ml-auto flex shrink-0 items-center gap-2">
-                      {/* Icon picker */}
+                    </>
+                  ) : activePage === 'projects' && selectedProject ? (
+                    <>
                       <div ref={projectIconPickerRef} className="relative">
                         <button
                           type="button"
@@ -1792,33 +1749,9 @@ function App(): ReactElement {
                       >
                         <Trash2 size={18} />
                       </button>
-                    </div>
-                  </div>
-                ) : activePage === 'calendar' ? (
-                  <div className="flex min-w-0 w-full items-center gap-2">
-                    {/* Month and selected date display */}
-                    <div className="flex min-w-0 items-center gap-3 text-sm text-[var(--muted)]">
-                      <span>
-                        {(() => {
-                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
-                          return parsed.toLocaleDateString(undefined, {
-                            month: 'long',
-                            year: 'numeric'
-                          })
-                        })()}
-                      </span>
-                      <span className="text-[var(--line-strong)]">·</span>
-                      <span>
-                        {(() => {
-                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
-                          return parsed.toLocaleDateString(undefined, {
-                            weekday: 'short',
-                            day: 'numeric'
-                          })
-                        })()}
-                      </span>
-                    </div>
-                    <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
+                    </>
+                  ) : activePage === 'calendar' ? (
+                    <>
                       <button
                         type="button"
                         onClick={goToPrevMonth}
@@ -1843,72 +1776,12 @@ function App(): ReactElement {
                       >
                         <ChevronRight size={18} />
                       </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="truncate text-base font-semibold text-[var(--text)]">
-                    {middleHeaderTitle}
-                  </div>
-                )}
+                    </>
+                  ) : null}
+                </div>
               </header>
-            </div>
 
-            {/* Body Row */}
-            <div className="flex flex-1 min-h-0">
-              {/* Middle panel - hidden on calendar page */}
-              {activePage !== 'calendar' && (
-                <section className={`${bodyCellClass} w-[320px] shrink-0 border-r overflow-y-auto`}>
-                  {activePage === 'notes' ? (
-                    <NotePreviewList
-                      notes={notes}
-                      selectedPath={currentNotePath}
-                      filter={searchQuery}
-                      onOpen={(relPath) => {
-                        setSearchQuery('')
-                        setSearchResults([])
-                        void openNote(relPath)
-                      }}
-                      onDelete={(relPath) => {
-                        void deleteNoteByPath(relPath)
-                      }}
-                    />
-                  ) : activePage === 'projects' ? (
-                    <ProjectPreviewList
-                      projects={projects}
-                      selectedProjectId={selectedProjectId}
-                      filter={projectSearchQuery}
-                      onSelect={setSelectedProjectId}
-                    />
-                  ) : activePage === 'resources' ? (
-                    <div className="grid h-full grid-rows-3 gap-3 p-3">
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Reference Links
-                      </div>
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Attachments
-                      </div>
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Templates
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid h-full grid-rows-3 gap-3 p-3">
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Appearance
-                      </div>
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Editor Defaults
-                      </div>
-                      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                        Shortcuts
-                      </div>
-                    </div>
-                  )}
-                </section></div>                    </div>                   </div></section></SidebarProvider>
-              )}
-
-              {/* Main content */}
-              <section className={`${bodyCellClass} flex-1 overflow-hidden`}>
+              <div className="min-h-0 flex-1 overflow-hidden">
                 {activePage === 'notes' ? (
                   searchQuery.trim() ? (
                     <SearchPage
@@ -1940,7 +1813,7 @@ function App(): ReactElement {
                     />
                   ) : (
                     <div className="p-5 text-sm text-[var(--muted)]">
-                      Pick a note from the middle column to open details
+                      Pick a note from the right panel to open details
                     </div>
                   )
                 ) : activePage === 'projects' ? (
@@ -2011,48 +1884,39 @@ function App(): ReactElement {
                     />
                   ) : (
                     <div className="p-5 text-sm text-[var(--muted)]">
-                      Pick a project from the middle column to open details
+                      Pick a project from the right panel to open details
                     </div>
                   )
                 ) : activePage === 'calendar' ? (
-                  <div className="flex h-full">
-<section className="content-wrapper">
-                    {!isCalendarSidebarCollapsed ? (<div className="w-80 shrink-0 border-r border-[var(--line)]"> <UnscheduledTaskList tasks={unscheduledTasks} onToggle={(taskId) => { void toggleCalendarTask(taskId); }} onDelete={(taskId) => { void removeCalendarTask(taskId); }} onRename={(taskId, newTitle) => { void renameCalendarTask(taskId, newTitle); }} onUpdatePriority={(taskId, priority) => { void updateCalendarTaskPriority(taskId, priority); }} onCreate={(title) => { void createUnscheduledTask(title); }} /></div>) : null}
-                    </div></>}
-  <div className="w-80 shrink-0 border-r border-[var(--line)]">
-                      <UnscheduledTaskList
-                        tasks={unscheduledTasks}
-                        onToggle={(taskId) => {
-                          void toggleCalendarTask(taskId)
-                        }}
-                        onDelete={(taskId) => {
-                          void removeCalendarTask(taskId)
-                        }}
-                        onRename={(taskId, newTitle) => {
-                          void renameCalendarTask(taskId, newTitle)
-                        }}
-                        onUpdatePriority={(taskId, priority) => {
-                          void updateCalendarTaskPriority(taskId, priority)
-                        }}
-                        onCreate={(title) => {
-                          void createUnscheduledTask(title)
-                        }}
-                      />
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <CalendarMonthView
-                        selectedDate={selectedCalendarDate}
-                        tasksByDate={tasksByDate}
-                        onSelectDate={setSelectedCalendarDate}
-                        onRescheduleTask={(taskId, newDate) => {
-                          void rescheduleCalendarTask(taskId, newDate)
-                        }}
-                        onToggleTask={(taskId) => {
-                          void toggleCalendarTask(taskId)
-                        }}
-                      />
-                    </div>
-                  </div>
+                  <CalendarMonthView
+                    selectedDate={selectedCalendarDate}
+                    tasks={scheduledCalendarTasks}
+                    onSelectDate={setSelectedCalendarDate}
+                    onRescheduleTask={(taskId, newDate) => {
+                      void rescheduleCalendarTask(taskId, newDate)
+                    }}
+                    onResizeTaskStart={(taskId, newStartDate) => {
+                      void resizeCalendarTaskStart(taskId, newStartDate)
+                    }}
+                    onResizeTaskEnd={(taskId, newEndDate) => {
+                      void resizeCalendarTaskEnd(taskId, newEndDate)
+                    }}
+                    onToggleTask={(taskId) => {
+                      void toggleCalendarTask(taskId)
+                    }}
+                    onDeleteTask={(taskId) => {
+                      void removeCalendarTask(taskId)
+                    }}
+                    onRenameTask={(taskId, newTitle) => {
+                      void renameCalendarTask(taskId, newTitle)
+                    }}
+                    onUpdateTaskPriority={(taskId, priority) => {
+                      void updateCalendarTaskPriority(taskId, priority)
+                    }}
+                    onUpdateTaskTime={(taskId, time) => {
+                      void updateCalendarTaskTime(taskId, time)
+                    }}
+                  />
                 ) : activePage === 'settings' ? (
                   <SettingsPage
                     fontOptions={FONT_OPTIONS}
@@ -2070,8 +1934,189 @@ function App(): ReactElement {
                     {activePage} workspace ready. Notes remain fully functional.
                   </div>
                 )}
-              </section></div>                    </div>                   </div></section></SidebarProvider>
-            </div>
+              </div>
+            </section>
+
+            <aside className="flex h-full w-[340px] shrink-0 flex-col bg-[var(--panel)]">
+              <header className={headerClass}>
+                <div className="app-no-drag flex min-w-0 items-center gap-2">
+                  {activePage === 'notes' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                        onClick={promptAndRunSearch}
+                        aria-label="Search notes"
+                        title="Search notes"
+                      >
+                        <Search size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                        onClick={() => {
+                          void createNote()
+                        }}
+                        aria-label="Add new note"
+                        title="Add new note"
+                      >
+                        <Plus size={18} aria-hidden="true" />
+                      </button>
+                    </>
+                  ) : activePage === 'projects' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                        onClick={promptAndRunProjectSearch}
+                        aria-label="Search projects"
+                        title="Search projects"
+                      >
+                        <Search size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                        onClick={createProject}
+                        aria-label="Add new project"
+                        title="Add new project"
+                      >
+                        <Plus size={18} aria-hidden="true" />
+                      </button>
+                    </>
+                  ) : activePage === 'calendar' ? (
+                    <div className="flex w-full min-w-0 items-center gap-2">
+                      <input
+                        type="text"
+                        aria-label="Add a task"
+                        placeholder="Add a task..."
+                        value={calendarHeaderNewTask}
+                        onChange={(e) => setCalendarHeaderNewTask(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void addUnscheduledFromHeader()
+                          }
+                        }}
+                        className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void addUnscheduledFromHeader()
+                        }}
+                        aria-label="Add task"
+                        title="Add task"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                      >
+                        <Plus size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : activePage === 'resources' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
+                        onClick={() => notifyUnavailableTool('Add resource link')}
+                      >
+                        Add Link
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
+                        onClick={() => notifyUnavailableTool('Upload resource file')}
+                      >
+                        Upload
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
+                      onClick={() => {
+                        void updateFontFamily(FONT_OPTIONS[0].value)
+                      }}
+                    >
+                      Reset Font
+                    </button>
+                  )}
+                </div>
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {activePage === 'notes' ? (
+                  <NotePreviewList
+                    notes={notes}
+                    selectedPath={currentNotePath}
+                    filter={searchQuery}
+                    onOpen={(relPath) => {
+                      setSearchQuery('')
+                      setSearchResults([])
+                      void openNote(relPath)
+                    }}
+                    onDelete={(relPath) => {
+                      void deleteNoteByPath(relPath)
+                    }}
+                  />
+                ) : activePage === 'projects' ? (
+                  <ProjectPreviewList
+                    projects={projects}
+                    selectedProjectId={selectedProjectId}
+                    filter={projectSearchQuery}
+                    onSelect={setSelectedProjectId}
+                  />
+                ) : activePage === 'calendar' ? (
+                  <UnscheduledTaskList
+                    tasks={unscheduledTasks}
+                    selectedDate={selectedCalendarDate}
+                    onToggle={(taskId) => {
+                      void toggleCalendarTask(taskId)
+                    }}
+                    onDelete={(taskId) => {
+                      void removeCalendarTask(taskId)
+                    }}
+                    onRename={(taskId, newTitle) => {
+                      void renameCalendarTask(taskId, newTitle)
+                    }}
+                    onUpdatePriority={(taskId, priority) => {
+                      void updateCalendarTaskPriority(taskId, priority)
+                    }}
+                    onUpdateTime={(taskId, time) => {
+                      void updateCalendarTaskTime(taskId, time)
+                    }}
+                    onScheduleTask={(taskId, date) => {
+                      void rescheduleCalendarTask(taskId, date)
+                    }}
+                    onUnscheduleTask={(taskId) => {
+                      void rescheduleCalendarTask(taskId, undefined)
+                    }}
+                  />
+                ) : activePage === 'resources' ? (
+                  <div className="grid h-full grid-rows-3 gap-3 p-3">
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Reference Links
+                    </div>
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Attachments
+                    </div>
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Templates
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid h-full grid-rows-3 gap-3 p-3">
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Appearance
+                    </div>
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Editor Defaults
+                    </div>
+                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                      Shortcuts
+                    </div>
+                  </div>
+                )}
+              </div>
+            </aside>
           </div>
 
           <CommandPalette
@@ -2089,9 +2134,7 @@ function App(): ReactElement {
             }}
           />
           <SonnerBridge />
-  </SidebarInset>
-  </div>
-</SidebarProvider>
+        </SidebarInset>
       </SidebarProvider>
     </div>
   )
@@ -2112,6 +2155,18 @@ function parseIsoDate(iso: string): Date {
     return new Date()
   }
   return parsed
+}
+
+function diffIsoDays(startIso: string, endIso: string): number {
+  const start = parseIsoDate(startIso)
+  const end = parseIsoDate(endIso)
+  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+function addIsoDays(iso: string, days: number): string {
+  const date = parseIsoDate(iso)
+  date.setDate(date.getDate() + days)
+  return toIsoDate(date)
 }
 
 function formatCalendarDateLabel(isoDate: string): string {
