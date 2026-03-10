@@ -134,6 +134,9 @@ export interface AppSettings {
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
+  // UI customization
+  uiTransparency?: number
+  uiBlur?: number
 }
 
 export interface AppSettingsUpdate {
@@ -142,6 +145,8 @@ export interface AppSettingsUpdate {
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
+  uiTransparency?: number
+  uiBlur?: number
 }
 
 export interface VaultOpenResult {

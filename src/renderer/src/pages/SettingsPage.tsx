@@ -11,6 +11,11 @@ interface SettingsPageProps {
   vaultLocation: string | null
   onSelectFont: (fontFamily: string) => void
   onChangeVaultLocation: () => void
+
+  uiTransparency: number
+  uiBlur: number
+  onChangeTransparency: (value: number) => void
+  onChangeBlur: (value: number) => void
 }
 
 export function SettingsPage({
@@ -18,7 +23,11 @@ export function SettingsPage({
   selectedFontFamily,
   vaultLocation,
   onSelectFont,
-  onChangeVaultLocation
+  onChangeVaultLocation,
+  uiTransparency,
+  uiBlur,
+  onChangeTransparency,
+  onChangeBlur
 }: SettingsPageProps): ReactElement {
   return (
     <section className="grid gap-3.5 p-5" aria-label="App settings">
@@ -41,6 +50,41 @@ export function SettingsPage({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="grid max-w-[360px] gap-1.5">
+        <span className="text-sm text-[var(--muted)]">UI Transparency</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={0.6}
+            max={1}
+            step={0.01}
+            value={uiTransparency}
+            onChange={(e) => onChangeTransparency(Number(e.target.value))}
+            className="flex-1"
+          />
+          <div className="w-14 text-right text-sm text-[var(--muted)]">
+            {Math.round(uiTransparency * 100)}%
+          </div>
+        </div>
+        <div className="text-xs text-[var(--muted)]">Lower values increase see-through effect.</div>
+      </label>
+
+      <label className="grid max-w-[360px] gap-1.5">
+        <span className="text-sm text-[var(--muted)]">Background Blur (px)</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={0}
+            max={24}
+            step={1}
+            value={uiBlur}
+            onChange={(e) => onChangeBlur(Number(e.target.value))}
+            className="flex-1"
+          />
+          <div className="w-14 text-right text-sm text-[var(--muted)]">{uiBlur}px</div>
+        </div>
       </label>
 
       <div className="grid max-w-[360px] gap-1.5" aria-label="Vault location">

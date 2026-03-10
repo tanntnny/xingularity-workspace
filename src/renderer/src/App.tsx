@@ -332,6 +332,17 @@ function App(): ReactElement {
   }, [settings.fontFamily])
 
   useEffect(() => {
+    const uiTransparency = settings.uiTransparency ?? 0.96
+    const uiBlur = settings.uiBlur ?? 6
+    const sidebarOpacity = uiTransparency
+    const workspaceOpacity = Math.max(0, Math.min(1, uiTransparency * 0.7))
+
+    document.documentElement.style.setProperty('--ui-blur', `${uiBlur}px`)
+    document.documentElement.style.setProperty('--sidebar-opacity', String(sidebarOpacity))
+    document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity))
+  }, [settings.uiTransparency, settings.uiBlur])
+
+  useEffect(() => {
     if (!vaultApi) {
       return
     }
@@ -1927,6 +1938,30 @@ function App(): ReactElement {
                     }}
                     onChangeVaultLocation={() => {
                       void openVault('open')
+                    }}
+                    uiTransparency={settings.uiTransparency ?? 0.96}
+                    uiBlur={settings.uiBlur ?? 6}
+                    onChangeTransparency={async (value: number) => {
+                      if (!vaultApi) return
+                      try {
+                        const nextSettings = await vaultApi.settings.update({
+                          uiTransparency: value
+                        })
+                        setSettings(nextSettings)
+                        pushToast('success', 'Transparency updated')
+                      } catch (err) {
+                        pushToast('error', String(err))
+                      }
+                    }}
+                    onChangeBlur={async (value: number) => {
+                      if (!vaultApi) return
+                      try {
+                        const nextSettings = await vaultApi.settings.update({ uiBlur: value })
+                        setSettings(nextSettings)
+                        pushToast('success', 'Blur updated')
+                      } catch (err) {
+                        pushToast('error', String(err))
+                      }
                     }}
                   />
                 ) : (

@@ -10,7 +10,9 @@ function createDefaultSettings(): AppSettings {
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
     projectIcons: {},
-    projects: []
+    projects: [],
+    uiTransparency: 0.96,
+    uiBlur: 6
   }
 }
 

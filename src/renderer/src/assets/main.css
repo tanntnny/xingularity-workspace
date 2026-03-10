@@ -95,6 +95,14 @@
     --sidebar-active-bg-end: #e2e4e7;
     --sidebar-active-border-start: #d3d6db;
     --sidebar-active-border-end: #bcc1c8;
+    /* UI customization variables */
+    --ui-blur: 6px;
+    --sidebar-opacity: 0.96;
+    --workspace-opacity: 0.67;
+    /* RGB helpers for panel colors (used for rgba backgrounds) */
+    --panel-r: 255;
+    --panel-g: 255;
+    --panel-b: 255;
   }
 }
 
@@ -149,7 +157,7 @@
       --destructive-foreground: #0b0b0b;
 
       /* Dark mode sidebar variables */
-      --sidebar-background: #0b0c0d;
+      --sidebar-background: #0e0e0f;
       --sidebar-foreground: var(--text);
       --sidebar-primary: var(--accent);
       --sidebar-primary-foreground: #0b0b0b;
@@ -161,6 +169,10 @@
       --sidebar-active-bg-end: #101214;
       --sidebar-active-border-start: #3f4349;
       --sidebar-active-border-end: #262a2f;
+      /* Dark overrides for RGB helpers */
+      --panel-r: 7;
+      --panel-g: 8;
+      --panel-b: 10;
     }
   }
 
@@ -187,4 +199,33 @@
 
 .app-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Apply blur and transparency to sidebar and workspace backgrounds. */
+:root {
+  /* ensure defaults if not provided from JS */
+  --ui-blur: var(--ui-blur, 6px);
+  --sidebar-opacity: var(--sidebar-opacity, 0.96);
+  --workspace-opacity: var(--workspace-opacity, 0.67);
+}
+
+/* Sidebar background: more translucent and stronger blur */
+[data-sidebar='sidebar'] {
+  background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--sidebar-opacity));
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+  backdrop-filter: blur(var(--ui-blur));
+}
+
+/* Workspace (main content): fewer transparency effects than the sidebar */
+.group\/sidebar-wrapper > main,
+.group\/sidebar-wrapper > main *:not([data-sidebar='sidebar']) {
+  background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--workspace-opacity));
+  -webkit-backdrop-filter: blur(calc(var(--ui-blur) * 0.6));
+  backdrop-filter: blur(calc(var(--ui-blur) * 0.6));
+}
+
+/* Keep content rendering sharp; only background is affected */
+.group\/sidebar-wrapper [data-sidebar='sidebar'],
+.group\/sidebar-wrapper > main {
+  background-clip: padding-box;
 }
