@@ -53,6 +53,7 @@ export interface SearchResult {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high'
+export type CalendarTaskType = 'meeting' | 'assignment' | 'review' | 'personal' | 'other'
 
 export interface TaskReminder {
   id: string
@@ -69,8 +70,12 @@ export interface CalendarTask {
   completed: boolean
   createdAt: string
   priority: TaskPriority
+  taskType?: CalendarTaskType
   reminders: TaskReminder[]
   time?: string // Optional time in HH:mm format
+  // Automation deduplication fields (set by schedule runner)
+  automationSource?: string
+  automationSourceKey?: string
 }
 
 // Unified calendar item for displaying tasks, milestones, and subtasks together
@@ -95,14 +100,16 @@ export type ProjectStatus = 'on-track' | 'at-risk' | 'blocked' | 'completed'
 export interface ProjectSubtask {
   id: string
   title: string
+  description?: string
   completed: boolean
   createdAt: string
-  dueDate?: string
 }
 
 export interface ProjectMilestone {
   id: string
   title: string
+  description?: string
+  collapsed?: boolean
   dueDate: string
   status: 'pending' | 'in-progress' | 'completed' | 'blocked'
   subtasks: ProjectSubtask[]
@@ -130,23 +137,128 @@ export type FileMap = Record<string, FileMapEntry>
 export interface AppSettings {
   isSidebarCollapsed: boolean // Tracks if the calendar sidebar is collapsed
   lastVaultPath: Maybe<string>
+  profile: {
+    name: string
+  }
   fontFamily: string
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
-  // UI customization
-  uiTransparency?: number
-  uiBlur?: number
 }
 
 export interface AppSettingsUpdate {
   isSidebarCollapsed?: boolean // Optional
+  profile?: {
+    name: string
+  }
   fontFamily?: string
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
-  uiTransparency?: number
-  uiBlur?: number
+}
+
+export type WeeklyPlanPriorityStatus = 'planned' | 'in_progress' | 'done'
+
+export interface WeeklyPlanWeek {
+  id: string
+  startDate: string
+  endDate: string
+  focus?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WeeklyPlanPriority {
+  id: string
+  weekId: string
+  title: string
+  status: WeeklyPlanPriorityStatus
+  order: number
+  linkedProjectId?: string
+  linkedMilestoneId?: string
+  linkedSubtaskId?: string
+  linkedTaskId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WeeklyPlanReview {
+  id: string
+  weekId: string
+  wins?: string
+  misses?: string
+  blockers?: string
+  nextWeek?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WeeklyPlanState {
+  weeks: WeeklyPlanWeek[]
+  priorities: WeeklyPlanPriority[]
+  reviews: WeeklyPlanReview[]
+}
+
+export interface CreateWeeklyPlanWeekInput {
+  startDate: string
+  endDate?: string
+  focus?: string
+}
+
+export interface UpdateWeeklyPlanWeekInput {
+  id: string
+  startDate?: string
+  endDate?: string
+  focus?: string | null
+}
+
+export interface DeleteWeeklyPlanWeekInput {
+  id: string
+}
+
+export interface CreateWeeklyPlanPriorityInput {
+  weekId: string
+  title: string
+  linkedProjectId?: string
+  linkedMilestoneId?: string
+  linkedSubtaskId?: string
+  linkedTaskId?: string
+}
+
+export interface UpdateWeeklyPlanPriorityInput {
+  id: string
+  title?: string
+  status?: WeeklyPlanPriorityStatus
+  linkedProjectId?: string | null
+  linkedMilestoneId?: string | null
+  linkedSubtaskId?: string | null
+  linkedTaskId?: string | null
+}
+
+export interface ReorderWeeklyPlanPrioritiesInput {
+  weekId: string
+  priorityIds: string[]
+}
+
+export interface UpsertWeeklyPlanReviewInput {
+  weekId: string
+  reviewId?: string
+  wins?: string | null
+  misses?: string | null
+  blockers?: string | null
+  nextWeek?: string | null
+}
+
+export interface RendererWeeklyPlanApi {
+  getState: () => Promise<WeeklyPlanState>
+  createWeek: (input: CreateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  updateWeek: (input: UpdateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  deleteWeek: (input: DeleteWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  addPriority: (input: CreateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
+  updatePriority: (input: UpdateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
+  deletePriority: (priorityId: string) => Promise<WeeklyPlanState>
+  reorderPriorities: (input: ReorderWeeklyPlanPrioritiesInput) => Promise<WeeklyPlanState>
+  upsertReview: (input: UpsertWeeklyPlanReviewInput) => Promise<WeeklyPlanState>
 }
 
 export interface VaultOpenResult {
@@ -181,4 +293,6 @@ export interface RendererVaultApi {
     get: () => Promise<AppSettings>
     update: (next: AppSettingsUpdate) => Promise<AppSettings>
   }
+  schedules: import('./scheduleTypes').RendererScheduleApi
+  weeklyPlan: RendererWeeklyPlanApi
 }

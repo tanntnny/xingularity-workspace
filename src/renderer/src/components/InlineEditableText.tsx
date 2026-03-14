@@ -15,6 +15,8 @@ interface InlineEditableTextProps {
   renderDisplay?: (value: string) => ReactNode
 }
 
+const defaultDisplayClassName =
+  'cursor-text text-inherit transition-colors hover:text-[var(--accent)]'
 const defaultInputClassName = 'm-0 min-w-0 flex-1 border-0 bg-transparent text-inherit outline-none'
 
 export function InlineEditableText({
@@ -107,7 +109,7 @@ export function InlineEditableText({
   const DisplayTag = displayAs
   return (
     <DisplayTag
-      className={displayClassName}
+      className={displayClassName ?? defaultDisplayClassName}
       onClick={() => {
         setDraftValue(value)
         setIsEditing(true)

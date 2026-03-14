@@ -1,70 +1,150 @@
 import { app } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { AppSettings } from '../shared/types'
+import { AppSettings, AppSettingsUpdate } from '../shared/types'
+import { ensureVaultAppDir } from './vaultData'
 
-function createDefaultSettings(): AppSettings {
+interface GlobalSettings {
+  lastVaultPath: string | null
+}
+
+export function createDefaultAppSettings(): AppSettings {
   return {
     isSidebarCollapsed: false,
     lastVaultPath: null,
+    profile: {
+      name: ''
+    },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
     projectIcons: {},
-    projects: [],
-    uiTransparency: 0.96,
-    uiBlur: 6
+    projects: []
   }
 }
 
+function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
+  const defaults = createDefaultAppSettings()
+  return {
+    ...defaults,
+    ...parsed,
+    profile: {
+      name:
+        typeof parsed.profile?.name === 'string' && parsed.profile.name.trim().length > 0
+          ? parsed.profile.name
+          : defaults.profile.name
+    },
+    calendarTasks: Array.isArray(parsed.calendarTasks) ? parsed.calendarTasks : defaults.calendarTasks,
+    projectIcons: parsed.projectIcons ?? defaults.projectIcons,
+    projects: Array.isArray(parsed.projects) ? parsed.projects : defaults.projects,
+    lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath
+  }
+}
+
+function isLegacyAppSettings(value: unknown): value is AppSettings {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'calendarTasks' in value &&
+    'projects' in value
+  )
+}
+
 export class SettingsStore {
-  private readonly settingsPath: string
+  private readonly globalSettingsPath: string
 
   constructor() {
-    this.settingsPath = path.join(app.getPath('userData'), 'settings.json')
+    this.globalSettingsPath = path.join(app.getPath('userData'), 'settings.json')
   }
 
-  async read(): Promise<AppSettings> {
-    let raw: string
+  // ── Global settings (last opened vault) ───────────────────────────────────
+
+  async readGlobal(): Promise<GlobalSettings> {
     try {
-      raw = await fs.readFile(this.settingsPath, 'utf-8')
+      const raw = await fs.readFile(this.globalSettingsPath, 'utf-8')
+      const parsed = JSON.parse(raw) as GlobalSettings | AppSettings
+      if (isLegacyAppSettings(parsed)) {
+        return { lastVaultPath: parsed.lastVaultPath ?? null }
+      }
+      return {
+        lastVaultPath: parsed?.lastVaultPath ?? null
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('Failed to read settings file:', error)
+        console.error('Failed to read global settings:', error)
       }
-      return createDefaultSettings()
+      return { lastVaultPath: null }
     }
+  }
+
+  async writeGlobal(next: GlobalSettings): Promise<void> {
+    await this.writeJsonFile(this.globalSettingsPath, next)
+  }
+
+  // ── Vault-specific settings ───────────────────────────────────────────────
+
+  async readVault(vaultRoot: string): Promise<AppSettings> {
+    const settingsPath = await this.ensureVaultSettingsPath(vaultRoot)
 
     try {
+      const raw = await fs.readFile(settingsPath, 'utf-8')
       const parsed = JSON.parse(raw) as Partial<AppSettings>
-      return {
-        ...createDefaultSettings(),
-        ...parsed
-      }
+      return normalizeSettings({ ...parsed, lastVaultPath: vaultRoot })
     } catch (error) {
-      const backupPath = `${this.settingsPath}.corrupt-${Date.now()}.json`
-      console.error('Settings file is invalid JSON. Backing up and resetting defaults.', {
-        settingsPath: this.settingsPath,
-        backupPath,
-        error
-      })
-
-      try {
-        await fs.copyFile(this.settingsPath, backupPath)
-      } catch (copyError) {
-        console.error('Failed to back up corrupt settings file:', copyError)
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('Failed to read vault settings:', error)
       }
 
-      const defaults = createDefaultSettings()
-      await this.write(defaults)
+      // Try migrating from legacy global file
+      const legacy = await this.readLegacyAppSettings()
+      if (legacy) {
+        const migrated = normalizeSettings({ ...legacy, lastVaultPath: vaultRoot })
+        await this.writeJsonFile(settingsPath, migrated)
+        await this.writeGlobal({ lastVaultPath: legacy.lastVaultPath ?? vaultRoot })
+        return migrated
+      }
+
+      const defaults = normalizeSettings({ lastVaultPath: vaultRoot })
+      await this.writeJsonFile(settingsPath, defaults)
       return defaults
     }
   }
 
-  async write(next: AppSettings): Promise<void> {
-    const settingsDir = path.dirname(this.settingsPath)
-    const tempPath = `${this.settingsPath}.tmp-${process.pid}-${Date.now()}`
-    await fs.mkdir(settingsDir, { recursive: true })
-    await fs.writeFile(tempPath, JSON.stringify(next, null, 2), 'utf-8')
-    await fs.rename(tempPath, this.settingsPath)
+  async updateVault(vaultRoot: string, next: AppSettingsUpdate): Promise<AppSettings> {
+    const current = await this.readVault(vaultRoot)
+    const merged = normalizeSettings({ ...current, ...next, lastVaultPath: vaultRoot })
+    const settingsPath = await this.ensureVaultSettingsPath(vaultRoot)
+    await this.writeJsonFile(settingsPath, merged)
+    return merged
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private async readLegacyAppSettings(): Promise<AppSettings | null> {
+    try {
+      const raw = await fs.readFile(this.globalSettingsPath, 'utf-8')
+      const parsed = JSON.parse(raw)
+      if (isLegacyAppSettings(parsed)) {
+        return normalizeSettings(parsed)
+      }
+      return null
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('Failed to read legacy settings:', error)
+      }
+      return null
+    }
+  }
+
+  private async ensureVaultSettingsPath(vaultRoot: string): Promise<string> {
+    const dir = await ensureVaultAppDir(vaultRoot)
+    return path.join(dir, 'settings.json')
+  }
+
+  private async writeJsonFile(filePath: string, data: unknown): Promise<void> {
+    const dir = path.dirname(filePath)
+    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')
+    await fs.rename(tempPath, filePath)
   }
 }

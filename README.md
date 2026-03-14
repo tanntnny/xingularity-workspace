@@ -1,4 +1,4 @@
-# Beacon Vault
+# Xingularity
 
 Local-first vault app (Electron + React + TypeScript) that stores notes and attachments directly in a user-selected folder.
 
@@ -43,6 +43,18 @@ npm run dev
 ```bash
 npm run build
 ```
+
+### macOS packaging & signing
+
+- `npm run build:mac` packages the production bundle and keeps `dist/` up to date.
+- Electron Builder now runs a custom `afterSign` hook (`scripts/after-sign.cjs`) that
+  re-signs the entire `.app` bundle with a single identity so Electron frameworks
+  load correctly on modern macOS releases.
+- Set `MAC_CODE_SIGN_IDENTITY="Developer ID Application: Example (TEAMID)"` when you
+  want to keep your Developer ID signature; otherwise the hook falls back to an
+  ad-hoc signature (`-`) that is sufficient for local testing.
+- The hook reuses `build/entitlements.mac.plist`, so update that file if the
+  sandboxed runtime needs additional capabilities.
 
 ### Tests
 

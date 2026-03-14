@@ -39,6 +39,19 @@ export {
 } from './dialog'
 
 export {
+  Drawer,
+  DrawerPortal,
+  DrawerOverlay,
+  DrawerTrigger,
+  DrawerClose,
+  DrawerContent,
+  DrawerHeader,
+  DrawerFooter,
+  DrawerTitle,
+  DrawerDescription
+} from './drawer'
+
+export {
   AlertDialog,
   AlertDialogPortal,
   AlertDialogOverlay,
@@ -148,3 +161,5 @@ export {
   BreadcrumbSeparator,
   BreadcrumbEllipsis
 } from './breadcrumb'
+
+export { Kbd } from './kbd'

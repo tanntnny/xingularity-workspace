@@ -7,7 +7,7 @@
     color-scheme: light dark;
     --app-font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
 
-    /* Original Beacon color palette */
+    /* Original Xingularity color palette */
     --bg: #ffffff;
     --bg-radial-a: #ffffff;
     --bg-radial-b: #f6f6f6;
@@ -91,18 +91,24 @@
     --sidebar-accent-foreground: var(--accent);
     --sidebar-border: var(--line);
     --sidebar-ring: var(--ring);
-    --sidebar-active-bg-start: #f1f2f3;
-    --sidebar-active-bg-end: #e2e4e7;
-    --sidebar-active-border-start: #d3d6db;
-    --sidebar-active-border-end: #bcc1c8;
-    /* UI customization variables */
-    --ui-blur: 6px;
-    --sidebar-opacity: 0.96;
-    --workspace-opacity: 0.67;
+    --sidebar-active-bg-start: #fafbfc;
+    --sidebar-active-bg-end: #eceff3;
+    --sidebar-active-border-start: #dde2e8;
+    --sidebar-active-border-end: #c9d0d8;
     /* RGB helpers for panel colors (used for rgba backgrounds) */
     --panel-r: 255;
     --panel-g: 255;
     --panel-b: 255;
+
+    --glass-sidebar-alpha: 0.3;
+    --glass-workspace-alpha: 0.66;
+    --glass-header-alpha: 0.72;
+    --glass-sidebar-blur: 26px;
+    --glass-workspace-blur: 12px;
+    --glass-header-blur: 10px;
+    --glass-border-alpha: 0.48;
+    --drawer-width: 640px;
+    --workspace-pane-width: 300px;
   }
 }
 
@@ -173,6 +179,16 @@
       --panel-r: 7;
       --panel-g: 8;
       --panel-b: 10;
+
+      --glass-sidebar-alpha: 0.4;
+      --glass-workspace-alpha: 0.6;
+      --glass-header-alpha: 0.66;
+      --glass-sidebar-blur: 32px;
+      --glass-workspace-blur: 14px;
+      --glass-header-blur: 12px;
+      --glass-border-alpha: 0.38;
+      --drawer-width: 640px;
+      --workspace-pane-width: 300px;
     }
   }
 
@@ -181,7 +197,7 @@
   }
 
   body {
-    background-color: var(--background);
+    background-color: transparent;
     color: var(--foreground);
   }
 
@@ -201,31 +217,254 @@
   -webkit-app-region: no-drag;
 }
 
-/* Apply blur and transparency to sidebar and workspace backgrounds. */
-:root {
-  /* ensure defaults if not provided from JS */
-  --ui-blur: var(--ui-blur, 6px);
-  --sidebar-opacity: var(--sidebar-opacity, 0.96);
-  --workspace-opacity: var(--workspace-opacity, 0.67);
-}
-
-/* Sidebar background: more translucent and stronger blur */
+/* mac-first glass surfaces */
 [data-sidebar='sidebar'] {
-  background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--sidebar-opacity));
-  -webkit-backdrop-filter: blur(var(--ui-blur));
-  backdrop-filter: blur(var(--ui-blur));
+  background-color: rgba(
+      var(--panel-r),
+      var(--panel-g),
+      var(--panel-b),
+      var(--glass-sidebar-alpha)
+    )
+    !important;
+  border-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha)) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  -webkit-backdrop-filter: saturate(150%) blur(var(--glass-sidebar-blur)) !important;
+  backdrop-filter: saturate(150%) blur(var(--glass-sidebar-blur)) !important;
 }
 
-/* Workspace (main content): fewer transparency effects than the sidebar */
-.group\/sidebar-wrapper > main,
-.group\/sidebar-wrapper > main *:not([data-sidebar='sidebar']) {
-  background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--workspace-opacity));
-  -webkit-backdrop-filter: blur(calc(var(--ui-blur) * 0.6));
-  backdrop-filter: blur(calc(var(--ui-blur) * 0.6));
-}
-
-/* Keep content rendering sharp; only background is affected */
-.group\/sidebar-wrapper [data-sidebar='sidebar'],
+/* Keep blur on shell surfaces only (not all descendants) */
 .group\/sidebar-wrapper > main {
-  background-clip: padding-box;
+  background-color: rgba(
+    var(--panel-r),
+    var(--panel-g),
+    var(--panel-b),
+    var(--glass-workspace-alpha)
+  );
+  -webkit-backdrop-filter: saturate(135%) blur(var(--glass-workspace-blur));
+  backdrop-filter: saturate(135%) blur(var(--glass-workspace-blur));
+}
+
+.app-drag-region {
+  background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-header-alpha));
+  border-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha));
+  -webkit-backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
+  backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  [data-sidebar='sidebar'],
+  .group\/sidebar-wrapper > main,
+  .app-drag-region {
+    background-color: rgb(var(--panel-r), var(--panel-g), var(--panel-b));
+    box-shadow: none;
+  }
+}
+
+/* FullCalendar skin aligned with Xingularity calendar styling */
+.calendar-full .fc {
+  height: 100%;
+  font-family: var(--app-font-family);
+}
+
+.calendar-full .fc-theme-standard td,
+.calendar-full .fc-theme-standard th,
+.calendar-full .fc-theme-standard .fc-scrollgrid {
+  border-color: var(--line);
+}
+
+.calendar-full .fc-theme-standard .fc-scrollgrid {
+  border-width: 0;
+}
+
+.calendar-full .fc .fc-col-header tr > th:last-child,
+.calendar-full .fc .fc-daygrid-body tr > td:last-child,
+.calendar-full .fc .fc-scrollgrid-section > td:last-child {
+  border-right-width: 0 !important;
+}
+
+.calendar-full .fc .fc-daygrid-body tr:last-child > td,
+.calendar-full .fc .fc-scrollgrid-section:last-child > td {
+  border-bottom-width: 0 !important;
+}
+
+.calendar-full .fc .fc-scrollgrid-section-header > td,
+.calendar-full .fc .fc-col-header,
+.calendar-full .fc .fc-col-header tr,
+.calendar-full .fc .fc-col-header tr > th:last-child {
+  border-right-width: 0 !important;
+}
+
+.calendar-full .fc .fc-scrollgrid-section-header > td,
+.calendar-full .fc .fc-col-header,
+.calendar-full .fc .fc-col-header tr > th {
+  border-bottom-width: 0 !important;
+}
+
+.calendar-full .fc .fc-toolbar.fc-header-toolbar {
+  display: none;
+}
+
+.calendar-full .fc .fc-col-header-cell {
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 0;
+}
+
+.calendar-full .fc .fc-daygrid-day {
+  background: var(--panel);
+}
+
+.calendar-full .fc .fc-day-other {
+  background: color-mix(in srgb, var(--panel-2) 40%, transparent);
+}
+
+.calendar-full .fc .fc-daygrid-day-frame {
+  min-height: 110px;
+  padding: 2px;
+}
+
+.calendar-full .fc .fc-daygrid-day-top {
+  justify-content: flex-start;
+}
+
+.calendar-full .fc .fc-daygrid-day-number {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px;
+}
+
+.calendar-full .fc .beacon-day-selected {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+}
+
+.calendar-full .fc .fc-event {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  margin: 2px 0;
+  white-space: normal;
+}
+
+.calendar-full .fc .fc-event-main {
+  padding: 0;
+  overflow: visible;
+}
+
+.calendar-full .fc .fc-daygrid-event {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.calendar-full .fc .fc-daygrid-event .fc-event-main-frame {
+  display: block;
+}
+
+.calendar-full .fc .beacon-task-inner {
+  min-height: 36px;
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-meeting {
+  background: color-mix(in srgb, #3b82f6 14%, var(--panel));
+  border-color: color-mix(in srgb, #3b82f6 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-assignment {
+  background: color-mix(in srgb, #f59e0b 14%, var(--panel));
+  border-color: color-mix(in srgb, #f59e0b 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-review {
+  background: color-mix(in srgb, #8b5cf6 14%, var(--panel));
+  border-color: color-mix(in srgb, #8b5cf6 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-personal {
+  background: color-mix(in srgb, #22c55e 14%, var(--panel));
+  border-color: color-mix(in srgb, #22c55e 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-other {
+  background: color-mix(in srgb, #64748b 14%, var(--panel));
+  border-color: color-mix(in srgb, #64748b 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-completed {
+  opacity: 0.65;
+}
+
+.calendar-full .fc .fc-day-today {
+  background: color-mix(in srgb, var(--accent-soft) 36%, transparent);
+}
+
+.calendar-full .fc .fc-daygrid-event-harness:hover .beacon-task-inner {
+  filter: brightness(0.98);
+}
+
+.page-transition {
+  animation: pageFadeSlide 280ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  will-change: opacity, transform;
+}
+
+@keyframes pageFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    animation: none !important;
+  }
+}
+
+.calendar-full .fc .fc-daygrid-event-dot {
+  display: none;
+}
+
+.beacon-task-surface {
+  background: var(--panel);
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-meeting {
+  background: color-mix(in srgb, #3b82f6 14%, var(--panel));
+  border-color: color-mix(in srgb, #3b82f6 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-assignment {
+  background: color-mix(in srgb, #f59e0b 14%, var(--panel));
+  border-color: color-mix(in srgb, #f59e0b 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-review {
+  background: color-mix(in srgb, #8b5cf6 14%, var(--panel));
+  border-color: color-mix(in srgb, #8b5cf6 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-personal {
+  background: color-mix(in srgb, #22c55e 14%, var(--panel));
+  border-color: color-mix(in srgb, #22c55e 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-other {
+  background: color-mix(in srgb, #64748b 14%, var(--panel));
+  border-color: color-mix(in srgb, #64748b 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-completed {
+  opacity: 0.65;
+}
+
+.beacon-task-surface:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }

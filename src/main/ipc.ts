@@ -31,11 +31,14 @@ const calendarTaskSchema = z.object({
   completed: z.boolean(),
   createdAt: z.string().min(1).max(64),
   priority: z.enum(['low', 'medium', 'high']),
+  taskType: z.enum(['meeting', 'assignment', 'review', 'personal', 'other']).optional(),
   reminders: z.array(taskReminderSchema).max(10),
   time: z
     .string()
     .regex(/^\d{2}:\d{2}$/)
-    .optional()
+    .optional(),
+  automationSource: z.string().max(200).optional(),
+  automationSourceKey: z.string().max(200).optional()
 })
 
 const projectIconSchema = z.object({
@@ -47,6 +50,7 @@ const projectIconSchema = z.object({
 const projectSubtaskSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
   completed: z.boolean(),
   createdAt: z.string().min(1).max(64),
   dueDate: z
@@ -58,6 +62,8 @@ const projectSubtaskSchema = z.object({
 const projectMilestoneSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  collapsed: z.boolean().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   status: z.enum(['pending', 'in-progress', 'completed', 'blocked']),
   subtasks: z.array(projectSubtaskSchema).max(100)
@@ -75,6 +81,11 @@ const projectSchema = z.object({
 })
 
 const settingsUpdateSchema = z.object({
+  profile: z
+    .object({
+      name: z.string().trim().min(1).max(100)
+    })
+    .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),

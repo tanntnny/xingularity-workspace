@@ -1,7 +1,8 @@
-appId: com.electron.app
-productName: beacon-vault
+appId: com.xingularity.app
+productName: Xingularity
 directories:
   buildResources: build
+afterSign: scripts/after-sign.cjs
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -12,7 +13,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: beacon-vault
+  executableName: xingularity
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

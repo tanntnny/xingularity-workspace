@@ -147,15 +147,7 @@ export function ProjectPreviewList({
                 >
                   <div className="flex min-w-0 items-center gap-1">
                     <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
-                    <div
-                      className={`truncate text-lg font-bold ${
-                        selectedProjectId === project.id
-                          ? 'text-[var(--accent)]'
-                          : 'text-[var(--text)]'
-                      }`}
-                    >
-                      {project.name}
-                    </div>
+                    <div className="truncate text-lg font-bold">{project.name}</div>
                   </div>
                   <div className="line-clamp-2 text-sm text-[var(--muted)]">{project.summary}</div>
                   <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">

@@ -1,12 +1,22 @@
 import { app, BrowserWindow, protocol } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
+import { registerScheduleIpcHandlers } from './scheduleIpc'
 import { VaultRuntime } from './runtime'
+import { ScheduleService } from './scheduleService'
+import { registerWeeklyPlanIpcHandlers } from './planning/weeklyPlanIpc'
+import { WeeklyPlanService } from './planning/weeklyPlanService'
 import { createMainWindow } from './window'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
 const runtime = new VaultRuntime()
+const scheduleService = new ScheduleService(runtime)
+const weeklyPlanService = new WeeklyPlanService()
+runtime.onVaultChange((paths) => {
+  void scheduleService.handleVaultChange(paths ? paths.rootPath : null)
+  weeklyPlanService.handleVaultChange(paths ? paths.rootPath : null)
+})
 
 // Register custom protocol to serve vault files
 app.whenReady().then(() => {
@@ -51,6 +61,9 @@ app.whenReady().then(() => {
   })
 
   registerIpcHandlers(runtime)
+  registerScheduleIpcHandlers(scheduleService)
+  registerWeeklyPlanIpcHandlers(weeklyPlanService)
+  void scheduleService.init()
   createMainWindow()
 
   app.on('activate', () => {
@@ -61,6 +74,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  scheduleService.destroy()
   if (process.platform !== 'darwin') {
     app.quit()
   }

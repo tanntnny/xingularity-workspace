@@ -163,6 +163,7 @@ export function NotePreviewList({
         <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
       ) : (
         filtered.map((note) => {
+          const isSelected = selectedPath === note.relPath
           const noteTags = Array.isArray(note.tags) ? note.tags : []
           const visibleTags = noteTags.slice(0, 2)
           const hiddenTagCount = Math.max(0, noteTags.length - visibleTags.length)
@@ -173,7 +174,7 @@ export function NotePreviewList({
                 <button
                   type="button"
                   className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                    selectedPath === note.relPath
+                    isSelected
                       ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                       : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
                   }`}
@@ -188,7 +189,7 @@ export function NotePreviewList({
                     onDelete(note.relPath)
                   }}
                 >
-                  <div className="truncate text-lg font-bold text-[var(--text)]">
+                  <div className="truncate text-lg font-bold">
                     {note.name.replace(/\.md$/i, '')}
                   </div>
                   <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">

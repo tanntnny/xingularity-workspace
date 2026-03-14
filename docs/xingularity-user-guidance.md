@@ -1,8 +1,8 @@
-# Beacon Vault User Guide
+# Xingularity Vault User Guide
 
-Beacon Vault is a local-first desktop notes app. Your notes and attachments are stored directly in a folder you choose on your machine.
+Xingularity Vault is a local-first desktop notes app. Your notes and attachments are stored directly in a folder you choose on your machine.
 
-## What Beacon Vault Is
+## What Xingularity Vault Is
 
 - Desktop app built with Electron (not a web app)
 - Markdown-first note taking with rich editing
@@ -11,7 +11,7 @@ Beacon Vault is a local-first desktop notes app. Your notes and attachments are 
 
 ## Vault Setup
 
-When you open a vault folder, Beacon ensures this structure exists:
+When you open a vault folder, Xingularity ensures this structure exists:
 
 ```text
 <your-vault>/

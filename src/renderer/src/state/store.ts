@@ -22,7 +22,7 @@ interface VaultState {
   setVault: (vault: VaultInfo | null) => void
   setNotes: (notes: NoteListItem[]) => void
   setCurrentNotePath: (path: string | null) => void
-  setCurrentNoteContent: (content: string) => void
+  setCurrentNoteContent: (content: string | ((current: string) => string)) => void
   setSearchQuery: (query: string) => void
   setSearchResults: (results: SearchResult[]) => void
   setCommandPaletteOpen: (open: boolean) => void
@@ -42,12 +42,13 @@ export const useVaultStore = create<VaultState>((set) => ({
   settings: {
     isSidebarCollapsed: false,
     lastVaultPath: null,
+    profile: {
+      name: ''
+    },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
     projectIcons: {},
-    projects: [],
-    uiTransparency: 0.96,
-    uiBlur: 6
+    projects: []
   },
   toasts: [],
   loading: false,
@@ -55,7 +56,11 @@ export const useVaultStore = create<VaultState>((set) => ({
   setVault: (vault) => set({ vault }),
   setNotes: (notes) => set({ notes }),
   setCurrentNotePath: (currentNotePath) => set({ currentNotePath }),
-  setCurrentNoteContent: (currentNoteContent) => set({ currentNoteContent }),
+  setCurrentNoteContent: (content) =>
+    set((state) => ({
+      currentNoteContent:
+        typeof content === 'function' ? content(state.currentNoteContent) : content
+    })),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),

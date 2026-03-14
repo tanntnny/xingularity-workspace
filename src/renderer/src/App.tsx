@@ -13,12 +13,15 @@ import {
 } from 'lucide-react'
 import {
   CalendarTask,
+  CreateWeeklyPlanWeekInput,
   Project,
   ProjectIconStyle,
   ProjectMilestone,
   ProjectSubtask,
   RendererVaultApi,
-  TaskPriority
+  TaskReminder,
+  CalendarTaskType,
+  WeeklyPlanWeek
 } from '../../shared/types'
 import {
   createRandomProjectIcon,
@@ -48,7 +51,27 @@ import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
 import { FontOption, SettingsPage } from './pages/SettingsPage'
+import { SchedulesPage } from './pages/SchedulesPage'
+import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { useVaultStore } from './state/store'
+import { useWeeklyPlan } from './hooks/useWeeklyPlan'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator
+} from './components/ui/breadcrumb'
+import { findWeekForDate, getSortedWeeks } from './lib/weeklyPlan'
+
+const PAGE_LABELS: Record<AppPage, string> = {
+  notes: 'Notes',
+  projects: 'Projects',
+  weeklyPlan: 'Weekly Plan',
+  calendar: 'Calendar',
+  settings: 'Settings',
+  schedules: 'Schedules'
+}
 
 const FONT_OPTIONS: FontOption[] = [
   {
@@ -257,9 +280,46 @@ function App(): ReactElement {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     PROJECT_SEED[0]?.id ?? null
   )
+  const {
+    data: weeklyPlanState,
+    loading: weeklyPlanLoading,
+    isReady: weeklyPlanReady,
+    createWeek,
+    updateWeek,
+    deleteWeek,
+    addPriority,
+    updatePriority,
+    deletePriority,
+    reorderPriorities,
+    upsertReview
+  } = useWeeklyPlan(vaultApi, pushToast)
+  const [selectedWeeklyPlanWeekId, setSelectedWeeklyPlanWeekId] = useState<string | null>(null)
+  const [pendingWeekStart, setPendingWeekStart] = useState<string | null>(null)
+  const weeklyPlanWeeks = useMemo(() => getSortedWeeks(weeklyPlanState), [weeklyPlanState])
+  const todayIso = toIsoDate(new Date())
+  const currentWeeklyPlanWeek = useMemo(
+    () => findWeekForDate(weeklyPlanWeeks, todayIso) ?? null,
+    [weeklyPlanWeeks, todayIso]
+  )
+  const weeklyPlanCurrentWeekId = currentWeeklyPlanWeek?.id ?? null
+  const nextWeeklyPlanStart = useMemo(
+    () => getNextWeeklyPlanStart(weeklyPlanWeeks),
+    [weeklyPlanWeeks]
+  )
   const [projectSearchQuery, setProjectSearchQuery] = useState('')
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const projectIconPickerRef = useRef<HTMLDivElement | null>(null)
+  const lastPersistedNoteRef = useRef<{ relPath: string; content: string } | null>(null)
+  const calendarTasksRef = useRef(settings.calendarTasks)
+
+  const handleCreateWeeklyPlanWeek = async (input: CreateWeeklyPlanWeekInput): Promise<void> => {
+    if (!weeklyPlanReady) {
+      pushToast('error', 'Weekly Plan is unavailable. Restart Beacon after updating to enable it.')
+      return
+    }
+    setPendingWeekStart(input.startDate)
+    await createWeek(input)
+  }
 
   const noteIsOpen = Boolean(currentNotePath)
   const currentNoteTags = useMemo(
@@ -278,12 +338,15 @@ function App(): ReactElement {
   const scheduledCalendarTasks = useMemo(() => {
     return settings.calendarTasks.filter((task) => Boolean(task.date))
   }, [settings.calendarTasks])
+  const calendarUndoneCount = useMemo(() => {
+    return settings.calendarTasks.filter((task) => !task.completed).length
+  }, [settings.calendarTasks])
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
   )
-  const middleHeaderTitle = useMemo(() => {
+  const middleHeaderBreadcrumbItem = useMemo(() => {
     if (activePage === 'notes') {
       if (searchQuery.trim()) {
         return 'Search Results'
@@ -301,46 +364,67 @@ function App(): ReactElement {
       return selectedProject?.name ?? 'No Project Selected'
     }
 
-    if (activePage === 'resources') {
-      return 'Resource Library'
-    }
-
     if (activePage === 'calendar') {
-      return `Tasks for ${formatCalendarDateLabel(selectedCalendarDate)}`
+      return formatCalendarDateLabel(selectedCalendarDate)
     }
 
-    return 'App Settings'
+    return null
   }, [activePage, searchQuery, currentNotePath, selectedCalendarDate, selectedProject])
 
   useEffect(() => {
-    if (!vaultApi) {
+    if (!weeklyPlanWeeks.length) {
+      setSelectedWeeklyPlanWeekId(null)
+      return
+    }
+    if (selectedWeeklyPlanWeekId && weeklyPlanWeeks.some((week) => week.id === selectedWeeklyPlanWeekId)) {
+      return
+    }
+    const fallback = findWeekForDate(weeklyPlanWeeks, todayIso) ?? weeklyPlanWeeks[weeklyPlanWeeks.length - 1]
+    setSelectedWeeklyPlanWeekId(fallback.id)
+  }, [weeklyPlanWeeks, selectedWeeklyPlanWeekId, todayIso])
+
+  useEffect(() => {
+    if (!pendingWeekStart || !weeklyPlanState) {
+      return
+    }
+    const match = weeklyPlanState.weeks.find((week) => week.startDate === pendingWeekStart)
+    if (match) {
+      setSelectedWeeklyPlanWeekId(match.id)
+      setPendingWeekStart(null)
+    }
+  }, [pendingWeekStart, weeklyPlanState])
+
+  useEffect(() => {
+    if (!vaultApi || !vault) {
       return
     }
 
+    let cancelled = false
     void vaultApi.settings
       .get()
       .then((nextSettings) => {
-        setSettings(nextSettings)
+        if (!cancelled) {
+          setSettings(nextSettings)
+        }
       })
       .catch((error: unknown) => {
-        pushToast('error', String(error))
+        if (!cancelled) {
+          pushToast('error', String(error))
+        }
       })
-  }, [vaultApi, setSettings, pushToast])
+
+    return () => {
+      cancelled = true
+    }
+  }, [vaultApi, vault?.rootPath, setSettings, pushToast])
 
   useEffect(() => {
     document.documentElement.style.setProperty('--app-font-family', settings.fontFamily)
   }, [settings.fontFamily])
 
   useEffect(() => {
-    const uiTransparency = settings.uiTransparency ?? 0.96
-    const uiBlur = settings.uiBlur ?? 6
-    const sidebarOpacity = uiTransparency
-    const workspaceOpacity = Math.max(0, Math.min(1, uiTransparency * 0.7))
-
-    document.documentElement.style.setProperty('--ui-blur', `${uiBlur}px`)
-    document.documentElement.style.setProperty('--sidebar-opacity', String(sidebarOpacity))
-    document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity))
-  }, [settings.uiTransparency, settings.uiBlur])
+    calendarTasksRef.current = settings.calendarTasks
+  }, [settings.calendarTasks])
 
   useEffect(() => {
     if (!vaultApi) {
@@ -364,11 +448,46 @@ function App(): ReactElement {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const isPalette = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p'
+      const isModifierPressed = event.metaKey || event.ctrlKey
+      const isPalette = isModifierPressed && event.key.toLowerCase() === 'p'
       if (isPalette) {
         event.preventDefault()
         setCommandPaletteOpen(true)
+        return
       }
+
+      if (!isModifierPressed) {
+        return
+      }
+
+      const target = event.target
+      const isTypingTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.getAttribute('role') === 'textbox')
+
+      if (isTypingTarget) {
+        return
+      }
+
+      const pageByKey: Partial<Record<string, AppPage>> = {
+        '1': 'notes',
+        '2': 'projects',
+        '3': 'calendar',
+        '4': 'weeklyPlan',
+        '5': 'schedules',
+        '6': 'settings'
+      }
+      const nextPage = pageByKey[event.key]
+      if (!nextPage) {
+        return
+      }
+
+      event.preventDefault()
+      setActivePage(nextPage)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -407,9 +526,23 @@ function App(): ReactElement {
     if (!noteIsOpen || !currentNotePath) {
       return
     }
+
+    const lastPersisted = lastPersistedNoteRef.current
+    if (
+      lastPersisted?.relPath === currentNotePath &&
+      lastPersisted.content === currentNoteContent
+    ) {
+      return
+    }
+
+    const notePath = currentNotePath
+    const noteContent = currentNoteContent
     const timer = setTimeout(() => {
       void vaultApi.files
-        .writeNote(currentNotePath, currentNoteContent)
+        .writeNote(notePath, noteContent)
+        .then(() => {
+          lastPersistedNoteRef.current = { relPath: notePath, content: noteContent }
+        })
         .then(() => vaultApi.files.listNotes())
         .then((nextNotes) => setNotes(nextNotes))
         .catch((error: unknown) => pushToast('error', String(error)))
@@ -427,6 +560,23 @@ function App(): ReactElement {
       const nextSettings = await vaultApi.settings.update({ fontFamily })
       setSettings(nextSettings)
       pushToast('success', 'Font updated')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateProfileName = async (name: string): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({
+        profile: {
+          name
+        }
+      })
+      setSettings(nextSettings)
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -481,28 +631,33 @@ function App(): ReactElement {
 
   // (was addCalendarTask) Add scheduled task via modal prompt — removed in favor of header input for unscheduled tasks
 
-  // Create an unscheduled task (no date)
-  const createUnscheduledTask = async (title: string): Promise<void> => {
-    const trimmed = title.trim()
-    if (!trimmed) return
-
+  const createCalendarTask = async (title: string, date?: string): Promise<CalendarTask> => {
+    const trimmed = title.trim() || 'New Task'
     const nextTask: CalendarTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: trimmed,
+      date,
       completed: false,
       createdAt: new Date().toISOString(),
       priority: 'medium',
+      taskType: 'assignment',
       reminders: []
     }
 
-    await persistCalendarTasks([...settings.calendarTasks, nextTask])
+    await persistCalendarTasks([...calendarTasksRef.current, nextTask])
+    calendarTasksRef.current = [...calendarTasksRef.current, nextTask]
+    return nextTask
   }
 
   const addUnscheduledFromHeader = async (): Promise<void> => {
     const trimmed = calendarHeaderNewTask.trim()
     if (!trimmed) return
-    await createUnscheduledTask(trimmed)
+    await createCalendarTask(trimmed)
     setCalendarHeaderNewTask('')
+  }
+
+  const createTaskForDate = async (date: string): Promise<CalendarTask> => {
+    return createCalendarTask('New Task', date)
   }
 
   const toggleCalendarTask = async (taskId: string): Promise<void> => {
@@ -526,12 +681,12 @@ function App(): ReactElement {
     await persistCalendarTasks(nextTasks)
   }
 
-  const updateCalendarTaskPriority = async (
+  const updateCalendarTaskType = async (
     taskId: string,
-    priority: TaskPriority
+    taskType: CalendarTaskType
   ): Promise<void> => {
     const nextTasks = settings.calendarTasks.map((task) =>
-      task.id === taskId ? { ...task, priority } : task
+      task.id === taskId ? { ...task, taskType } : task
     )
     await persistCalendarTasks(nextTasks)
   }
@@ -542,6 +697,16 @@ function App(): ReactElement {
   ): Promise<void> => {
     const nextTasks = settings.calendarTasks.map((task) =>
       task.id === taskId ? { ...task, time } : task
+    )
+    await persistCalendarTasks(nextTasks)
+  }
+
+  const updateCalendarTaskReminders = async (
+    taskId: string,
+    reminders: TaskReminder[]
+  ): Promise<void> => {
+    const nextTasks = settings.calendarTasks.map((task) =>
+      task.id === taskId ? { ...task, reminders } : task
     )
     await persistCalendarTasks(nextTasks)
   }
@@ -658,6 +823,7 @@ function App(): ReactElement {
 
     try {
       const content = await vaultApi.files.readNote(relPath)
+      lastPersistedNoteRef.current = { relPath, content }
       setCurrentNotePath(relPath)
       setCurrentNoteContent(content)
       setIsPreviewMode(false) // Reset to edit mode when opening a new note
@@ -894,7 +1060,7 @@ function App(): ReactElement {
   }
 
   const updateCurrentNoteBody = (nextBody: string): void => {
-    setCurrentNoteContent(replaceNoteBody(currentNoteContent, nextBody))
+    setCurrentNoteContent((current) => replaceNoteBody(current, nextBody))
   }
 
   const updateProjectIcon = (projectId: string, nextIcon: ProjectIconStyle): void => {
@@ -1025,10 +1191,6 @@ function App(): ReactElement {
     }
   }
 
-  const notifyUnavailableTool = (label: string): void => {
-    pushToast('info', `${label} is coming soon`)
-  }
-
   const deriveMilestoneStatus = (milestone: ProjectMilestone): ProjectMilestone['status'] => {
     const subtasks = milestone.subtasks
     if (subtasks.length === 0) {
@@ -1068,11 +1230,20 @@ function App(): ReactElement {
   }
 
   const withComputedProjectState = (project: Project): Project => {
-    const milestones = project.milestones.map((milestone) => ({
-      ...milestone,
-      subtasks: milestone.subtasks ?? [],
-      status: deriveMilestoneStatus(milestone)
-    }))
+    const milestones = project.milestones.map((milestone) => {
+      const normalizedSubtasks = (milestone.subtasks ?? []).map((subtask) => ({
+        ...subtask,
+        description: subtask.description ?? ''
+      }))
+
+      return {
+        ...milestone,
+        description: milestone.description ?? '',
+        collapsed: milestone.collapsed ?? false,
+        subtasks: normalizedSubtasks,
+        status: deriveMilestoneStatus({ ...milestone, subtasks: normalizedSubtasks })
+      }
+    })
 
     return {
       ...project,
@@ -1161,6 +1332,8 @@ function App(): ReactElement {
       const nextMilestone: ProjectMilestone = {
         id: `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: normalizedTitle,
+        description: '',
+        collapsed: false,
         dueDate: normalizedDueDate,
         status: 'pending',
         subtasks: []
@@ -1227,6 +1400,59 @@ function App(): ReactElement {
         milestones: nextMilestones,
         updatedAt: new Date().toISOString()
       })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const updateProjectMilestoneDescription = (
+    projectId: string,
+    milestoneId: string,
+    nextDescription: string
+  ): void => {
+    const normalizedDescription = nextDescription.trim()
+
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? { ...milestone, description: normalizedDescription }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const toggleProjectMilestoneCollapsed = (projectId: string, milestoneId: string): void => {
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? { ...milestone, collapsed: !(milestone.collapsed ?? false) }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+
+    setSettings({
+      ...settings,
+      projects: nextProjects
     })
     void persistProjects(nextProjects)
   }
@@ -1301,47 +1527,11 @@ function App(): ReactElement {
                 {
                   id: `subtask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                   title: normalizedTitle,
+                  description: '',
                   completed: false,
-                  createdAt: new Date().toISOString(),
-                  dueDate: milestone.dueDate
+                  createdAt: new Date().toISOString()
                 } satisfies ProjectSubtask
               ]
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateMilestoneSubtaskDueDate = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    nextDueDate: string
-  ): void => {
-    const normalizedDueDate = nextDueDate.trim()
-    if (!normalizedDueDate) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId ? { ...subtask, dueDate: normalizedDueDate } : subtask
-              )
             }
           : milestone
       )
@@ -1407,6 +1597,41 @@ function App(): ReactElement {
               ...milestone,
               subtasks: milestone.subtasks.map((subtask) =>
                 subtask.id === subtaskId ? { ...subtask, title: normalizedTitle } : subtask
+              )
+            }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const updateMilestoneSubtaskDescription = (
+    projectId: string,
+    milestoneId: string,
+    subtaskId: string,
+    nextDescription: string
+  ): void => {
+    const normalizedDescription = nextDescription.trim()
+
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              subtasks: milestone.subtasks.map((subtask) =>
+                subtask.id === subtaskId
+                  ? { ...subtask, description: normalizedDescription }
+                  : subtask
               )
             }
           : milestone
@@ -1541,45 +1766,48 @@ function App(): ReactElement {
   }
 
   const headerClass =
-    'app-drag-region flex h-[80px] shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--panel)] px-3'
+    'app-drag-region flex h-[80px] shrink-0 items-center justify-between gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
+  const isStandalonePage = activePage === 'schedules'
 
   return (
     <div className="flex h-screen">
       <SidebarProvider className="h-full">
-        <AppSidebar activePage={activePage} onChange={setActivePage} notesCount={notes.length} />
+        <AppSidebar
+          activePage={activePage}
+          onChange={setActivePage}
+          notesCount={notes.length}
+          projectsCount={projects.length}
+          calendarUndoneCount={calendarUndoneCount}
+          profileName={settings.profile.name}
+        />
 
         <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
           <div className="flex h-full min-w-0">
-            <section className="flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]">
+            {activePage === 'schedules' ? (
+              <SchedulesPage vaultApi={vaultApi} pushToast={pushToast} />
+            ) : null}
+            <section className={`flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]${isStandalonePage ? ' hidden' : ''}`}>
               <header className={headerClass}>
                 <div className="app-no-drag flex min-w-0 items-center gap-3">
-                  {activePage === 'calendar' ? (
-                    <>
-                      <span className="text-sm text-[var(--muted)]">
-                        {(() => {
-                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
-                          return parsed.toLocaleDateString(undefined, {
-                            month: 'long',
-                            year: 'numeric'
-                          })
-                        })()}
-                      </span>
-                      <span className="text-[var(--line-strong)]">·</span>
-                      <span className="text-sm text-[var(--muted)]">
-                        {(() => {
-                          const parsed = new Date(`${selectedCalendarDate}T00:00:00`)
-                          return parsed.toLocaleDateString(undefined, {
-                            weekday: 'short',
-                            day: 'numeric'
-                          })
-                        })()}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="truncate text-base font-semibold text-[var(--text)]">
-                      {middleHeaderTitle}
-                    </span>
-                  )}
+                  <Breadcrumb>
+                    <BreadcrumbList className="text-[var(--muted)]">
+                      <BreadcrumbItem>
+                        <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                          {PAGE_LABELS[activePage]}
+                        </BreadcrumbPage>
+                      </BreadcrumbItem>
+                      {middleHeaderBreadcrumbItem ? (
+                        <>
+                          <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                          <BreadcrumbItem>
+                            <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                              {middleHeaderBreadcrumbItem}
+                            </BreadcrumbPage>
+                          </BreadcrumbItem>
+                        </>
+                      ) : null}
+                    </BreadcrumbList>
+                  </Breadcrumb>
                 </div>
 
                 <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">
@@ -1788,13 +2016,43 @@ function App(): ReactElement {
                         <ChevronRight size={18} />
                       </button>
                     </>
+                  ) : activePage === 'weeklyPlan' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!weeklyPlanReady) {
+                            pushToast('error', 'Weekly Plan is unavailable. Restart Beacon after updating to enable it.')
+                            return
+                          }
+                          void handleCreateWeeklyPlanWeek({ startDate: nextWeeklyPlanStart })
+                        }}
+                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm font-medium hover:border-[var(--accent)] disabled:opacity-50"
+                        disabled={!weeklyPlanReady}
+                      >
+                        <Plus size={16} className="mr-1" /> New week
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (weeklyPlanCurrentWeekId) {
+                            setSelectedWeeklyPlanWeekId(weeklyPlanCurrentWeekId)
+                          }
+                        }}
+                        disabled={!weeklyPlanCurrentWeekId || !weeklyPlanReady}
+                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm font-medium hover:border-[var(--accent)] disabled:opacity-50"
+                      >
+                        <CalendarDays size={16} className="mr-1" /> Current week
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </header>
 
               <div className="min-h-0 flex-1 overflow-hidden">
-                {activePage === 'notes' ? (
-                  searchQuery.trim() ? (
+                <div key={activePage} className="page-transition h-full w-full">
+                  {activePage === 'notes' ? (
+                    searchQuery.trim() ? (
                     <SearchPage
                       results={searchResults}
                       onOpen={(relPath) => {
@@ -1845,6 +2103,16 @@ function App(): ReactElement {
                       onUpdateMilestoneDueDate={(milestoneId, nextDueDate) =>
                         updateProjectMilestoneDueDate(selectedProject.id, milestoneId, nextDueDate)
                       }
+                      onUpdateMilestoneDescription={(milestoneId, nextDescription) =>
+                        updateProjectMilestoneDescription(
+                          selectedProject.id,
+                          milestoneId,
+                          nextDescription
+                        )
+                      }
+                      onToggleMilestoneCollapsed={(milestoneId) =>
+                        toggleProjectMilestoneCollapsed(selectedProject.id, milestoneId)
+                      }
                       onMoveMilestone={(milestoneId, direction) =>
                         moveProjectMilestone(selectedProject.id, milestoneId, direction)
                       }
@@ -1865,12 +2133,12 @@ function App(): ReactElement {
                           nextTitle
                         )
                       }
-                      onUpdateSubtaskDueDate={(milestoneId, subtaskId, nextDueDate) =>
-                        updateMilestoneSubtaskDueDate(
+                      onUpdateSubtaskDescription={(milestoneId, subtaskId, nextDescription) =>
+                        updateMilestoneSubtaskDescription(
                           selectedProject.id,
                           milestoneId,
                           subtaskId,
-                          nextDueDate
+                          nextDescription
                         )
                       }
                       onMoveSubtask={(milestoneId, subtaskId, direction) =>
@@ -1898,14 +2166,31 @@ function App(): ReactElement {
                       Pick a project from the right panel to open details
                     </div>
                   )
+                ) : activePage === 'weeklyPlan' ? (
+                  <WeeklyPlanWorkspace
+                    state={weeklyPlanState}
+                    loading={weeklyPlanLoading}
+                    selectedWeekId={selectedWeeklyPlanWeekId}
+                    isReady={weeklyPlanReady}
+                    projects={projects}
+                    calendarTasks={settings.calendarTasks}
+                    onUpdateWeek={(input) => updateWeek(input)}
+                    onDeleteWeek={(input) => deleteWeek(input)}
+                    onAddPriority={(input) => addPriority(input)}
+                    onUpdatePriority={(input) => updatePriority(input)}
+                    onDeletePriority={(priorityId) => deletePriority(priorityId)}
+                    onReorderPriorities={(input) => reorderPriorities(input)}
+                    onUpsertReview={(input) => upsertReview(input)}
+                  />
                 ) : activePage === 'calendar' ? (
-                  <CalendarMonthView
-                    selectedDate={selectedCalendarDate}
-                    tasks={scheduledCalendarTasks}
-                    onSelectDate={setSelectedCalendarDate}
-                    onRescheduleTask={(taskId, newDate) => {
-                      void rescheduleCalendarTask(taskId, newDate)
-                    }}
+                <CalendarMonthView
+                  selectedDate={selectedCalendarDate}
+                  tasks={scheduledCalendarTasks}
+                  onSelectDate={setSelectedCalendarDate}
+                  onCreateTask={createTaskForDate}
+                  onRescheduleTask={(taskId, newDate) => {
+                    void rescheduleCalendarTask(taskId, newDate)
+                  }}
                     onResizeTaskStart={(taskId, newStartDate) => {
                       void resizeCalendarTaskStart(taskId, newStartDate)
                     }}
@@ -1921,47 +2206,30 @@ function App(): ReactElement {
                     onRenameTask={(taskId, newTitle) => {
                       void renameCalendarTask(taskId, newTitle)
                     }}
-                    onUpdateTaskPriority={(taskId, priority) => {
-                      void updateCalendarTaskPriority(taskId, priority)
+                    onUpdateTaskType={(taskId, taskType) => {
+                      void updateCalendarTaskType(taskId, taskType)
                     }}
                     onUpdateTaskTime={(taskId, time) => {
                       void updateCalendarTaskTime(taskId, time)
                     }}
+                    onUpdateTaskReminders={(taskId, reminders) => {
+                      void updateCalendarTaskReminders(taskId, reminders)
+                    }}
                   />
                 ) : activePage === 'settings' ? (
                   <SettingsPage
+                    profileName={settings.profile.name}
                     fontOptions={FONT_OPTIONS}
                     selectedFontFamily={settings.fontFamily}
                     vaultLocation={vault?.rootPath ?? settings.lastVaultPath}
+                    onSaveProfile={(name) => {
+                      void updateProfileName(name)
+                    }}
                     onSelectFont={(fontFamily) => {
                       void updateFontFamily(fontFamily)
                     }}
                     onChangeVaultLocation={() => {
                       void openVault('open')
-                    }}
-                    uiTransparency={settings.uiTransparency ?? 0.96}
-                    uiBlur={settings.uiBlur ?? 6}
-                    onChangeTransparency={async (value: number) => {
-                      if (!vaultApi) return
-                      try {
-                        const nextSettings = await vaultApi.settings.update({
-                          uiTransparency: value
-                        })
-                        setSettings(nextSettings)
-                        pushToast('success', 'Transparency updated')
-                      } catch (err) {
-                        pushToast('error', String(err))
-                      }
-                    }}
-                    onChangeBlur={async (value: number) => {
-                      if (!vaultApi) return
-                      try {
-                        const nextSettings = await vaultApi.settings.update({ uiBlur: value })
-                        setSettings(nextSettings)
-                        pushToast('success', 'Blur updated')
-                      } catch (err) {
-                        pushToast('error', String(err))
-                      }
                     }}
                   />
                 ) : (
@@ -1969,188 +2237,165 @@ function App(): ReactElement {
                     {activePage} workspace ready. Notes remain fully functional.
                   </div>
                 )}
+                </div>
               </div>
             </section>
 
-            <aside className="flex h-full w-[340px] shrink-0 flex-col bg-[var(--panel)]">
-              <header className={headerClass}>
-                <div className="app-no-drag flex min-w-0 items-center gap-2">
-                  {activePage === 'notes' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                        onClick={promptAndRunSearch}
-                        aria-label="Search notes"
-                        title="Search notes"
-                      >
-                        <Search size={16} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                        onClick={() => {
-                          void createNote()
+            <aside
+              className={`h-full w-[300px] shrink-0 flex-col bg-[var(--panel)]${
+                isStandalonePage || activePage === 'settings' ? ' hidden' : ' flex'
+              }`}
+              style={{ width: 'var(--workspace-pane-width)', flexBasis: 'var(--workspace-pane-width)' }}
+            >
+              {activePage === 'weeklyPlan' ? (
+                <WeeklyPlanSidebar
+                  state={weeklyPlanState}
+                  loading={weeklyPlanLoading}
+                  selectedWeekId={selectedWeeklyPlanWeekId}
+                  currentWeekId={weeklyPlanCurrentWeekId}
+                  nextWeekStart={nextWeeklyPlanStart}
+                  todayIso={todayIso}
+                  isReady={weeklyPlanReady}
+                  onSelectWeek={setSelectedWeeklyPlanWeekId}
+                  onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
+                  onDeleteWeek={(input) => deleteWeek(input)}
+                />
+              ) : (
+                <>
+                  <header className={headerClass}>
+                    <div className="app-no-drag flex min-w-0 items-center gap-2">
+                      {activePage === 'notes' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                            onClick={promptAndRunSearch}
+                            aria-label="Search notes"
+                            title="Search notes"
+                          >
+                            <Search size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                            onClick={() => {
+                              void createNote()
+                            }}
+                            aria-label="Add new note"
+                            title="Add new note"
+                          >
+                            <Plus size={18} aria-hidden="true" />
+                          </button>
+                        </>
+                      ) : activePage === 'projects' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                            onClick={promptAndRunProjectSearch}
+                            aria-label="Search projects"
+                            title="Search projects"
+                          >
+                            <Search size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                            onClick={createProject}
+                            aria-label="Add new project"
+                            title="Add new project"
+                          >
+                            <Plus size={18} aria-hidden="true" />
+                          </button>
+                        </>
+                      ) : activePage === 'calendar' ? (
+                        <div className="w-full" />
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
+                          onClick={() => {
+                            void updateFontFamily(FONT_OPTIONS[0].value)
+                          }}
+                        >
+                          Reset Font
+                        </button>
+                      )}
+                    </div>
+                  </header>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    {activePage === 'notes' ? (
+                      <NotePreviewList
+                        notes={notes}
+                        selectedPath={currentNotePath}
+                        filter={searchQuery}
+                        onOpen={(relPath) => {
+                          setSearchQuery('')
+                          setSearchResults([])
+                          void openNote(relPath)
                         }}
-                        aria-label="Add new note"
-                        title="Add new note"
-                      >
-                        <Plus size={18} aria-hidden="true" />
-                      </button>
-                    </>
-                  ) : activePage === 'projects' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                        onClick={promptAndRunProjectSearch}
-                        aria-label="Search projects"
-                        title="Search projects"
-                      >
-                        <Search size={16} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                        onClick={createProject}
-                        aria-label="Add new project"
-                        title="Add new project"
-                      >
-                        <Plus size={18} aria-hidden="true" />
-                      </button>
-                    </>
-                  ) : activePage === 'calendar' ? (
-                    <div className="flex w-full min-w-0 items-center gap-2">
-                      <input
-                        type="text"
-                        aria-label="Add a task"
-                        placeholder="Add a task..."
-                        value={calendarHeaderNewTask}
-                        onChange={(e) => setCalendarHeaderNewTask(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            void addUnscheduledFromHeader()
-                          }
+                        onDelete={(relPath) => {
+                          void deleteNoteByPath(relPath)
                         }}
-                        className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
+                    ) : activePage === 'projects' ? (
+                      <ProjectPreviewList
+                        projects={projects}
+                        selectedProjectId={selectedProjectId}
+                        filter={projectSearchQuery}
+                        onSelect={setSelectedProjectId}
+                      />
+                    ) : activePage === 'calendar' ? (
+                      <UnscheduledTaskList
+                        tasks={unscheduledTasks}
+                        selectedDate={selectedCalendarDate}
+                        newTaskValue={calendarHeaderNewTask}
+                        onNewTaskValueChange={setCalendarHeaderNewTask}
+                        onToggle={(taskId) => {
+                          void toggleCalendarTask(taskId)
+                        }}
+                        onDelete={(taskId) => {
+                          void removeCalendarTask(taskId)
+                        }}
+                        onRename={(taskId, newTitle) => {
+                          void renameCalendarTask(taskId, newTitle)
+                        }}
+                        onUpdateTaskType={(taskId, taskType) => {
+                          void updateCalendarTaskType(taskId, taskType)
+                        }}
+                        onUpdateTime={(taskId, time) => {
+                          void updateCalendarTaskTime(taskId, time)
+                        }}
+                        onUpdateReminders={(taskId, reminders) => {
+                          void updateCalendarTaskReminders(taskId, reminders)
+                        }}
+                        onScheduleTask={(taskId, date) => {
+                          void rescheduleCalendarTask(taskId, date)
+                        }}
+                        onUnscheduleTask={(taskId) => {
+                          void rescheduleCalendarTask(taskId, undefined)
+                        }}
+                        onInsertTask={() => {
                           void addUnscheduledFromHeader()
                         }}
-                        aria-label="Add task"
-                        title="Add task"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                      >
-                        <Plus size={16} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : activePage === 'resources' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                        onClick={() => notifyUnavailableTool('Add resource link')}
-                      >
-                        Add Link
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                        onClick={() => notifyUnavailableTool('Upload resource file')}
-                      >
-                        Upload
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
-                      onClick={() => {
-                        void updateFontFamily(FONT_OPTIONS[0].value)
-                      }}
-                    >
-                      Reset Font
-                    </button>
-                  )}
-                </div>
-              </header>
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {activePage === 'notes' ? (
-                  <NotePreviewList
-                    notes={notes}
-                    selectedPath={currentNotePath}
-                    filter={searchQuery}
-                    onOpen={(relPath) => {
-                      setSearchQuery('')
-                      setSearchResults([])
-                      void openNote(relPath)
-                    }}
-                    onDelete={(relPath) => {
-                      void deleteNoteByPath(relPath)
-                    }}
-                  />
-                ) : activePage === 'projects' ? (
-                  <ProjectPreviewList
-                    projects={projects}
-                    selectedProjectId={selectedProjectId}
-                    filter={projectSearchQuery}
-                    onSelect={setSelectedProjectId}
-                  />
-                ) : activePage === 'calendar' ? (
-                  <UnscheduledTaskList
-                    tasks={unscheduledTasks}
-                    selectedDate={selectedCalendarDate}
-                    onToggle={(taskId) => {
-                      void toggleCalendarTask(taskId)
-                    }}
-                    onDelete={(taskId) => {
-                      void removeCalendarTask(taskId)
-                    }}
-                    onRename={(taskId, newTitle) => {
-                      void renameCalendarTask(taskId, newTitle)
-                    }}
-                    onUpdatePriority={(taskId, priority) => {
-                      void updateCalendarTaskPriority(taskId, priority)
-                    }}
-                    onUpdateTime={(taskId, time) => {
-                      void updateCalendarTaskTime(taskId, time)
-                    }}
-                    onScheduleTask={(taskId, date) => {
-                      void rescheduleCalendarTask(taskId, date)
-                    }}
-                    onUnscheduleTask={(taskId) => {
-                      void rescheduleCalendarTask(taskId, undefined)
-                    }}
-                  />
-                ) : activePage === 'resources' ? (
-                  <div className="grid h-full grid-rows-3 gap-3 p-3">
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Reference Links
-                    </div>
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Attachments
-                    </div>
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Templates
-                    </div>
+                      />
+                    ) : (
+                      <div className="grid h-full grid-rows-3 gap-3 p-3">
+                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                          Appearance
+                        </div>
+                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                          Editor Defaults
+                        </div>
+                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
+                          Shortcuts
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="grid h-full grid-rows-3 gap-3 p-3">
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Appearance
-                    </div>
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Editor Defaults
-                    </div>
-                    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                      Shortcuts
-                    </div>
-                  </div>
-                )}
-              </div>
+                </>
+              )}
             </aside>
           </div>
 
@@ -2176,6 +2421,21 @@ function App(): ReactElement {
 }
 
 export default App
+
+function getNextWeeklyPlanStart(weeks: WeeklyPlanWeek[]): string {
+  if (!weeks.length) {
+    return startOfWeekIso(new Date())
+  }
+  return addIsoDays(weeks[weeks.length - 1]!.startDate, 7)
+}
+
+function startOfWeekIso(date: Date): string {
+  const copy = new Date(date)
+  const day = copy.getDay()
+  const offset = (day + 6) % 7
+  copy.setDate(copy.getDate() - offset)
+  return toIsoDate(copy)
+}
 
 function toIsoDate(date: Date): string {
   const year = date.getFullYear()

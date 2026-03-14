@@ -12,7 +12,7 @@ import {
   VaultPaths
 } from './vaultManager'
 import { VaultWatcher } from './watcher'
-import { SettingsStore } from './settingsStore'
+import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { AppSettings, AppSettingsUpdate, SearchResult, VaultOpenResult } from '../shared/types'
 
@@ -25,6 +25,7 @@ export class VaultRuntime {
   private reminderService = new ReminderService()
   private activationQueue: Promise<void> = Promise.resolve()
   private settingsQueue: Promise<void> = Promise.resolve()
+  private vaultListeners: Array<(paths: VaultPaths | null) => void> = []
 
   async openWithDialog(): Promise<VaultOpenResult | null> {
     const chosen = await chooseVaultFolder('Open vault folder')
@@ -43,19 +44,19 @@ export class VaultRuntime {
   }
 
   async restoreLast(): Promise<VaultOpenResult | null> {
-    const settings = await this.settings.read()
-    if (!settings.lastVaultPath) {
+    const global = await this.settings.readGlobal()
+    if (!global.lastVaultPath) {
       return null
     }
 
     try {
-      return await this.enqueueActivation(() => this.activateVault(settings.lastVaultPath!, false))
+      return await this.enqueueActivation(() => this.activateVault(global.lastVaultPath!, false))
     } catch (error) {
       console.error('Failed to restore last vault:', {
-        lastVaultPath: settings.lastVaultPath,
+        lastVaultPath: global.lastVaultPath,
         error
       })
-      throw new Error(`Could not restore previous vault at ${settings.lastVaultPath}`)
+      throw new Error(`Could not restore previous vault at ${global.lastVaultPath}`)
     }
   }
 
@@ -68,6 +69,10 @@ export class VaultRuntime {
   getCurrentVaultRoot(): string {
     this.assertReady()
     return this.currentPaths!.rootPath
+  }
+
+  onVaultChange(listener: (paths: VaultPaths | null) => void): void {
+    this.vaultListeners.push(listener)
   }
 
   async listNotes() {
@@ -173,7 +178,18 @@ export class VaultRuntime {
   }
 
   async getSettings(): Promise<AppSettings> {
-    const settings = await this.settings.read()
+    if (!this.currentPaths) {
+      console.log('[VaultRuntime] getSettings requested before vault open')
+      const defaults = createDefaultAppSettings()
+      const global = await this.settings.readGlobal()
+      return {
+        ...defaults,
+        lastVaultPath: global.lastVaultPath
+      }
+    }
+
+    console.log('[VaultRuntime] getSettings for vault', this.currentPaths.rootPath)
+    const settings = await this.settings.readVault(this.getCurrentVaultRoot())
     // Initialize reminder service with current tasks
     this.reminderService.updateTasks(settings.calendarTasks)
     return settings
@@ -181,12 +197,7 @@ export class VaultRuntime {
 
   async updateSettings(next: AppSettingsUpdate): Promise<AppSettings> {
     return this.enqueueSettingsUpdate(async () => {
-      const current = await this.settings.read()
-      const merged: AppSettings = {
-        ...current,
-        ...next
-      }
-      await this.settings.write(merged)
+      const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
       if (next.calendarTasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
@@ -221,6 +232,7 @@ export class VaultRuntime {
   }
 
   private async activateVault(folderPath: string, createMode: boolean): Promise<VaultOpenResult> {
+    console.log('[VaultRuntime] activateVault', { folderPath, createMode })
     await this.closeCurrentVault()
     this.currentPaths = createMode
       ? await initializeVault(folderPath)
@@ -243,11 +255,9 @@ export class VaultRuntime {
     )
     this.watcher.start()
 
-    const currentSettings = await this.settings.read()
-    await this.settings.write({
-      ...currentSettings,
-      lastVaultPath: this.currentPaths.rootPath
-    })
+    console.log('[VaultRuntime] persist global last vault', this.currentPaths.rootPath)
+    await this.settings.writeGlobal({ lastVaultPath: this.currentPaths.rootPath })
+    this.notifyVaultChange(this.currentPaths)
     return {
       info: toInfo(this.currentPaths),
       notes: await this.fileService.listNotes()
@@ -255,6 +265,9 @@ export class VaultRuntime {
   }
 
   private async closeCurrentVault(): Promise<void> {
+    if (this.currentPaths) {
+      this.notifyVaultChange(null)
+    }
     await this.watcher?.stop()
     this.watcher = null
     this.fileService = null
@@ -279,6 +292,16 @@ export class VaultRuntime {
       () => undefined
     )
     return run
+  }
+
+  private notifyVaultChange(paths: VaultPaths | null): void {
+    for (const listener of this.vaultListeners) {
+      try {
+        listener(paths)
+      } catch (error) {
+        console.error('[VaultRuntime] vault listener failed', error)
+      }
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
-import { CalendarTask, TaskPriority } from '../../../shared/types'
+import { CalendarTask, CalendarTaskType } from '../../../shared/types'
 
 interface CalendarDayViewProps {
   selectedDate: string
@@ -8,10 +8,12 @@ interface CalendarDayViewProps {
   onRescheduleTask?: (taskId: string, newDate: string) => void
 }
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  high: '#ef4444',
-  medium: '#f59e0b',
-  low: '#22c55e'
+const TASK_TYPE_COLORS: Record<CalendarTaskType, string> = {
+  meeting: '#3b82f6',
+  assignment: '#f59e0b',
+  review: '#8b5cf6',
+  personal: '#22c55e',
+  other: '#64748b'
 }
 
 // Time slots from 6 AM to 11 PM
@@ -127,7 +129,7 @@ export function CalendarDayView({
               >
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: PRIORITY_COLORS[task.priority || 'medium'] }}
+                  style={{ backgroundColor: TASK_TYPE_COLORS[task.taskType || 'assignment'] }}
                 />
                 {task.title}
               </div>
@@ -189,7 +191,7 @@ export function CalendarDayView({
                     >
                       <span
                         className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: PRIORITY_COLORS[task.priority || 'medium'] }}
+                        style={{ backgroundColor: TASK_TYPE_COLORS[task.taskType || 'assignment'] }}
                       />
                       {task.title}
                       <span className="text-xs text-[var(--muted)]">{task.time}</span>

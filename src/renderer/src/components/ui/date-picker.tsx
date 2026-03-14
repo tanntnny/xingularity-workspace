@@ -52,6 +52,7 @@ interface DatePickerISOProps {
   placeholder?: string
   className?: string
   displayFormat?: string
+  showIcon?: boolean
   'aria-label'?: string
 }
 
@@ -61,6 +62,7 @@ export function DatePickerISO({
   placeholder = 'Pick a date',
   className,
   displayFormat = 'MMM d, yyyy',
+  showIcon = true,
   'aria-label': ariaLabel
 }: DatePickerISOProps): React.ReactElement {
   const date = value ? parseISO(value) : undefined
@@ -86,7 +88,7 @@ export function DatePickerISO({
           )}
           aria-label={ariaLabel}
         >
-          <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+          {showIcon ? <CalendarIcon className="mr-2 h-3.5 w-3.5" /> : null}
           {date ? format(date, displayFormat) : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>

@@ -15,7 +15,7 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:bg-[var(--destructive)]/80',
         outline: 'text-[var(--foreground)]',
-        // Custom variants for Beacon's tag colors
+        // Custom variants for Xingularity's tag colors
         tag0: 'border-[var(--tag-0-line)] bg-[var(--tag-0-bg)] text-[var(--tag-0-text)]',
         tag1: 'border-[var(--tag-1-line)] bg-[var(--tag-1-bg)] text-[var(--tag-1-text)]',
         tag2: 'border-[var(--tag-2-line)] bg-[var(--tag-2-bg)] text-[var(--tag-2-text)]',

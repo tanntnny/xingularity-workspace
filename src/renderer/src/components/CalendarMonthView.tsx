@@ -1,342 +1,686 @@
-import { DragEvent, ReactElement, useMemo, useState } from 'react'
-import { Check } from 'lucide-react'
-import { CalendarTask, TaskPriority } from '../../../shared/types'
-import { TaskContextMenu } from './TaskContextMenu'
+import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import { Trash2 } from 'lucide-react'
+import FullCalendar from '@fullcalendar/react'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin from '@fullcalendar/interaction'
+import {
+  Draggable,
+  DropArg,
+  EventDragStartArg,
+  EventDragStopArg,
+  EventResizeDoneArg,
+  EventResizeStartArg,
+  EventResizeStopArg
+} from '@fullcalendar/interaction'
+import { DayCellMountArg, EventDropArg, EventMountArg, EventHoveringArg } from '@fullcalendar/core'
+import { createPortal } from 'react-dom'
+import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
+import { CalendarTaskCard } from './CalendarTaskCard'
+import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
+import { Input } from './ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from './ui/dialog'
 
 interface CalendarMonthViewProps {
   selectedDate: string
   tasks: CalendarTask[]
   onSelectDate: (date: string) => void
+  onCreateTask?: (date: string) => Promise<CalendarTask>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onResizeTaskStart?: (taskId: string, newStartDate: string) => void
   onResizeTaskEnd?: (taskId: string, newEndDate: string) => void
   onToggleTask?: (taskId: string) => void
   onDeleteTask?: (taskId: string) => void
   onRenameTask?: (taskId: string, newTitle: string) => void
-  onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
+  onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
-}
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-const PRIORITY_STYLE: Record<TaskPriority, { bg: string; border: string }> = {
-  high: { bg: 'bg-red-50 dark:bg-red-950/30', border: 'border-red-300 dark:border-red-700/50' },
-  medium: {
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
-    border: 'border-amber-300 dark:border-amber-700/50'
-  },
-  low: {
-    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-    border: 'border-emerald-300 dark:border-emerald-700/50'
-  }
-}
-
-interface WeekSegment {
-  task: CalendarTask
-  startCol: number
-  endCol: number
-  lane: number
+  onUpdateTaskReminders?: (taskId: string, reminders: TaskReminder[]) => void
 }
 
 export function CalendarMonthView({
   selectedDate,
   tasks,
   onSelectDate,
+  onCreateTask,
   onRescheduleTask,
   onResizeTaskStart,
   onResizeTaskEnd,
   onToggleTask,
   onDeleteTask,
   onRenameTask,
-  onUpdateTaskPriority,
-  onUpdateTaskTime
+  onUpdateTaskType,
+  onUpdateTaskTime,
+  onUpdateTaskReminders
 }: CalendarMonthViewProps): ReactElement {
-  const todayIso = toIsoDate(new Date())
-  const [dragOverDate, setDragOverDate] = useState<string | null>(null)
+  const calendarRef = useRef<FullCalendar | null>(null)
+  const mirrorParent = typeof document === 'undefined' ? undefined : document.body
+  const [hoveredTaskCard, setHoveredTaskCard] = useState<{
+    task: CalendarTask
+    x: number
+    y: number
+  } | null>(null)
+  const [calendarContextMenu, setCalendarContextMenu] = useState<{
+    taskId: string
+    x: number
+    y: number
+    nonce: number
+  } | null>(null)
+  const [isInteracting, setIsInteracting] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const contextMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
+  const contextMenuNonceRef = useRef(0)
+  const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
 
-  const viewMonth = useMemo(() => {
-    const d = parseIsoDate(selectedDate)
-    return { year: d.getFullYear(), month: d.getMonth() }
-  }, [selectedDate])
-
-  const monthDays = useMemo(() => {
-    const { year, month } = viewMonth
-    const firstOfMonth = new Date(year, month, 1)
-    const startOffset = firstOfMonth.getDay()
-    const start = new Date(year, month, 1 - startOffset)
-
-    return Array.from({ length: 42 }, (_, index) => {
-      const day = new Date(start)
-      day.setDate(start.getDate() + index)
-      return day
-    })
-  }, [viewMonth])
-
-  const weekRows = useMemo(
-    () => Array.from({ length: 6 }, (_, rowIdx) => monthDays.slice(rowIdx * 7, rowIdx * 7 + 7)),
-    [monthDays]
+  const tasksById = useMemo(() => Object.fromEntries(tasks.map((task) => [task.id, task])), [tasks])
+  const tasksByIdRef = useRef(tasksById)
+  const isInteractingRef = useRef(isInteracting)
+  const eventListenerMapRef = useRef(
+    new WeakMap<
+      HTMLElement,
+      {
+        onContextMenu: (event: MouseEvent) => void
+        onMouseMove: (event: MouseEvent) => void
+        onMouseLeave: () => void
+        contextMenuTargets: HTMLElement[]
+      }
+    >()
   )
 
-  const scheduledTasks = useMemo(() => tasks.filter((task) => Boolean(task.date)), [tasks])
+  useEffect(() => {
+    tasksByIdRef.current = tasksById
+  }, [tasksById])
 
-  const rowLayout = useMemo(() => {
-    return weekRows.map((rowDays) => {
-      const rowStartIso = toIsoDate(rowDays[0])
-      const rowEndIso = toIsoDate(rowDays[6])
-      const rawSegments: Omit<WeekSegment, 'lane'>[] = []
+  useEffect(() => {
+    if (editingTaskId && !tasksById[editingTaskId]) {
+      setEditingTaskId(null)
+    }
+  }, [editingTaskId, tasksById])
 
-      for (const task of scheduledTasks) {
-        const startIso = task.date as string
-        const endIso = task.endDate && task.endDate >= startIso ? task.endDate : startIso
-        if (endIso < rowStartIso || startIso > rowEndIso) {
-          continue
-        }
+  useEffect(() => {
+    isInteractingRef.current = isInteracting
+  }, [isInteracting])
 
-        const segmentStart = maxIso(startIso, rowStartIso)
-        const segmentEnd = minIso(endIso, rowEndIso)
-        rawSegments.push({
-          task,
-          startCol: diffIsoDays(rowStartIso, segmentStart),
-          endCol: diffIsoDays(rowStartIso, segmentEnd)
+  useEffect(() => {
+    return () => {
+      dayCellListenerMapRef.current.forEach((handler, el) => {
+        el.removeEventListener('dblclick', handler)
+      })
+      dayCellListenerMapRef.current.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!calendarContextMenu) {
+      return
+    }
+    if (typeof window === 'undefined') {
+      return
+    }
+    const frame = window.requestAnimationFrame(() => {
+      contextMenuTriggerRef.current?.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: calendarContextMenu.x,
+          clientY: calendarContextMenu.y
         })
-      }
+      )
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [calendarContextMenu])
 
-      rawSegments.sort((a, b) => a.startCol - b.startCol || a.endCol - b.endCol)
-
-      const laneEnds: number[] = []
-      const segments: WeekSegment[] = rawSegments.map((segment) => {
-        let lane = laneEnds.findIndex((endCol) => segment.startCol > endCol)
-        if (lane === -1) {
-          lane = laneEnds.length
-          laneEnds.push(segment.endCol)
-        } else {
-          laneEnds[lane] = segment.endCol
-        }
-
+  const calendarEvents = useMemo(() => {
+    return tasks
+      .filter((task) => Boolean(task.date))
+      .map((task) => {
+        const startIso = task.date as string
+        const endIso = task.endDate && task.endDate >= startIso ? task.endDate : undefined
         return {
-          ...segment,
-          lane
+          id: task.id,
+          title: task.title,
+          start: startIso,
+          end: endIso ? toIsoDate(addIsoDays(parseIsoDate(endIso), 1)) : undefined,
+          allDay: true,
+          extendedProps: {
+            taskId: task.id
+          }
         }
       })
+  }, [tasks])
 
-      return {
-        rowDays,
-        segments,
-        laneCount: Math.max(laneEnds.length, 1)
+  useEffect(() => {
+    const api = calendarRef.current?.getApi()
+    if (!api) {
+      return
+    }
+    api.gotoDate(selectedDate)
+  }, [selectedDate])
+
+  useEffect(() => {
+    const unscheduledContainer = document.querySelector<HTMLElement>(
+      '[data-unscheduled-task-list="true"]'
+    )
+    if (!unscheduledContainer) {
+      return
+    }
+
+    const draggable = new Draggable(unscheduledContainer, {
+      itemSelector: '[data-unscheduled-task-id]',
+      eventData: (eventEl) => {
+        const taskId = eventEl.getAttribute('data-unscheduled-task-id') ?? ''
+        const title = eventEl.getAttribute('data-unscheduled-task-title') ?? 'Task'
+        return {
+          id: taskId,
+          title,
+          create: false
+        }
       }
     })
-  }, [scheduledTasks, weekRows])
 
-  const handleDayDragOver = (event: DragEvent<HTMLButtonElement>, isoDate: string): void => {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-    setDragOverDate(isoDate)
+    return () => {
+      draggable.destroy()
+    }
+  }, [])
+
+  const handleEventDrop = (dropInfo: EventDropArg): void => {
+    if (!dropInfo.event.start) {
+      return
+    }
+    onRescheduleTask?.(dropInfo.event.id, toIsoDate(dropInfo.event.start))
   }
 
-  const handleDayDrop = (event: DragEvent<HTMLButtonElement>, isoDate: string): void => {
-    event.preventDefault()
-    setDragOverDate(null)
-    const payload = event.dataTransfer.getData('text/plain')
-    if (!payload) {
+  const handleEventResize = (resizeInfo: EventResizeDoneArg): void => {
+    const { event, oldEvent } = resizeInfo
+    if (!event.start) {
       return
     }
 
-    if (payload.startsWith('resize-start:')) {
-      const taskId = payload.replace('resize-start:', '')
-      onResizeTaskStart?.(taskId, isoDate)
+    const prevStartIso = oldEvent.start ? toIsoDate(oldEvent.start) : undefined
+    const nextStartIso = toIsoDate(event.start)
+    if (prevStartIso !== nextStartIso) {
+      onResizeTaskStart?.(event.id, nextStartIso)
+    }
+
+    const previousExclusiveEnd = oldEvent.end ? toIsoDate(oldEvent.end) : undefined
+    const nextExclusiveEnd = event.end ? toIsoDate(event.end) : undefined
+    if (previousExclusiveEnd !== nextExclusiveEnd && event.end) {
+      onResizeTaskEnd?.(event.id, toIsoDate(addIsoDays(event.end, -1)))
+    }
+  }
+
+  const handleExternalDrop = (dropInfo: DropArg): void => {
+    const taskId = dropInfo.draggedEl.getAttribute('data-unscheduled-task-id')
+    if (!taskId) {
+      return
+    }
+    onRescheduleTask?.(taskId, toIsoDate(dropInfo.date))
+  }
+
+  const handleEventDragStop = (dragInfo: EventDragStopArg): void => {
+    setIsInteracting(false)
+
+    const unscheduledContainer = document.querySelector<HTMLElement>(
+      '[data-unscheduled-task-list="true"]'
+    )
+    if (!unscheduledContainer) {
       return
     }
 
-    if (payload.startsWith('resize-end:')) {
-      const taskId = payload.replace('resize-end:', '')
-      onResizeTaskEnd?.(taskId, isoDate)
+    const rect = unscheduledContainer.getBoundingClientRect()
+    const { clientX, clientY } = dragInfo.jsEvent
+    const droppedInUnscheduled =
+      clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+
+    if (droppedInUnscheduled) {
+      onRescheduleTask?.(dragInfo.event.id, undefined)
+    }
+  }
+
+  const handleEventDragStart = (_dragInfo: EventDragStartArg): void => {
+    setIsInteracting(true)
+    setHoveredTaskCard(null)
+  }
+
+  const handleEventResizeStart = (_resizeInfo: EventResizeStartArg): void => {
+    setIsInteracting(true)
+    setHoveredTaskCard(null)
+  }
+
+  const handleEventResizeStop = (_resizeInfo: EventResizeStopArg): void => {
+    setIsInteracting(false)
+  }
+
+  const handleEventMouseEnter = (hoverInfo: EventHoveringArg): void => {
+    if (isInteracting) {
       return
     }
 
-    if (payload.startsWith('move:')) {
-      const taskId = payload.replace('move:', '')
-      onRescheduleTask?.(taskId, isoDate)
+    const task = tasksById[hoverInfo.event.id]
+    if (!task) {
       return
     }
 
-    onRescheduleTask?.(payload, isoDate)
+    const { x, y } = getTooltipPositionFromMouse(
+      hoverInfo.jsEvent.clientX,
+      hoverInfo.jsEvent.clientY
+    )
+
+    setHoveredTaskCard({
+      task,
+      x,
+      y
+    })
+  }
+
+  const handleEventMouseLeave = (): void => {
+    setHoveredTaskCard(null)
+  }
+
+  const handleEventDidMount = (mountInfo: EventMountArg): void => {
+    const taskId = mountInfo.event.id
+    const onContextMenu = (event: MouseEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      contextMenuNonceRef.current += 1
+      setHoveredTaskCard(null)
+      setCalendarContextMenu({
+        taskId,
+        x: event.clientX,
+        y: event.clientY,
+        nonce: contextMenuNonceRef.current
+      })
+    }
+    const onMouseMove = (event: MouseEvent): void => {
+      if (isInteractingRef.current) {
+        return
+      }
+      const task = tasksByIdRef.current[taskId]
+      if (!task) {
+        return
+      }
+      const { x, y } = getTooltipPositionFromMouse(event.clientX, event.clientY)
+      setHoveredTaskCard((current) => {
+        if (!current || current.task.id !== task.id) {
+          return {
+            task,
+            x,
+            y
+          }
+        }
+        return {
+          ...current,
+          x,
+          y
+        }
+      })
+    }
+    const onMouseLeave = (): void => {
+      setHoveredTaskCard(null)
+    }
+
+    const contextMenuTargets = [
+      mountInfo.el,
+      mountInfo.el.querySelector<HTMLElement>('.fc-event-main')
+    ].filter((target): target is HTMLElement => Boolean(target))
+
+    contextMenuTargets.forEach((target) => {
+      target.addEventListener('contextmenu', onContextMenu, true)
+    })
+    mountInfo.el.addEventListener('mousemove', onMouseMove)
+    mountInfo.el.addEventListener('mouseleave', onMouseLeave)
+    eventListenerMapRef.current.set(mountInfo.el, {
+      onContextMenu,
+      onMouseMove,
+      onMouseLeave,
+      contextMenuTargets
+    })
+  }
+
+  const editingTask = editingTaskId ? tasksById[editingTaskId] ?? null : null
+  const handleCloseEditor = (): void => setEditingTaskId(null)
+  const safeToggleTask = onToggleTask ?? (() => undefined)
+  const safeDeleteTask = onDeleteTask ?? (() => undefined)
+  const safeRenameTask = onRenameTask ?? (() => undefined)
+  const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
+  const safeUpdateTaskTime = onUpdateTaskTime ?? (() => undefined)
+  const safeRescheduleTask = onRescheduleTask ?? (() => undefined)
+
+  const handleEventWillUnmount = (mountInfo: EventMountArg): void => {
+    const handlers = eventListenerMapRef.current.get(mountInfo.el)
+    if (!handlers) {
+      return
+    }
+    handlers.contextMenuTargets.forEach((target) => {
+      target.removeEventListener('contextmenu', handlers.onContextMenu, true)
+    })
+    mountInfo.el.removeEventListener('mousemove', handlers.onMouseMove)
+    mountInfo.el.removeEventListener('mouseleave', handlers.onMouseLeave)
+    eventListenerMapRef.current.delete(mountInfo.el)
+  }
+
+  const handleDayCellDidMount = (info: DayCellMountArg): void => {
+    const onDoubleClick = (event: MouseEvent): void => {
+      event.preventDefault()
+      const iso = toIsoDate(info.date)
+      setHoveredTaskCard(null)
+      setCalendarContextMenu(null)
+      onSelectDate(iso)
+      if (!onCreateTask) {
+        return
+      }
+      void onCreateTask(iso)
+        .then((task) => {
+          if (task) {
+            setEditingTaskId(task.id)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to create calendar task', error)
+        })
+    }
+    info.el.addEventListener('dblclick', onDoubleClick)
+    dayCellListenerMapRef.current.set(info.el, onDoubleClick)
+  }
+
+  const handleDayCellWillUnmount = (info: DayCellMountArg): void => {
+    const handler = dayCellListenerMapRef.current.get(info.el)
+    if (handler) {
+      info.el.removeEventListener('dblclick', handler)
+      dayCellListenerMapRef.current.delete(info.el)
+    }
   }
 
   return (
-    <section className="flex h-full flex-col overflow-hidden p-4">
-      <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
-        <div className="grid shrink-0 grid-cols-7 border-b border-[var(--line)] bg-[var(--panel-2)]">
-          {WEEKDAYS.map((day) => (
-            <div
-              key={day}
-              className="py-2 text-center text-xs font-semibold uppercase text-[var(--muted)]"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
+    <section className="calendar-full h-full overflow-hidden p-4">
+      <div className="h-full overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          initialDate={selectedDate}
+          headerToolbar={false}
+          firstDay={0}
+          editable
+          droppable
+          eventResizableFromStart
+          fixedMirrorParent={mirrorParent}
+          eventDragMinDistance={8}
+          eventDisplay="block"
+          dayMaxEventRows={false}
+          dayMaxEvents={false}
+          displayEventTime={false}
+          events={calendarEvents}
+          drop={handleExternalDrop}
+          eventDragStart={handleEventDragStart}
+          eventDrop={handleEventDrop}
+          eventDragStop={handleEventDragStop}
+          eventResizeStart={handleEventResizeStart}
+          eventResize={handleEventResize}
+          eventResizeStop={handleEventResizeStop}
+          eventMouseEnter={handleEventMouseEnter}
+          eventMouseLeave={handleEventMouseLeave}
+          eventDidMount={handleEventDidMount}
+          eventWillUnmount={handleEventWillUnmount}
+          dayCellDidMount={handleDayCellDidMount}
+          dayCellWillUnmount={handleDayCellWillUnmount}
+          dateClick={(info) => onSelectDate(info.dateStr)}
+          eventClick={(info) => {
+            if (info.jsEvent.button !== 0) {
+              return
+            }
+            info.jsEvent.preventDefault()
+            info.jsEvent.stopPropagation()
+            const date = info.event.start ? toIsoDate(info.event.start) : selectedDate
+            setHoveredTaskCard(null)
+            setCalendarContextMenu(null)
+            onSelectDate(date)
+            setEditingTaskId(info.event.id)
+          }}
+          eventClassNames={(arg) => {
+            const task = tasksById[arg.event.id]
+            if (!task) {
+              return ['beacon-task-event', 'beacon-task-assignment']
+            }
+            return [
+              'beacon-task-event',
+              `beacon-task-${task.taskType || 'assignment'}`,
+              task.completed ? 'beacon-task-completed' : ''
+            ]
+          }}
+          dayCellClassNames={(arg) => {
+            const iso = toIsoDate(arg.date)
+            return iso === selectedDate ? ['beacon-day-selected'] : []
+          }}
+          eventContent={(arg) => {
+            const task = tasksById[arg.event.id]
+            if (!task) {
+              return <span className="truncate text-[var(--text)]">{arg.event.title}</span>
+            }
 
-        <div className="flex-1 overflow-auto">
-          {rowLayout.map((row, rowIndex) => {
-            const rowHasBottomBorder = rowIndex < rowLayout.length - 1
-            return (
-              <div
-                key={toIsoDate(row.rowDays[0])}
-                className={rowHasBottomBorder ? 'border-b border-[var(--line)]' : ''}
-              >
-                <div className="grid grid-cols-7 border-b border-[var(--line)]/70">
-                  {row.rowDays.map((day, dayIndex) => {
-                    const iso = toIsoDate(day)
-                    const inMonth = day.getMonth() === viewMonth.month
-                    const isSelected = iso === selectedDate
-                    const isToday = iso === todayIso
-                    const isDragOver = dragOverDate === iso
-                    const dayTaskCount = scheduledTasks.filter((task) => {
-                      if (!task.date) return false
-                      const endIso =
-                        task.endDate && task.endDate >= task.date ? task.endDate : task.date
-                      return iso >= task.date && iso <= endIso
-                    }).length
-
-                    return (
-                      <button
-                        key={iso}
-                        type="button"
-                        onClick={() => onSelectDate(iso)}
-                        onDragOver={(event) => handleDayDragOver(event, iso)}
-                        onDragLeave={() => setDragOverDate(null)}
-                        onDrop={(event) => handleDayDrop(event, iso)}
-                        className={`flex min-h-[64px] flex-col items-start px-2 py-1 text-left transition-colors ${
-                          dayIndex < 6 ? 'border-r border-[var(--line)]/70' : ''
-                        } ${
-                          isSelected
-                            ? 'bg-[var(--accent-soft)]'
-                            : isDragOver
-                              ? 'bg-[var(--accent-soft)]/70 ring-1 ring-inset ring-[var(--accent)]'
-                              : 'hover:bg-[var(--panel-2)]/60'
-                        } ${inMonth ? '' : 'bg-[var(--panel-2)]/40 opacity-60'}`}
-                      >
-                        <span
-                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                            isToday
-                              ? 'bg-[var(--accent)] text-white'
-                              : isSelected
-                                ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
-                                : 'text-[var(--text)]'
-                          }`}
-                        >
-                          {day.getDate()}
-                        </span>
-                        {dayTaskCount > 0 && (
-                          <span className="mt-1 text-[10px] text-[var(--muted)]">
-                            {dayTaskCount} task{dayTaskCount > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <div className="relative" style={{ height: `${row.laneCount * 30 + 6}px` }}>
-                  {row.segments.map((segment) => {
-                    const { task } = segment
-                    const priorityStyle = PRIORITY_STYLE[task.priority || 'medium']
-                    const span = segment.endCol - segment.startCol + 1
-                    const leftPercent = (segment.startCol / 7) * 100
-                    const widthPercent = (span / 7) * 100
-                    const onToggle = onToggleTask ?? (() => undefined)
-                    const onDelete = onDeleteTask ?? (() => undefined)
-                    const onRename = onRenameTask ?? (() => undefined)
-                    const onUpdatePriority = onUpdateTaskPriority ?? (() => undefined)
-                    const onUpdateTime = onUpdateTaskTime ?? (() => undefined)
-                    const onSchedule = (taskId: string, date: string): void => {
-                      onRescheduleTask?.(taskId, date)
-                    }
-                    const onUnschedule = (taskId: string): void => {
-                      onRescheduleTask?.(taskId, undefined)
-                    }
-
-                    return (
-                      <TaskContextMenu
-                        key={`${task.id}-${segment.startCol}-${segment.endCol}-${segment.lane}`}
-                        task={task}
-                        selectedDate={selectedDate}
-                        onToggle={onToggle}
-                        onDelete={onDelete}
-                        onRename={onRename}
-                        onUpdatePriority={onUpdatePriority}
-                        onUpdateTime={onUpdateTime}
-                        onScheduleTask={onSchedule}
-                        onUnscheduleTask={onUnschedule}
-                      >
-                        <div
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData('text/plain', `move:${task.id}`)
-                            event.dataTransfer.effectAllowed = 'move'
-                          }}
-                          className={`group absolute flex h-7 cursor-grab items-center gap-2 rounded-md border px-2 text-xs shadow-sm active:cursor-grabbing ${priorityStyle.bg} ${priorityStyle.border} ${
-                            task.completed ? 'opacity-60' : ''
-                          }`}
-                          style={{
-                            left: `calc(${leftPercent}% + 4px)`,
-                            width: `calc(${widthPercent}% - 8px)`,
-                            top: `${segment.lane * 30 + 4}px`
-                          }}
-                          title={task.title}
-                        >
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onToggleTask?.(task.id)
-                            }}
-                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                              task.completed
-                                ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                                : 'border-[var(--line-strong)] bg-[var(--panel)]'
-                            }`}
-                          >
-                            {task.completed ? <Check size={8} strokeWidth={3} /> : null}
-                          </button>
-                          <span className="truncate text-[var(--text)]">{task.title}</span>
-                          {task.time && (
-                            <span className="ml-auto text-[10px] text-[var(--muted)]">
-                              {task.time}
-                            </span>
-                          )}
-
-                          <div
-                            draggable
-                            onDragStart={(event) => {
-                              event.stopPropagation()
-                              event.dataTransfer.setData('text/plain', `resize-start:${task.id}`)
-                              event.dataTransfer.effectAllowed = 'move'
-                            }}
-                            className="absolute -left-1 top-0 h-7 w-2 cursor-ew-resize"
-                            title="Drag to change start date"
-                          />
-                          <div
-                            draggable
-                            onDragStart={(event) => {
-                              event.stopPropagation()
-                              event.dataTransfer.setData('text/plain', `resize-end:${task.id}`)
-                              event.dataTransfer.effectAllowed = 'move'
-                            }}
-                            className="absolute -right-1 top-0 h-7 w-2 cursor-ew-resize"
-                            title="Drag to change end date"
-                          />
-                        </div>
-                      </TaskContextMenu>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+            return <CalendarTaskCard task={task} onToggle={safeToggleTask} />
+          }}
+        />
       </div>
+      {calendarContextMenu && tasksById[calendarContextMenu.taskId] ? (
+        <TaskContextMenu
+          key={`${calendarContextMenu.taskId}-${calendarContextMenu.nonce}`}
+          task={tasksById[calendarContextMenu.taskId]}
+          selectedDate={selectedDate}
+          onToggle={safeToggleTask}
+          onDelete={safeDeleteTask}
+          onRename={safeRenameTask}
+          onUpdateTaskType={safeUpdateTaskType}
+          onUpdateTime={safeUpdateTaskTime}
+          onUpdateReminders={onUpdateTaskReminders ?? (() => undefined)}
+          onScheduleTask={(taskId, date) => safeRescheduleTask(taskId, date)}
+          onUnscheduleTask={(taskId) => safeRescheduleTask(taskId, undefined)}
+        >
+          <span
+            ref={contextMenuTriggerRef}
+            className="pointer-events-none fixed h-px w-px opacity-0"
+            style={{
+              left: `${calendarContextMenu.x}px`,
+              top: `${calendarContextMenu.y}px`
+            }}
+            aria-hidden="true"
+          />
+        </TaskContextMenu>
+      ) : null}
+      {hoveredTaskCard && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-50 w-64 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 shadow-xl"
+              style={{
+                left: `${hoveredTaskCard.x}px`,
+                top: `${hoveredTaskCard.y}px`
+              }}
+            >
+              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
+                {hoveredTaskCard.task.title}
+              </div>
+              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                <span>{hoveredTaskCard.task.completed ? 'Completed' : 'Pending'}</span>
+                <span>{hoveredTaskCard.task.time || 'No time'}</span>
+              </div>
+              <div className="mt-2 text-xs text-[var(--muted)]">
+                Date: {hoveredTaskCard.task.date}
+              </div>
+              <div className="mt-1 text-xs text-[var(--muted)]">
+                Type: {hoveredTaskCard.task.taskType || 'assignment'}
+              </div>
+              {(hoveredTaskCard.task.reminders || []).some((reminder) => reminder.enabled) && (
+                <div className="mt-1 text-xs text-[var(--muted)]">Reminders enabled</div>
+              )}
+            </div>,
+            document.body
+          )
+        : null}
+      {editingTask ? (
+        <TaskEditDialog
+          task={editingTask}
+          onClose={handleCloseEditor}
+          onRename={safeRenameTask}
+          onUpdateTaskType={safeUpdateTaskType}
+          onUpdateTaskTime={safeUpdateTaskTime}
+          onRescheduleTask={safeRescheduleTask}
+          onDelete={safeDeleteTask}
+        />
+      ) : null}
     </section>
+  )
+}
+
+interface TaskEditDialogProps {
+  task: CalendarTask
+  onClose: () => void
+  onRename: (taskId: string, title: string) => void
+  onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
+  onUpdateTaskTime: (taskId: string, time: string | undefined) => void
+  onRescheduleTask: (taskId: string, date: string | undefined) => void
+  onDelete: (taskId: string) => void
+}
+
+function TaskEditDialog({
+  task,
+  onClose,
+  onRename,
+  onUpdateTaskType,
+  onUpdateTaskTime,
+  onRescheduleTask,
+  onDelete
+}: TaskEditDialogProps): ReactElement {
+  const [title, setTitle] = useState(task.title)
+  const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
+  const [date, setDate] = useState(task.date ?? '')
+  const [time, setTime] = useState(task.time ?? '')
+  const skipAutoSaveRef = useRef(false)
+
+  useEffect(() => {
+    setTitle(task.title)
+    setTaskType(task.taskType ?? 'assignment')
+    setDate(task.date ?? '')
+    setTime(task.time ?? '')
+    skipAutoSaveRef.current = false
+  }, [task.id, task.title, task.taskType, task.date, task.time])
+
+  const handleAutoSave = (): void => {
+    if (skipAutoSaveRef.current) {
+      skipAutoSaveRef.current = false
+      return
+    }
+    const trimmedTitle = title.trim()
+    if (trimmedTitle && trimmedTitle !== task.title) {
+      onRename(task.id, trimmedTitle)
+    }
+    if ((task.taskType ?? 'assignment') !== taskType) {
+      onUpdateTaskType(task.id, taskType)
+    }
+    const normalizedTime = time.trim()
+    const previousTime = task.time ?? ''
+    if (normalizedTime !== previousTime) {
+      onUpdateTaskTime(task.id, normalizedTime || undefined)
+    }
+    const normalizedDate = date.trim()
+    const previousDate = task.date ?? ''
+    if (normalizedDate !== previousDate) {
+      onRescheduleTask(task.id, normalizedDate || undefined)
+    }
+  }
+
+  const handleDelete = (): void => {
+    skipAutoSaveRef.current = true
+    onDelete(task.id)
+    onClose()
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          handleAutoSave()
+          onClose()
+        }
+      }}
+    >
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit task</DialogTitle>
+          <DialogDescription>Update task details without leaving the calendar.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Title
+            </label>
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="mt-1"
+              placeholder="Task title"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Type
+            </label>
+            <select
+              value={taskType}
+              onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm"
+            >
+              {TASK_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Date
+            </label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Time
+            </label>
+            <Input
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <DialogFooter className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="flex h-9 w-9 items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 text-[var(--text)] hover:border-[var(--accent)]"
+            title="Delete task"
+          >
+            <Trash2 size={18} />
+            <span className="sr-only">Delete task</span>
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -355,17 +699,26 @@ function parseIsoDate(iso: string): Date {
   return parsed
 }
 
-function diffIsoDays(startIso: string, endIso: string): number {
-  const start = parseIsoDate(startIso)
-  const end = parseIsoDate(endIso)
-  const diff = end.getTime() - start.getTime()
-  return Math.round(diff / (24 * 60 * 60 * 1000))
+function addIsoDays(date: Date, days: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
 }
 
-function minIso(a: string, b: string): string {
-  return a <= b ? a : b
-}
+function getTooltipPositionFromMouse(clientX: number, clientY: number): { x: number; y: number } {
+  const tooltipWidth = 256
+  const tooltipHeight = 140
+  const margin = 12
+  const cursorOffset = 14
 
-function maxIso(a: string, b: string): string {
-  return a >= b ? a : b
+  const x = Math.max(
+    margin,
+    Math.min(clientX + cursorOffset, window.innerWidth - tooltipWidth - margin)
+  )
+  const y = Math.max(
+    margin,
+    Math.min(clientY + cursorOffset, window.innerHeight - tooltipHeight - margin)
+  )
+
+  return { x, y }
 }

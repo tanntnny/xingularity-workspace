@@ -1,6 +1,6 @@
 import { ReactElement, useState } from 'react'
-import { Calendar, Check, Clock3, Flag, Pencil, Trash2 } from 'lucide-react'
-import { CalendarTask, TaskPriority } from '../../../shared/types'
+import { Bell, BellRing, Calendar, Check, Clock3, Pencil, Target, Trash2, X } from 'lucide-react'
+import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,14 +26,21 @@ interface TaskContextMenuProps {
   onToggle: (taskId: string) => void
   onDelete: (taskId: string) => void
   onRename: (taskId: string, newTitle: string) => void
-  onUpdatePriority: (taskId: string, priority: TaskPriority) => void
+  onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTime: (taskId: string, time: string | undefined) => void
+  onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
   onScheduleTask: (taskId: string, date: string) => void
   onUnscheduleTask: (taskId: string) => void
   children: ReactElement
 }
 
-const PRIORITY_ORDER: TaskPriority[] = ['high', 'medium', 'low']
+export const TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'assignment', label: 'Assignment' },
+  { value: 'review', label: 'Review' },
+  { value: 'personal', label: 'Personal' },
+  { value: 'other', label: 'Other' }
+]
 
 const QUICK_TIME_OPTIONS = [
   { label: '9:00 AM', value: '09:00' },
@@ -48,14 +55,47 @@ export function TaskContextMenu({
   onToggle,
   onDelete,
   onRename,
-  onUpdatePriority,
+  onUpdateTaskType,
   onUpdateTime,
+  onUpdateReminders,
   onScheduleTask,
   onUnscheduleTask,
   children
 }: TaskContextMenuProps): ReactElement {
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false)
+  const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false)
   const [timeInputValue, setTimeInputValue] = useState(task.time ?? '')
+  const [newReminderValue, setNewReminderValue] = useState(30)
+  const [newReminderType, setNewReminderType] = useState<'minutes' | 'hours' | 'days'>('minutes')
+
+  const formatReminderLabel = (reminder: TaskReminder): string => {
+    const unit = reminder.value === 1 ? reminder.type.slice(0, -1) : reminder.type
+    return `${reminder.value} ${unit} before`
+  }
+
+  const handleAddReminder = (): void => {
+    const nextReminder: TaskReminder = {
+      id: `reminder-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      type: newReminderType,
+      value: Math.max(1, newReminderValue),
+      enabled: true
+    }
+    onUpdateReminders(task.id, [...(task.reminders || []), nextReminder])
+    setNewReminderValue(30)
+    setNewReminderType('minutes')
+  }
+
+  const handleToggleReminder = (reminderId: string): void => {
+    const nextReminders = (task.reminders || []).map((reminder) =>
+      reminder.id === reminderId ? { ...reminder, enabled: !reminder.enabled } : reminder
+    )
+    onUpdateReminders(task.id, nextReminders)
+  }
+
+  const handleRemoveReminder = (reminderId: string): void => {
+    const nextReminders = (task.reminders || []).filter((reminder) => reminder.id !== reminderId)
+    onUpdateReminders(task.id, nextReminders)
+  }
 
   return (
     <>
@@ -80,14 +120,19 @@ export function TaskContextMenu({
           </ContextMenuItem>
           <ContextMenuSub>
             <ContextMenuSubTrigger>
-              <Flag className="mr-2 h-4 w-4" />
-              Set priority
+              <Target className="mr-2 h-4 w-4" />
+              Set type
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
-              {PRIORITY_ORDER.map((priority) => (
-                <ContextMenuItem key={priority} onClick={() => onUpdatePriority(task.id, priority)}>
-                  {priority[0].toUpperCase() + priority.slice(1)}
-                  {task.priority === priority && <Check className="ml-auto h-4 w-4" />}
+              {TASK_TYPE_OPTIONS.map((taskType) => (
+                <ContextMenuItem
+                  key={taskType.value}
+                  onClick={() => onUpdateTaskType(task.id, taskType.value)}
+                >
+                  {taskType.label}
+                  {(task.taskType || 'assignment') === taskType.value && (
+                    <Check className="ml-auto h-4 w-4" />
+                  )}
                 </ContextMenuItem>
               ))}
             </ContextMenuSubContent>
@@ -120,6 +165,14 @@ export function TaskContextMenu({
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
+          <ContextMenuItem
+            onClick={() => {
+              setIsReminderDialogOpen(true)
+            }}
+          >
+            <Bell className="mr-2 h-4 w-4" />
+            Manage reminders
+          </ContextMenuItem>
           <ContextMenuSeparator />
           {task.date ? (
             <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
@@ -166,6 +219,89 @@ export function TaskContextMenu({
               Save
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Task reminders</DialogTitle>
+            <DialogDescription>Manage notifications for this task.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {(task.reminders || []).length > 0 ? (
+              <div className="space-y-1.5">
+                {(task.reminders || []).map((reminder) => (
+                  <div
+                    key={reminder.id}
+                    className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
+                      reminder.enabled
+                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                        : 'border-[var(--line)] bg-[var(--panel-2)] opacity-70'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleReminder(reminder.id)}
+                      className="flex items-center gap-1.5 text-[var(--text)]"
+                    >
+                      {reminder.enabled ? (
+                        <BellRing size={12} className="text-amber-500" />
+                      ) : (
+                        <Bell size={12} className="text-[var(--muted)]" />
+                      )}
+                      {formatReminderLabel(reminder)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveReminder(reminder.id)}
+                      className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--panel)] hover:text-red-500"
+                      title="Remove reminder"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">No reminders yet.</p>
+            )}
+
+            <div className="border-t border-[var(--line)] pt-2">
+              <div className="mb-2 text-xs text-[var(--muted)]">Add reminder</div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={newReminderValue}
+                  onChange={(event) =>
+                    setNewReminderValue(Math.max(1, Number(event.target.value) || 1))
+                  }
+                  className="w-16 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none"
+                />
+                <select
+                  value={newReminderType}
+                  onChange={(event) =>
+                    setNewReminderType(event.target.value as 'minutes' | 'hours' | 'days')
+                  }
+                  className="flex-1 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none"
+                >
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddReminder}
+                  className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-medium text-white"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>

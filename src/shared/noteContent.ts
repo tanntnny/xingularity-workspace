@@ -17,9 +17,16 @@ export function splitNoteContent(markdown: string): NoteContentParts {
     }
   }
 
+  const rawBody = markdown.slice(match[0].length)
+  const body = rawBody.startsWith('\r\n')
+    ? rawBody.slice(2)
+    : rawBody.startsWith('\n')
+      ? rawBody.slice(1)
+      : rawBody
+
   return {
     frontmatter: match[1],
-    body: markdown.slice(match[0].length),
+    body,
     lineEnding
   }
 }

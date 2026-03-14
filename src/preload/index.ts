@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS } from '../shared/ipc'
+import { IPC_CHANNELS, SCHEDULE_CHANNELS, WEEKLY_PLAN_CHANNELS } from '../shared/ipc'
 import { RendererVaultApi } from '../shared/types'
 
 const api: RendererVaultApi = {
@@ -31,6 +31,27 @@ const api: RendererVaultApi = {
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (next) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next)
+  },
+  schedules: {
+    listJobs: () => ipcRenderer.invoke(SCHEDULE_CHANNELS.listJobs),
+    saveJob: (input) => ipcRenderer.invoke(SCHEDULE_CHANNELS.saveJob, input),
+    deleteJob: (id) => ipcRenderer.invoke(SCHEDULE_CHANNELS.deleteJob, id),
+    runNow: (id) => ipcRenderer.invoke(SCHEDULE_CHANNELS.runNow, id),
+    listRuns: (jobId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.listRuns, jobId),
+    applyActions: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.applyActions, runId),
+    dismissRun: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.dismissRun, runId)
+  },
+  weeklyPlan: {
+    getState: () => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.getState),
+    createWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.createWeek, input),
+    updateWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.updateWeek, input),
+    deleteWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.deleteWeek, input),
+    addPriority: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.addPriority, input),
+    updatePriority: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.updatePriority, input),
+    deletePriority: (priorityId) =>
+      ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.deletePriority, priorityId),
+    reorderPriorities: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.reorderPriorities, input),
+    upsertReview: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.upsertReview, input)
   }
 }
 

@@ -21,9 +21,10 @@ interface TopBarProps {
 const PAGE_LABELS: Record<AppPage, string> = {
   notes: 'Notes',
   projects: 'Projects',
+  weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
-  resources: 'Data Library',
-  settings: 'Settings'
+  settings: 'Settings',
+  schedules: 'Schedules'
 }
 
 export function TopBar({
