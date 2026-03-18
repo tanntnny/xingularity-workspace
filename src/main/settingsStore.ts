@@ -12,8 +12,15 @@ export function createDefaultAppSettings(): AppSettings {
   return {
     isSidebarCollapsed: false,
     lastVaultPath: null,
+    lastOpenedNotePath: null,
+    lastOpenedProjectId: null,
+    favoriteNotePaths: [],
+    favoriteProjectIds: [],
     profile: {
       name: ''
+    },
+    ai: {
+      mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
@@ -33,19 +40,32 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsed.profile.name
           : defaults.profile.name
     },
-    calendarTasks: Array.isArray(parsed.calendarTasks) ? parsed.calendarTasks : defaults.calendarTasks,
+    ai: {
+      mistralApiKey:
+        typeof parsed.ai?.mistralApiKey === 'string'
+          ? parsed.ai.mistralApiKey
+          : defaults.ai.mistralApiKey
+    },
+    calendarTasks: Array.isArray(parsed.calendarTasks)
+      ? parsed.calendarTasks
+      : defaults.calendarTasks,
     projectIcons: parsed.projectIcons ?? defaults.projectIcons,
     projects: Array.isArray(parsed.projects) ? parsed.projects : defaults.projects,
-    lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath
+    lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath,
+    lastOpenedNotePath: parsed.lastOpenedNotePath ?? defaults.lastOpenedNotePath,
+    lastOpenedProjectId: parsed.lastOpenedProjectId ?? defaults.lastOpenedProjectId,
+    favoriteNotePaths: Array.isArray(parsed.favoriteNotePaths)
+      ? parsed.favoriteNotePaths.filter((item): item is string => typeof item === 'string')
+      : defaults.favoriteNotePaths,
+    favoriteProjectIds: Array.isArray(parsed.favoriteProjectIds)
+      ? parsed.favoriteProjectIds.filter((item): item is string => typeof item === 'string')
+      : defaults.favoriteProjectIds
   }
 }
 
 function isLegacyAppSettings(value: unknown): value is AppSettings {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'calendarTasks' in value &&
-    'projects' in value
+    typeof value === 'object' && value !== null && 'calendarTasks' in value && 'projects' in value
   )
 }
 

@@ -4,8 +4,10 @@ import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/ty
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -185,13 +187,13 @@ export function TaskContextMenu({
               Schedule to {selectedDate}
             </ContextMenuItem>
           )}
-          <ContextMenuItem
+          <ContextMenuDestructiveItem
             onClick={() => onDelete(task.id)}
-            className="text-red-500 focus:text-red-500"
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
-          </ContextMenuItem>
+            <ContextMenuShortcut keys={['cmd', 'backspace']} />
+          </ContextMenuDestructiveItem>
         </ContextMenuContent>
       </ContextMenu>
 

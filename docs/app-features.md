@@ -1,107 +1,138 @@
-# Xingularity App Feature Documentation
+# Xingularity App Features
 
-This document describes the current user-facing features and UI structure of the Xingularity desktop app.
+This document summarizes the current user-facing behavior in the desktop app.
 
 ## Product Overview
 
-Xingularity is a local-first Electron application for Markdown notes, lightweight project tracking, and task planning.
+Xingularity is a local-first desktop workspace that combines note-taking, lightweight project management, task planning, scripted automations, and agent-assisted workflows.
 
-- Notes and attachments are stored in a vault folder on the local machine.
-- Search is full-text and local.
-- Core navigation uses a left sidebar with a center workspace and a right utility panel.
+- Notes and attachments live in a local vault folder.
+- Search runs locally against a SQLite full-text index.
+- Projects, tasks, weekly plans, schedules, and agent state are managed by the desktop app.
+- The UI is organized around a persistent sidebar, a central workspace, and a contextual right panel.
 
-## Primary Layout
+## Navigation
 
-The app uses a three-panel layout:
-
-1. Left Sidebar (global navigation)
-2. Center Workspace (active page content)
-3. Right Panel (contextual tools/lists)
-
-### Header Alignment Standard
-
-All three top headers are visually aligned.
-
-- Fixed height: `80px`
-- Bottom border visible: `border-b`
-- Shared panel style with app surface color and consistent spacing
-
-This provides a continuous horizontal rhythm across sidebar, workspace, and right panel.
-
-## Sidebar Structure
-
-The sidebar is collapsible and follows this row order:
-
-1. `Xingularity` text with collapse button in the same row
-2. Subtext: `All-in-one Application` (lower emphasis)
-3. Divider
-4. Welcome text: `Welcome back, {profileName}`
-5. Status text: `Status: Synced`
-6. Divider
-7. Remaining sidebar menu items
-
-### Sidebar Behavior
-
-- Collapse control is always available.
-- In collapsed icon mode, non-essential text rows are hidden.
-- Menu icons remain visible and navigable.
-- Notes menu can show a count badge (capped display: `99+`).
-
-## Navigation Pages
-
-### Home Section
+The current sidebar exposes these pages:
 
 - Notes
 - Projects
 - Calendar
-
-### Documents Section
-
-- Data Library (Resources)
-
-### Footer
-
+- Weekly Plan
+- Schedules
+- Agent Chat
 - Settings
 
-## Notes Features
+The sidebar also includes:
 
-- Create, open, rename, and delete notes
-- Markdown editing with auto-save
-- Preview mode toggle
+- profile greeting
+- search palette entry point
+- keyboard shortcut hints
+- count badges for notes, projects, and incomplete calendar items
+
+## Notes
+
+- Create, open, rename, and delete Markdown notes
+- Auto-save note edits
+- Edit and preview modes
+- Add and remove tags
+- Full-text search over title, body, and tags
+- `[[note]]` mention linking and mention navigation
 - Export note action
-- Tag add/remove and tag-based discovery
-- Mention support (`[[note]]`) with link navigation
-- Note count badge in sidebar
+- Favorites support
+- Attachment import and image paste support into the vault
 
-## Search and Command Features
+## Projects
 
-- Note search from right panel header
-- Project search from right panel header
-- Command palette (`Cmd/Ctrl + P`) for quick actions
+- Project list with search and favorites
+- Create and delete projects
+- Editable project name and summary
+- Health status tracking: `on-track`, `at-risk`, `blocked`, `completed`
+- Progress display
+- Milestone creation, editing, reordering state, and deletion
+- Subtask creation, completion, editing, and deletion
+- Project icon customization using shape, variant, and color
+- Related-note workflows through generated project tags
 
-## Calendar Features
+## Calendar
 
-- Month-based planning view
-- Unscheduled task list
-- Add task from right panel header input
-- Mark complete, rename, delete, reprioritize, and reschedule tasks
+- Month view calendar workspace
+- Scheduled and unscheduled task management
+- Task completion, rename, delete, and reschedule flows
+- Priority and task-type metadata
+- Optional multi-day ranges and time values
+- Reminder support on tasks
+- Unified rendering for tasks, milestones, and subtasks
 
-## Projects Features
+## Weekly Plan
 
-- Project list and selection
-- Project creation and deletion
-- Milestones and subtasks management
-- Status and progress derivation
-- Project icon customization (shape/style/color)
+- Create week plans from the sidebar
+- Select and browse prior weeks
+- Edit week focus and date range
+- Add ordered weekly priorities
+- Link priorities to projects, milestones, subtasks, or tasks
+- Track priority state: `planned`, `in_progress`, `done`
+- Capture end-of-week review notes for wins, misses, blockers, and next week
 
-## Settings Features
+## Schedules
 
-- Profile name update
-- Font family selection and reset
-- Vault location management
+- Create automation jobs from the Schedules page
+- Supported triggers:
+  - manual
+  - daily
+  - every N minutes
+  - cron
+  - on app start
+- Supported runtimes:
+  - JavaScript
+  - Python
+- Review and assign explicit permissions per job
+- Run jobs immediately
+- Inspect run history, status, logs, and proposed actions
+- Apply or dismiss review-mode outputs
 
-## Current UX Notes
+Supported automation action types currently include:
 
-- The sidebar brand area is the fixed-height header region.
-- Welcome and status content intentionally stays below the header.
-- Workspace and right panel headers share the same fixed-height + bottom-border treatment.
+- create task
+- update task
+- create note
+- append to note
+- create calendar event
+
+## Agent Chat
+
+- Persistent chat sessions
+- `@` mention suggestions for notes and projects
+- Workspace context attached to prompts
+- Inline rendering for tool steps during a run
+- Session list and recent run history
+- Copy and refresh affordances in the chat UI
+
+## Settings
+
+- Update profile name
+- Choose app font family
+- Review and change vault location
+- Save Mistral API key for assistant workflows
+
+## Search And Command Access
+
+- Global search palette entry point in the sidebar
+- Command palette shortcut: `Cmd/Ctrl + P`
+- Note and project discovery from the contextual side panels
+
+## Storage Summary
+
+- Vault-backed content:
+  - `notes/**/*.md`
+  - `attachments/**`
+  - `.appmeta/vault.json`
+  - `.appmeta/filemap.json`
+  - `.appmeta/index.sqlite`
+- App-managed state:
+  - settings
+  - projects
+  - calendar tasks
+  - weekly plans
+  - schedules
+  - agent sessions and history

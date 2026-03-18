@@ -5,9 +5,12 @@ import { NoteShapeIcon } from './NoteShapeIcon'
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuTrigger
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+  isDeleteShortcut
 } from './ui/context-menu'
 
 // Re-export types for components that need them
@@ -21,6 +24,7 @@ type ProjectSortDirection = 'asc' | 'desc'
 
 interface ProjectPreviewListProps {
   projects: Project[]
+  favoriteProjectIds: string[]
   selectedProjectId: string | null
   filter: string
   onSelect: (projectId: string) => void
@@ -32,6 +36,7 @@ interface ProjectPreviewListProps {
 
 export function ProjectPreviewList({
   projects,
+  favoriteProjectIds,
   selectedProjectId,
   filter,
   onSelect,
@@ -73,6 +78,24 @@ export function ProjectPreviewList({
     )
     return sorted
   }, [projects, filter, sortField, sortDirection])
+
+  const favoriteProjectIdSet = useMemo(() => new Set(favoriteProjectIds), [favoriteProjectIds])
+  const favoriteProjects = useMemo(
+    () => sortedProjects.filter((project) => favoriteProjectIdSet.has(project.id)),
+    [sortedProjects, favoriteProjectIdSet]
+  )
+  const nonFavoriteProjects = useMemo(
+    () => sortedProjects.filter((project) => !favoriteProjectIdSet.has(project.id)),
+    [sortedProjects, favoriteProjectIdSet]
+  )
+  const inProgressProjects = useMemo(
+    () => nonFavoriteProjects.filter((project) => project.status !== 'completed'),
+    [nonFavoriteProjects]
+  )
+  const doneProjects = useMemo(
+    () => nonFavoriteProjects.filter((project) => project.status === 'completed'),
+    [nonFavoriteProjects]
+  )
 
   const toggleSort = (field: ProjectSortField): void => {
     if (sortField === field) {
@@ -124,12 +147,82 @@ export function ProjectPreviewList({
         </button>
       </div>
 
-      <h2 className="text-lg font-semibold text-[var(--text)]">All Projects</h2>
-
       {sortedProjects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No projects found</div>
       ) : (
-        sortedProjects.map((project) => {
+        <>
+          <ProjectSection
+            title="Favorites"
+            emptyLabel="No favorite projects yet"
+            projects={favoriteProjects}
+            selectedProjectId={selectedProjectId}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onRename={onRename}
+            onDuplicate={onDuplicate}
+            onCopyLink={onCopyLink}
+            neutralChipClass={neutralChipClass}
+          />
+          <ProjectSection
+            title="In-Progress Projects"
+            emptyLabel="No in-progress projects found"
+            projects={inProgressProjects}
+            selectedProjectId={selectedProjectId}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onRename={onRename}
+            onDuplicate={onDuplicate}
+            onCopyLink={onCopyLink}
+            neutralChipClass={neutralChipClass}
+          />
+          <ProjectSection
+            title="Done Projects"
+            emptyLabel="No done projects found"
+            projects={doneProjects}
+            selectedProjectId={selectedProjectId}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onRename={onRename}
+            onDuplicate={onDuplicate}
+            onCopyLink={onCopyLink}
+            neutralChipClass={neutralChipClass}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function ProjectSection({
+  title,
+  emptyLabel,
+  projects,
+  selectedProjectId,
+  onSelect,
+  onDelete,
+  onRename,
+  onDuplicate,
+  onCopyLink,
+  neutralChipClass
+}: {
+  title: string
+  emptyLabel: string
+  projects: Project[]
+  selectedProjectId: string | null
+  onSelect: (projectId: string) => void
+  onDelete?: (projectId: string) => void
+  onRename?: (projectId: string) => void
+  onDuplicate?: (projectId: string) => void
+  onCopyLink?: (projectId: string) => void
+  neutralChipClass: string
+}): ReactElement {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+      {projects.length === 0 ? (
+        <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
+      ) : (
+        projects.map((project) => {
           const updatedLabel = new Date(project.updatedAt).toLocaleDateString()
           const milestoneCount = project.milestones.length
 
@@ -144,6 +237,13 @@ export function ProjectPreviewList({
                       : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
                   }`}
                   onClick={() => onSelect(project.id)}
+                  onKeyDown={(event) => {
+                    if (!onDelete || !isDeleteShortcut(event)) {
+                      return
+                    }
+                    event.preventDefault()
+                    onDelete(project.id)
+                  }}
                 >
                   <div className="flex min-w-0 items-center gap-1">
                     <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
@@ -181,13 +281,11 @@ export function ProjectPreviewList({
                 {onDelete && (
                   <>
                     <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onClick={() => onDelete(project.id)}
-                      className="text-[var(--danger)] focus:text-[var(--danger)]"
-                    >
+                    <ContextMenuDestructiveItem onClick={() => onDelete(project.id)}>
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
-                    </ContextMenuItem>
+                      <ContextMenuShortcut keys={['cmd', 'backspace']} />
+                    </ContextMenuDestructiveItem>
                   </>
                 )}
               </ContextMenuContent>
@@ -195,6 +293,6 @@ export function ProjectPreviewList({
           )
         })
       )}
-    </div>
+    </section>
   )
 }

@@ -1,6 +1,15 @@
 import { ReactElement } from 'react'
 import { ButtonBase } from '@mui/material'
-import { CalendarDays, ClipboardList, FileText, FolderKanban, Settings, Zap } from 'lucide-react'
+import {
+  Bot,
+  CalendarDays,
+  ClipboardList,
+  FileText,
+  FolderKanban,
+  Search,
+  Settings,
+  Zap
+} from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -24,14 +33,18 @@ export type AppPage =
   | 'calendar'
   | 'settings'
   | 'schedules'
+  | 'agentHistory'
 
 interface AppSidebarProps {
   activePage: AppPage
   onChange: (page: AppPage) => void
+  onOpenSearchPalette: () => void
+  onSidebarInteract?: () => void
   notesCount: number
   projectsCount: number
   calendarUndoneCount: number
   profileName: string
+  className?: string
 }
 
 const HOME_PAGES: Array<{ id: AppPage; label: string; icon: typeof FileText; shortcut: string }> = [
@@ -42,14 +55,15 @@ const HOME_PAGES: Array<{ id: AppPage; label: string; icon: typeof FileText; sho
 ]
 
 const DOCUMENT_PAGES: Array<{ id: AppPage; label: string; icon: typeof Zap; shortcut: string }> = [
-  { id: 'schedules', label: 'Schedules', icon: Zap, shortcut: '⌘5' }
+  { id: 'schedules', label: 'Schedules', icon: Zap, shortcut: '⌘5' },
+  { id: 'agentHistory', label: 'Agent Chat', icon: Bot, shortcut: '⌘I' }
 ]
 
 const SETTINGS_PAGE: { id: AppPage; label: string; icon: typeof Settings; shortcut: string } = {
   id: 'settings',
   label: 'Settings',
   icon: Settings,
-  shortcut: '⌘6'
+  shortcut: '⌘,'
 }
 
 const SIDEBAR_MENU_BUTTON_SX = {
@@ -83,10 +97,13 @@ const SIDEBAR_MENU_BUTTON_SX = {
 export function AppSidebar({
   activePage,
   onChange,
+  onOpenSearchPalette,
+  onSidebarInteract,
   notesCount,
   projectsCount,
   calendarUndoneCount,
-  profileName
+  profileName,
+  className
 }: AppSidebarProps): ReactElement {
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
   const notesCountLabel = toBadgeLabel(notesCount)
@@ -99,9 +116,12 @@ export function AppSidebar({
       <span className="text-[11px] leading-none">{shortcut.slice(1)}</span>
     </>
   )
-
   return (
-    <Sidebar collapsible="icon" className="app-sidebar-glass">
+    <Sidebar
+      collapsible="icon"
+      className={`app-sidebar-glass ${className ?? ''}`.trim()}
+      onPointerDownCapture={() => onSidebarInteract?.()}
+    >
       <SidebarHeader className="flex flex-col items-center h-[80px] shrink-0 justify-center border-b border-[var(--line)] px-2 pb-0">
         <p className="text-sidebar-foreground group-data-[collapsible=icon]:hidden">Xingularity</p>
       </SidebarHeader>
@@ -111,6 +131,19 @@ export function AppSidebar({
           Welcome back, {welcomeName}
         </p>
         <p className="pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">Status: Synced</p>
+        <button
+          type="button"
+          onClick={onOpenSearchPalette}
+          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)]/60 px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] hover:bg-[var(--panel)]/80"
+          aria-label="Open command palette"
+          title="Open command palette"
+        >
+          <Search size={15} className="shrink-0 opacity-70" />
+          <span className="min-w-0 flex-1 text-sm text-sidebar-foreground/70">
+            Command palette...
+          </span>
+          <Kbd className="shrink-0 gap-0.5">{renderShortcut('⌘P')}</Kbd>
+        </button>
       </div>
       <SidebarSeparator />
 
@@ -152,7 +185,7 @@ export function AppSidebar({
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel>Plugins</SidebarGroupLabel>
+          <SidebarGroupLabel>Automations</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {DOCUMENT_PAGES.map((page) => (

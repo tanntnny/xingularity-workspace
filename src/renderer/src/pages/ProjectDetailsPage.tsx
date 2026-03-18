@@ -1,4 +1,4 @@
-import { Fragment, type ReactElement, useEffect, useMemo, useState } from 'react'
+import { Fragment, type DragEvent, type ReactElement, useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   ChevronDown,
@@ -13,11 +13,12 @@ import {
 import { type NoteListItem } from '../../../shared/types'
 import { generateProjectTag } from '../../../shared/noteTags'
 import { InlineEditableText } from '../components/InlineEditableText'
+import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { DatePickerISO } from '../components/ui/date-picker'
-import { Badge } from '../components/ui/badge'
-import { ButtonGroup, ButtonGroupItem } from '../components/ui/button-group'
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
+import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,7 @@ import {
   TableHeader,
   TableRow
 } from '../components/ui/table'
+import { cn } from '../lib/utils'
 
 interface ProjectDetailsPageProps {
   project: ProjectListItem
@@ -54,7 +56,9 @@ interface ProjectDetailsPageProps {
     nextDescription: string
   ) => void
   onMoveMilestone: (milestoneId: string, direction: 'up' | 'down') => void
+  onReorderMilestones: (orderedMilestoneIds: string[]) => void
   onMoveSubtask: (milestoneId: string, subtaskId: string, direction: 'up' | 'down') => void
+  onReorderSubtasks: (milestoneId: string, orderedSubtaskIds: string[]) => void
   onRemoveSubtask: (milestoneId: string, subtaskId: string) => void
   onDuplicateMilestone?: (milestoneId: string) => void
   onDuplicateSubtask?: (milestoneId: string, subtaskId: string) => void
@@ -71,6 +75,15 @@ type ProjectNoteRow = {
   name: string
   tags: string[]
 }
+
+type ProjectDragState =
+  | { kind: 'milestone'; milestoneId: string }
+  | { kind: 'subtask'; milestoneId: string; subtaskId: string }
+
+type ProjectDropIndicator =
+  | { kind: 'milestone'; index: number }
+  | { kind: 'subtask'; milestoneId: string; index: number }
+  | null
 
 const neutralChipClass =
   'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
@@ -91,7 +104,9 @@ export function ProjectDetailsPage({
   onRenameSubtask,
   onUpdateSubtaskDescription,
   onMoveMilestone,
+  onReorderMilestones,
   onMoveSubtask,
+  onReorderSubtasks,
   onRemoveSubtask,
   onDuplicateMilestone,
   onDuplicateSubtask,
@@ -114,6 +129,8 @@ export function ProjectDetailsPage({
   const [isNotePickerOpen, setIsNotePickerOpen] = useState(false)
   const [notePickerSearchQuery, setNotePickerSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'milestones' | 'notes'>('milestones')
+  const [dragState, setDragState] = useState<ProjectDragState | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<ProjectDropIndicator>(null)
 
   const projectTag = useMemo(() => generateProjectTag(project.name), [project.name])
 
@@ -183,6 +200,65 @@ export function ProjectDetailsPage({
     return projectNotes.map((note) => ({ relPath: note.relPath, name: note.name, tags: note.tags }))
   }, [projectNotes])
 
+  const handleDragEnd = (): void => {
+    setDragState(null)
+    setDropIndicator(null)
+  }
+
+  const handleMilestoneDrop = (index: number): void => {
+    if (dragState?.kind !== 'milestone') {
+      return
+    }
+
+    const orderedMilestones = [...project.milestones]
+    const fromIndex = orderedMilestones.findIndex(
+      (milestone) => milestone.id === dragState.milestoneId
+    )
+    if (fromIndex < 0) {
+      handleDragEnd()
+      return
+    }
+
+    const [movedMilestone] = orderedMilestones.splice(fromIndex, 1)
+    const nextIndex = fromIndex < index ? index - 1 : index
+    orderedMilestones.splice(nextIndex, 0, movedMilestone)
+    onReorderMilestones(orderedMilestones.map((milestone) => milestone.id))
+    handleDragEnd()
+  }
+
+  const getDropIndexForRow = (
+    event: DragEvent<HTMLTableRowElement>,
+    rowIndex: number
+  ): number => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    return event.clientY < bounds.top + bounds.height / 2 ? rowIndex : rowIndex + 1
+  }
+
+  const handleSubtaskDrop = (milestoneId: string, index: number): void => {
+    if (dragState?.kind !== 'subtask' || dragState.milestoneId !== milestoneId) {
+      return
+    }
+
+    const milestone = project.milestones.find((item) => item.id === milestoneId)
+    if (!milestone) {
+      handleDragEnd()
+      return
+    }
+
+    const orderedSubtasks = [...milestone.subtasks]
+    const fromIndex = orderedSubtasks.findIndex((subtask) => subtask.id === dragState.subtaskId)
+    if (fromIndex < 0) {
+      handleDragEnd()
+      return
+    }
+
+    const [movedSubtask] = orderedSubtasks.splice(fromIndex, 1)
+    const nextIndex = fromIndex < index ? index - 1 : index
+    orderedSubtasks.splice(nextIndex, 0, movedSubtask)
+    onReorderSubtasks(milestoneId, orderedSubtasks.map((subtask) => subtask.id))
+    handleDragEnd()
+  }
+
   return (
     <div className="h-full overflow-auto bg-[var(--panel)]">
       <div className="flex flex-col gap-3 px-8 py-5">
@@ -227,28 +303,13 @@ export function ProjectDetailsPage({
       </div>
 
       <div className="flex shrink-0 flex-col gap-2 bg-[var(--panel)] px-8 py-2">
-        <div className="flex items-center gap-2 border-y border-[var(--line)] py-2">
-          <ButtonGroup
-            variant="default"
-            size="default"
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
-            className="rounded-xl border border-[var(--line)] bg-[color-mix(in_srgb,var(--panel-2)_78%,var(--panel))]"
-          >
-            <ButtonGroupItem
-              value="milestones"
-              className="data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-[inset_0_0_0_1px_var(--accent-line)]"
-            >
-              Milestones
-            </ButtonGroupItem>
-            <ButtonGroupItem
-              value="notes"
-              className="data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-[inset_0_0_0_1px_var(--accent-line)]"
-            >
-              Project Notes
-            </ButtonGroupItem>
-          </ButtonGroup>
-        </div>
+        <TabMenu
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
+        >
+          <TabMenuItem value="milestones">Milestones</TabMenuItem>
+          <TabMenuItem value="notes">Project Notes</TabMenuItem>
+        </TabMenu>
       </div>
 
       {activeTab === 'notes' && (
@@ -269,7 +330,7 @@ export function ProjectDetailsPage({
                       Tags
                     </span>
                   </TableHead>
-                  <TableHead className="w-[84px] text-center">
+                  <TableHead className="w-[120px] text-center">
                     <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
                       ACTIONS
                     </span>
@@ -294,7 +355,6 @@ export function ProjectDetailsPage({
                         className="flex h-full w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:text-[var(--accent)]"
                         onClick={() => onOpenNote(row.relPath)}
                       >
-                        <FileText size={14} className="shrink-0 text-[var(--muted)]" />
                         <span>{row.name}</span>
                       </button>
                     </TableCell>
@@ -304,13 +364,7 @@ export function ProjectDetailsPage({
                           .filter((tag) => tag !== projectTag)
                           .slice(0, 3)
                           .map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="secondary"
-                              className="px-1.5 py-0 text-[0.65rem]"
-                            >
-                              #{tag}
-                            </Badge>
+                            <TagChip key={tag} tag={tag} />
                           ))}
                       </div>
                     </TableCell>
@@ -348,53 +402,55 @@ export function ProjectDetailsPage({
                 {onAddTagToNote ? (
                   <TableRow className="hover:bg-[var(--accent-soft)]/60">
                     <TableCell colSpan={3} className="p-0">
-                      <div className="relative">
-                        <button
-                          type="button"
-                          className="flex h-full w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                          onClick={() => setIsNotePickerOpen((current) => !current)}
+                      <Popover open={isNotePickerOpen} onOpenChange={setIsNotePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex h-full w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                          >
+                            <Link size={14} className="shrink-0" />
+                            <span>Link existing note</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-72 border border-[var(--line)] bg-[var(--panel)] p-2 text-[var(--text)] shadow-xl"
                         >
-                          <Link size={14} className="shrink-0" />
-                          <span>+ Link existing note</span>
-                        </button>
-                        {isNotePickerOpen && (
-                          <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-2 shadow-xl">
-                            <input
-                              type="text"
-                              placeholder="Search notes..."
-                              value={notePickerSearchQuery}
-                              onChange={(event) => setNotePickerSearchQuery(event.target.value)}
-                              className="mb-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                              autoFocus
-                            />
-                            {availableNotesForAssociation.length === 0 ? (
-                              <p className="px-2 py-3 text-center text-xs text-[var(--muted)]">
-                                {notePickerSearchQuery.trim()
-                                  ? 'No matching notes found'
-                                  : 'All notes are already linked'}
-                              </p>
-                            ) : (
-                              <div className="max-h-48 overflow-y-auto">
-                                {availableNotesForAssociation.map((note) => (
-                                  <button
-                                    key={note.relPath}
-                                    type="button"
-                                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--accent-soft)]"
-                                    onClick={() => {
-                                      onAddTagToNote(note.relPath, projectTag)
-                                      setIsNotePickerOpen(false)
-                                      setNotePickerSearchQuery('')
-                                    }}
-                                  >
-                                    <FileText size={14} className="shrink-0 text-[var(--muted)]" />
-                                    <span className="truncate">{note.name}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                          <input
+                            type="text"
+                            placeholder="Search notes..."
+                            value={notePickerSearchQuery}
+                            onChange={(event) => setNotePickerSearchQuery(event.target.value)}
+                            className="mb-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                            autoFocus
+                          />
+                          {availableNotesForAssociation.length === 0 ? (
+                            <p className="px-2 py-3 text-center text-xs text-[var(--muted)]">
+                              {notePickerSearchQuery.trim()
+                                ? 'No matching notes found'
+                                : 'All notes are already linked'}
+                            </p>
+                          ) : (
+                            <div className="max-h-48 overflow-y-auto">
+                              {availableNotesForAssociation.map((note) => (
+                                <button
+                                  key={note.relPath}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--accent-soft)]"
+                                  onClick={() => {
+                                    onAddTagToNote(note.relPath, projectTag)
+                                    setIsNotePickerOpen(false)
+                                    setNotePickerSearchQuery('')
+                                  }}
+                                >
+                                  <FileText size={14} className="shrink-0 text-[var(--muted)]" />
+                                  <span className="truncate">{note.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -406,7 +462,7 @@ export function ProjectDetailsPage({
                       onClick={onCreateProjectNote}
                     >
                       <Plus size={14} className="shrink-0" />
-                      <span>+ New note</span>
+                      <span>New note</span>
                     </button>
                   </TableCell>
                 </TableRow>
@@ -445,7 +501,7 @@ export function ProjectDetailsPage({
                       Due Date
                     </span>
                   </TableHead>
-                  <TableHead className="w-[84px] text-center">
+                  <TableHead className="w-[120px] text-center">
                     <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
                       ACTIONS
                     </span>
@@ -453,14 +509,50 @@ export function ProjectDetailsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {project.milestones.map((milestone) => {
+                {project.milestones.map((milestone, milestoneIndex) => {
                   const isCreatingSubtask = creatingSubtaskByMilestoneId[milestone.id] ?? false
                   const draftTitle = newSubtaskTitleByMilestoneId[milestone.id] ?? ''
                   const milestoneProgressPercent = getMilestoneProgressPercent(milestone)
 
                   return (
                     <Fragment key={milestone.id}>
-                      <TableRow className="bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))]">
+                      <DragPlaceholderRow
+                        colSpan={5}
+                        active={
+                          dragState?.kind === 'milestone' &&
+                          dropIndicator?.kind === 'milestone' &&
+                          dropIndicator.index === milestoneIndex
+                        }
+                        onDragOver={(event) => {
+                          if (dragState?.kind !== 'milestone') {
+                            return
+                          }
+                          event.preventDefault()
+                          setDropIndicator({ kind: 'milestone', index: milestoneIndex })
+                        }}
+                        onDrop={() => handleMilestoneDrop(milestoneIndex)}
+                      />
+                      <TableRow
+                        className="bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))]"
+                        onDragOver={(event) => {
+                          if (dragState?.kind !== 'milestone') {
+                            return
+                          }
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = 'move'
+                          setDropIndicator({
+                            kind: 'milestone',
+                            index: getDropIndexForRow(event, milestoneIndex)
+                          })
+                        }}
+                        onDrop={(event) => {
+                          if (dragState?.kind !== 'milestone') {
+                            return
+                          }
+                          event.preventDefault()
+                          handleMilestoneDrop(getDropIndexForRow(event, milestoneIndex))
+                        }}
+                      >
                         <TableCell className="px-3 py-2 text-center">
                           <button
                             type="button"
@@ -530,6 +622,16 @@ export function ProjectDetailsPage({
                         </TableCell>
                         <TableCell className="px-2 py-1">
                           <div className="flex items-center justify-start gap-1">
+                            <RowDragHandle
+                              label={`Drag milestone ${milestone.title}`}
+                              onDragStart={(event) => {
+                                setDragState({ kind: 'milestone', milestoneId: milestone.id })
+                                setDropIndicator({ kind: 'milestone', index: milestoneIndex })
+                                event.dataTransfer.effectAllowed = 'move'
+                                event.dataTransfer.setData('text/plain', milestone.id)
+                              }}
+                              onDragEnd={handleDragEnd}
+                            />
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <button
@@ -584,8 +686,64 @@ export function ProjectDetailsPage({
                       </TableRow>
                       {milestone.collapsed
                         ? null
-                        : milestone.subtasks.map((subtask) => (
-                            <TableRow key={`subtask-${milestone.id}-${subtask.id}`}>
+                        : milestone.subtasks.map((subtask, subtaskIndex) => (
+                            <Fragment key={`subtask-fragment-${milestone.id}-${subtask.id}`}>
+                              <DragPlaceholderRow
+                                colSpan={5}
+                                active={
+                                  dragState?.kind === 'subtask' &&
+                                  dragState.milestoneId === milestone.id &&
+                                  dropIndicator?.kind === 'subtask' &&
+                                  dropIndicator.milestoneId === milestone.id &&
+                                  dropIndicator.index === subtaskIndex
+                                }
+                                onDragOver={(event) => {
+                                  if (
+                                    dragState?.kind !== 'subtask' ||
+                                    dragState.milestoneId !== milestone.id
+                                  ) {
+                                    return
+                                  }
+                                  event.preventDefault()
+                                  setDropIndicator({
+                                    kind: 'subtask',
+                                    milestoneId: milestone.id,
+                                    index: subtaskIndex
+                                  })
+                                }}
+                                onDrop={() => handleSubtaskDrop(milestone.id, subtaskIndex)}
+                              />
+                            <TableRow
+                              key={`subtask-${milestone.id}-${subtask.id}`}
+                              onDragOver={(event) => {
+                                if (
+                                  dragState?.kind !== 'subtask' ||
+                                  dragState.milestoneId !== milestone.id
+                                ) {
+                                  return
+                                }
+                                event.preventDefault()
+                                event.dataTransfer.dropEffect = 'move'
+                                setDropIndicator({
+                                  kind: 'subtask',
+                                  milestoneId: milestone.id,
+                                  index: getDropIndexForRow(event, subtaskIndex)
+                                })
+                              }}
+                              onDrop={(event) => {
+                                if (
+                                  dragState?.kind !== 'subtask' ||
+                                  dragState.milestoneId !== milestone.id
+                                ) {
+                                  return
+                                }
+                                event.preventDefault()
+                                handleSubtaskDrop(
+                                  milestone.id,
+                                  getDropIndexForRow(event, subtaskIndex)
+                                )
+                              }}
+                            >
                               <TableCell className="px-3 py-2 text-center">
                                 <div className="flex items-center justify-center">
                                   <input
@@ -637,7 +795,26 @@ export function ProjectDetailsPage({
                                 </span>
                               </TableCell>
                               <TableCell className="px-2 py-1 text-left">
-                                <DropdownMenu>
+                                <div className="flex items-center justify-start gap-1">
+                                  <RowDragHandle
+                                    label={`Drag subtask ${subtask.title}`}
+                                    onDragStart={(event) => {
+                                      setDragState({
+                                        kind: 'subtask',
+                                        milestoneId: milestone.id,
+                                        subtaskId: subtask.id
+                                      })
+                                      setDropIndicator({
+                                        kind: 'subtask',
+                                        milestoneId: milestone.id,
+                                        index: subtaskIndex
+                                      })
+                                      event.dataTransfer.effectAllowed = 'move'
+                                      event.dataTransfer.setData('text/plain', subtask.id)
+                                    }}
+                                    onDragEnd={handleDragEnd}
+                                  />
+                                  <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <button
                                       type="button"
@@ -681,10 +858,39 @@ export function ProjectDetailsPage({
                                       Delete
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
-                                </DropdownMenu>
+                                  </DropdownMenu>
+                                </div>
                               </TableCell>
                             </TableRow>
+                            </Fragment>
                           ))}
+                      {!milestone.collapsed ? (
+                        <DragPlaceholderRow
+                          colSpan={5}
+                          active={
+                            dragState?.kind === 'subtask' &&
+                            dragState.milestoneId === milestone.id &&
+                            dropIndicator?.kind === 'subtask' &&
+                            dropIndicator.milestoneId === milestone.id &&
+                            dropIndicator.index === milestone.subtasks.length
+                          }
+                          onDragOver={(event) => {
+                            if (
+                              dragState?.kind !== 'subtask' ||
+                              dragState.milestoneId !== milestone.id
+                            ) {
+                              return
+                            }
+                            event.preventDefault()
+                            setDropIndicator({
+                              kind: 'subtask',
+                              milestoneId: milestone.id,
+                              index: milestone.subtasks.length
+                            })
+                          }}
+                          onDrop={() => handleSubtaskDrop(milestone.id, milestone.subtasks.length)}
+                        />
+                      ) : null}
                       {milestone.collapsed || !isCreatingSubtask ? null : (
                         <TableRow className="hover:bg-[var(--accent-soft)]/60">
                           <TableCell colSpan={5} className="p-0">
@@ -733,6 +939,22 @@ export function ProjectDetailsPage({
                     </Fragment>
                   )
                 })}
+                <DragPlaceholderRow
+                  colSpan={5}
+                  active={
+                    dragState?.kind === 'milestone' &&
+                    dropIndicator?.kind === 'milestone' &&
+                    dropIndicator.index === project.milestones.length
+                  }
+                  onDragOver={(event) => {
+                    if (dragState?.kind !== 'milestone') {
+                      return
+                    }
+                    event.preventDefault()
+                    setDropIndicator({ kind: 'milestone', index: project.milestones.length })
+                  }}
+                  onDrop={() => handleMilestoneDrop(project.milestones.length)}
+                />
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">
                   <TableCell colSpan={5} className="p-0">
                     {isCreatingMilestone ? (
@@ -799,6 +1021,66 @@ export function ProjectDetailsPage({
         </section>
       )}
     </div>
+  )
+}
+
+function RowDragHandle({
+  label,
+  onDragStart,
+  onDragEnd
+}: {
+  label: string
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
+  onDragEnd: () => void
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)] active:cursor-grabbing"
+      aria-label={label}
+      title={label}
+    >
+      <span className="grid grid-cols-2 gap-[2px]">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <span key={index} className="h-[3px] w-[3px] rounded-full bg-current opacity-80" />
+        ))}
+      </span>
+    </button>
+  )
+}
+
+function DragPlaceholderRow({
+  colSpan,
+  active,
+  onDragOver,
+  onDrop
+}: {
+  colSpan: number
+  active: boolean
+  onDragOver: (event: DragEvent<HTMLTableRowElement>) => void
+  onDrop: () => void
+}): ReactElement {
+  return (
+    <TableRow
+      className={cn('border-0 bg-transparent hover:bg-transparent', active ? '' : 'h-0')}
+      onDragOver={(event) => {
+        event.preventDefault()
+        onDragOver(event)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        onDrop()
+      }}
+    >
+      <TableCell colSpan={colSpan} className={cn('border-0 p-0', active ? 'px-2 py-1' : '')}>
+        {active ? (
+          <div className="h-9 rounded-lg border-2 border-dashed border-[var(--accent)] bg-[var(--accent-soft)]/55" />
+        ) : null}
+      </TableCell>
+    </TableRow>
   )
 }
 

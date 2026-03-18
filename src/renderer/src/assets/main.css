@@ -208,6 +208,68 @@
   }
 }
 
+@keyframes workspace-pane-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@layer utilities {
+  .animate-workspace-pane {
+    animation: workspace-pane-slide-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+
+  .workspace-divider {
+    border-color: color-mix(in srgb, var(--line) 82%, transparent);
+  }
+
+  .workspace-section {
+    border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+  }
+
+  .workspace-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .workspace-meta {
+    color: var(--muted);
+  }
+
+  .workspace-flat-input {
+    background-color: transparent;
+    border-color: color-mix(in srgb, var(--line) 88%, transparent);
+    box-shadow: none;
+  }
+
+  .workspace-flat-input:focus-visible {
+    border-color: var(--accent-line);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-soft) 68%, transparent);
+  }
+
+  .workspace-flat-surface {
+    background-color: color-mix(in srgb, var(--panel) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  }
+
+  .workspace-flat-surface:hover {
+    border-color: color-mix(in srgb, var(--accent-line) 34%, var(--line));
+  }
+}
+
 /* Electron window drag regions */
 .app-drag-region {
   -webkit-app-region: drag;
@@ -220,13 +282,17 @@
 /* mac-first glass surfaces */
 [data-sidebar='sidebar'] {
   background-color: rgba(
-      var(--panel-r),
-      var(--panel-g),
-      var(--panel-b),
-      var(--glass-sidebar-alpha)
-    )
-    !important;
-  border-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha)) !important;
+    var(--panel-r),
+    var(--panel-g),
+    var(--panel-b),
+    var(--glass-sidebar-alpha)
+  ) !important;
+  border-color: rgba(
+    var(--panel-r),
+    var(--panel-g),
+    var(--panel-b),
+    var(--glass-border-alpha)
+  ) !important;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
   -webkit-backdrop-filter: saturate(150%) blur(var(--glass-sidebar-blur)) !important;
   backdrop-filter: saturate(150%) blur(var(--glass-sidebar-blur)) !important;
@@ -249,6 +315,10 @@
   border-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha));
   -webkit-backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
   backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
+}
+
+.search-palette-surface-blur {
+  filter: blur(10px) saturate(0.9);
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -410,6 +480,56 @@
   will-change: opacity, transform;
 }
 
+.command-palette-overlay {
+  animation: commandPaletteOverlayIn 180ms ease-out;
+}
+
+.command-palette-panel {
+  transform-origin: top center;
+  animation: commandPalettePanelIn 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform, filter;
+}
+
+.command-palette-preview {
+  animation: commandPalettePreviewIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes commandPaletteOverlayIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes commandPalettePanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.97);
+    filter: blur(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes commandPalettePreviewIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes pageFadeSlide {
   from {
     opacity: 0;
@@ -423,8 +543,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page-transition {
+  .page-transition,
+  .command-palette-overlay,
+  .command-palette-panel,
+  .command-palette-preview {
     animation: none !important;
+  }
+
+  .command-palette-panel,
+  .command-palette-preview {
+    transform: none !important;
+    filter: none !important;
   }
 }
 

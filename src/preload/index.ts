@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, SCHEDULE_CHANNELS, WEEKLY_PLAN_CHANNELS } from '../shared/ipc'
-import { RendererVaultApi } from '../shared/types'
+import {
+  AGENT_TOOL_CHANNELS,
+  IPC_CHANNELS,
+  SCHEDULE_CHANNELS,
+  WEEKLY_PLAN_CHANNELS
+} from '../shared/ipc'
+import { AgentChatEvent, RendererVaultApi } from '../shared/types'
 
 const api: RendererVaultApi = {
   vault: {
@@ -18,7 +23,9 @@ const api: RendererVaultApi = {
     rename: (fromRelPath, toRelPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.renameNote, fromRelPath, toRelPath),
     delete: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deleteNote, relPath),
-    exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content)
+    exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content),
+    exportProject: (projectName, content) =>
+      ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
   },
   search: {
     query: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchQuery, query)
@@ -27,6 +34,26 @@ const api: RendererVaultApi = {
     import: (sourcePath) => ipcRenderer.invoke(IPC_CHANNELS.importAttachment, sourcePath),
     importFromBuffer: (buffer: Uint8Array, fileExtension: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.importAttachmentFromBuffer, buffer, fileExtension)
+  },
+  ai: {
+    completeNote: (input) => ipcRenderer.invoke(IPC_CHANNELS.aiCompleteNote, input)
+  },
+  agentChat: {
+    sendMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentChatSendMessage, input),
+    listSessions: () => ipcRenderer.invoke(IPC_CHANNELS.agentChatListSessions),
+    saveSession: (session) => ipcRenderer.invoke(IPC_CHANNELS.agentChatSaveSession, session),
+    deleteSession: (sessionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentChatDeleteSession, sessionId),
+    approveTool: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentChatApproveTool, input),
+    onEvent: (listener) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, payload: AgentChatEvent) =>
+        listener(payload)
+      ipcRenderer.on(IPC_CHANNELS.agentChatEvent, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentChatEvent, wrapped)
+    }
+  },
+  agentHistory: {
+    listRuns: () => ipcRenderer.invoke(IPC_CHANNELS.agentHistoryListRuns)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
@@ -52,6 +79,41 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.deletePriority, priorityId),
     reorderPriorities: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.reorderPriorities, input),
     upsertReview: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.upsertReview, input)
+  },
+  agentTools: {
+    note: {
+      search: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.search', input),
+      read: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.read', input),
+      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.create', input),
+      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.update', input),
+      append: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.append', input)
+    },
+    project: {
+      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'project.create', input),
+      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'project.update', input)
+    },
+    milestone: {
+      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'milestone.create', input),
+      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'milestone.update', input)
+    },
+    subtask: {
+      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'subtask.create', input),
+      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'subtask.update', input)
+    },
+    calendarTask: {
+      create: (input) =>
+        ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'calendarTask.create', input),
+      update: (input) =>
+        ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'calendarTask.update', input)
+    },
+    weeklyPlan: {
+      createWeek: (input) =>
+        ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'weeklyPlan.createWeek', input),
+      createPriority: (input) =>
+        ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'weeklyPlan.createPriority', input),
+      upsertReview: (input) =>
+        ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'weeklyPlan.upsertReview', input)
+    }
   }
 }
 

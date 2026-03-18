@@ -6,16 +6,28 @@ import { VaultRuntime } from './runtime'
 import { ScheduleService } from './scheduleService'
 import { registerWeeklyPlanIpcHandlers } from './planning/weeklyPlanIpc'
 import { WeeklyPlanService } from './planning/weeklyPlanService'
+import { registerAgentToolIpcHandlers } from './agentToolsIpc'
+import { AgentToolsService } from './agentToolsService'
 import { createMainWindow } from './window'
+import { IPC_CHANNELS } from '../shared/ipc'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
 const runtime = new VaultRuntime()
 const scheduleService = new ScheduleService(runtime)
 const weeklyPlanService = new WeeklyPlanService()
+const agentToolsService = new AgentToolsService(runtime, weeklyPlanService)
+runtime.setAgentToolInvoker((name, input) => agentToolsService.invoke(name as never, input))
 runtime.onVaultChange((paths) => {
   void scheduleService.handleVaultChange(paths ? paths.rootPath : null)
   weeklyPlanService.handleVaultChange(paths ? paths.rootPath : null)
+})
+runtime.onAgentChatEvent((event) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.agentChatEvent, event)
+    }
+  }
 })
 
 // Register custom protocol to serve vault files
@@ -63,6 +75,7 @@ app.whenReady().then(() => {
   registerIpcHandlers(runtime)
   registerScheduleIpcHandlers(scheduleService)
   registerWeeklyPlanIpcHandlers(weeklyPlanService)
+  registerAgentToolIpcHandlers(agentToolsService)
   void scheduleService.init()
   createMainWindow()
 

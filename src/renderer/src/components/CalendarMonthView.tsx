@@ -18,6 +18,7 @@ import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/ty
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
 import { Input } from './ui/input'
+import { buildCalendarEvents, normalizeCalendarTasks } from '../lib/calendarTasks'
 import {
   Dialog,
   DialogContent,
@@ -77,7 +78,11 @@ export function CalendarMonthView({
   const contextMenuNonceRef = useRef(0)
   const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
 
-  const tasksById = useMemo(() => Object.fromEntries(tasks.map((task) => [task.id, task])), [tasks])
+  const normalizedTasks = useMemo(() => normalizeCalendarTasks(tasks), [tasks])
+  const tasksById = useMemo(
+    () => Object.fromEntries(normalizedTasks.map((task) => [task.id, task])),
+    [normalizedTasks]
+  )
   const tasksByIdRef = useRef(tasksById)
   const isInteractingRef = useRef(isInteracting)
   const eventListenerMapRef = useRef(
@@ -139,23 +144,20 @@ export function CalendarMonthView({
   }, [calendarContextMenu])
 
   const calendarEvents = useMemo(() => {
-    return tasks
-      .filter((task) => Boolean(task.date))
-      .map((task) => {
-        const startIso = task.date as string
-        const endIso = task.endDate && task.endDate >= startIso ? task.endDate : undefined
-        return {
-          id: task.id,
-          title: task.title,
-          start: startIso,
-          end: endIso ? toIsoDate(addIsoDays(parseIsoDate(endIso), 1)) : undefined,
-          allDay: true,
-          extendedProps: {
-            taskId: task.id
-          }
-        }
-      })
-  }, [tasks])
+    return buildCalendarEvents(normalizedTasks)
+  }, [normalizedTasks])
+
+  useEffect(() => {
+    const api = calendarRef.current?.getApi()
+    if (!api) {
+      return
+    }
+
+    api.removeAllEvents()
+    calendarEvents.forEach((event) => {
+      api.addEvent(event)
+    })
+  }, [calendarEvents])
 
   useEffect(() => {
     const api = calendarRef.current?.getApi()
@@ -418,7 +420,6 @@ export function CalendarMonthView({
           dayMaxEventRows={false}
           dayMaxEvents={false}
           displayEventTime={false}
-          events={calendarEvents}
           drop={handleExternalDrop}
           eventDragStart={handleEventDragStart}
           eventDrop={handleEventDrop}
@@ -689,14 +690,6 @@ function toIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function parseIsoDate(iso: string): Date {
-  const parsed = new Date(`${iso}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) {
-    return new Date()
-  }
-  return parsed
 }
 
 function addIsoDays(date: Date, days: number): Date {

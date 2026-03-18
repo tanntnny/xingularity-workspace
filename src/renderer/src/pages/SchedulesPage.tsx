@@ -32,6 +32,15 @@ import {
   DrawerHeader,
   DrawerTitle
 } from '../components/ui/drawer'
+import {
+  DocumentWorkspace,
+  DocumentWorkspaceMain,
+  DocumentWorkspaceMainContent,
+  DocumentWorkspaceMainHeader,
+  DocumentWorkspacePanel,
+  DocumentWorkspacePanelContent,
+  DocumentWorkspacePanelHeader
+} from '../components/ui/document-workspace'
 
 interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -171,7 +180,12 @@ function formatNextRun(iso: string | undefined): string {
   if (mins < 60) return `in ${mins}m`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `in ${hours}h`
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 function describeAction(action: ScriptAction): string {
@@ -190,9 +204,6 @@ function describeAction(action: ScriptAction): string {
       return `Unknown action`
   }
 }
-
-const headerClass =
-  'app-drag-region flex h-[80px] shrink-0 items-center justify-between gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
 
 export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): ReactElement {
   const [jobs, setJobs] = useState<ScheduleJob[]>([])
@@ -281,7 +292,6 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
     setSelectedJobId(id)
     setIsEditDrawerOpen(true)
   }
-
 
   const handleSave = async (): Promise<void> => {
     if (!schedules) {
@@ -481,18 +491,22 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
 
   return (
     <>
-      <div className="flex h-full w-full min-w-0">
+      <DocumentWorkspace>
         {/* ── Left: Run history & selection ───────────────────────────── */}
-        <div className="flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]">
-          <header className={headerClass}>
-            <span className="app-no-drag text-sm font-semibold text-[var(--muted)]">Run History</span>
-            {selectedJob && (
-              <div className="app-no-drag flex items-center gap-1 text-xs text-[var(--muted)]">
-                <Clock size={12} />
-                {selectedJob.nextRunAt ? formatNextRun(selectedJob.nextRunAt) : '—'}
-              </div>
-            )}
-          </header>
+        <DocumentWorkspaceMain>
+          <DocumentWorkspaceMainHeader
+            breadcrumb={
+              <span className="text-sm font-semibold text-[var(--muted)]">Run History</span>
+            }
+            actions={
+              selectedJob ? (
+                <div className="flex items-center gap-1 text-xs text-[var(--muted)]">
+                  <Clock size={12} />
+                  {selectedJob.nextRunAt ? formatNextRun(selectedJob.nextRunAt) : '—'}
+                </div>
+              ) : null
+            }
+          />
           {/* <div className="border-b border-[var(--line)] px-3 py-3">
             {jobs.length === 0 ? (
               <div className="flex flex-col gap-3 text-sm text-[var(--muted)]">
@@ -545,7 +559,7 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
               </div>
             )}
           </div> */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <DocumentWorkspaceMainContent className="overflow-y-auto">
             {!selectedJobId ? (
               <div className="p-4 text-sm text-[var(--muted)]">
                 Select or create a schedule to view run history.
@@ -584,7 +598,9 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
 
                     {selectedRun.errorMessage && (
                       <div className="border-b border-[var(--line)] bg-red-50 px-3 py-2.5 dark:bg-red-950/30">
-                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">Error</p>
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                          Error
+                        </p>
                         <p className="mt-0.5 break-words text-xs text-red-600 dark:text-red-400">
                           {selectedRun.errorMessage}
                         </p>
@@ -634,7 +650,10 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
                         </p>
                         <ul className="mt-1.5 space-y-1">
                           {selectedRun.appliedActions.map((action, i) => (
-                            <li key={i} className="flex items-start gap-1 text-xs text-[var(--text)]">
+                            <li
+                              key={i}
+                              className="flex items-start gap-1 text-xs text-[var(--text)]"
+                            >
                               <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-green-500" />
                               {describeAction(action)}
                             </li>
@@ -668,26 +687,27 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
                 )}
               </div>
             )}
-          </div>
-        </div>
+          </DocumentWorkspaceMainContent>
+        </DocumentWorkspaceMain>
 
         {/* ── Right: Schedule cards ───────────────────────────────────── */}
-        <div
-          className="flex w-[300px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--panel)]"
-          style={{ width: 'var(--workspace-pane-width)', flexBasis: 'var(--workspace-pane-width)' }}
-        >
-          <header className={headerClass}>
-            <span className="app-no-drag text-sm font-semibold text-[var(--text)]">Schedules</span>
-            <button
-              type="button"
-              className="app-no-drag inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-              onClick={handleNewJob}
-              title="New schedule"
-            >
-              <Plus size={16} />
-            </button>
-          </header>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+        <DocumentWorkspacePanel className="border-l border-[var(--line)]">
+          <DocumentWorkspacePanelHeader
+            actions={
+              <>
+                <span className="text-sm font-semibold text-[var(--text)]">Schedules</span>
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                  onClick={handleNewJob}
+                  title="New schedule"
+                >
+                  <Plus size={16} />
+                </button>
+              </>
+            }
+          />
+          <DocumentWorkspacePanelContent>
             {jobs.length === 0 ? (
               <div className="p-4 text-sm text-[var(--muted)]">
                 No schedules yet. Click + to create one.
@@ -709,7 +729,9 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[var(--text)]">{job.name}</p>
+                          <p className="truncate text-sm font-semibold text-[var(--text)]">
+                            {job.name}
+                          </p>
                           <p className="text-xs text-[var(--muted)]">
                             {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
                           </p>
@@ -735,9 +757,9 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
                 })}
               </div>
             )}
-          </div>
-        </div>
-      </div>
+          </DocumentWorkspacePanelContent>
+        </DocumentWorkspacePanel>
+      </DocumentWorkspace>
 
       <Drawer open={isNewDrawerOpen} onOpenChange={handleNewDrawerOpenChange}>
         <DrawerContent>
@@ -775,13 +797,18 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
         </DrawerContent>
       </Drawer>
 
-      <Drawer open={isEditDrawerOpen && Boolean(selectedJobId)} onOpenChange={handleEditDrawerOpenChange}>
+      <Drawer
+        open={isEditDrawerOpen && Boolean(selectedJobId)}
+        onOpenChange={handleEditDrawerOpenChange}
+      >
         <DrawerContent>
           <DrawerHeader className="border-b border-[var(--line)] pb-4">
             <DrawerTitle>{draft.name ?? 'Schedule details'}</DrawerTitle>
             <DrawerDescription>Review and update this schedule.</DrawerDescription>
             {isDraftDirty && selectedJobId && (
-              <span className="text-[11px] uppercase tracking-wide text-[var(--accent)]">Unsaved changes</span>
+              <span className="text-[11px] uppercase tracking-wide text-[var(--accent)]">
+                Unsaved changes
+              </span>
             )}
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -851,7 +878,12 @@ interface ScheduleFormProps {
   handleRuntimeChange: (runtime: 'javascript' | 'python') => void
 }
 
-function ScheduleForm({ draft, updateDraft, togglePermission, handleRuntimeChange }: ScheduleFormProps): ReactElement {
+function ScheduleForm({
+  draft,
+  updateDraft,
+  togglePermission,
+  handleRuntimeChange
+}: ScheduleFormProps): ReactElement {
   const outputModeName = useId()
   const permissions = draft.permissions ?? []
   const triggerType = draft.trigger?.type ?? 'manual'
@@ -887,7 +919,9 @@ function ScheduleForm({ draft, updateDraft, togglePermission, handleRuntimeChang
               }`}
             />
           </button>
-          <span className="text-xs text-[var(--muted)]">{draft.enabled ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-xs text-[var(--muted)]">
+            {draft.enabled ? 'Enabled' : 'Disabled'}
+          </span>
         </div>
       </section>
 
@@ -997,7 +1031,11 @@ function ScheduleForm({ draft, updateDraft, togglePermission, handleRuntimeChang
                     : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
                 }`}
               >
-                {active ? <CheckCircle2 size={14} /> : <Circle size={14} className="text-[var(--muted)]" />}
+                {active ? (
+                  <CheckCircle2 size={14} />
+                ) : (
+                  <Circle size={14} className="text-[var(--muted)]" />
+                )}
                 <span className="truncate">{PERMISSION_LABELS[perm]}</span>
               </button>
             )
@@ -1058,7 +1096,9 @@ function ScheduleForm({ draft, updateDraft, togglePermission, handleRuntimeChang
             >
               <span className="text-sm font-semibold capitalize">{rt}</span>
               <span className="text-xs text-[var(--muted)]">
-                {rt === 'javascript' ? '— run JavaScript inside Xingularity' : '— run Python via runtime'}
+                {rt === 'javascript'
+                  ? '— run JavaScript inside Xingularity'
+                  : '— run Python via runtime'}
               </span>
             </button>
           ))}

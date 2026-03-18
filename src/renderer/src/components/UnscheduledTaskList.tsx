@@ -3,6 +3,7 @@ import { CalendarPlus, Plus } from 'lucide-react'
 import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
+import { isDeleteShortcut } from './ui/context-menu'
 
 interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
@@ -111,9 +112,6 @@ export function UnscheduledTaskList({
             <Plus size={13} aria-hidden="true" />
           </button>
         </div>
-        <p className="mt-2 text-center text-[11px] text-[var(--muted)]">
-          Add tasks using the header input or drag from calendar
-        </p>
       </div>
 
       <div className="mx-4 border-t border-[var(--line)]" />
@@ -149,11 +147,19 @@ export function UnscheduledTaskList({
               >
                 <article
                   draggable
+                  tabIndex={0}
                   data-unscheduled-task-id={task.id}
                   data-unscheduled-task-title={task.title}
                   onDragStart={(e: DragEvent<HTMLElement>) => {
                     e.dataTransfer.setData('text/plain', `move:${task.id}`)
                     e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onKeyDown={(event) => {
+                    if (!isDeleteShortcut(event)) {
+                      return
+                    }
+                    event.preventDefault()
+                    onDelete(task.id)
                   }}
                   className={`beacon-task-surface beacon-task-event beacon-task-${task.taskType || 'assignment'} ${
                     task.completed ? 'beacon-task-completed' : ''

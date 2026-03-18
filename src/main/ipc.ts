@@ -5,11 +5,81 @@ import { VaultRuntime } from './runtime'
 
 const notePathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
+const projectNameSchema = z.string().min(1).max(200)
 const contentSchema = z.string().max(2_000_000)
 const querySchema = z.string().min(1).max(200)
+const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
 const fileExtensionSchema = z.string().min(1).max(10)
 const tagsArraySchema = z.array(z.string().min(1).max(100)).max(50)
+const aiCompletionInputSchema = z.object({
+  notePath: z.string().min(1).max(512),
+  noteContent: z.string().max(2_000_000),
+  prompt: aiPromptSchema
+})
+const agentChatMentionSchema = z.object({
+  id: z.string().min(1).max(200),
+  kind: z.enum(['note', 'project']),
+  label: z.string().min(1).max(200),
+  notePath: z.string().min(1).max(512).optional(),
+  projectId: z.string().min(1).max(120).optional()
+})
+const agentChatInputSchema = z.object({
+  requestId: z.string().min(1).max(200).optional(),
+  message: z.string().trim().min(1).max(10_000),
+  mentions: z.array(agentChatMentionSchema).max(20)
+})
+const agentChatToolStepSchema = z.object({
+  id: z.string().min(1).max(200),
+  toolName: z.string().min(1).max(200),
+  status: z.enum(['completed', 'error', 'approval-required', 'rejected']),
+  inputSummary: z.string().max(10_000),
+  outputSummary: z.string().max(20_000),
+  approvalRequest: z
+    .object({
+      requestId: z.string().min(1).max(200).optional(),
+      stepId: z.string().min(1).max(200).optional(),
+      toolName: z.string().min(1).max(200),
+      input: z.unknown()
+    })
+    .optional()
+})
+const agentChatMessageRecordSchema = z.object({
+  id: z.string().min(1).max(200),
+  role: z.enum(['user', 'assistant']),
+  content: z.string().max(200_000),
+  createdAt: z.string().min(1).max(100),
+  mentions: z.array(agentChatMentionSchema).max(20).optional(),
+  contexts: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(200),
+        kind: z.enum(['note', 'project']),
+        label: z.string().min(1).max(200),
+        detail: z.string().max(5000)
+      })
+    )
+    .max(20)
+    .optional(),
+  toolSteps: z.array(agentChatToolStepSchema).max(50).optional(),
+  model: z.string().max(200).optional()
+})
+const agentChatSessionSchema = z.object({
+  id: z.string().min(1).max(200),
+  title: z.string().max(200),
+  titleMode: z.enum(['auto', 'manual']).optional(),
+  createdAt: z.string().min(1).max(100),
+  updatedAt: z.string().min(1).max(100),
+  messages: z.array(agentChatMessageRecordSchema).max(500)
+})
+const sessionIdSchema = z.string().min(1).max(200)
+const approveToolInputSchema = z.object({
+  requestId: z.string().min(1).max(200).optional(),
+  stepId: z.string().min(1).max(200),
+  toolName: z.string().min(1).max(200),
+  input: z.unknown(),
+  sessionMessages: z.array(agentChatMessageRecordSchema).max(500).optional()
+})
 const taskReminderSchema = z.object({
   id: z.string().min(1).max(120),
   type: z.enum(['minutes', 'hours', 'days']),
@@ -81,15 +151,25 @@ const projectSchema = z.object({
 })
 
 const settingsUpdateSchema = z.object({
+  isSidebarCollapsed: z.boolean().optional(),
   profile: z
     .object({
       name: z.string().trim().min(1).max(100)
     })
     .optional(),
+  ai: z
+    .object({
+      mistralApiKey: z.string().max(500)
+    })
+    .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
-  projects: z.array(projectSchema).max(100).optional()
+  projects: z.array(projectSchema).max(100).optional(),
+  lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
+  lastOpenedProjectId: z.string().min(1).max(120).nullable().optional(),
+  favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
+  favoriteProjectIds: z.array(z.string().min(1).max(120)).max(1000).optional()
 })
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
@@ -140,8 +220,43 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.exportNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
 
+  ipcMain.handle(
+    IPC_CHANNELS.exportProject,
+    async (_event, projectName: unknown, content: unknown) => {
+      return runtime.exportProject(projectNameSchema.parse(projectName), contentSchema.parse(content))
+    }
+  )
+
   ipcMain.handle(IPC_CHANNELS.searchQuery, (_event, query: unknown) => {
     return runtime.search(querySchema.parse(query))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.aiCompleteNote, async (_event, input: unknown) => {
+    return runtime.completeNoteWithAi(aiCompletionInputSchema.parse(input))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentChatSendMessage, async (_event, input: unknown) => {
+    return runtime.chatWithAgent(agentChatInputSchema.parse(input))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentChatListSessions, async () => {
+    return runtime.listAgentChatSessions()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentChatSaveSession, async (_event, session: unknown) => {
+    return runtime.saveAgentChatSession(agentChatSessionSchema.parse(session))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentChatDeleteSession, async (_event, sessionId: unknown) => {
+    return runtime.deleteAgentChatSession(sessionIdSchema.parse(sessionId))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {
+    return runtime.approveAgentChatTool(approveToolInputSchema.parse(input))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.agentHistoryListRuns, async () => {
+    return runtime.listAgentRuns()
   })
 
   ipcMain.handle(IPC_CHANNELS.importAttachment, async (_event, sourcePath: unknown) => {

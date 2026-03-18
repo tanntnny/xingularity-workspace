@@ -19,12 +19,15 @@ import { CalendarTask, CalendarItem, TaskPriority, TaskReminder } from '../../..
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger
+  ContextMenuTrigger,
+  isDeleteShortcut
 } from './ui/context-menu'
 
 type TaskFilterMode = 'all' | 'pending' | 'completed'
@@ -514,9 +517,17 @@ export function CalendarTaskList({
                 <ContextMenuTrigger asChild>
                   <article
                     draggable
+                    tabIndex={0}
                     onDragStart={(e: DragEvent<HTMLElement>) => {
                       e.dataTransfer.setData('text/plain', task.id)
                       e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onKeyDown={(event) => {
+                      if (!isDeleteShortcut(event)) {
+                        return
+                      }
+                      event.preventDefault()
+                      onDelete(task.id)
                     }}
                     className={`flex w-full cursor-grab items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors active:cursor-grabbing ${
                       task.completed
@@ -828,13 +839,13 @@ export function CalendarTaskList({
                     </ContextMenuSubContent>
                   </ContextMenuSub>
                   <ContextMenuSeparator />
-                  <ContextMenuItem
+                  <ContextMenuDestructiveItem
                     onClick={() => onDelete(task.id)}
-                    className="text-[var(--danger)] focus:text-[var(--danger)]"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
-                  </ContextMenuItem>
+                    <ContextMenuShortcut keys={['cmd', 'backspace']} />
+                  </ContextMenuDestructiveItem>
                 </ContextMenuContent>
               </ContextMenu>
             )

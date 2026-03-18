@@ -4,12 +4,15 @@ import { NoteListItem } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger
+  ContextMenuTrigger,
+  isDeleteShortcut
 } from './ui/context-menu'
 
 interface FileTreeProps {
@@ -129,6 +132,13 @@ export function FileTree({
                   <button
                     className="note-button"
                     onClick={() => onSelect(note.relPath)}
+                    onKeyDown={(event) => {
+                      if (!isDeleteShortcut(event)) {
+                        return
+                      }
+                      event.preventDefault()
+                      onDelete(note.relPath)
+                    }}
                     title={note.relPath}
                   >
                     {note.relPath}
@@ -171,13 +181,13 @@ export function FileTree({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuItem
+                <ContextMenuDestructiveItem
                   onClick={() => onDelete(note.relPath)}
-                  className="text-[var(--danger)] focus:text-[var(--danger)]"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
-                </ContextMenuItem>
+                  <ContextMenuShortcut keys={['cmd', 'backspace']} />
+                </ContextMenuDestructiveItem>
               </ContextMenuContent>
             </ContextMenu>
           ))

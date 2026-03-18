@@ -42,8 +42,15 @@ export const useVaultStore = create<VaultState>((set) => ({
   settings: {
     isSidebarCollapsed: false,
     lastVaultPath: null,
+    lastOpenedNotePath: null,
+    lastOpenedProjectId: null,
+    favoriteNotePaths: [],
+    favoriteProjectIds: [],
     profile: {
       name: ''
+    },
+    ai: {
+      mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],

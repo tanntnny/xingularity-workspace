@@ -1,17 +1,12 @@
-# Xingularity Vault User Guide
+# Xingularity User Guide
 
-Xingularity Vault is a local-first desktop notes app. Your notes and attachments are stored directly in a folder you choose on your machine.
+Xingularity is a desktop workspace for notes, projects, planning, automations, and agent-assisted work. The current build is local-first: your note vault stays on disk on your machine, and the rest of the workspace runs inside the desktop app.
 
-## What Xingularity Vault Is
+## Getting Started
 
-- Desktop app built with Electron (not a web app)
-- Markdown-first note taking with rich editing
-- Local storage only (no cloud sync in the current build)
-- Fast full-text search (title, body, tags)
+### Open Or Create A Vault
 
-## Vault Setup
-
-When you open a vault folder, Xingularity ensures this structure exists:
+Your vault stores note content and attachments. When you pick a vault location, Xingularity creates this structure if it does not already exist:
 
 ```text
 <your-vault>/
@@ -23,114 +18,190 @@ When you open a vault folder, Xingularity ensures this structure exists:
     index.sqlite
 ```
 
-How to open a vault in the app:
+To change the vault location:
 
-1. Open **Settings** in the left navigation.
-2. Click **Change Vault Location**.
-3. Select your vault folder.
+1. Open `Settings`.
+2. Open the `Notification` tab.
+3. Use `Change Vault Location`.
 
-The app also tries to restore your last opened vault automatically on startup.
+On startup, the app attempts to restore the last opened vault automatically.
 
-## Daily Workflow
+## Main Navigation
 
-1. Create a note using the `+` button in the Notes header.
-2. Type content in the editor (auto-saves after a short delay).
-3. Add tags from the note header.
-4. Use search to find notes quickly.
-5. Switch to preview mode when you want to read rendered Markdown.
+The sidebar currently includes:
 
-## Implemented Features
+- `Notes`
+- `Projects`
+- `Calendar`
+- `Weekly Plan`
+- `Schedules`
+- `Agent Chat`
+- `Settings`
 
-### Notes
+The sidebar also provides:
 
-- Create, open, rename, and delete Markdown notes (`.md`)
-- Auto-save while editing
-- Note list with:
-  - filter (`All`, `Tagged`, `Untagged`)
-  - sort (`Name`, `Updated`)
-- Keyboard delete shortcut in note list: `Cmd/Ctrl + Backspace` (or Delete key combo)
+- a search palette entry point
+- keyboard shortcut hints
+- badges for note, project, and incomplete task counts
 
-### Editor
+## Notes Workflow
 
-- Rich text editor powered by BlockNote
-- Markdown is stored in files under `notes/`
-- Obsidian-style mentions: type `[[` while writing to open note autocomplete
-- Mention links are clickable in preview and open referenced notes
-- Click note title to rename
-- Tag management in note header:
-  - add tag
-  - remove tag
-  - click tag to search by that tag
-- Edit/Preview toggle
+Use the Notes page when you want to write, search, or organize Markdown content.
 
-### Attachments & Images
+Available actions:
 
-- Drag and drop a file into the editor to import into `attachments/`
-- Paste an image from clipboard to save and embed it in the note
-- Image links are stored as vault-relative Markdown paths
+- create a note
+- rename a note
+- delete a note
+- edit and preview Markdown
+- add and remove tags
+- favorite a note
+- export a note
 
-### Search
+Notes support:
 
-- Search box in Notes header
-- Full-text search over note title, content, and tags
-- Click result to open the note
+- frontmatter-backed title and tags
+- inline `#tags`
+- `[[note]]` mentions
+- drag-and-drop file import into `attachments/`
+- pasted image import into the vault
 
-### Command Palette
+Search is local and indexes note title, body, and tags.
 
-- Open with `Cmd/Ctrl + P`
-- Quick actions:
-  - New Note
-  - Focus Search
-  - Open a note by path
+## Projects Workflow
 
-### Calendar
+Use the Projects page to manage active work streams.
 
-- Monthly calendar view
-- Add tasks for a selected date
-- Mark tasks complete/incomplete
-- Delete tasks
-- Task counts are shown on calendar days
+Available actions:
 
-### Settings
+- create a project
+- edit project name and summary
+- favorite or delete a project
+- customize the project icon
+- add and manage milestones
+- add and manage subtasks
 
-- Change app font family
-- Reset font from header action
-- View current vault location
-- Change vault location
+Project status values are:
 
-## Features In Implementation (Not Fully Available Yet)
+- `on-track`
+- `at-risk`
+- `blocked`
+- `completed`
 
-The UI already exposes these areas, but they are currently placeholders or marked as coming soon:
+Projects can connect back to notes through generated project tags, and their milestones and subtasks also appear in planning surfaces.
 
-- **Projects page** (`Projects` nav): placeholder workspace blocks (`Active Projects`, `Milestones`, `Backlog`)
-- **Resources page** (`Resources` nav): placeholder blocks (`Reference Links`, `Attachments`, `Templates`)
-- **Projects header actions**:
-  - `New Project` -> shows "coming soon"
-  - `Roadmap` -> shows "coming soon"
-- **Resources header actions**:
-  - `Add Link` -> shows "coming soon"
-  - `Upload` -> shows "coming soon"
-- **Note actions**:
-  - `Share` -> shows "Share feature coming soon"
-  - `Favorites` -> shows "Favorites feature coming soon"
+## Calendar Workflow
 
-## Current Limitations
+Use the Calendar page to plan dated work.
 
-- No cloud sync/account system in current build
-- No collaboration/sharing yet (Share is in implementation)
-- Notes are Markdown files only
-- Favorites system is not implemented yet
+Available actions:
 
-## Keyboard & Interaction Cheatsheet
+- create tasks on specific dates
+- keep tasks unscheduled until ready
+- edit task title
+- set priority and task type
+- assign reminders
+- mark tasks complete
+- delete tasks
 
-- `Cmd/Ctrl + P`: open command palette
-- Click note title: rename note
-- `Enter` while renaming/tagging: confirm
-- `Esc` while renaming/tagging: cancel
+Calendar views may also include milestone and subtask items from projects.
+
+## Weekly Plan Workflow
+
+Use Weekly Plan to organize a single week around priorities instead of just dates.
+
+Available actions:
+
+- create a new week plan
+- edit the focus statement
+- adjust start and end dates
+- add ordered priorities
+- move priorities up or down
+- link priorities to a project, milestone, subtask, or task
+- record wins, misses, blockers, and next-week notes
+
+## Schedules Workflow
+
+Use Schedules to create automations that generate or update workspace data.
+
+Each schedule can define:
+
+- a trigger:
+  - manual
+  - daily
+  - every N minutes
+  - cron
+  - on app start
+- a runtime:
+  - JavaScript
+  - Python
+- a permission set
+- an output mode:
+  - auto-apply
+  - review before apply
+
+Current automation actions include:
+
+- create task
+- update task
+- create note
+- append to note
+- create calendar event
+
+Each run stores logs and result details so you can inspect or review what happened.
+
+## Agent Chat Workflow
+
+Use Agent Chat for assistant-style workflows inside the workspace.
+
+Current behavior includes:
+
+- persistent chat sessions
+- `@` mentions for notes and projects
+- attached workspace context passed into prompts
+- recent run history beside the conversation
+- inline tool-step rendering while a response is being produced
+
+The current settings page stores a Mistral API key used for these agent-related flows.
+
+## Settings
+
+Settings is split into three tabs:
+
+- `Profile`: profile name
+- `Notification`: font family and vault location
+- `Agent`: Mistral API key
+
+## Keyboard Shortcuts
+
+- `Cmd/Ctrl + P`: open the search or command palette
+- `Cmd + 1`: Notes
+- `Cmd + 2`: Projects
+- `Cmd + 3`: Calendar
+- `Cmd + 4`: Weekly Plan
+- `Cmd + 5`: Schedules
+- `Cmd + I`: Agent Chat
+- `Cmd + ,`: Settings
 
 ## Where Data Lives
 
-- Notes: `notes/**/*.md`
-- Attachments: `attachments/*`
-- Search index and metadata: `.appmeta/*`
-- App UI settings (font, last vault, calendar tasks): stored in app user data (`settings.json`)
+Vault-backed files:
+
+- notes: `notes/**/*.md`
+- attachments: `attachments/**`
+- local index and vault metadata: `.appmeta/*`
+
+App-managed state:
+
+- profile and font preferences
+- project data
+- calendar tasks
+- weekly plan records
+- schedules and run history
+- agent chat sessions and run history
+
+## Current Caveats
+
+- The app is local-first and does not provide cloud sync in this build.
+- Notes are Markdown files; projects, schedules, and planning data are app-managed.
+- Agent and schedule capabilities depend on local configuration and granted permissions.

@@ -32,8 +32,8 @@ export class WeeklyPlanService {
     return this.enqueueMutation(async () => {
       return this.assertStore().update((state) => {
         const nowIso = new Date().toISOString()
-        const startDate = sanitizeIsoDate(input.startDate)
-        const endDate = sanitizeIsoDate(input.endDate ?? addDaysIso(startDate, 6))
+        const startDate = startOfWeekSundayIso(sanitizeIsoDate(input.startDate))
+        const endDate = addDaysIso(startDate, 6)
 
         if (state.weeks.some((week) => week.startDate === startDate)) {
           throw new Error(`Week already exists for ${startDate}`)
@@ -48,7 +48,9 @@ export class WeeklyPlanService {
           updatedAt: nowIso
         }
 
-        const weeks = [...state.weeks, newWeek].sort((a, b) => a.startDate.localeCompare(b.startDate))
+        const weeks = [...state.weeks, newWeek].sort((a, b) =>
+          a.startDate.localeCompare(b.startDate)
+        )
         return { ...state, weeks }
       })
     })
@@ -206,7 +208,11 @@ export class WeeklyPlanService {
 
         const priorities = state.priorities.map((priority) =>
           priority.weekId === week.id && orderMap.has(priority.id)
-            ? { ...priority, order: orderMap.get(priority.id)!, updatedAt: new Date().toISOString() }
+            ? {
+                ...priority,
+                order: orderMap.get(priority.id)!,
+                updatedAt: new Date().toISOString()
+              }
             : priority
         )
         return { ...state, priorities }
@@ -290,13 +296,23 @@ function addDaysIso(start: string, days: number): string {
   return formatIsoDate(date)
 }
 
+function startOfWeekSundayIso(iso: string): string {
+  const date = parseIsoDate(iso)
+  const offset = date.getUTCDay()
+  date.setUTCDate(date.getUTCDate() - offset)
+  return formatIsoDate(date)
+}
+
 function diffDays(startIso: string, endIso: string): number {
   const start = parseIsoDate(startIso)
   const end = parseIsoDate(endIso)
   return Math.max(Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)), 0)
 }
 
-function normalizeOptional<T>(nextValue: T | null | undefined, currentValue: T | undefined): T | undefined {
+function normalizeOptional<T>(
+  nextValue: T | null | undefined,
+  currentValue: T | undefined
+): T | undefined {
   if (nextValue === undefined) {
     return currentValue
   }
@@ -310,7 +326,10 @@ function normalizeOptional<T>(nextValue: T | null | undefined, currentValue: T |
   return nextValue
 }
 
-function normalizeLink(nextValue: string | null | undefined, currentValue: string | undefined): string | undefined {
+function normalizeLink(
+  nextValue: string | null | undefined,
+  currentValue: string | undefined
+): string | undefined {
   if (nextValue === undefined) {
     return currentValue
   }

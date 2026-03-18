@@ -24,7 +24,8 @@ const PAGE_LABELS: Record<AppPage, string> = {
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   settings: 'Settings',
-  schedules: 'Schedules'
+  schedules: 'Schedules',
+  agentHistory: 'Agent Chat'
 }
 
 export function TopBar({

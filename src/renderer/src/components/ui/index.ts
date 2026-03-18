@@ -88,6 +88,7 @@ export {
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuDestructiveItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioItem,
   ContextMenuLabel,
@@ -98,7 +99,8 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuRadioGroup
+  ContextMenuRadioGroup,
+  isDeleteShortcut
 } from './context-menu'
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'
@@ -109,6 +111,7 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
+export { TabMenu, TabMenuItem } from './tab-menu'
 
 export {
   Table,
@@ -161,5 +164,15 @@ export {
   BreadcrumbSeparator,
   BreadcrumbEllipsis
 } from './breadcrumb'
+
+export {
+  DocumentWorkspace,
+  DocumentWorkspaceMain,
+  DocumentWorkspaceMainHeader,
+  DocumentWorkspaceMainContent,
+  DocumentWorkspacePanel,
+  DocumentWorkspacePanelHeader,
+  DocumentWorkspacePanelContent
+} from './document-workspace'
 
 export { Kbd } from './kbd'

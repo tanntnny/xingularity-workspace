@@ -1,8 +1,9 @@
 import * as React from 'react'
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
-import { Check, ChevronRight, Circle } from 'lucide-react'
+import { Check, ChevronRight, Circle, Command } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
+import { Kbd } from './kbd'
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -88,6 +89,23 @@ const ContextMenuItem = React.forwardRef<
 ))
 ContextMenuItem.displayName = ContextMenuPrimitive.Item.displayName
 
+const ContextMenuDestructiveItem = React.forwardRef<
+  React.ComponentRef<typeof ContextMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & {
+    inset?: boolean
+  }
+>(({ className, ...props }, ref) => (
+  <ContextMenuItem
+    ref={ref}
+    className={cn(
+      'text-[var(--danger)] focus:bg-[rgba(220,38,38,0.14)] focus:text-[var(--danger)] data-[highlighted]:bg-[rgba(220,38,38,0.14)] data-[highlighted]:text-[var(--danger)]',
+      className
+    )}
+    {...props}
+  />
+))
+ContextMenuDestructiveItem.displayName = 'ContextMenuDestructiveItem'
+
 const ContextMenuCheckboxItem = React.forwardRef<
   React.ComponentRef<typeof ContextMenuPrimitive.CheckboxItem>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.CheckboxItem>
@@ -163,24 +181,86 @@ const ContextMenuSeparator = React.forwardRef<
 ))
 ContextMenuSeparator.displayName = ContextMenuPrimitive.Separator.displayName
 
+type ContextMenuShortcutKey =
+  | 'cmd'
+  | 'backspace'
+  | 'delete'
+  | 'shift'
+  | 'option'
+  | 'ctrl'
+  | string
+
+const renderShortcutKey = (key: ContextMenuShortcutKey): React.ReactElement => {
+  const normalized = key.toLowerCase()
+
+  if (normalized === 'cmd') {
+    return (
+      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
+        <Command className="h-3 w-3" />
+      </Kbd>
+    )
+  }
+
+  if (normalized === 'backspace') {
+    return (
+      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
+        ⌫
+      </Kbd>
+    )
+  }
+
+  if (normalized === 'delete') {
+    return (
+      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
+        ⌦
+      </Kbd>
+    )
+  }
+
+  if (normalized === 'shift') {
+    return <Kbd key={key}>Shift</Kbd>
+  }
+
+  if (normalized === 'option') {
+    return <Kbd key={key}>Opt</Kbd>
+  }
+
+  if (normalized === 'ctrl') {
+    return <Kbd key={key}>Ctrl</Kbd>
+  }
+
+  return <Kbd key={key}>{key}</Kbd>
+}
+
 const ContextMenuShortcut = ({
+  keys,
   className,
+  children,
   ...props
-}: React.HTMLAttributes<HTMLSpanElement>): React.ReactElement => {
+}: React.HTMLAttributes<HTMLSpanElement> & {
+  keys?: ContextMenuShortcutKey[]
+}): React.ReactElement => {
   return (
     <span
-      className={cn('ml-auto text-xs tracking-widest text-[var(--muted)]', className)}
+      className={cn('ml-auto flex items-center gap-1 text-xs text-[var(--muted)]', className)}
       {...props}
-    />
+    >
+      {keys?.length ? keys.map((key) => renderShortcutKey(key)) : children}
+    </span>
   )
 }
 ContextMenuShortcut.displayName = 'ContextMenuShortcut'
+
+function isDeleteShortcut(event: { metaKey: boolean; key: string }): boolean {
+  return event.metaKey && (event.key === 'Backspace' || event.key === 'Delete')
+}
 
 export {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuDestructiveItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioItem,
   ContextMenuLabel,
@@ -191,5 +271,6 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuRadioGroup
+  ContextMenuRadioGroup,
+  isDeleteShortcut
 }

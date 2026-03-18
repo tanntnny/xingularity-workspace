@@ -7,13 +7,15 @@ import { Badge } from './ui/badge'
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuShortcut,
-  ContextMenuTrigger
+  ContextMenuTrigger,
+  isDeleteShortcut
 } from './ui/context-menu'
 
 type NoteFilterMode = 'all' | 'tagged' | 'untagged'
@@ -22,6 +24,7 @@ type NoteSortDirection = 'asc' | 'desc'
 
 interface NotePreviewListProps {
   notes: NoteListItem[]
+  favoritePaths: string[]
   selectedPath: string | null
   filter: string
   onOpen: (relPath: string) => void
@@ -35,6 +38,7 @@ interface NotePreviewListProps {
 
 export function NotePreviewList({
   notes,
+  favoritePaths,
   selectedPath,
   filter,
   onOpen,
@@ -88,6 +92,16 @@ export function NotePreviewList({
     )
     return sorted
   }, [filter, notes, filterMode, sortField, sortDirection])
+
+  const favoritePathSet = useMemo(() => new Set(favoritePaths), [favoritePaths])
+  const favoriteNotes = useMemo(
+    () => filtered.filter((note) => favoritePathSet.has(note.relPath)),
+    [filtered, favoritePathSet]
+  )
+  const allNotes = useMemo(
+    () => filtered.filter((note) => !favoritePathSet.has(note.relPath)),
+    [filtered, favoritePathSet]
+  )
 
   const toggleSort = (field: NoteSortField): void => {
     if (sortField === field) {
@@ -158,16 +172,80 @@ export function NotePreviewList({
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text)]">All Notes</h2>
       {filtered.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
       ) : (
-        filtered.map((note) => {
+        <>
+          <NoteSection
+            title="Favorites"
+            emptyLabel="No favorite notes yet"
+            notes={favoriteNotes}
+            selectedPath={selectedPath}
+            onOpen={onOpen}
+            onDelete={onDelete}
+            onRename={onRename}
+            onDuplicate={onDuplicate}
+            onMoveTo={onMoveTo}
+            onCopyLink={onCopyLink}
+            folders={folders}
+          />
+          <NoteSection
+            title="All Notes"
+            emptyLabel="No other notes found"
+            notes={allNotes}
+            selectedPath={selectedPath}
+            onOpen={onOpen}
+            onDelete={onDelete}
+            onRename={onRename}
+            onDuplicate={onDuplicate}
+            onMoveTo={onMoveTo}
+            onCopyLink={onCopyLink}
+            folders={folders}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function NoteSection({
+  title,
+  emptyLabel,
+  notes,
+  selectedPath,
+  onOpen,
+  onDelete,
+  onRename,
+  onDuplicate,
+  onMoveTo,
+  onCopyLink,
+  folders
+}: {
+  title: string
+  emptyLabel: string
+  notes: NoteListItem[]
+  selectedPath: string | null
+  onOpen: (relPath: string) => void
+  onDelete: (relPath: string) => void
+  onRename?: (relPath: string) => void
+  onDuplicate?: (relPath: string) => void
+  onMoveTo?: (relPath: string, targetFolder: string) => void
+  onCopyLink?: (relPath: string) => void
+  folders: string[]
+}): ReactElement {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+      {notes.length === 0 ? (
+        <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
+      ) : (
+        notes.map((note) => {
           const isSelected = selectedPath === note.relPath
           const noteTags = Array.isArray(note.tags) ? note.tags : []
           const visibleTags = noteTags.slice(0, 2)
           const hiddenTagCount = Math.max(0, noteTags.length - visibleTags.length)
           const updatedLabel = `${new Date(note.updatedAt).toLocaleDateString()}`
+
           return (
             <ContextMenu key={note.relPath}>
               <ContextMenuTrigger asChild>
@@ -180,9 +258,7 @@ export function NotePreviewList({
                   }`}
                   onClick={() => onOpen(note.relPath)}
                   onKeyDown={(event) => {
-                    const isDeleteCombo =
-                      event.metaKey && (event.key === 'Backspace' || event.key === 'Delete')
-                    if (!isDeleteCombo) {
+                    if (!isDeleteShortcut(event)) {
                       return
                     }
                     event.preventDefault()
@@ -201,9 +277,7 @@ export function NotePreviewList({
                       {visibleTags.map((tag) => (
                         <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
                       ))}
-                      {hiddenTagCount > 0 ? (
-                        <Badge variant="neutral">+{hiddenTagCount}</Badge>
-                      ) : null}
+                      {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
                     </span>
                   </div>
                 </button>
@@ -229,10 +303,7 @@ export function NotePreviewList({
                     </ContextMenuSubTrigger>
                     <ContextMenuSubContent>
                       {folders.map((folder) => (
-                        <ContextMenuItem
-                          key={folder}
-                          onClick={() => onMoveTo(note.relPath, folder)}
-                        >
+                        <ContextMenuItem key={folder} onClick={() => onMoveTo(note.relPath, folder)}>
                           {folder}
                         </ContextMenuItem>
                       ))}
@@ -246,19 +317,18 @@ export function NotePreviewList({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuItem
+                <ContextMenuDestructiveItem
                   onClick={() => onDelete(note.relPath)}
-                  className="text-[var(--danger)] focus:text-[var(--danger)]"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
-                  <ContextMenuShortcut>⌘ Del</ContextMenuShortcut>
-                </ContextMenuItem>
+                  <ContextMenuShortcut keys={['cmd', 'backspace']} />
+                </ContextMenuDestructiveItem>
               </ContextMenuContent>
             </ContextMenu>
           )
         })
       )}
-    </div>
+    </section>
   )
 }

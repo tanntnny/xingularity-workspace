@@ -10,7 +10,16 @@ export const IPC_CHANNELS = {
   renameNote: 'files:rename-note',
   deleteNote: 'files:delete-note',
   exportNote: 'files:export-note',
+  exportProject: 'files:export-project',
   searchQuery: 'search:query',
+  aiCompleteNote: 'ai:complete-note',
+  agentChatSendMessage: 'agent-chat:send-message',
+  agentChatListSessions: 'agent-chat:list-sessions',
+  agentChatSaveSession: 'agent-chat:save-session',
+  agentChatDeleteSession: 'agent-chat:delete-session',
+  agentChatApproveTool: 'agent-chat:approve-tool',
+  agentChatEvent: 'agent-chat:event',
+  agentHistoryListRuns: 'agent-history:list-runs',
   importAttachment: 'attachments:import',
   importAttachmentFromBuffer: 'attachments:import-from-buffer',
   settingsGet: 'settings:get',
@@ -37,4 +46,8 @@ export const WEEKLY_PLAN_CHANNELS = {
   deletePriority: 'weeklyPlan:delete-priority',
   reorderPriorities: 'weeklyPlan:reorder-priorities',
   upsertReview: 'weeklyPlan:upsert-review'
+} as const
+
+export const AGENT_TOOL_CHANNELS = {
+  invoke: 'agentTools:invoke'
 } as const

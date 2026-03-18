@@ -7,9 +7,10 @@ import type {
   UpdateWeeklyPlanPriorityInput,
   UpdateWeeklyPlanWeekInput,
   UpsertWeeklyPlanReviewInput,
-  WeeklyPlanState
+  WeeklyPlanState,
+  RendererVaultApi,
+  VaultInfo
 } from '../../../shared/types'
-import type { RendererVaultApi } from '../../../shared/types'
 
 type Mutation<T> = (input: T) => Promise<void>
 
@@ -33,14 +34,18 @@ interface UseWeeklyPlanResult extends MutationMap {
 
 export function useWeeklyPlan(
   vaultApi: RendererVaultApi | undefined,
-  pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
+  pushToast: (kind: 'info' | 'error' | 'success', message: string) => void,
+  vaultInfo: VaultInfo | null
 ): UseWeeklyPlanResult {
   const [data, setData] = useState<WeeklyPlanState | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const hasApi = Boolean(vaultApi?.weeklyPlan)
+  const hasApi = Boolean(vaultApi?.weeklyPlan) && Boolean(vaultInfo)
 
   const ensureApi = useCallback(() => {
+    if (!vaultInfo) {
+      throw new Error('No vault selected')
+    }
     if (!vaultApi) {
       throw new Error('Vault API unavailable')
     }
@@ -48,10 +53,10 @@ export function useWeeklyPlan(
       throw new Error('Weekly Plan API unavailable')
     }
     return vaultApi.weeklyPlan
-  }, [vaultApi])
+  }, [vaultApi, vaultInfo])
 
   const load = useCallback(async () => {
-    if (!vaultApi || !vaultApi.weeklyPlan) {
+    if (!vaultInfo || !vaultApi || !vaultApi.weeklyPlan) {
       setData(null)
       setLoading(false)
       return
@@ -65,7 +70,7 @@ export function useWeeklyPlan(
     } finally {
       setLoading(false)
     }
-  }, [vaultApi, pushToast])
+  }, [vaultInfo, vaultApi, pushToast])
 
   useEffect(() => {
     void load()
