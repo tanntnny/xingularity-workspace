@@ -1,10 +1,12 @@
 import { Fragment, type DragEvent, type ReactElement, useEffect, useMemo, useState } from 'react'
+import { format, parseISO } from 'date-fns'
 import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
   CircleDashed,
   FileText,
+  Flag,
   Link,
   MoreHorizontal,
   Plus,
@@ -16,7 +18,8 @@ import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
-import { DatePickerISO } from '../components/ui/date-picker'
+import { Button } from '../components/ui/button'
+import { Calendar } from '../components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
 import {
@@ -46,9 +49,11 @@ interface ProjectDetailsPageProps {
   onUpdateMilestoneDescription: (milestoneId: string, nextDescription: string) => void
   onUpdateMilestoneDueDate: (milestoneId: string, nextDueDate: string) => void
   onToggleMilestoneCollapsed: (milestoneId: string) => void
+  onCycleMilestonePriority: (milestoneId: string) => void
   onRemoveMilestone: (milestoneId: string) => void
   onAddSubtask: (milestoneId: string, title: string) => void
   onToggleSubtask: (milestoneId: string, subtaskId: string) => void
+  onCycleSubtaskPriority: (milestoneId: string, subtaskId: string) => void
   onRenameSubtask: (milestoneId: string, subtaskId: string, nextTitle: string) => void
   onUpdateSubtaskDescription: (
     milestoneId: string,
@@ -98,9 +103,11 @@ export function ProjectDetailsPage({
   onUpdateMilestoneDescription,
   onUpdateMilestoneDueDate,
   onToggleMilestoneCollapsed,
+  onCycleMilestonePriority,
   onRemoveMilestone: _onRemoveMilestone,
   onAddSubtask,
   onToggleSubtask,
+  onCycleSubtaskPriority,
   onRenameSubtask,
   onUpdateSubtaskDescription,
   onMoveMilestone,
@@ -495,7 +502,7 @@ export function ProjectDetailsPage({
                       Description
                     </span>
                   </TableHead>
-                  <TableHead className="w-[1%] whitespace-nowrap px-1">
+                  <TableHead className="w-[1%] whitespace-nowrap px-3">
                     <span className="inline-flex items-center gap-1.5">
                       <CalendarDays size={12} aria-hidden="true" />
                       Due Date
@@ -610,18 +617,24 @@ export function ProjectDetailsPage({
                           />
                         </TableCell>
                         <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
-                          <DatePickerISO
+                          <MilestoneCalendarPicker
                             value={milestone.dueDate}
-                            onChange={(nextDate) =>
-                              onUpdateMilestoneDueDate(milestone.id, nextDate)
-                            }
+                            onChange={(nextDate) => onUpdateMilestoneDueDate(milestone.id, nextDate)}
                             aria-label="Milestone due date"
-                            showIcon={false}
-                            className="h-full w-auto min-w-0 rounded-none border-0 bg-transparent px-1.5 py-2"
+                            className="h-8 justify-start px-2 text-xs"
                           />
                         </TableCell>
                         <TableCell className="px-2 py-1">
                           <div className="flex items-center justify-start gap-1">
+                            <button
+                              type="button"
+                              className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(milestone.priority)}`}
+                              onClick={() => onCycleMilestonePriority(milestone.id)}
+                              title={`Priority: ${formatSubtaskPriority(milestone.priority)}. Click to change priority.`}
+                              aria-label={`Change priority for ${milestone.title}`}
+                            >
+                              <Flag size={13} />
+                            </button>
                             <RowDragHandle
                               label={`Drag milestone ${milestone.title}`}
                               onDragStart={(event) => {
@@ -796,6 +809,15 @@ export function ProjectDetailsPage({
                               </TableCell>
                               <TableCell className="px-2 py-1 text-left">
                                 <div className="flex items-center justify-start gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => onCycleSubtaskPriority(milestone.id, subtask.id)}
+                                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
+                                    title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
+                                    aria-label={`Change priority for ${subtask.title}`}
+                                  >
+                                    <Flag size={13} />
+                                  </button>
                                   <RowDragHandle
                                     label={`Drag subtask ${subtask.title}`}
                                     onDragStart={(event) => {
@@ -979,11 +1001,11 @@ export function ProjectDetailsPage({
                           autoFocus
                           className="min-w-0 border-0 bg-transparent text-sm text-[var(--text)] outline-none"
                         />
-                        <DatePickerISO
+                        <MilestoneCalendarPicker
                           value={newMilestoneDueDate}
                           onChange={(nextDate) => setNewMilestoneDueDate(nextDate)}
                           aria-label="New milestone due date"
-                          showIcon={false}
+                          className="h-8 justify-start text-xs"
                         />
                         <button
                           type="button"
@@ -1021,6 +1043,53 @@ export function ProjectDetailsPage({
         </section>
       )}
     </div>
+  )
+}
+
+function MilestoneCalendarPicker({
+  value,
+  onChange,
+  className,
+  'aria-label': ariaLabel
+}: {
+  value: string
+  onChange: (nextDate: string) => void
+  className?: string
+  'aria-label'?: string
+}): ReactElement {
+  const date = value ? parseISO(value) : undefined
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            'w-full min-w-[130px] justify-start text-left font-normal',
+            !date && 'text-[var(--muted-foreground)]',
+            className
+          )}
+          aria-label={ariaLabel}
+        >
+          {date ? format(date, 'MMM d, yyyy') : <span>Pick a date</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={(selected) => {
+            if (!selected) {
+              return
+            }
+            onChange(format(selected, 'yyyy-MM-dd'))
+          }}
+          captionLayout="dropdown"
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -1096,4 +1165,24 @@ function getMilestoneProgressPercent(milestone: ProjectMilestone): number {
 
   const completed = milestone.subtasks.filter((subtask) => subtask.completed).length
   return Math.round((completed / total) * 100)
+}
+
+function formatSubtaskPriority(priority?: 'low' | 'medium' | 'high'): string {
+  if (priority === 'high') {
+    return 'High'
+  }
+  if (priority === 'medium') {
+    return 'Medium'
+  }
+  return 'Low'
+}
+
+function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): string {
+  if (priority === 'high') {
+    return 'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c] hover:border-[color:rgba(239,68,68,0.55)]'
+  }
+  if (priority === 'medium') {
+    return 'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309] hover:border-[color:rgba(245,158,11,0.55)]'
+  }
+  return 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d] hover:border-[color:rgba(34,197,94,0.55)]'
 }

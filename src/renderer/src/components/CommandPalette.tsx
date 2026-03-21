@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileText, FolderKanban, Plus, Clock } from 'lucide-react'
+import { FileText, FolderKanban, LayoutDashboard, Plus, Clock } from 'lucide-react'
 import { NoteListItem } from '../../../shared/types'
 import {
   Command,
@@ -24,6 +24,7 @@ export interface CommandPaletteSearchResult {
 }
 
 type CommandPalettePage =
+  | 'dashboard'
   | 'notes'
   | 'projects'
   | 'calendar'
@@ -192,6 +193,12 @@ export function CommandPalette({
         shortcut: '⌘N',
         onSelect: () => onCreate(),
         icon: Plus
+      },
+      {
+        value: '>go dashboard',
+        label: 'Go to Dashboard',
+        onSelect: () => onOpenPage('dashboard'),
+        icon: LayoutDashboard
       },
       {
         value: '>go notes',

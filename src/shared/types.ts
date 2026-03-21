@@ -102,6 +102,7 @@ export interface ProjectSubtask {
   title: string
   description?: string
   completed: boolean
+  priority?: TaskPriority
   createdAt: string
   dueDate?: string
 }
@@ -112,6 +113,7 @@ export interface ProjectMilestone {
   description?: string
   collapsed?: boolean
   dueDate: string
+  priority?: TaskPriority
   status: 'pending' | 'in-progress' | 'completed' | 'blocked'
   subtasks: ProjectSubtask[]
 }

@@ -122,6 +122,7 @@ const projectSubtaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   completed: z.boolean(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
   createdAt: z.string().min(1).max(64),
   dueDate: z
     .string()
@@ -135,6 +136,7 @@ const projectMilestoneSchema = z.object({
   description: z.string().max(2000).optional(),
   collapsed: z.boolean().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
   status: z.enum(['pending', 'in-progress', 'completed', 'blocked']),
   subtasks: z.array(projectSubtaskSchema).max(100)
 })

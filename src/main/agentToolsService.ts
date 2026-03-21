@@ -86,6 +86,7 @@ const milestoneCreateSchema = z
     title: z.string().trim().min(1).max(200),
     description: z.string().max(2000).optional(),
     dueDate: isoDateSchema,
+    priority: z.enum(['low', 'medium', 'high']).optional(),
     collapsed: z.boolean().optional()
   })
   .refine((value) => value.projectId || value.projectName, {
@@ -101,6 +102,7 @@ const milestoneUpdateSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
     dueDate: isoDateSchema.optional(),
+    priority: z.enum(['low', 'medium', 'high']).optional(),
     collapsed: z.boolean().optional(),
     status: z.enum(['pending', 'in-progress', 'completed', 'blocked']).optional()
   })
@@ -115,6 +117,7 @@ const milestoneUpdateSchema = z
       value.title !== undefined ||
       value.description !== undefined ||
       value.dueDate !== undefined ||
+      value.priority !== undefined ||
       value.collapsed !== undefined ||
       value.status !== undefined,
     {
@@ -131,7 +134,8 @@ const subtaskCreateSchema = z
     title: z.string().trim().min(1).max(200),
     description: z.string().max(2000).optional(),
     dueDate: isoDateSchema.optional(),
-    completed: z.boolean().optional()
+    completed: z.boolean().optional(),
+    priority: z.enum(['low', 'medium', 'high']).optional()
   })
   .refine((value) => value.projectId || value.projectName, {
     message: 'Provide projectId or projectName'
@@ -151,7 +155,8 @@ const subtaskUpdateSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
     dueDate: isoDateSchema.nullable().optional(),
-    completed: z.boolean().optional()
+    completed: z.boolean().optional(),
+    priority: z.enum(['low', 'medium', 'high']).optional()
   })
   .refine((value) => value.projectId || value.projectName, {
     message: 'Provide projectId or projectName'
@@ -167,7 +172,8 @@ const subtaskUpdateSchema = z
       value.title !== undefined ||
       value.description !== undefined ||
       value.dueDate !== undefined ||
-      value.completed !== undefined,
+      value.completed !== undefined ||
+      value.priority !== undefined,
     {
       message: 'Provide at least one subtask field to update'
     }
@@ -430,6 +436,7 @@ export class AgentToolsService {
         description: input.description?.trim() || '',
         collapsed: input.collapsed ?? false,
         dueDate: input.dueDate,
+        priority: input.priority,
         status: 'pending',
         subtasks: []
       }
@@ -469,6 +476,7 @@ export class AgentToolsService {
           description:
             input.description !== undefined ? input.description.trim() : item.description,
           dueDate: input.dueDate ?? item.dueDate,
+          priority: input.priority ?? item.priority,
           collapsed: input.collapsed ?? item.collapsed,
           status: input.status ?? item.status
         }
@@ -502,6 +510,7 @@ export class AgentToolsService {
         title: input.title.trim(),
         description: input.description?.trim() || '',
         completed: input.completed ?? false,
+        priority: input.priority,
         createdAt: nowIso,
         dueDate: input.dueDate
       }
@@ -556,6 +565,7 @@ export class AgentToolsService {
                   ? input.description.trim()
                   : subtaskItem.description,
               completed: input.completed ?? subtaskItem.completed,
+              priority: input.priority ?? subtaskItem.priority,
               dueDate:
                 input.dueDate === undefined
                   ? subtaskItem.dueDate

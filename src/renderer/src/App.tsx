@@ -64,6 +64,7 @@ import { FontOption, SettingsPage } from './pages/SettingsPage'
 import { AgentHistoryPage } from './pages/AgentHistoryPage'
 import { SchedulesPage } from './pages/SchedulesPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
 import {
@@ -74,9 +75,10 @@ import {
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
 import { normalizeCalendarTasks } from './lib/calendarTasks'
-import { findWeekForDate, formatWeekRange, getSortedWeeks } from './lib/weeklyPlan'
+import { findWeekForDate, formatWeekRange, getSortedWeeks, getWeekPriorities } from './lib/weeklyPlan'
 
 const PAGE_LABELS: Record<AppPage, string> = {
+  dashboard: 'Dashboard',
   notes: 'Notes',
   projects: 'Projects',
   weeklyPlan: 'Weekly Plan',
@@ -338,6 +340,10 @@ function App(): ReactElement {
     () => weeklyPlanWeeks.find((week) => week.id === selectedWeeklyPlanWeekId) ?? null,
     [weeklyPlanWeeks, selectedWeeklyPlanWeekId]
   )
+  const currentWeekPriorities = useMemo(
+    () => getWeekPriorities(weeklyPlanState, weeklyPlanCurrentWeekId),
+    [weeklyPlanState, weeklyPlanCurrentWeekId]
+  )
   const nextWeeklyPlanStart = useMemo(
     () => getNextWeeklyPlanStart(weeklyPlanWeeks),
     [weeklyPlanWeeks]
@@ -354,7 +360,15 @@ function App(): ReactElement {
   const lastPersistedNoteRef = useRef<{ relPath: string; content: string } | null>(null)
   const calendarTasksRef = useRef(settings.calendarTasks)
   const shouldAnimateWorkspacePane =
-    activePage === 'notes' || activePage === 'projects' || activePage === 'calendar'
+    activePage === 'dashboard' ||
+    activePage === 'notes' ||
+    activePage === 'projects' ||
+    activePage === 'calendar'
+  const showWorkspacePanel =
+    activePage === 'notes' ||
+    activePage === 'projects' ||
+    activePage === 'calendar' ||
+    activePage === 'weeklyPlan'
 
   const persistLastOpenedNotePath = useCallback(
     async (relPath: string | null): Promise<void> => {
@@ -552,6 +566,12 @@ function App(): ReactElement {
       return selectedProject?.name ?? 'No Project Selected'
     }
 
+    if (activePage === 'dashboard') {
+      return currentWeeklyPlanWeek
+        ? formatWeekRange(currentWeeklyPlanWeek.startDate, currentWeeklyPlanWeek.endDate)
+        : 'Overview'
+    }
+
     if (activePage === 'calendar') {
       return formatCalendarDateLabel(selectedCalendarDate)
     }
@@ -568,6 +588,7 @@ function App(): ReactElement {
     searchQuery,
     currentNotePath,
     selectedCalendarDate,
+    currentWeeklyPlanWeek,
     selectedProject,
     shouldRestoreLastOpenedNote,
     selectedWeeklyPlanWeek
@@ -649,7 +670,7 @@ function App(): ReactElement {
         }
         setVault(restored.info)
         setNotes(restored.notes)
-        pushToast('info', `Restored vault ${restored.info.rootPath}`)
+        pushToast('success', `Restored vault ${restored.info.rootPath}`)
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -694,6 +715,7 @@ function App(): ReactElement {
 
       const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
       const pageByKey: Partial<Record<string, AppPage>> = {
+        d: 'dashboard',
         '1': 'notes',
         '2': 'projects',
         '3': 'calendar',
@@ -1935,6 +1957,7 @@ function App(): ReactElement {
         description: '',
         collapsed: false,
         dueDate: normalizedDueDate,
+        priority: 'medium',
         status: 'pending',
         subtasks: []
       }
@@ -2057,6 +2080,27 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
+  const cycleProjectMilestonePriority = (projectId: string, milestoneId: string): void => {
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? { ...milestone, priority: getNextTaskPriority(milestone.priority) }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
   const removeProjectMilestone = (projectId: string, milestoneId: string): void => {
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
@@ -2156,6 +2200,7 @@ function App(): ReactElement {
                   title: normalizedTitle,
                   description: '',
                   completed: false,
+                  priority: 'medium',
                   createdAt: new Date().toISOString()
                 } satisfies ProjectSubtask
               ]
@@ -2188,6 +2233,41 @@ function App(): ReactElement {
               ...milestone,
               subtasks: milestone.subtasks.map((subtask) =>
                 subtask.id === subtaskId ? { ...subtask, completed: !subtask.completed } : subtask
+              )
+            }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const cycleMilestoneSubtaskPriority = (
+    projectId: string,
+    milestoneId: string,
+    subtaskId: string
+  ): void => {
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              subtasks: milestone.subtasks.map((subtask) =>
+                subtask.id === subtaskId
+                  ? {
+                      ...subtask,
+                      priority: getNextTaskPriority(subtask.priority)
+                    }
+                  : subtask
               )
             }
           : milestone
@@ -2818,6 +2898,25 @@ function App(): ReactElement {
                         Pick a note from the right panel to open details
                       </div>
                     )
+                  ) : activePage === 'dashboard' ? (
+                    <DashboardPage
+                      projects={projects}
+                      currentWeek={currentWeeklyPlanWeek}
+                      currentWeekPriorities={currentWeekPriorities}
+                      tasks={settings.calendarTasks}
+                      weeklyPlanLoading={weeklyPlanLoading}
+                      weeklyPlanReady={weeklyPlanReady}
+                      onOpenProject={(projectId) => {
+                        selectProject(projectId)
+                        setActivePage('projects')
+                      }}
+                      onOpenProjects={() => {
+                        setActivePage('projects')
+                      }}
+                      onOpenWeeklyPlan={() => {
+                        setActivePage('weeklyPlan')
+                      }}
+                    />
                   ) : activePage === 'projects' ? (
                     selectedProject ? (
                       <ProjectDetailsPage
@@ -2850,6 +2949,9 @@ function App(): ReactElement {
                         onToggleMilestoneCollapsed={(milestoneId) =>
                           toggleProjectMilestoneCollapsed(selectedProject.id, milestoneId)
                         }
+                        onCycleMilestonePriority={(milestoneId) =>
+                          cycleProjectMilestonePriority(selectedProject.id, milestoneId)
+                        }
                         onMoveMilestone={(milestoneId, direction) =>
                           moveProjectMilestone(selectedProject.id, milestoneId, direction)
                         }
@@ -2864,6 +2966,9 @@ function App(): ReactElement {
                         }
                         onToggleSubtask={(milestoneId, subtaskId) =>
                           toggleMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
+                        }
+                        onCycleSubtaskPriority={(milestoneId, subtaskId) =>
+                          cycleMilestoneSubtaskPriority(selectedProject.id, milestoneId, subtaskId)
                         }
                         onRenameSubtask={(milestoneId, subtaskId, nextTitle) =>
                           renameMilestoneSubtask(
@@ -2995,7 +3100,7 @@ function App(): ReactElement {
             </DocumentWorkspaceMain>
 
             <DocumentWorkspacePanel
-              className={`${isStandalonePage || activePage === 'settings' ? 'hidden' : 'flex'} ${paletteSurfaceClass}${paletteBlurClass}`}
+              className={`${!showWorkspacePanel || isStandalonePage ? 'hidden' : 'flex'} ${paletteSurfaceClass}${paletteBlurClass}`}
             >
               {activePage === 'weeklyPlan' ? (
                 <WeeklyPlanSidebar
@@ -3210,36 +3315,36 @@ function App(): ReactElement {
             </DocumentWorkspacePanel>
           </div>
 
-          <CommandPalette
-            open={commandPaletteOpen}
-            initialQuery={commandPaletteInitialQuery}
-            notes={notes}
-            searchResults={commandPaletteResults}
-            searchLoading={commandPaletteLoading}
-            aiLoading={commandPaletteAiLoading}
-            activeNotePath={currentNotePath}
-            onClose={() => setCommandPaletteOpen(false)}
-            onCreate={() => {
-              void createNote()
-            }}
-            onQueryChange={runCommandPaletteSearch}
-            onRunAiPrompt={runCommandPaletteAi}
-            onOpenNote={(relPath) => {
-              setSearchQuery('')
-              setSearchResults([])
-              void openNote(relPath)
-            }}
-            onOpenProject={(projectId) => {
-              setActivePage('projects')
-              selectProject(projectId)
-            }}
-            onOpenPage={(page) => {
-              setActivePage(page)
-            }}
-          />
           <SonnerBridge />
         </SidebarInset>
       </SidebarProvider>
+      <CommandPalette
+        open={commandPaletteOpen}
+        initialQuery={commandPaletteInitialQuery}
+        notes={notes}
+        searchResults={commandPaletteResults}
+        searchLoading={commandPaletteLoading}
+        aiLoading={commandPaletteAiLoading}
+        activeNotePath={currentNotePath}
+        onClose={() => setCommandPaletteOpen(false)}
+        onCreate={() => {
+          void createNote()
+        }}
+        onQueryChange={runCommandPaletteSearch}
+        onRunAiPrompt={runCommandPaletteAi}
+        onOpenNote={(relPath) => {
+          setSearchQuery('')
+          setSearchResults([])
+          void openNote(relPath)
+        }}
+        onOpenProject={(projectId) => {
+          setActivePage('projects')
+          selectProject(projectId)
+        }}
+        onOpenPage={(page) => {
+          setActivePage(page)
+        }}
+      />
     </div>
   )
 }
@@ -3338,6 +3443,18 @@ function buildDefaultNoteName(): string {
   return `note-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
     now.getHours()
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+}
+
+function getNextTaskPriority(
+  priority: CalendarTaskType extends never ? never : 'low' | 'medium' | 'high' | undefined
+): 'low' | 'medium' | 'high' {
+  if (priority === 'low') {
+    return 'medium'
+  }
+  if (priority === 'medium') {
+    return 'high'
+  }
+  return 'low'
 }
 
 function appendAiCompletion(currentContent: string, completion: string): string {

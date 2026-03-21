@@ -19,6 +19,7 @@ interface TopBarProps {
 }
 
 const PAGE_LABELS: Record<AppPage, string> = {
+  dashboard: 'Dashboard',
   notes: 'Notes',
   projects: 'Projects',
   weeklyPlan: 'Weekly Plan',

@@ -2,7 +2,6 @@ import { ReactElement, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, FolderInput, Link, Pencil, Trash2 } from 'lucide-react'
 import { NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
-import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group'
 import { Badge } from './ui/badge'
 import {
   ContextMenu,
@@ -17,10 +16,22 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './ui/dropdown-menu'
 
 type NoteFilterMode = 'all' | 'tagged' | 'untagged'
 type NoteSortField = 'name' | 'created' | 'updated'
 type NoteSortDirection = 'asc' | 'desc'
+
+const actionButtonClass =
+  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
 
 interface NotePreviewListProps {
   notes: NoteListItem[]
@@ -103,12 +114,7 @@ export function NotePreviewList({
     [filtered, favoritePathSet]
   )
 
-  const toggleSort = (field: NoteSortField): void => {
-    if (sortField === field) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-
+  const selectSortField = (field: NoteSortField): void => {
     setSortField(field)
     setSortDirection(field === 'name' ? 'asc' : 'desc')
   }
@@ -116,61 +122,54 @@ export function NotePreviewList({
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Filter
-        </span>
-        <ToggleGroup
-          type="single"
-          variant="pill"
-          size="xs"
-          value={filterMode}
-          onValueChange={(value) => {
-            if (value) setFilterMode(value as NoteFilterMode)
-          }}
-        >
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          <ToggleGroupItem value="tagged">Tagged</ToggleGroupItem>
-          <ToggleGroupItem value="untagged">Untagged</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Sort
-        </span>
-        <ToggleGroup
-          type="single"
-          variant="pill"
-          size="xs"
-          value={sortField}
-          onValueChange={(value) => {
-            if (value) toggleSort(value as NoteSortField)
-          }}
-        >
-          <ToggleGroupItem value="name">
-            {sortField === 'name' && sortDirection === 'desc' ? (
-              <ArrowDown size={12} aria-hidden="true" />
-            ) : (
-              <ArrowUp size={12} aria-hidden="true" />
-            )}
-            Name
-          </ToggleGroupItem>
-          <ToggleGroupItem value="created">
-            {sortField === 'created' && sortDirection === 'asc' ? (
-              <ArrowUp size={12} aria-hidden="true" />
-            ) : (
-              <ArrowDown size={12} aria-hidden="true" />
-            )}
-            Created
-          </ToggleGroupItem>
-          <ToggleGroupItem value="updated">
-            {sortField === 'updated' && sortDirection === 'asc' ? (
-              <ArrowUp size={12} aria-hidden="true" />
-            ) : (
-              <ArrowDown size={12} aria-hidden="true" />
-            )}
-            Updated
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Filter: {formatNoteFilterMode(filterMode)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={filterMode}
+              onValueChange={(value) => setFilterMode(value as NoteFilterMode)}
+            >
+              <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="tagged">Tagged</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="untagged">Untagged</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Sort: {formatNoteSortLabel(sortField, sortDirection)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={sortField}
+              onValueChange={(value) => selectSortField(value as NoteSortField)}
+            >
+              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+              }
+            >
+              {sortDirection === 'asc' ? (
+                <ArrowUp size={12} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={12} aria-hidden="true" />
+              )}
+              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {filtered.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
@@ -206,6 +205,17 @@ export function NotePreviewList({
       )}
     </div>
   )
+}
+
+function formatNoteFilterMode(mode: NoteFilterMode): string {
+  if (mode === 'tagged') return 'Tagged'
+  if (mode === 'untagged') return 'Untagged'
+  return 'All'
+}
+
+function formatNoteSortLabel(field: NoteSortField, direction: NoteSortDirection): string {
+  const label = field === 'name' ? 'Name' : field === 'created' ? 'Created' : 'Updated'
+  return `${label} ${direction === 'asc' ? '↑' : '↓'}`
 }
 
 function NoteSection({

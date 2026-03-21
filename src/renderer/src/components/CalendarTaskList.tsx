@@ -29,6 +29,15 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './ui/dropdown-menu'
 
 type TaskFilterMode = 'all' | 'pending' | 'completed'
 type ItemTypeFilter = 'all' | 'tasks' | 'milestones' | 'subtasks'
@@ -42,6 +51,8 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; sort
 }
 
 const TYPE_SORT_ORDER = { task: 1, milestone: 2, subtask: 3 }
+const actionButtonClass =
+  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
 
 interface CalendarTaskListProps {
   selectedDate: string
@@ -290,12 +301,7 @@ export function CalendarTaskList({
     return items
   }, [calendarItems, filter, filterMode, itemTypeFilter, sortField, sortDirection])
 
-  const toggleSort = (field: TaskSortField): void => {
-    if (sortField === field) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-
+  const selectSortField = (field: TaskSortField): void => {
     setSortField(field)
     setSortDirection(field === 'name' ? 'asc' : 'desc')
   }
@@ -331,166 +337,86 @@ export function CalendarTaskList({
 
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
-      {/* Item type filter */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Show
-        </span>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            itemTypeFilter === 'all'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setItemTypeFilter('all')}
-        >
-          All ({totalItems})
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            itemTypeFilter === 'tasks'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setItemTypeFilter('tasks')}
-        >
-          Tasks ({tasks.length})
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            itemTypeFilter === 'milestones'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setItemTypeFilter('milestones')}
-        >
-          <Target size={12} />
-          Milestones ({milestonesCount})
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            itemTypeFilter === 'subtasks'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setItemTypeFilter('subtasks')}
-        >
-          <ListTodo size={12} />
-          Subtasks ({subtasksCount})
-        </button>
-      </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Show: {formatItemTypeFilter(itemTypeFilter)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={itemTypeFilter}
+              onValueChange={(value) => setItemTypeFilter(value as ItemTypeFilter)}
+            >
+              <DropdownMenuRadioItem value="all">All ({totalItems})</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="tasks">Tasks ({tasks.length})</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="milestones">
+                Milestones ({milestonesCount})
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="subtasks">
+                Subtasks ({subtasksCount})
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-      {/* Status filter */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Filter
-        </span>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            filterMode === 'all'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setFilterMode('all')}
-        >
-          All ({tasks.length + calendarItems.filter((i) => i.type !== 'task').length})
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            filterMode === 'pending'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setFilterMode('pending')}
-        >
-          Pending ({pendingCount + calendarItems.filter((i) => !i.completed).length})
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            filterMode === 'completed'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => setFilterMode('completed')}
-        >
-          Completed ({completedCount + calendarItems.filter((i) => i.completed).length})
-        </button>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Sort
-        </span>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'name'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('name')}
-        >
-          {sortField === 'name' && sortDirection === 'desc' ? (
-            <ArrowDown size={12} aria-hidden="true" />
-          ) : (
-            <ArrowUp size={12} aria-hidden="true" />
-          )}
-          Name
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'created'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('created')}
-        >
-          {sortField === 'created' && sortDirection === 'asc' ? (
-            <ArrowUp size={12} aria-hidden="true" />
-          ) : (
-            <ArrowDown size={12} aria-hidden="true" />
-          )}
-          Created
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'status'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('status')}
-        >
-          {sortField === 'status' && sortDirection === 'asc' ? (
-            <ArrowUp size={12} aria-hidden="true" />
-          ) : (
-            <ArrowDown size={12} aria-hidden="true" />
-          )}
-          Status
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'priority'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('priority')}
-        >
-          {sortField === 'priority' && sortDirection === 'desc' ? (
-            <ArrowDown size={12} aria-hidden="true" />
-          ) : (
-            <ArrowUp size={12} aria-hidden="true" />
-          )}
-          Priority
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Filter: {formatTaskFilterMode(filterMode)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={filterMode}
+              onValueChange={(value) => setFilterMode(value as TaskFilterMode)}
+            >
+              <DropdownMenuRadioItem value="all">
+                All ({tasks.length + calendarItems.filter((i) => i.type !== 'task').length})
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="pending">
+                Pending ({pendingCount + calendarItems.filter((i) => !i.completed).length})
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="completed">
+                Completed ({completedCount + calendarItems.filter((i) => i.completed).length})
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Sort: {formatTaskSortLabel(sortField, sortDirection)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={sortField}
+              onValueChange={(value) => selectSortField(value as TaskSortField)}
+            >
+              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="status">Status</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="priority">Priority</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="type">Type</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+              }
+            >
+              {sortDirection === 'asc' ? (
+                <ArrowUp size={12} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={12} aria-hidden="true" />
+              )}
+              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <h2 className="text-lg font-semibold text-[var(--text)]">
         Items for {formatCalendarDateHeading(selectedDate)}
@@ -939,6 +865,34 @@ export function CalendarTaskList({
       )}
     </div>
   )
+}
+
+function formatItemTypeFilter(value: ItemTypeFilter): string {
+  if (value === 'tasks') return 'Tasks'
+  if (value === 'milestones') return 'Milestones'
+  if (value === 'subtasks') return 'Subtasks'
+  return 'All'
+}
+
+function formatTaskFilterMode(value: TaskFilterMode): string {
+  if (value === 'pending') return 'Pending'
+  if (value === 'completed') return 'Completed'
+  return 'All'
+}
+
+function formatTaskSortLabel(field: TaskSortField, direction: TaskSortDirection): string {
+  const label =
+    field === 'name'
+      ? 'Name'
+      : field === 'created'
+        ? 'Created'
+        : field === 'status'
+          ? 'Status'
+          : field === 'priority'
+            ? 'Priority'
+            : 'Type'
+
+  return `${label} ${direction === 'asc' ? '↑' : '↓'}`
 }
 
 function formatCalendarDateHeading(isoDate: string): string {

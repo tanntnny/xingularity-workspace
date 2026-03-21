@@ -12,6 +12,15 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './ui/dropdown-menu'
 
 // Re-export types for components that need them
 export type { Project, ProjectMilestone, ProjectSubtask, ProjectStatus }
@@ -21,6 +30,9 @@ export type ProjectListItem = Project
 
 type ProjectSortField = 'name' | 'updated'
 type ProjectSortDirection = 'asc' | 'desc'
+
+const actionButtonClass =
+  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
 
 interface ProjectPreviewListProps {
   projects: Project[]
@@ -97,12 +109,7 @@ export function ProjectPreviewList({
     [nonFavoriteProjects]
   )
 
-  const toggleSort = (field: ProjectSortField): void => {
-    if (sortField === field) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-
+  const selectSortField = (field: ProjectSortField): void => {
     setSortField(field)
     setSortDirection(field === 'name' ? 'asc' : 'desc')
   }
@@ -110,41 +117,35 @@ export function ProjectPreviewList({
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Sort
-        </span>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'name'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('name')}
-        >
-          {sortField === 'name' && sortDirection === 'desc' ? (
-            <ArrowDown size={12} aria-hidden="true" />
-          ) : (
-            <ArrowUp size={12} aria-hidden="true" />
-          )}
-          Name
-        </button>
-        <button
-          type="button"
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-            sortField === 'updated'
-              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)]'
-          }`}
-          onClick={() => toggleSort('updated')}
-        >
-          {sortField === 'updated' && sortDirection === 'asc' ? (
-            <ArrowUp size={12} aria-hidden="true" />
-          ) : (
-            <ArrowDown size={12} aria-hidden="true" />
-          )}
-          Updated
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={actionButtonClass}>
+              Sort: {formatProjectSortLabel(sortField, sortDirection)}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={sortField}
+              onValueChange={(value) => selectSortField(value as ProjectSortField)}
+            >
+              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+              }
+            >
+              {sortDirection === 'asc' ? (
+                <ArrowUp size={12} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={12} aria-hidden="true" />
+              )}
+              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {sortedProjects.length === 0 ? (
@@ -191,6 +192,10 @@ export function ProjectPreviewList({
       )}
     </div>
   )
+}
+
+function formatProjectSortLabel(field: ProjectSortField, direction: ProjectSortDirection): string {
+  return `${field === 'name' ? 'Name' : 'Updated'} ${direction === 'asc' ? '↑' : '↓'}`
 }
 
 function ProjectSection({

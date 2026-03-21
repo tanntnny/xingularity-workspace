@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   ClipboardList,
+  LayoutDashboard,
   FileText,
   FolderKanban,
   Search,
@@ -27,6 +28,7 @@ import {
 import { Kbd } from './ui/kbd'
 
 export type AppPage =
+  | 'dashboard'
   | 'notes'
   | 'projects'
   | 'weeklyPlan'
@@ -48,6 +50,7 @@ interface AppSidebarProps {
 }
 
 const HOME_PAGES: Array<{ id: AppPage; label: string; icon: typeof FileText; shortcut: string }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
   { id: 'notes', label: 'Notes', icon: FileText, shortcut: '⌘1' },
   { id: 'projects', label: 'Projects', icon: FolderKanban, shortcut: '⌘2' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '⌘3' },
