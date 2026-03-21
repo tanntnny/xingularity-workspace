@@ -1,6 +1,6 @@
-import { ReactElement, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, FolderInput, Link, Pencil, Trash2 } from 'lucide-react'
-import { NoteListItem } from '../../../shared/types'
+import { ReactElement, useMemo } from 'react'
+import { Copy, FileText, FolderInput, Heart, Link, Pencil, Trash2 } from 'lucide-react'
+import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
 import { Badge } from './ui/badge'
 import {
@@ -16,28 +16,21 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from './ui/dropdown-menu'
+import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
-type NoteFilterMode = 'all' | 'tagged' | 'untagged'
-type NoteSortField = 'name' | 'created' | 'updated'
-type NoteSortDirection = 'asc' | 'desc'
-
-const actionButtonClass =
-  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
+export type NoteFilterMode = 'all' | 'tagged' | 'untagged'
+export type NoteSortField = 'name' | 'created' | 'updated'
+export type NoteSortDirection = 'asc' | 'desc'
 
 interface NotePreviewListProps {
   notes: NoteListItem[]
   favoritePaths: string[]
   selectedPath: string | null
   filter: string
+  filterMode: NoteFilterMode
+  sortField: NoteSortField
+  sortDirection: NoteSortDirection
   onOpen: (relPath: string) => void
   onDelete: (relPath: string) => void
   onRename?: (relPath: string) => void
@@ -52,6 +45,9 @@ export function NotePreviewList({
   favoritePaths,
   selectedPath,
   filter,
+  filterMode,
+  sortField,
+  sortDirection,
   onOpen,
   onDelete,
   onRename,
@@ -60,10 +56,7 @@ export function NotePreviewList({
   onCopyLink,
   folders = []
 }: NotePreviewListProps): ReactElement {
-  const [filterMode, setFilterMode] = useState<NoteFilterMode>('all')
-  const [sortField, setSortField] = useState<NoteSortField>('created')
-  const [sortDirection, setSortDirection] = useState<NoteSortDirection>('desc')
-
+  const useNativeMenus = canUseNativeMenus()
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase()
     const base = [...notes]
@@ -114,69 +107,16 @@ export function NotePreviewList({
     [filtered, favoritePathSet]
   )
 
-  const selectSortField = (field: NoteSortField): void => {
-    setSortField(field)
-    setSortDirection(field === 'name' ? 'asc' : 'desc')
-  }
-
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Filter: {formatNoteFilterMode(filterMode)}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={filterMode}
-              onValueChange={(value) => setFilterMode(value as NoteFilterMode)}
-            >
-              <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="tagged">Tagged</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="untagged">Untagged</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Sort: {formatNoteSortLabel(sortField, sortDirection)}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={sortField}
-              onValueChange={(value) => selectSortField(value as NoteSortField)}
-            >
-              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }
-            >
-              {sortDirection === 'asc' ? (
-                <ArrowUp size={12} aria-hidden="true" />
-              ) : (
-                <ArrowDown size={12} aria-hidden="true" />
-              )}
-              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
       {filtered.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
       ) : (
         <>
           <NoteSection
             title="Favorites"
+            icon={<Heart size={16} aria-hidden="true" />}
+            description={`${favoriteNotes.length} starred notes in the current filter`}
             emptyLabel="No favorite notes yet"
             notes={favoriteNotes}
             selectedPath={selectedPath}
@@ -187,9 +127,12 @@ export function NotePreviewList({
             onMoveTo={onMoveTo}
             onCopyLink={onCopyLink}
             folders={folders}
+            useNativeMenus={useNativeMenus}
           />
           <NoteSection
             title="All Notes"
+            icon={<FileText size={16} aria-hidden="true" />}
+            description={`${allNotes.length} notes available in the current filter`}
             emptyLabel="No other notes found"
             notes={allNotes}
             selectedPath={selectedPath}
@@ -200,6 +143,7 @@ export function NotePreviewList({
             onMoveTo={onMoveTo}
             onCopyLink={onCopyLink}
             folders={folders}
+            useNativeMenus={useNativeMenus}
           />
         </>
       )}
@@ -207,19 +151,10 @@ export function NotePreviewList({
   )
 }
 
-function formatNoteFilterMode(mode: NoteFilterMode): string {
-  if (mode === 'tagged') return 'Tagged'
-  if (mode === 'untagged') return 'Untagged'
-  return 'All'
-}
-
-function formatNoteSortLabel(field: NoteSortField, direction: NoteSortDirection): string {
-  const label = field === 'name' ? 'Name' : field === 'created' ? 'Created' : 'Updated'
-  return `${label} ${direction === 'asc' ? '↑' : '↓'}`
-}
-
 function NoteSection({
   title,
+  icon,
+  description,
   emptyLabel,
   notes,
   selectedPath,
@@ -229,9 +164,12 @@ function NoteSection({
   onDuplicate,
   onMoveTo,
   onCopyLink,
-  folders
+  folders,
+  useNativeMenus
 }: {
   title: string
+  icon: ReactElement
+  description: string
   emptyLabel: string
   notes: NoteListItem[]
   selectedPath: string | null
@@ -242,10 +180,11 @@ function NoteSection({
   onMoveTo?: (relPath: string, targetFolder: string) => void
   onCopyLink?: (relPath: string) => void
   folders: string[]
+  useNativeMenus: boolean
 }): ReactElement {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+    <WorkspacePanelSection>
+      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {notes.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
@@ -255,43 +194,82 @@ function NoteSection({
           const visibleTags = noteTags.slice(0, 2)
           const hiddenTagCount = Math.max(0, noteTags.length - visibleTags.length)
           const updatedLabel = `${new Date(note.updatedAt).toLocaleDateString()}`
+          const menuItems = buildNoteMenuItems({
+            canRename: Boolean(onRename),
+            canDuplicate: Boolean(onDuplicate),
+            canCopyLink: Boolean(onCopyLink),
+            moveFolders: onMoveTo ? folders : []
+          })
 
-          return (
+          const handleNativeContextMenu = async (
+            event: React.MouseEvent<HTMLButtonElement>
+          ): Promise<void> => {
+            event.preventDefault()
+            const actionId = await showNativeMenu(menuItems, getMouseMenuPosition(event))
+
+            if (!actionId) {
+              return
+            }
+            if (actionId === 'rename' && onRename) {
+              onRename(note.relPath)
+              return
+            }
+            if (actionId === 'duplicate' && onDuplicate) {
+              onDuplicate(note.relPath)
+              return
+            }
+            if (actionId.startsWith('move:') && onMoveTo) {
+              onMoveTo(note.relPath, actionId.slice('move:'.length))
+              return
+            }
+            if (actionId === 'copy-link' && onCopyLink) {
+              onCopyLink(note.relPath)
+              return
+            }
+            if (actionId === 'delete') {
+              onDelete(note.relPath)
+            }
+          }
+
+          const noteButton = (
+            <button
+              type="button"
+              className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                isSelected
+                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                  : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+              }`}
+              onClick={() => onOpen(note.relPath)}
+              onContextMenu={useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined}
+              onKeyDown={(event) => {
+                if (!isDeleteShortcut(event)) {
+                  return
+                }
+                event.preventDefault()
+                onDelete(note.relPath)
+              }}
+            >
+              <div className="truncate text-lg font-bold">{note.name.replace(/\.md$/i, '')}</div>
+              <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                <Badge variant="neutral">
+                  <Pencil size={12} aria-hidden="true" />
+                  {updatedLabel}
+                </Badge>
+                <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                  {visibleTags.map((tag) => (
+                    <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
+                  ))}
+                  {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
+                </span>
+              </div>
+            </button>
+          )
+
+          return useNativeMenus ? (
+            <div key={note.relPath}>{noteButton}</div>
+          ) : (
             <ContextMenu key={note.relPath}>
-              <ContextMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                    isSelected
-                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                      : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                  }`}
-                  onClick={() => onOpen(note.relPath)}
-                  onKeyDown={(event) => {
-                    if (!isDeleteShortcut(event)) {
-                      return
-                    }
-                    event.preventDefault()
-                    onDelete(note.relPath)
-                  }}
-                >
-                  <div className="truncate text-lg font-bold">
-                    {note.name.replace(/\.md$/i, '')}
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                    <Badge variant="neutral">
-                      <Pencil size={12} aria-hidden="true" />
-                      {updatedLabel}
-                    </Badge>
-                    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-                      {visibleTags.map((tag) => (
-                        <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
-                      ))}
-                      {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
-                    </span>
-                  </div>
-                </button>
-              </ContextMenuTrigger>
+              <ContextMenuTrigger asChild>{noteButton}</ContextMenuTrigger>
               <ContextMenuContent>
                 {onRename && (
                   <ContextMenuItem onClick={() => onRename(note.relPath)}>
@@ -327,9 +305,7 @@ function NoteSection({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuDestructiveItem
-                  onClick={() => onDelete(note.relPath)}
-                >
+                <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                   <ContextMenuShortcut keys={['cmd', 'backspace']} />
@@ -339,6 +315,33 @@ function NoteSection({
           )
         })
       )}
-    </section>
+    </WorkspacePanelSection>
   )
+}
+
+function buildNoteMenuItems(options: {
+  canRename: boolean
+  canDuplicate: boolean
+  canCopyLink: boolean
+  moveFolders: string[]
+}): NativeMenuItemDescriptor[] {
+  return [
+    ...(options.canRename ? [{ id: 'rename', label: 'Rename' }] : []),
+    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+    ...(options.moveFolders.length
+      ? [
+          {
+            type: 'submenu' as const,
+            label: 'Move to...',
+            submenu: options.moveFolders.map((folder) => ({
+              id: `move:${folder}`,
+              label: folder
+            }))
+          }
+        ]
+      : []),
+    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
+    { type: 'separator' as const },
+    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+  ]
 }

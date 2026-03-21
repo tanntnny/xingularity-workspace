@@ -60,6 +60,7 @@ import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader
 } from '../components/ui/document-workspace'
+import { WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
 import { cn } from '../lib/utils'
 
 interface AgentHistoryPageProps {
@@ -1004,10 +1005,12 @@ export function AgentHistoryPage({
         </DocumentWorkspacePanelHeader>
         <DocumentWorkspacePanelContent className="space-y-5 p-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-[var(--text)]">Chat cards</h3>
-              <p className="text-xs text-[var(--muted)]">Select the conversation you want to continue</p>
-            </div>
+            <WorkspacePanelSectionHeader
+              className="mb-3"
+              icon={<Bot size={16} aria-hidden="true" />}
+              heading="Chat cards"
+              description="Select the conversation you want to continue"
+            />
             {isLoadingSessions ? (
               <p className="text-sm text-[var(--muted)]">Loading chats...</p>
             ) : sessions.length ? (
@@ -1054,10 +1057,12 @@ export function AgentHistoryPage({
           </section>
 
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-[var(--text)]">Active chat</h3>
-              <p className="text-xs text-[var(--muted)]">Details for the selected conversation</p>
-            </div>
+            <WorkspacePanelSectionHeader
+              className="mb-3"
+              icon={<MessageSquarePlus size={16} aria-hidden="true" />}
+              heading="Active chat"
+              description="Details for the selected conversation"
+            />
             {activeSession ? (
               <div className="space-y-3">
                 <div>
@@ -1101,12 +1106,12 @@ export function AgentHistoryPage({
           </section>
 
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-[var(--text)]">Context added</h3>
-              <p className="text-xs text-[var(--muted)]">
-                Mentions attached to the current draft before sending
-              </p>
-            </div>
+            <WorkspacePanelSectionHeader
+              className="mb-3"
+              icon={<AtSign size={16} aria-hidden="true" />}
+              heading="Context added"
+              description="Mentions attached to the current draft before sending"
+            />
             {selectedMentions.length ? (
               <div className="flex flex-wrap gap-2">
                 {selectedMentions.map((mention) => (

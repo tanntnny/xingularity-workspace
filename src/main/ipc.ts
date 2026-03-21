@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { VaultRuntime } from './runtime'
@@ -117,6 +117,34 @@ const projectIconSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
 
+const nativeMenuItemSchema: z.ZodType<{
+  id?: string
+  type?: 'normal' | 'separator' | 'submenu' | 'checkbox'
+  label?: string
+  enabled?: boolean
+  checked?: boolean
+  accelerator?: string
+  submenu?: unknown
+}> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1).max(200).optional(),
+    type: z.enum(['normal', 'separator', 'submenu', 'checkbox']).optional(),
+    label: z.string().min(1).max(200).optional(),
+    enabled: z.boolean().optional(),
+    checked: z.boolean().optional(),
+    accelerator: z.string().min(1).max(80).optional(),
+    submenu: z.array(nativeMenuItemSchema).optional()
+  })
+)
+
+const nativeMenuRequestSchema = z.object({
+  items: z.array(nativeMenuItemSchema).max(100),
+  position: z.object({
+    x: z.number().int().min(0).max(10000),
+    y: z.number().int().min(0).max(10000)
+  })
+})
+
 const projectSubtaskSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
@@ -175,6 +203,32 @@ const settingsUpdateSchema = z.object({
 })
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
+  ipcMain.handle(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
+    const parsed = nativeMenuRequestSchema.parse(request)
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) {
+      return null
+    }
+
+    let selectedActionId: string | null = null
+    const menu = Menu.buildFromTemplate(
+      buildNativeMenuTemplate(parsed.items, (actionId) => {
+        selectedActionId = actionId
+      })
+    )
+
+    await new Promise<void>((resolve) => {
+      menu.popup({
+        window,
+        x: parsed.position.x,
+        y: parsed.position.y,
+        callback: () => resolve()
+      })
+    })
+
+    return selectedActionId
+  })
+
   ipcMain.handle(IPC_CHANNELS.vaultOpen, async () => {
     return runtime.openWithDialog()
   })
@@ -281,5 +335,52 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown) => {
     return runtime.updateSettings(settingsUpdateSchema.parse(next))
+  })
+}
+
+function buildNativeMenuTemplate(
+  items: Array<z.infer<typeof nativeMenuItemSchema>>,
+  onSelect: (actionId: string) => void
+): MenuItemConstructorOptions[] {
+  return items.map((item) => {
+    if (item.type === 'separator') {
+      return { type: 'separator' }
+    }
+
+    if (item.type === 'submenu') {
+      return {
+        type: 'submenu',
+        label: item.label ?? '',
+        enabled: item.enabled ?? true,
+        submenu: buildNativeMenuTemplate((item.submenu as Array<z.infer<typeof nativeMenuItemSchema>>) ?? [], onSelect)
+      }
+    }
+
+    if (item.type === 'checkbox') {
+      return {
+        type: 'checkbox',
+        label: item.label ?? '',
+        enabled: item.enabled ?? true,
+        checked: item.checked ?? false,
+        accelerator: item.accelerator,
+        click: () => {
+          if (item.id) {
+            onSelect(item.id)
+          }
+        }
+      }
+    }
+
+    return {
+      type: 'normal',
+      label: item.label ?? '',
+      enabled: item.enabled ?? true,
+      accelerator: item.accelerator,
+      click: () => {
+        if (item.id) {
+          onSelect(item.id)
+        }
+      }
+    }
   })
 }

@@ -2,10 +2,13 @@ import { ReactElement, useMemo, useState, useRef, useEffect, DragEvent } from 'r
 import {
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   Check,
   Circle,
+  Eye,
   Trash2,
   Flag,
+  Funnel,
   Target,
   ListTodo,
   Bell,
@@ -51,8 +54,8 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; sort
 }
 
 const TYPE_SORT_ORDER = { task: 1, milestone: 2, subtask: 3 }
-const actionButtonClass =
-  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
+const iconActionButtonClass =
+  'inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
 
 interface CalendarTaskListProps {
   selectedDate: string
@@ -340,8 +343,13 @@ export function CalendarTaskList({
       <div className="flex flex-wrap items-center gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Show: {formatItemTypeFilter(itemTypeFilter)}
+            <button
+              type="button"
+              className={iconActionButtonClass}
+              aria-label={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
+              title={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
+            >
+              <Eye size={14} aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -363,8 +371,13 @@ export function CalendarTaskList({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Filter: {formatTaskFilterMode(filterMode)}
+            <button
+              type="button"
+              className={iconActionButtonClass}
+              aria-label={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
+              title={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
+            >
+              <Funnel size={14} aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -387,8 +400,13 @@ export function CalendarTaskList({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Sort: {formatTaskSortLabel(sortField, sortDirection)}
+            <button
+              type="button"
+              className={iconActionButtonClass}
+              aria-label={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
+              title={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
+            >
+              <ArrowUpDown size={14} aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">

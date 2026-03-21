@@ -4,6 +4,7 @@ import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/ty
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { isDeleteShortcut } from './ui/context-menu'
+import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 
 interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
@@ -74,17 +75,11 @@ export function UnscheduledTaskList({
       onDrop={handleDrop}
     >
       <div className="shrink-0 px-4 py-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
-            <CalendarPlus size={16} className="text-[var(--accent)]" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-[var(--text)]">Unscheduled</h2>
-            <p className="text-xs text-[var(--muted)]">
-              {pendingCount} pending{completedCount > 0 && ` · ${completedCount} done`}
-            </p>
-          </div>
-        </div>
+        <WorkspacePanelSectionHeader
+          icon={<CalendarPlus size={16} aria-hidden="true" />}
+          heading="Unscheduled"
+          description={`${pendingCount} pending${completedCount > 0 ? ` · ${completedCount} done` : ''}`}
+        />
       </div>
 
       <div className="shrink-0 px-4 pb-3">

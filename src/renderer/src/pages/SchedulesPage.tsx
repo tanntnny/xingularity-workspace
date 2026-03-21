@@ -1,5 +1,6 @@
 import { ReactElement, useCallback, useEffect, useId, useRef, useState } from 'react'
 import {
+  CalendarClock,
   CheckCircle2,
   Circle,
   Clock,
@@ -41,6 +42,7 @@ import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader
 } from '../components/ui/document-workspace'
+import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
 
 interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -708,55 +710,62 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
             }
           />
           <DocumentWorkspacePanelContent>
-            {jobs.length === 0 ? (
-              <div className="p-4 text-sm text-[var(--muted)]">
-                No schedules yet. Click + to create one.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 p-3">
-                {jobs.map((job) => {
-                  const isActive = selectedJobId === job.id
-                  return (
-                    <button
-                      key={job.id}
-                      type="button"
-                      onClick={() => handleOpenEditDrawer(job.id)}
-                      className={`flex flex-col gap-2 rounded-xl border px-3 py-3 text-left shadow-sm transition-colors ${
-                        isActive
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                          : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[var(--text)]">
-                            {job.name}
-                          </p>
-                          <p className="text-xs text-[var(--muted)]">
-                            {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
-                          </p>
+            <WorkspacePanelSection className="p-3">
+              <WorkspacePanelSectionHeader
+                icon={<CalendarClock size={16} aria-hidden="true" />}
+                heading="Schedules"
+                description={`${jobs.length} jobs configured${selectedJobId ? ' · select one to edit' : ''}`}
+              />
+              {jobs.length === 0 ? (
+                <div className="p-1 text-sm text-[var(--muted)]">
+                  No schedules yet. Click + to create one.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {jobs.map((job) => {
+                    const isActive = selectedJobId === job.id
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => handleOpenEditDrawer(job.id)}
+                        className={`flex flex-col gap-2 rounded-xl border px-3 py-3 text-left shadow-sm transition-colors ${
+                          isActive
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--text)]">
+                              {job.name}
+                            </p>
+                            <p className="text-xs text-[var(--muted)]">
+                              {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
+                            </p>
+                          </div>
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                              job.enabled ? 'bg-green-500' : 'bg-[var(--muted)]'
+                            }`}
+                            title={job.enabled ? 'Enabled' : 'Disabled'}
+                          />
                         </div>
-                        <span
-                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                            job.enabled ? 'bg-green-500' : 'bg-[var(--muted)]'
-                          }`}
-                          title={job.enabled ? 'Enabled' : 'Disabled'}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                        {statusIcon(job.lastStatus)}
-                        <span>{statusLabel(job.lastStatus)}</span>
-                      </div>
-                      {job.nextRunAt && (
-                        <div className="text-xs text-[var(--muted)]">
-                          Next run {formatNextRun(job.nextRunAt)}
+                        <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                          {statusIcon(job.lastStatus)}
+                          <span>{statusLabel(job.lastStatus)}</span>
                         </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+                        {job.nextRunAt && (
+                          <div className="text-xs text-[var(--muted)]">
+                            Next run {formatNextRun(job.nextRunAt)}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </WorkspacePanelSection>
           </DocumentWorkspacePanelContent>
         </DocumentWorkspacePanel>
       </DocumentWorkspace>

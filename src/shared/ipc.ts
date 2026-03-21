@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   vaultOpen: 'vault:open',
   vaultCreate: 'vault:create',
   vaultRestoreLast: 'vault:restore-last',
+  uiShowNativeMenu: 'ui:show-native-menu',
   listNotes: 'files:list-notes',
   readNote: 'files:read-note',
   writeNote: 'files:write-note',

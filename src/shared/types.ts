@@ -527,7 +527,29 @@ export interface AgentRunRecord {
   context?: AgentRunContext
 }
 
+export interface NativeMenuPosition {
+  x: number
+  y: number
+}
+
+export interface NativeMenuItemDescriptor {
+  id?: string
+  type?: 'normal' | 'separator' | 'submenu' | 'checkbox'
+  label?: string
+  enabled?: boolean
+  checked?: boolean
+  accelerator?: string
+  submenu?: NativeMenuItemDescriptor[]
+}
+
 export interface RendererVaultApi {
+  ui: {
+    platform: string
+    showNativeMenu: (
+      items: NativeMenuItemDescriptor[],
+      position: NativeMenuPosition
+    ) => Promise<string | null>
+  }
   vault: {
     open: () => Promise<Maybe<VaultOpenResult>>
     create: () => Promise<Maybe<VaultOpenResult>>

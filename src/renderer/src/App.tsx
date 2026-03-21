@@ -2,11 +2,18 @@ import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 
 import {
   Pencil,
   Eye,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Download,
+  Funnel,
   Heart,
+  Keyboard,
+  Paintbrush,
   Check,
   Trash2,
   Plus,
+  Type,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
@@ -42,13 +49,32 @@ import { CalendarMonthView } from './components/CalendarMonthView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
 import { NoteShapeIcon } from './components/NoteShapeIcon'
-import { NotePreviewList } from './components/NotePreviewList'
-import { ProjectPreviewList } from './components/ProjectPreviewList'
+import {
+  NotePreviewList,
+  type NoteFilterMode,
+  type NoteSortDirection,
+  type NoteSortField
+} from './components/NotePreviewList'
+import {
+  ProjectPreviewList,
+  type ProjectFilterMode,
+  type ProjectSortDirection,
+  type ProjectSortField
+} from './components/ProjectPreviewList'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
 import type { AppPage } from './components/AppSidebar'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './components/ui/dropdown-menu'
 import {
   DocumentWorkspaceMain,
   DocumentWorkspaceMainContent,
@@ -57,6 +83,7 @@ import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader
 } from './components/ui/document-workspace'
+import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './components/ui/workspace-panel-section'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
@@ -116,6 +143,9 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' }
 ] as const
+
+const panelIconButtonClass =
+  'flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]'
 
 const PROJECT_SEED: Project[] = [
   {
@@ -309,11 +339,18 @@ function App(): ReactElement {
     useState<(typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']>('day')
   const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
   const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [noteFilterMode, setNoteFilterMode] = useState<NoteFilterMode>('all')
+  const [noteSortField, setNoteSortField] = useState<NoteSortField>('created')
+  const [noteSortDirection, setNoteSortDirection] = useState<NoteSortDirection>('desc')
   // Projects are now derived from settings for persistence
   const projects = settings.projects.length > 0 ? settings.projects : PROJECT_SEED
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     PROJECT_SEED[0]?.id ?? null
   )
+  const [projectFilterMode, setProjectFilterMode] = useState<ProjectFilterMode>('all')
+  const [projectSortField, setProjectSortField] = useState<ProjectSortField>('name')
+  const [projectSortDirection, setProjectSortDirection] =
+    useState<ProjectSortDirection>('asc')
   const {
     data: weeklyPlanState,
     loading: weeklyPlanLoading,
@@ -3123,9 +3160,74 @@ function App(): ReactElement {
                     actions={
                       activePage === 'notes' ? (
                         <>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={panelIconButtonClass}
+                                aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                              >
+                                <Funnel size={18} aria-hidden="true" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuRadioGroup
+                                value={noteFilterMode}
+                                onValueChange={(value) => setNoteFilterMode(value as NoteFilterMode)}
+                              >
+                                <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="tagged">Tagged</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="untagged">
+                                  Untagged
+                                </DropdownMenuRadioItem>
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={panelIconButtonClass}
+                                aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                              >
+                                <ArrowUpDown size={18} aria-hidden="true" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuRadioGroup
+                                value={noteSortField}
+                                onValueChange={(value) => {
+                                  const field = value as NoteSortField
+                                  setNoteSortField(field)
+                                  setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
+                                }}
+                              >
+                                <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
+                              </DropdownMenuRadioGroup>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setNoteSortDirection((current) =>
+                                    current === 'asc' ? 'desc' : 'asc'
+                                  )
+                                }
+                              >
+                                {noteSortDirection === 'asc' ? (
+                                  <ArrowUp size={12} aria-hidden="true" />
+                                ) : (
+                                  <ArrowDown size={12} aria-hidden="true" />
+                                )}
+                                Direction: {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <button
                             type="button"
-                            className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                            className={panelIconButtonClass}
                             onClick={() => {
                               void createNote()
                             }}
@@ -3137,9 +3239,78 @@ function App(): ReactElement {
                         </>
                       ) : activePage === 'projects' ? (
                         <>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={panelIconButtonClass}
+                                aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                              >
+                                <Funnel size={18} aria-hidden="true" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuRadioGroup
+                                value={projectFilterMode}
+                                onValueChange={(value) =>
+                                  setProjectFilterMode(value as ProjectFilterMode)
+                                }
+                              >
+                                <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="favorites">
+                                  Favorites
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="active">
+                                  In Progress
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="completed">Done</DropdownMenuRadioItem>
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={panelIconButtonClass}
+                                aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                              >
+                                <ArrowUpDown size={18} aria-hidden="true" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuRadioGroup
+                                value={projectSortField}
+                                onValueChange={(value) => {
+                                  const field = value as ProjectSortField
+                                  setProjectSortField(field)
+                                  setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
+                                }}
+                              >
+                                <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
+                              </DropdownMenuRadioGroup>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setProjectSortDirection((current) =>
+                                    current === 'asc' ? 'desc' : 'asc'
+                                  )
+                                }
+                              >
+                                {projectSortDirection === 'asc' ? (
+                                  <ArrowUp size={12} aria-hidden="true" />
+                                ) : (
+                                  <ArrowDown size={12} aria-hidden="true" />
+                                )}
+                                Direction: {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <button
                             type="button"
-                            className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                            className={panelIconButtonClass}
                             onClick={createProject}
                             aria-label="Add new project"
                             title="Add new project"
@@ -3155,7 +3326,7 @@ function App(): ReactElement {
                           <PopoverTrigger asChild>
                             <button
                               type="button"
-                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                              className={panelIconButtonClass}
                             >
                               <Target size={18} className="inline-block" />
                             </button>
@@ -3242,6 +3413,9 @@ function App(): ReactElement {
                         favoritePaths={favoriteNotePaths}
                         selectedPath={currentNotePath}
                         filter={searchQuery}
+                        filterMode={noteFilterMode}
+                        sortField={noteSortField}
+                        sortDirection={noteSortDirection}
                         onOpen={(relPath) => {
                           setSearchQuery('')
                           setSearchResults([])
@@ -3257,6 +3431,9 @@ function App(): ReactElement {
                         favoriteProjectIds={favoriteProjectIds}
                         selectedProjectId={selectedProjectId}
                         filter={projectSearchQuery}
+                        filterMode={projectFilterMode}
+                        sortField={projectSortField}
+                        sortDirection={projectSortDirection}
                         onSelect={handleProjectListSelect}
                         onDelete={(projectId) => {
                           void removeProjectById(projectId)
@@ -3297,16 +3474,28 @@ function App(): ReactElement {
                         }}
                       />
                     ) : (
-                      <div className="grid h-full grid-rows-3 gap-3 p-3">
-                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                          Appearance
-                        </div>
-                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                          Editor Defaults
-                        </div>
-                        <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5 text-lg text-[var(--muted)]">
-                          Shortcuts
-                        </div>
+                      <div className="flex h-full flex-col gap-4 p-3">
+                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                          <WorkspacePanelSectionHeader
+                            icon={<Paintbrush size={16} aria-hidden="true" />}
+                            heading="Appearance"
+                            description="Theme and surface defaults for the workspace"
+                          />
+                        </WorkspacePanelSection>
+                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                          <WorkspacePanelSectionHeader
+                            icon={<Type size={16} aria-hidden="true" />}
+                            heading="Editor Defaults"
+                            description="Type, writing, and editing preferences"
+                          />
+                        </WorkspacePanelSection>
+                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                          <WorkspacePanelSectionHeader
+                            icon={<Keyboard size={16} aria-hidden="true" />}
+                            heading="Shortcuts"
+                            description="Keyboard actions available across the app"
+                          />
+                        </WorkspacePanelSection>
                       </div>
                     )}
                   </DocumentWorkspacePanelContent>
@@ -3435,6 +3624,28 @@ function formatCalendarDateLabel(isoDate: string): string {
     day: 'numeric',
     year: 'numeric'
   })
+}
+
+function formatNoteFilterMode(mode: NoteFilterMode): string {
+  if (mode === 'tagged') return 'Tagged'
+  if (mode === 'untagged') return 'Untagged'
+  return 'All'
+}
+
+function formatNoteSortLabel(field: NoteSortField, direction: NoteSortDirection): string {
+  const label = field === 'name' ? 'Name' : field === 'created' ? 'Created' : 'Updated'
+  return `${label} ${direction === 'asc' ? '↑' : '↓'}`
+}
+
+function formatProjectFilterMode(mode: ProjectFilterMode): string {
+  if (mode === 'favorites') return 'Favorites'
+  if (mode === 'active') return 'In Progress'
+  if (mode === 'completed') return 'Done'
+  return 'All'
+}
+
+function formatProjectSortLabel(field: ProjectSortField, direction: ProjectSortDirection): string {
+  return `${field === 'name' ? 'Name' : 'Updated'} ${direction === 'asc' ? '↑' : '↓'}`
 }
 
 function buildDefaultNoteName(): string {

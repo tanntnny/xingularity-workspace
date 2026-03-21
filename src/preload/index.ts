@@ -8,6 +8,11 @@ import {
 import { AgentChatEvent, RendererVaultApi } from '../shared/types'
 
 const api: RendererVaultApi = {
+  ui: {
+    platform: process.platform,
+    showNativeMenu: (items, position) =>
+      ipcRenderer.invoke(IPC_CHANNELS.uiShowNativeMenu, { items, position })
+  },
   vault: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.vaultOpen),
     create: () => ipcRenderer.invoke(IPC_CHANNELS.vaultCreate),

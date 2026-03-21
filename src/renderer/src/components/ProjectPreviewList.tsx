@@ -1,6 +1,6 @@
-import { ReactElement, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, Flag, Link, Pencil, Trash2 } from 'lucide-react'
-import { Project, ProjectMilestone, ProjectStatus, ProjectSubtask } from '../../../shared/types'
+import { ReactElement, useMemo } from 'react'
+import { Copy, Flag, Heart, Link, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import type { NativeMenuItemDescriptor, Project, ProjectMilestone, ProjectStatus, ProjectSubtask } from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import {
   ContextMenu,
@@ -12,33 +12,23 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from './ui/dropdown-menu'
+import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
-// Re-export types for components that need them
 export type { Project, ProjectMilestone, ProjectSubtask, ProjectStatus }
-
-// Legacy alias for backward compatibility
 export type ProjectListItem = Project
-
-type ProjectSortField = 'name' | 'updated'
-type ProjectSortDirection = 'asc' | 'desc'
-
-const actionButtonClass =
-  'inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
+export type ProjectSortField = 'name' | 'updated'
+export type ProjectSortDirection = 'asc' | 'desc'
+export type ProjectFilterMode = 'all' | 'favorites' | 'active' | 'completed'
 
 interface ProjectPreviewListProps {
   projects: Project[]
   favoriteProjectIds: string[]
   selectedProjectId: string | null
   filter: string
+  filterMode: ProjectFilterMode
+  sortField: ProjectSortField
+  sortDirection: ProjectSortDirection
   onSelect: (projectId: string) => void
   onDelete?: (projectId: string) => void
   onRename?: (projectId: string) => void
@@ -51,17 +41,18 @@ export function ProjectPreviewList({
   favoriteProjectIds,
   selectedProjectId,
   filter,
+  filterMode,
+  sortField,
+  sortDirection,
   onSelect,
   onDelete,
   onRename,
   onDuplicate,
   onCopyLink
 }: ProjectPreviewListProps): ReactElement {
+  const useNativeMenus = canUseNativeMenus()
   const neutralChipClass =
     'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
-
-  const [sortField, setSortField] = useState<ProjectSortField>('name')
-  const [sortDirection, setSortDirection] = useState<ProjectSortDirection>('asc')
 
   const sortedProjects = useMemo(() => {
     const query = filter.trim().toLowerCase()
@@ -75,7 +66,16 @@ export function ProjectPreviewList({
             )
           })
 
-    const sorted = [...filteredProjects]
+    const byFilterMode =
+      filterMode === 'favorites'
+        ? filteredProjects.filter((project) => favoriteProjectIds.includes(project.id))
+        : filterMode === 'active'
+          ? filteredProjects.filter((project) => project.status !== 'completed')
+          : filterMode === 'completed'
+            ? filteredProjects.filter((project) => project.status === 'completed')
+            : filteredProjects
+
+    const sorted = [...byFilterMode]
     if (sortField === 'updated') {
       sorted.sort((a, b) =>
         sortDirection === 'asc'
@@ -89,7 +89,7 @@ export function ProjectPreviewList({
       sortDirection === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
     )
     return sorted
-  }, [projects, filter, sortField, sortDirection])
+  }, [projects, filter, filterMode, sortField, sortDirection, favoriteProjectIds])
 
   const favoriteProjectIdSet = useMemo(() => new Set(favoriteProjectIds), [favoriteProjectIds])
   const favoriteProjects = useMemo(
@@ -109,51 +109,16 @@ export function ProjectPreviewList({
     [nonFavoriteProjects]
   )
 
-  const selectSortField = (field: ProjectSortField): void => {
-    setSortField(field)
-    setSortDirection(field === 'name' ? 'asc' : 'desc')
-  }
-
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={actionButtonClass}>
-              Sort: {formatProjectSortLabel(sortField, sortDirection)}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={sortField}
-              onValueChange={(value) => selectSortField(value as ProjectSortField)}
-            >
-              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }
-            >
-              {sortDirection === 'asc' ? (
-                <ArrowUp size={12} aria-hidden="true" />
-              ) : (
-                <ArrowDown size={12} aria-hidden="true" />
-              )}
-              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
       {sortedProjects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No projects found</div>
       ) : (
         <>
           <ProjectSection
             title="Favorites"
+            icon={<Heart size={16} aria-hidden="true" />}
+            description={`${favoriteProjects.length} pinned projects for quick access`}
             emptyLabel="No favorite projects yet"
             projects={favoriteProjects}
             selectedProjectId={selectedProjectId}
@@ -163,9 +128,12 @@ export function ProjectPreviewList({
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
+            useNativeMenus={useNativeMenus}
           />
           <ProjectSection
             title="In-Progress Projects"
+            icon={<Flag size={16} aria-hidden="true" />}
+            description={`${inProgressProjects.length} active projects still moving forward`}
             emptyLabel="No in-progress projects found"
             projects={inProgressProjects}
             selectedProjectId={selectedProjectId}
@@ -175,9 +143,12 @@ export function ProjectPreviewList({
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
+            useNativeMenus={useNativeMenus}
           />
           <ProjectSection
             title="Done Projects"
+            icon={<Sparkles size={16} aria-hidden="true" />}
+            description={`${doneProjects.length} completed projects kept for reference`}
             emptyLabel="No done projects found"
             projects={doneProjects}
             selectedProjectId={selectedProjectId}
@@ -187,6 +158,7 @@ export function ProjectPreviewList({
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
+            useNativeMenus={useNativeMenus}
           />
         </>
       )}
@@ -194,12 +166,10 @@ export function ProjectPreviewList({
   )
 }
 
-function formatProjectSortLabel(field: ProjectSortField, direction: ProjectSortDirection): string {
-  return `${field === 'name' ? 'Name' : 'Updated'} ${direction === 'asc' ? '↑' : '↓'}`
-}
-
 function ProjectSection({
   title,
+  icon,
+  description,
   emptyLabel,
   projects,
   selectedProjectId,
@@ -208,9 +178,12 @@ function ProjectSection({
   onRename,
   onDuplicate,
   onCopyLink,
-  neutralChipClass
+  neutralChipClass,
+  useNativeMenus
 }: {
   title: string
+  icon: ReactElement
+  description: string
   emptyLabel: string
   projects: Project[]
   selectedProjectId: string | null
@@ -220,50 +193,93 @@ function ProjectSection({
   onDuplicate?: (projectId: string) => void
   onCopyLink?: (projectId: string) => void
   neutralChipClass: string
+  useNativeMenus: boolean
 }): ReactElement {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+    <WorkspacePanelSection>
+      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {projects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
         projects.map((project) => {
           const updatedLabel = new Date(project.updatedAt).toLocaleDateString()
           const milestoneCount = project.milestones.length
+          const menuItems: NativeMenuItemDescriptor[] = [
+            ...(onRename ? [{ id: 'rename', label: 'Rename' }] : []),
+            ...(onDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+            ...(onCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
+            ...(onDelete
+              ? [
+                  { type: 'separator' as const },
+                  { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+                ]
+              : [])
+          ]
 
-          return (
+          const handleNativeContextMenu = async (
+            event: React.MouseEvent<HTMLButtonElement>
+          ): Promise<void> => {
+            event.preventDefault()
+            const actionId = await showNativeMenu(menuItems, getMouseMenuPosition(event))
+
+            if (!actionId) {
+              return
+            }
+            if (actionId === 'rename' && onRename) {
+              onRename(project.id)
+              return
+            }
+            if (actionId === 'duplicate' && onDuplicate) {
+              onDuplicate(project.id)
+              return
+            }
+            if (actionId === 'copy-link' && onCopyLink) {
+              onCopyLink(project.id)
+              return
+            }
+            if (actionId === 'delete' && onDelete) {
+              onDelete(project.id)
+            }
+          }
+
+          const projectButton = (
+            <button
+              type="button"
+              className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                selectedProjectId === project.id
+                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                  : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+              }`}
+              onClick={() => onSelect(project.id)}
+              onContextMenu={useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined}
+              onKeyDown={(event) => {
+                if (!onDelete || !isDeleteShortcut(event)) {
+                  return
+                }
+                event.preventDefault()
+                onDelete(project.id)
+              }}
+            >
+              <div className="flex min-w-0 items-center gap-1">
+                <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
+                <div className="truncate text-lg font-bold">{project.name}</div>
+              </div>
+              <div className="line-clamp-2 text-sm text-[var(--muted)]">{project.summary}</div>
+              <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                <span className={neutralChipClass}>
+                  <Flag size={12} aria-hidden="true" />
+                  {milestoneCount} milestones
+                </span>
+                <span className={neutralChipClass}>{updatedLabel}</span>
+              </div>
+            </button>
+          )
+
+          return useNativeMenus ? (
+            <div key={project.id}>{projectButton}</div>
+          ) : (
             <ContextMenu key={project.id}>
-              <ContextMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                    selectedProjectId === project.id
-                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                      : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                  }`}
-                  onClick={() => onSelect(project.id)}
-                  onKeyDown={(event) => {
-                    if (!onDelete || !isDeleteShortcut(event)) {
-                      return
-                    }
-                    event.preventDefault()
-                    onDelete(project.id)
-                  }}
-                >
-                  <div className="flex min-w-0 items-center gap-1">
-                    <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
-                    <div className="truncate text-lg font-bold">{project.name}</div>
-                  </div>
-                  <div className="line-clamp-2 text-sm text-[var(--muted)]">{project.summary}</div>
-                  <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                    <span className={neutralChipClass}>
-                      <Flag size={12} aria-hidden="true" />
-                      {milestoneCount} milestones
-                    </span>
-                    <span className={neutralChipClass}>{updatedLabel}</span>
-                  </div>
-                </button>
-              </ContextMenuTrigger>
+              <ContextMenuTrigger asChild>{projectButton}</ContextMenuTrigger>
               <ContextMenuContent>
                 {onRename && (
                   <ContextMenuItem onClick={() => onRename(project.id)}>
@@ -298,6 +314,6 @@ function ProjectSection({
           )
         })
       )}
-    </section>
+    </WorkspacePanelSection>
   )
 }

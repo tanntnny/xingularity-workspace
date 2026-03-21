@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow
 } from '../components/ui/table'
+import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
 
 interface ProjectDetailsPageProps {
@@ -124,6 +125,7 @@ export function ProjectDetailsPage({
   onAddTagToNote,
   onRemoveTagFromNote
 }: ProjectDetailsPageProps): ReactElement {
+  const useNativeMenus = canUseNativeMenus()
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false)
   const [newMilestoneTitle, setNewMilestoneTitle] = useState('')
   const [newMilestoneDueDate, setNewMilestoneDueDate] = useState(toIsoDate(new Date()))
@@ -210,6 +212,29 @@ export function ProjectDetailsPage({
   const handleDragEnd = (): void => {
     setDragState(null)
     setDropIndicator(null)
+  }
+
+  const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
+    const actionId = await showNativeMenu(
+      [
+        { id: 'open', label: 'Open note' },
+        ...(onRemoveTagFromNote
+          ? [{ type: 'separator' as const }, { id: 'unlink', label: 'Unlink' }]
+          : [])
+      ],
+      getElementMenuPosition(button)
+    )
+
+    if (!actionId) {
+      return
+    }
+    if (actionId === 'open') {
+      onOpenNote(relPath)
+      return
+    }
+    if (actionId === 'unlink' && onRemoveTagFromNote) {
+      onRemoveTagFromNote(relPath, projectTag)
+    }
   }
 
   const handleMilestoneDrop = (index: number): void => {
@@ -314,8 +339,18 @@ export function ProjectDetailsPage({
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
         >
-          <TabMenuItem value="milestones">Milestones</TabMenuItem>
-          <TabMenuItem value="notes">Project Notes</TabMenuItem>
+          <TabMenuItem value="milestones">
+            <span className="inline-flex items-center gap-1.5">
+              <Flag size={14} aria-hidden="true" />
+              Milestones
+            </span>
+          </TabMenuItem>
+          <TabMenuItem value="notes">
+            <span className="inline-flex items-center gap-1.5">
+              <FileText size={14} aria-hidden="true" />
+              Project Notes
+            </span>
+          </TabMenuItem>
         </TabMenu>
       </div>
 
@@ -376,33 +411,46 @@ export function ProjectDetailsPage({
                       </div>
                     </TableCell>
                     <TableCell className="px-2 py-1 text-left">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                            aria-label="Open note actions"
-                          >
-                            <MoreHorizontal size={14} />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
-                            Open note
-                          </DropdownMenuItem>
-                          {onRemoveTagFromNote ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => onRemoveTagFromNote(row.relPath, projectTag)}
-                              >
-                                <Tag size={12} className="mr-2" />
-                                Unlink
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {useNativeMenus ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                          aria-label="Open note actions"
+                          onClick={(event) => {
+                            void openProjectNoteMenu(event.currentTarget, row.relPath)
+                          }}
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      ) : (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                              aria-label="Open note actions"
+                            >
+                              <MoreHorizontal size={14} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
+                              Open note
+                            </DropdownMenuItem>
+                            {onRemoveTagFromNote ? (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onRemoveTagFromNote(row.relPath, projectTag)}
+                                >
+                                  <Tag size={12} className="mr-2" />
+                                  Unlink
+                                </DropdownMenuItem>
+                              </>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -645,6 +693,47 @@ export function ProjectDetailsPage({
                               }}
                               onDragEnd={handleDragEnd}
                             />
+                            {useNativeMenus ? (
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                aria-label="Open milestone actions"
+                                onClick={async (event) => {
+                                  const actionId = await showNativeMenu(
+                                    [
+                                      { id: 'move-up', label: 'Move up' },
+                                      { id: 'move-down', label: 'Move down' },
+                                      ...(onDuplicateMilestone
+                                        ? [{ id: 'duplicate', label: 'Duplicate' }]
+                                        : []),
+                                      ...(onCopyMilestoneLink
+                                        ? [{ id: 'copy-link', label: 'Copy link' }]
+                                        : []),
+                                      { type: 'separator' as const },
+                                      { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+                                    ],
+                                    getElementMenuPosition(event.currentTarget)
+                                  )
+
+                                  if (!actionId) {
+                                    return
+                                  }
+                                  if (actionId === 'move-up') {
+                                    onMoveMilestone(milestone.id, 'up')
+                                  } else if (actionId === 'move-down') {
+                                    onMoveMilestone(milestone.id, 'down')
+                                  } else if (actionId === 'duplicate' && onDuplicateMilestone) {
+                                    onDuplicateMilestone(milestone.id)
+                                  } else if (actionId === 'copy-link' && onCopyMilestoneLink) {
+                                    onCopyMilestoneLink(milestone.id)
+                                  } else if (actionId === 'delete') {
+                                    _onRemoveMilestone(milestone.id)
+                                  }
+                                }}
+                              >
+                                <MoreHorizontal size={14} />
+                              </button>
+                            ) : (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <button
@@ -686,6 +775,7 @@ export function ProjectDetailsPage({
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            )}
                             <button
                               type="button"
                               className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
@@ -836,6 +926,47 @@ export function ProjectDetailsPage({
                                     }}
                                     onDragEnd={handleDragEnd}
                                   />
+                                  {useNativeMenus ? (
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                      aria-label="Open subtask actions"
+                                      onClick={async (event) => {
+                                        const actionId = await showNativeMenu(
+                                          [
+                                            { id: 'move-up', label: 'Move up' },
+                                            { id: 'move-down', label: 'Move down' },
+                                            ...(onDuplicateSubtask
+                                              ? [{ id: 'duplicate', label: 'Duplicate' }]
+                                              : []),
+                                            ...(onCopySubtaskLink
+                                              ? [{ id: 'copy-link', label: 'Copy link' }]
+                                              : []),
+                                            { type: 'separator' as const },
+                                            { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+                                          ],
+                                          getElementMenuPosition(event.currentTarget)
+                                        )
+
+                                        if (!actionId) {
+                                          return
+                                        }
+                                        if (actionId === 'move-up') {
+                                          onMoveSubtask(milestone.id, subtask.id, 'up')
+                                        } else if (actionId === 'move-down') {
+                                          onMoveSubtask(milestone.id, subtask.id, 'down')
+                                        } else if (actionId === 'duplicate' && onDuplicateSubtask) {
+                                          onDuplicateSubtask(milestone.id, subtask.id)
+                                        } else if (actionId === 'copy-link' && onCopySubtaskLink) {
+                                          onCopySubtaskLink(milestone.id, subtask.id)
+                                        } else if (actionId === 'delete') {
+                                          onRemoveSubtask(milestone.id, subtask.id)
+                                        }
+                                      }}
+                                    >
+                                      <MoreHorizontal size={14} />
+                                    </button>
+                                  ) : (
                                   <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <button
@@ -881,6 +1012,7 @@ export function ProjectDetailsPage({
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                   </DropdownMenu>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

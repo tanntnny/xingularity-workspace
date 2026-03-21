@@ -1,6 +1,6 @@
-import { ReactElement, useState } from 'react'
+import { cloneElement, ReactElement, useState } from 'react'
 import { Bell, BellRing, Calendar, Check, Clock3, Pencil, Target, Trash2, X } from 'lucide-react'
-import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
+import { CalendarTask, CalendarTaskType, NativeMenuItemDescriptor, TaskReminder } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle
 } from './ui/dialog'
+import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 interface TaskContextMenuProps {
   task: CalendarTask
@@ -33,7 +34,9 @@ interface TaskContextMenuProps {
   onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
   onScheduleTask: (taskId: string, date: string) => void
   onUnscheduleTask: (taskId: string) => void
-  children: ReactElement
+  children: ReactElement<{
+    onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void
+  }>
 }
 
 export const TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
@@ -64,6 +67,7 @@ export function TaskContextMenu({
   onUnscheduleTask,
   children
 }: TaskContextMenuProps): ReactElement {
+  const useNativeMenus = canUseNativeMenus()
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false)
   const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false)
   const [timeInputValue, setTimeInputValue] = useState(task.time ?? '')
@@ -99,23 +103,130 @@ export function TaskContextMenu({
     onUpdateReminders(task.id, nextReminders)
   }
 
+  const handleRename = (): void => {
+    const raw = window.prompt('Rename task', task.title)
+    if (raw === null) return
+    const nextTitle = raw.trim()
+    if (!nextTitle) return
+    onRename(task.id, nextTitle)
+  }
+
+  const handleNativeContextMenu = async (
+    event: React.MouseEvent<HTMLElement>
+  ): Promise<void> => {
+    event.preventDefault()
+
+    const items: NativeMenuItemDescriptor[] = [
+      {
+        id: 'toggle',
+        label: task.completed ? 'Mark as pending' : 'Mark as complete'
+      },
+      { id: 'rename', label: 'Rename' },
+      {
+        type: 'submenu',
+        label: 'Set type',
+        submenu: TASK_TYPE_OPTIONS.map((taskType) => ({
+          id: `type:${taskType.value}`,
+          type: 'checkbox',
+          label: taskType.label,
+          checked: (task.taskType || 'assignment') === taskType.value
+        }))
+      },
+      {
+        type: 'submenu',
+        label: 'Set time',
+        submenu: [
+          ...QUICK_TIME_OPTIONS.map((option) => ({
+            id: `time:${option.value}`,
+            type: 'checkbox' as const,
+            label: option.label,
+            checked: task.time === option.value
+          })),
+          { id: 'time-custom', label: 'Custom time...' },
+          { id: 'time-clear', label: 'Clear time' }
+        ]
+      },
+      { id: 'reminders', label: 'Manage reminders' },
+      { type: 'separator' },
+      task.date
+        ? { id: 'unschedule', label: 'Move to unscheduled' }
+        : { id: 'schedule', label: `Schedule to ${selectedDate}` },
+      { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+    ]
+
+    const actionId = await showNativeMenu(items, getMouseMenuPosition(event))
+    if (!actionId) {
+      return
+    }
+
+    if (actionId === 'toggle') {
+      onToggle(task.id)
+      return
+    }
+    if (actionId === 'rename') {
+      handleRename()
+      return
+    }
+    if (actionId.startsWith('type:')) {
+      onUpdateTaskType(task.id, actionId.slice('type:'.length) as CalendarTaskType)
+      return
+    }
+    if (actionId.startsWith('time:')) {
+      const value = actionId.slice('time:'.length)
+      onUpdateTime(task.id, value)
+      return
+    }
+    if (actionId === 'time-custom') {
+      setTimeInputValue(task.time ?? '')
+      setIsTimeDialogOpen(true)
+      return
+    }
+    if (actionId === 'time-clear') {
+      onUpdateTime(task.id, undefined)
+      return
+    }
+    if (actionId === 'reminders') {
+      setIsReminderDialogOpen(true)
+      return
+    }
+    if (actionId === 'unschedule') {
+      onUnscheduleTask(task.id)
+      return
+    }
+    if (actionId === 'schedule') {
+      onScheduleTask(task.id, selectedDate)
+      return
+    }
+    if (actionId === 'delete') {
+      onDelete(task.id)
+    }
+  }
+
+  const triggerChild = useNativeMenus
+    ? cloneElement(children, {
+        onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+          children.props.onContextMenu?.(event)
+          if (!event.defaultPrevented) {
+            void handleNativeContextMenu(event)
+          }
+        }
+      })
+    : children
+
   return (
     <>
+      {useNativeMenus ? (
+        triggerChild
+      ) : (
       <ContextMenu>
-        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        <ContextMenuTrigger asChild>{triggerChild}</ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => onToggle(task.id)}>
             <Check className="mr-2 h-4 w-4" />
             {task.completed ? 'Mark as pending' : 'Mark as complete'}
           </ContextMenuItem>
           <ContextMenuItem
-            onClick={() => {
-              const raw = window.prompt('Rename task', task.title)
-              if (raw === null) return
-              const nextTitle = raw.trim()
-              if (!nextTitle) return
-              onRename(task.id, nextTitle)
-            }}
+            onClick={handleRename}
           >
             <Pencil className="mr-2 h-4 w-4" />
             Rename
@@ -196,6 +307,7 @@ export function TaskContextMenu({
           </ContextMenuDestructiveItem>
         </ContextMenuContent>
       </ContextMenu>
+      )}
 
       <Dialog open={isTimeDialogOpen} onOpenChange={setIsTimeDialogOpen}>
         <DialogContent className="max-w-sm">

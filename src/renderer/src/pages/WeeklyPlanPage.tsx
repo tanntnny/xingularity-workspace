@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow
 } from '../components/ui/table'
+import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
 import { cn } from '../lib/utils'
 import {
   findWeekForDate,
@@ -543,11 +544,12 @@ export function WeeklyPlanSidebar({
       />
       <DocumentWorkspacePanelContent className="p-3">
         <div className="flex flex-col gap-2">
-          <section className="flex flex-col gap-2">
-            <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[var(--text)]">
-              <CalendarDays size={18} className="text-[var(--accent)]" />
-              <span>All Week</span>
-            </h2>
+          <WorkspacePanelSection>
+            <WorkspacePanelSectionHeader
+              icon={<CalendarDays size={16} aria-hidden="true" />}
+              heading="All Week"
+              description={`${weeks.length} saved weeks${currentWeekId ? ' · current week available' : ''}`}
+            />
             <div className="space-y-2">
               {weeks.length === 0 ? (
                 <div className="p-2 text-sm text-[var(--muted)]">
@@ -600,7 +602,7 @@ export function WeeklyPlanSidebar({
                 })
               )}
             </div>
-          </section>
+          </WorkspacePanelSection>
         </div>
       </DocumentWorkspacePanelContent>
       {loading ? (
