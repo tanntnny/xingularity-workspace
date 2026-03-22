@@ -40,7 +40,9 @@ import {
   DocumentWorkspaceMainHeader,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
-  DocumentWorkspacePanelHeader
+  DocumentWorkspacePanelHeader,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
 
@@ -695,18 +697,20 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
         {/* ── Right: Schedule cards ───────────────────────────────────── */}
         <DocumentWorkspacePanel className="border-l border-[var(--line)]">
           <DocumentWorkspacePanelHeader
+            leading={<span className="text-sm font-semibold text-[var(--text)]">Schedules</span>}
             actions={
-              <>
-                <span className="text-sm font-semibold text-[var(--text)]">Schedules</span>
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
-                  onClick={handleNewJob}
-                  title="New schedule"
-                >
-                  <Plus size={16} />
-                </button>
-              </>
+              <WorkspaceHeaderActions>
+                <WorkspaceHeaderActionGroup>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                    onClick={handleNewJob}
+                    title="New schedule"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </WorkspaceHeaderActionGroup>
+              </WorkspaceHeaderActions>
             }
           />
           <DocumentWorkspacePanelContent>

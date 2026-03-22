@@ -1,4 +1,4 @@
-import { Fragment, type DragEvent, type ReactElement, useEffect, useMemo, useState } from 'react'
+import { Fragment, type ReactElement, useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   CalendarDays,
@@ -7,6 +7,7 @@ import {
   CircleDashed,
   FileText,
   Flag,
+  Funnel,
   Link,
   MoreHorizontal,
   Plus,
@@ -35,6 +36,7 @@ import {
   TableCell,
   TableHead,
   TableHeader,
+  SortableTableHead,
   TableRow
 } from '../components/ui/table'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from '../lib/nativeMenu'
@@ -82,15 +84,6 @@ type ProjectNoteRow = {
   tags: string[]
 }
 
-type ProjectDragState =
-  | { kind: 'milestone'; milestoneId: string }
-  | { kind: 'subtask'; milestoneId: string; subtaskId: string }
-
-type ProjectDropIndicator =
-  | { kind: 'milestone'; index: number }
-  | { kind: 'subtask'; milestoneId: string; index: number }
-  | null
-
 const neutralChipClass =
   'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
 
@@ -111,10 +104,10 @@ export function ProjectDetailsPage({
   onCycleSubtaskPriority,
   onRenameSubtask,
   onUpdateSubtaskDescription,
-  onMoveMilestone,
-  onReorderMilestones,
-  onMoveSubtask,
-  onReorderSubtasks,
+  onMoveMilestone: _onMoveMilestone,
+  onReorderMilestones: _onReorderMilestones,
+  onMoveSubtask: _onMoveSubtask,
+  onReorderSubtasks: _onReorderSubtasks,
   onRemoveSubtask,
   onDuplicateMilestone,
   onDuplicateSubtask,
@@ -138,8 +131,15 @@ export function ProjectDetailsPage({
   const [isNotePickerOpen, setIsNotePickerOpen] = useState(false)
   const [notePickerSearchQuery, setNotePickerSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'milestones' | 'notes'>('milestones')
-  const [dragState, setDragState] = useState<ProjectDragState | null>(null)
-  const [dropIndicator, setDropIndicator] = useState<ProjectDropIndicator>(null)
+  const [noteSort, setNoteSort] = useState<ProjectNoteSortState>({
+    key: 'name',
+    direction: 'asc'
+  })
+  const [milestoneSort, setMilestoneSort] = useState<ProjectMilestoneSortState>({
+    key: 'dueDate',
+    direction: 'asc'
+  })
+  const [hideCompletedItems, setHideCompletedItems] = useState(false)
 
   const projectTag = useMemo(() => generateProjectTag(project.name), [project.name])
 
@@ -206,13 +206,32 @@ export function ProjectDetailsPage({
   }
 
   const projectNoteRows = useMemo<ProjectNoteRow[]>(() => {
-    return projectNotes.map((note) => ({ relPath: note.relPath, name: note.name, tags: note.tags }))
-  }, [projectNotes])
+    return [...projectNotes]
+      .map((note) => ({ relPath: note.relPath, name: note.name, tags: note.tags }))
+      .sort((left, right) => compareProjectNoteRows(left, right, projectTag, noteSort))
+  }, [noteSort, projectNotes, projectTag])
 
-  const handleDragEnd = (): void => {
-    setDragState(null)
-    setDropIndicator(null)
-  }
+  const sortedMilestones = useMemo(() => {
+    return [...project.milestones]
+      .sort((left, right) => compareMilestones(left, right, milestoneSort))
+      .map((milestone) => ({
+        ...milestone,
+        subtasks: [...milestone.subtasks].sort((left, right) =>
+          compareSubtasks(left, right, milestoneSort)
+        )
+      }))
+  }, [milestoneSort, project.milestones])
+
+  const visibleMilestones = useMemo(() => {
+    return sortedMilestones
+      .filter((milestone) => !hideCompletedItems || !isMilestoneDone(milestone))
+      .map((milestone) => ({
+        ...milestone,
+        subtasks: hideCompletedItems
+          ? milestone.subtasks.filter((subtask) => !subtask.completed)
+          : milestone.subtasks
+      }))
+  }, [hideCompletedItems, sortedMilestones])
 
   const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
     const actionId = await showNativeMenu(
@@ -237,58 +256,20 @@ export function ProjectDetailsPage({
     }
   }
 
-  const handleMilestoneDrop = (index: number): void => {
-    if (dragState?.kind !== 'milestone') {
-      return
-    }
-
-    const orderedMilestones = [...project.milestones]
-    const fromIndex = orderedMilestones.findIndex(
-      (milestone) => milestone.id === dragState.milestoneId
+  const toggleNoteSort = (key: ProjectNoteSortKey): void => {
+    setNoteSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
     )
-    if (fromIndex < 0) {
-      handleDragEnd()
-      return
-    }
-
-    const [movedMilestone] = orderedMilestones.splice(fromIndex, 1)
-    const nextIndex = fromIndex < index ? index - 1 : index
-    orderedMilestones.splice(nextIndex, 0, movedMilestone)
-    onReorderMilestones(orderedMilestones.map((milestone) => milestone.id))
-    handleDragEnd()
   }
 
-  const getDropIndexForRow = (
-    event: DragEvent<HTMLTableRowElement>,
-    rowIndex: number
-  ): number => {
-    const bounds = event.currentTarget.getBoundingClientRect()
-    return event.clientY < bounds.top + bounds.height / 2 ? rowIndex : rowIndex + 1
-  }
-
-  const handleSubtaskDrop = (milestoneId: string, index: number): void => {
-    if (dragState?.kind !== 'subtask' || dragState.milestoneId !== milestoneId) {
-      return
-    }
-
-    const milestone = project.milestones.find((item) => item.id === milestoneId)
-    if (!milestone) {
-      handleDragEnd()
-      return
-    }
-
-    const orderedSubtasks = [...milestone.subtasks]
-    const fromIndex = orderedSubtasks.findIndex((subtask) => subtask.id === dragState.subtaskId)
-    if (fromIndex < 0) {
-      handleDragEnd()
-      return
-    }
-
-    const [movedSubtask] = orderedSubtasks.splice(fromIndex, 1)
-    const nextIndex = fromIndex < index ? index - 1 : index
-    orderedSubtasks.splice(nextIndex, 0, movedSubtask)
-    onReorderSubtasks(milestoneId, orderedSubtasks.map((subtask) => subtask.id))
-    handleDragEnd()
+  const toggleMilestoneSort = (key: ProjectMilestoneSortKey): void => {
+    setMilestoneSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: key === 'dueDate' ? 'asc' : 'asc' }
+    )
   }
 
   return (
@@ -319,9 +300,9 @@ export function ProjectDetailsPage({
         />
 
         <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
-          <span className={neutralChipClass}>
+          <span className={cn(neutralChipClass, projectStatusMeta[project.status].className)}>
             <CircleDashed size={12} aria-hidden="true" />
-            {project.status.replace('-', ' ')}
+            {projectStatusMeta[project.status].label}
           </span>
           <span className={neutralChipClass}>
             <CircleDashed size={12} aria-hidden="true" />
@@ -360,18 +341,28 @@ export function ProjectDetailsPage({
             <Table className="rounded-xl">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[45%]">
+                  <SortableTableHead
+                    className="w-[45%]"
+                    isActive={noteSort.key === 'name'}
+                    sortDirection={noteSort.direction}
+                    onToggleSort={() => toggleNoteSort('name')}
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <FileText size={12} aria-hidden="true" />
                       Note
                     </span>
-                  </TableHead>
-                  <TableHead className="w-[45%]">
+                  </SortableTableHead>
+                  <SortableTableHead
+                    className="w-[45%]"
+                    isActive={noteSort.key === 'tags'}
+                    sortDirection={noteSort.direction}
+                    onToggleSort={() => toggleNoteSort('tags')}
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <Tag size={12} aria-hidden="true" />
                       Tags
                     </span>
-                  </TableHead>
+                  </SortableTableHead>
                   <TableHead className="w-[120px] text-center">
                     <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
                       ACTIONS
@@ -533,29 +524,55 @@ export function ProjectDetailsPage({
             <Table className="rounded-xl">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[48px] text-center">
-                    <span className="inline-flex items-center justify-center">
-                      <ChevronDown size={12} aria-hidden="true" />
-                    </span>
+                  <TableHead className="w-[48px] px-2 text-center">
+                    <button
+                      type="button"
+                      className={cn(
+                        'inline-flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]',
+                        hideCompletedItems ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+                      )}
+                      onClick={() => setHideCompletedItems((current) => !current)}
+                      aria-label={
+                        hideCompletedItems ? 'Show completed items' : 'Hide completed items'
+                      }
+                      title={hideCompletedItems ? 'Show completed items' : 'Hide completed items'}
+                    >
+                      <Funnel size={12} aria-hidden="true" />
+                    </button>
                   </TableHead>
-                  <TableHead className="w-[37%]">
+                  <SortableTableHead
+                    className="w-[37%]"
+                    isActive={milestoneSort.key === 'title'}
+                    sortDirection={milestoneSort.direction}
+                    onToggleSort={() => toggleMilestoneSort('title')}
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <FileText size={12} aria-hidden="true" />
                       Task
                     </span>
-                  </TableHead>
-                  <TableHead className="w-[31%]">
+                  </SortableTableHead>
+                  <SortableTableHead
+                    className="w-[31%]"
+                    isActive={milestoneSort.key === 'description'}
+                    sortDirection={milestoneSort.direction}
+                    onToggleSort={() => toggleMilestoneSort('description')}
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <CircleDashed size={12} aria-hidden="true" />
                       Description
                     </span>
-                  </TableHead>
-                  <TableHead className="w-[1%] whitespace-nowrap px-3">
+                  </SortableTableHead>
+                  <SortableTableHead
+                    className="w-[1%] whitespace-nowrap px-3"
+                    isActive={milestoneSort.key === 'dueDate'}
+                    sortDirection={milestoneSort.direction}
+                    onToggleSort={() => toggleMilestoneSort('dueDate')}
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <CalendarDays size={12} aria-hidden="true" />
                       Due Date
                     </span>
-                  </TableHead>
+                  </SortableTableHead>
                   <TableHead className="w-[120px] text-center">
                     <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
                       ACTIONS
@@ -564,50 +581,14 @@ export function ProjectDetailsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {project.milestones.map((milestone, milestoneIndex) => {
+                {visibleMilestones.map((milestone) => {
                   const isCreatingSubtask = creatingSubtaskByMilestoneId[milestone.id] ?? false
                   const draftTitle = newSubtaskTitleByMilestoneId[milestone.id] ?? ''
                   const milestoneProgressPercent = getMilestoneProgressPercent(milestone)
 
                   return (
                     <Fragment key={milestone.id}>
-                      <DragPlaceholderRow
-                        colSpan={5}
-                        active={
-                          dragState?.kind === 'milestone' &&
-                          dropIndicator?.kind === 'milestone' &&
-                          dropIndicator.index === milestoneIndex
-                        }
-                        onDragOver={(event) => {
-                          if (dragState?.kind !== 'milestone') {
-                            return
-                          }
-                          event.preventDefault()
-                          setDropIndicator({ kind: 'milestone', index: milestoneIndex })
-                        }}
-                        onDrop={() => handleMilestoneDrop(milestoneIndex)}
-                      />
-                      <TableRow
-                        className="bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))]"
-                        onDragOver={(event) => {
-                          if (dragState?.kind !== 'milestone') {
-                            return
-                          }
-                          event.preventDefault()
-                          event.dataTransfer.dropEffect = 'move'
-                          setDropIndicator({
-                            kind: 'milestone',
-                            index: getDropIndexForRow(event, milestoneIndex)
-                          })
-                        }}
-                        onDrop={(event) => {
-                          if (dragState?.kind !== 'milestone') {
-                            return
-                          }
-                          event.preventDefault()
-                          handleMilestoneDrop(getDropIndexForRow(event, milestoneIndex))
-                        }}
-                      >
+                      <TableRow className="bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))]">
                         <TableCell className="px-3 py-2 text-center">
                           <button
                             type="button"
@@ -667,7 +648,9 @@ export function ProjectDetailsPage({
                         <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
                           <MilestoneCalendarPicker
                             value={milestone.dueDate}
-                            onChange={(nextDate) => onUpdateMilestoneDueDate(milestone.id, nextDate)}
+                            onChange={(nextDate) =>
+                              onUpdateMilestoneDueDate(milestone.id, nextDate)
+                            }
                             aria-label="Milestone due date"
                             className="h-8 justify-start px-2 text-xs"
                           />
@@ -683,16 +666,6 @@ export function ProjectDetailsPage({
                             >
                               <Flag size={13} />
                             </button>
-                            <RowDragHandle
-                              label={`Drag milestone ${milestone.title}`}
-                              onDragStart={(event) => {
-                                setDragState({ kind: 'milestone', milestoneId: milestone.id })
-                                setDropIndicator({ kind: 'milestone', index: milestoneIndex })
-                                event.dataTransfer.effectAllowed = 'move'
-                                event.dataTransfer.setData('text/plain', milestone.id)
-                              }}
-                              onDragEnd={handleDragEnd}
-                            />
                             {useNativeMenus ? (
                               <button
                                 type="button"
@@ -701,8 +674,6 @@ export function ProjectDetailsPage({
                                 onClick={async (event) => {
                                   const actionId = await showNativeMenu(
                                     [
-                                      { id: 'move-up', label: 'Move up' },
-                                      { id: 'move-down', label: 'Move down' },
                                       ...(onDuplicateMilestone
                                         ? [{ id: 'duplicate', label: 'Duplicate' }]
                                         : []),
@@ -710,7 +681,11 @@ export function ProjectDetailsPage({
                                         ? [{ id: 'copy-link', label: 'Copy link' }]
                                         : []),
                                       { type: 'separator' as const },
-                                      { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+                                      {
+                                        id: 'delete',
+                                        label: 'Delete',
+                                        accelerator: 'Command+Backspace'
+                                      }
                                     ],
                                     getElementMenuPosition(event.currentTarget)
                                   )
@@ -718,11 +693,7 @@ export function ProjectDetailsPage({
                                   if (!actionId) {
                                     return
                                   }
-                                  if (actionId === 'move-up') {
-                                    onMoveMilestone(milestone.id, 'up')
-                                  } else if (actionId === 'move-down') {
-                                    onMoveMilestone(milestone.id, 'down')
-                                  } else if (actionId === 'duplicate' && onDuplicateMilestone) {
+                                  if (actionId === 'duplicate' && onDuplicateMilestone) {
                                     onDuplicateMilestone(milestone.id)
                                   } else if (actionId === 'copy-link' && onCopyMilestoneLink) {
                                     onCopyMilestoneLink(milestone.id)
@@ -734,47 +705,39 @@ export function ProjectDetailsPage({
                                 <MoreHorizontal size={14} />
                               </button>
                             ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                  aria-label="Open milestone actions"
-                                >
-                                  <MoreHorizontal size={14} />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem
-                                  onClick={() => onMoveMilestone(milestone.id, 'up')}
-                                >
-                                  Move up
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => onMoveMilestone(milestone.id, 'down')}
-                                >
-                                  Move down
-                                </DropdownMenuItem>
-                                {onDuplicateMilestone ? (
-                                  <DropdownMenuItem
-                                    onClick={() => onDuplicateMilestone(milestone.id)}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                    aria-label="Open milestone actions"
                                   >
-                                    Duplicate
-                                  </DropdownMenuItem>
-                                ) : null}
-                                {onCopyMilestoneLink ? (
+                                    <MoreHorizontal size={14} />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-44">
+                                  {onDuplicateMilestone ? (
+                                    <DropdownMenuItem
+                                      onClick={() => onDuplicateMilestone(milestone.id)}
+                                    >
+                                      Duplicate
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                  {onCopyMilestoneLink ? (
+                                    <DropdownMenuItem
+                                      onClick={() => onCopyMilestoneLink(milestone.id)}
+                                    >
+                                      Copy link
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                  <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    onClick={() => onCopyMilestoneLink(milestone.id)}
+                                    onClick={() => _onRemoveMilestone(milestone.id)}
                                   >
-                                    Copy link
+                                    Delete
                                   </DropdownMenuItem>
-                                ) : null}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => _onRemoveMilestone(milestone.id)}>
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                             <button
                               type="button"
@@ -789,262 +752,159 @@ export function ProjectDetailsPage({
                       </TableRow>
                       {milestone.collapsed
                         ? null
-                        : milestone.subtasks.map((subtask, subtaskIndex) => (
+                        : milestone.subtasks.map((subtask) => (
                             <Fragment key={`subtask-fragment-${milestone.id}-${subtask.id}`}>
-                              <DragPlaceholderRow
-                                colSpan={5}
-                                active={
-                                  dragState?.kind === 'subtask' &&
-                                  dragState.milestoneId === milestone.id &&
-                                  dropIndicator?.kind === 'subtask' &&
-                                  dropIndicator.milestoneId === milestone.id &&
-                                  dropIndicator.index === subtaskIndex
-                                }
-                                onDragOver={(event) => {
-                                  if (
-                                    dragState?.kind !== 'subtask' ||
-                                    dragState.milestoneId !== milestone.id
-                                  ) {
-                                    return
-                                  }
-                                  event.preventDefault()
-                                  setDropIndicator({
-                                    kind: 'subtask',
-                                    milestoneId: milestone.id,
-                                    index: subtaskIndex
-                                  })
-                                }}
-                                onDrop={() => handleSubtaskDrop(milestone.id, subtaskIndex)}
-                              />
-                            <TableRow
-                              key={`subtask-${milestone.id}-${subtask.id}`}
-                              onDragOver={(event) => {
-                                if (
-                                  dragState?.kind !== 'subtask' ||
-                                  dragState.milestoneId !== milestone.id
-                                ) {
-                                  return
-                                }
-                                event.preventDefault()
-                                event.dataTransfer.dropEffect = 'move'
-                                setDropIndicator({
-                                  kind: 'subtask',
-                                  milestoneId: milestone.id,
-                                  index: getDropIndexForRow(event, subtaskIndex)
-                                })
-                              }}
-                              onDrop={(event) => {
-                                if (
-                                  dragState?.kind !== 'subtask' ||
-                                  dragState.milestoneId !== milestone.id
-                                ) {
-                                  return
-                                }
-                                event.preventDefault()
-                                handleSubtaskDrop(
-                                  milestone.id,
-                                  getDropIndexForRow(event, subtaskIndex)
-                                )
-                              }}
-                            >
-                              <TableCell className="px-3 py-2 text-center">
-                                <div className="flex items-center justify-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={subtask.completed}
-                                    onChange={() => {
-                                      onToggleSubtask(milestone.id, subtask.id)
-                                    }}
-                                    className="h-4 w-4 rounded border-[var(--line-strong)]"
-                                  />
-                                </div>
-                              </TableCell>
-                              <TableCell className="p-0">
-                                <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+                              <TableRow key={`subtask-${milestone.id}-${subtask.id}`}>
+                                <TableCell className="px-3 py-2 text-center">
+                                  <div className="flex items-center justify-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={subtask.completed}
+                                      onChange={() => {
+                                        onToggleSubtask(milestone.id, subtask.id)
+                                      }}
+                                      className="h-4 w-4 rounded border-[var(--line-strong)]"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="p-0">
+                                  <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+                                    <InlineEditableText
+                                      value={subtask.title}
+                                      onCommit={(nextTitle) => {
+                                        onRenameSubtask(milestone.id, subtask.id, nextTitle)
+                                      }}
+                                      displayAs="span"
+                                      displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-[var(--text)] transition-colors hover:text-[var(--accent)]"
+                                      inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-[var(--text)] outline-none"
+                                      title="Click to rename subtask"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="p-0">
                                   <InlineEditableText
-                                    value={subtask.title}
-                                    onCommit={(nextTitle) => {
-                                      onRenameSubtask(milestone.id, subtask.id, nextTitle)
+                                    value={subtask.description ?? ''}
+                                    onCommit={(nextDescription) => {
+                                      onUpdateSubtaskDescription(
+                                        milestone.id,
+                                        subtask.id,
+                                        nextDescription
+                                      )
                                     }}
                                     displayAs="span"
-                                    displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                                    inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-[var(--text)] outline-none"
-                                    title="Click to rename subtask"
+                                    displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                                    inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 text-sm text-[var(--muted)] outline-none"
+                                    title="Click to edit subtask description"
+                                    placeholder="-"
+                                    allowEmpty={true}
+                                    normalize={(next) => next.trim()}
                                   />
-                                </div>
-                              </TableCell>
-                              <TableCell className="p-0">
-                                <InlineEditableText
-                                  value={subtask.description ?? ''}
-                                  onCommit={(nextDescription) => {
-                                    onUpdateSubtaskDescription(
-                                      milestone.id,
-                                      subtask.id,
-                                      nextDescription
-                                    )
-                                  }}
-                                  displayAs="span"
-                                  displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                                  inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 text-sm text-[var(--muted)] outline-none"
-                                  title="Click to edit subtask description"
-                                  placeholder="-"
-                                  allowEmpty={true}
-                                  normalize={(next) => next.trim()}
-                                />
-                              </TableCell>
-                              <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
-                                <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
-                                  -
-                                </span>
-                              </TableCell>
-                              <TableCell className="px-2 py-1 text-left">
-                                <div className="flex items-center justify-start gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => onCycleSubtaskPriority(milestone.id, subtask.id)}
-                                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
-                                    title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
-                                    aria-label={`Change priority for ${subtask.title}`}
-                                  >
-                                    <Flag size={13} />
-                                  </button>
-                                  <RowDragHandle
-                                    label={`Drag subtask ${subtask.title}`}
-                                    onDragStart={(event) => {
-                                      setDragState({
-                                        kind: 'subtask',
-                                        milestoneId: milestone.id,
-                                        subtaskId: subtask.id
-                                      })
-                                      setDropIndicator({
-                                        kind: 'subtask',
-                                        milestoneId: milestone.id,
-                                        index: subtaskIndex
-                                      })
-                                      event.dataTransfer.effectAllowed = 'move'
-                                      event.dataTransfer.setData('text/plain', subtask.id)
-                                    }}
-                                    onDragEnd={handleDragEnd}
-                                  />
-                                  {useNativeMenus ? (
+                                </TableCell>
+                                <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
+                                  <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
+                                    -
+                                  </span>
+                                </TableCell>
+                                <TableCell className="px-2 py-1 text-left">
+                                  <div className="flex items-center justify-start gap-1">
                                     <button
                                       type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                      aria-label="Open subtask actions"
-                                      onClick={async (event) => {
-                                        const actionId = await showNativeMenu(
-                                          [
-                                            { id: 'move-up', label: 'Move up' },
-                                            { id: 'move-down', label: 'Move down' },
-                                            ...(onDuplicateSubtask
-                                              ? [{ id: 'duplicate', label: 'Duplicate' }]
-                                              : []),
-                                            ...(onCopySubtaskLink
-                                              ? [{ id: 'copy-link', label: 'Copy link' }]
-                                              : []),
-                                            { type: 'separator' as const },
-                                            { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
-                                          ],
-                                          getElementMenuPosition(event.currentTarget)
-                                        )
-
-                                        if (!actionId) {
-                                          return
-                                        }
-                                        if (actionId === 'move-up') {
-                                          onMoveSubtask(milestone.id, subtask.id, 'up')
-                                        } else if (actionId === 'move-down') {
-                                          onMoveSubtask(milestone.id, subtask.id, 'down')
-                                        } else if (actionId === 'duplicate' && onDuplicateSubtask) {
-                                          onDuplicateSubtask(milestone.id, subtask.id)
-                                        } else if (actionId === 'copy-link' && onCopySubtaskLink) {
-                                          onCopySubtaskLink(milestone.id, subtask.id)
-                                        } else if (actionId === 'delete') {
-                                          onRemoveSubtask(milestone.id, subtask.id)
-                                        }
-                                      }}
-                                    >
-                                      <MoreHorizontal size={14} />
-                                    </button>
-                                  ) : (
-                                  <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                      aria-label="Open subtask actions"
-                                    >
-                                      <MoreHorizontal size={14} />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem
-                                      onClick={() => onMoveSubtask(milestone.id, subtask.id, 'up')}
-                                    >
-                                      Move up
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
                                       onClick={() =>
-                                        onMoveSubtask(milestone.id, subtask.id, 'down')
+                                        onCycleSubtaskPriority(milestone.id, subtask.id)
                                       }
+                                      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
+                                      title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
+                                      aria-label={`Change priority for ${subtask.title}`}
                                     >
-                                      Move down
-                                    </DropdownMenuItem>
-                                    {onDuplicateSubtask ? (
-                                      <DropdownMenuItem
-                                        onClick={() => onDuplicateSubtask(milestone.id, subtask.id)}
+                                      <Flag size={13} />
+                                    </button>
+                                    {useNativeMenus ? (
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                        aria-label="Open subtask actions"
+                                        onClick={async (event) => {
+                                          const actionId = await showNativeMenu(
+                                            [
+                                              ...(onDuplicateSubtask
+                                                ? [{ id: 'duplicate', label: 'Duplicate' }]
+                                                : []),
+                                              ...(onCopySubtaskLink
+                                                ? [{ id: 'copy-link', label: 'Copy link' }]
+                                                : []),
+                                              { type: 'separator' as const },
+                                              {
+                                                id: 'delete',
+                                                label: 'Delete',
+                                                accelerator: 'Command+Backspace'
+                                              }
+                                            ],
+                                            getElementMenuPosition(event.currentTarget)
+                                          )
+
+                                          if (!actionId) {
+                                            return
+                                          }
+                                          if (actionId === 'duplicate' && onDuplicateSubtask) {
+                                            onDuplicateSubtask(milestone.id, subtask.id)
+                                          } else if (
+                                            actionId === 'copy-link' &&
+                                            onCopySubtaskLink
+                                          ) {
+                                            onCopySubtaskLink(milestone.id, subtask.id)
+                                          } else if (actionId === 'delete') {
+                                            onRemoveSubtask(milestone.id, subtask.id)
+                                          }
+                                        }}
                                       >
-                                        Duplicate
-                                      </DropdownMenuItem>
-                                    ) : null}
-                                    {onCopySubtaskLink ? (
-                                      <DropdownMenuItem
-                                        onClick={() => onCopySubtaskLink(milestone.id, subtask.id)}
-                                      >
-                                        Copy link
-                                      </DropdownMenuItem>
-                                    ) : null}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => onRemoveSubtask(milestone.id, subtask.id)}
-                                    >
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                  </DropdownMenu>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                                        <MoreHorizontal size={14} />
+                                      </button>
+                                    ) : (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button
+                                            type="button"
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                            aria-label="Open subtask actions"
+                                          >
+                                            <MoreHorizontal size={14} />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-44">
+                                          {onDuplicateSubtask ? (
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                onDuplicateSubtask(milestone.id, subtask.id)
+                                              }
+                                            >
+                                              Duplicate
+                                            </DropdownMenuItem>
+                                          ) : null}
+                                          {onCopySubtaskLink ? (
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                onCopySubtaskLink(milestone.id, subtask.id)
+                                              }
+                                            >
+                                              Copy link
+                                            </DropdownMenuItem>
+                                          ) : null}
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              onRemoveSubtask(milestone.id, subtask.id)
+                                            }
+                                          >
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
                             </Fragment>
                           ))}
-                      {!milestone.collapsed ? (
-                        <DragPlaceholderRow
-                          colSpan={5}
-                          active={
-                            dragState?.kind === 'subtask' &&
-                            dragState.milestoneId === milestone.id &&
-                            dropIndicator?.kind === 'subtask' &&
-                            dropIndicator.milestoneId === milestone.id &&
-                            dropIndicator.index === milestone.subtasks.length
-                          }
-                          onDragOver={(event) => {
-                            if (
-                              dragState?.kind !== 'subtask' ||
-                              dragState.milestoneId !== milestone.id
-                            ) {
-                              return
-                            }
-                            event.preventDefault()
-                            setDropIndicator({
-                              kind: 'subtask',
-                              milestoneId: milestone.id,
-                              index: milestone.subtasks.length
-                            })
-                          }}
-                          onDrop={() => handleSubtaskDrop(milestone.id, milestone.subtasks.length)}
-                        />
-                      ) : null}
                       {milestone.collapsed || !isCreatingSubtask ? null : (
                         <TableRow className="hover:bg-[var(--accent-soft)]/60">
                           <TableCell colSpan={5} className="p-0">
@@ -1093,22 +953,6 @@ export function ProjectDetailsPage({
                     </Fragment>
                   )
                 })}
-                <DragPlaceholderRow
-                  colSpan={5}
-                  active={
-                    dragState?.kind === 'milestone' &&
-                    dropIndicator?.kind === 'milestone' &&
-                    dropIndicator.index === project.milestones.length
-                  }
-                  onDragOver={(event) => {
-                    if (dragState?.kind !== 'milestone') {
-                      return
-                    }
-                    event.preventDefault()
-                    setDropIndicator({ kind: 'milestone', index: project.milestones.length })
-                  }}
-                  onDrop={() => handleMilestoneDrop(project.milestones.length)}
-                />
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">
                   <TableCell colSpan={5} className="p-0">
                     {isCreatingMilestone ? (
@@ -1225,66 +1069,6 @@ function MilestoneCalendarPicker({
   )
 }
 
-function RowDragHandle({
-  label,
-  onDragStart,
-  onDragEnd
-}: {
-  label: string
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
-  onDragEnd: () => void
-}): ReactElement {
-  return (
-    <button
-      type="button"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)] active:cursor-grabbing"
-      aria-label={label}
-      title={label}
-    >
-      <span className="grid grid-cols-2 gap-[2px]">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <span key={index} className="h-[3px] w-[3px] rounded-full bg-current opacity-80" />
-        ))}
-      </span>
-    </button>
-  )
-}
-
-function DragPlaceholderRow({
-  colSpan,
-  active,
-  onDragOver,
-  onDrop
-}: {
-  colSpan: number
-  active: boolean
-  onDragOver: (event: DragEvent<HTMLTableRowElement>) => void
-  onDrop: () => void
-}): ReactElement {
-  return (
-    <TableRow
-      className={cn('border-0 bg-transparent hover:bg-transparent', active ? '' : 'h-0')}
-      onDragOver={(event) => {
-        event.preventDefault()
-        onDragOver(event)
-      }}
-      onDrop={(event) => {
-        event.preventDefault()
-        onDrop()
-      }}
-    >
-      <TableCell colSpan={colSpan} className={cn('border-0 p-0', active ? 'px-2 py-1' : '')}>
-        {active ? (
-          <div className="h-9 rounded-lg border-2 border-dashed border-[var(--accent)] bg-[var(--accent-soft)]/55" />
-        ) : null}
-      </TableCell>
-    </TableRow>
-  )
-}
-
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
@@ -1297,6 +1081,14 @@ function getMilestoneProgressPercent(milestone: ProjectMilestone): number {
 
   const completed = milestone.subtasks.filter((subtask) => subtask.completed).length
   return Math.round((completed / total) * 100)
+}
+
+function isMilestoneDone(milestone: ProjectMilestone): boolean {
+  if (milestone.status === 'completed') {
+    return true
+  }
+
+  return milestone.subtasks.length > 0 && milestone.subtasks.every((subtask) => subtask.completed)
 }
 
 function formatSubtaskPriority(priority?: 'low' | 'medium' | 'high'): string {
@@ -1317,4 +1109,148 @@ function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): strin
     return 'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309] hover:border-[color:rgba(245,158,11,0.55)]'
   }
   return 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d] hover:border-[color:rgba(34,197,94,0.55)]'
+}
+
+type ProjectNoteSortKey = 'name' | 'tags'
+type ProjectMilestoneSortKey = 'title' | 'description' | 'dueDate'
+type SortDirection = 'asc' | 'desc'
+
+interface ProjectNoteSortState {
+  key: ProjectNoteSortKey
+  direction: SortDirection
+}
+
+interface ProjectMilestoneSortState {
+  key: ProjectMilestoneSortKey
+  direction: SortDirection
+}
+
+const projectStatusMeta: Record<ProjectListItem['status'], { label: string; className: string }> = {
+  'on-track': {
+    label: 'on-track',
+    className:
+      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+  },
+  'at-risk': {
+    label: 'at-risk',
+    className:
+      'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
+  },
+  blocked: {
+    label: 'blocked',
+    className:
+      'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
+  },
+  completed: {
+    label: 'completed',
+    className:
+      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+  }
+}
+
+function compareProjectNoteRows(
+  left: ProjectNoteRow,
+  right: ProjectNoteRow,
+  projectTag: string,
+  sort: ProjectNoteSortState
+): number {
+  const factor = sort.direction === 'asc' ? 1 : -1
+
+  if (sort.key === 'tags') {
+    const tagLabelResult = buildTagSortLabel(left.tags, projectTag).localeCompare(
+      buildTagSortLabel(right.tags, projectTag)
+    )
+    if (tagLabelResult !== 0) {
+      return tagLabelResult * factor
+    }
+  } else {
+    const nameResult = left.name.localeCompare(right.name)
+    if (nameResult !== 0) {
+      return nameResult * factor
+    }
+  }
+
+  return left.name.localeCompare(right.name)
+}
+
+function compareMilestones(
+  left: ProjectMilestone,
+  right: ProjectMilestone,
+  sort: ProjectMilestoneSortState
+): number {
+  return compareProjectRows(
+    {
+      title: left.title,
+      description: left.description,
+      dueDate: left.dueDate,
+      createdAt: left.subtasks[0]?.createdAt ?? left.dueDate
+    },
+    {
+      title: right.title,
+      description: right.description,
+      dueDate: right.dueDate,
+      createdAt: right.subtasks[0]?.createdAt ?? right.dueDate
+    },
+    sort
+  )
+}
+
+function compareSubtasks(
+  left: { title: string; description?: string; dueDate?: string; createdAt: string },
+  right: { title: string; description?: string; dueDate?: string; createdAt: string },
+  sort: ProjectMilestoneSortState
+): number {
+  return compareProjectRows(left, right, sort)
+}
+
+function compareProjectRows(
+  left: { title: string; description?: string; dueDate?: string; createdAt: string },
+  right: { title: string; description?: string; dueDate?: string; createdAt: string },
+  sort: ProjectMilestoneSortState
+): number {
+  const factor = sort.direction === 'asc' ? 1 : -1
+
+  if (sort.key === 'title') {
+    const titleResult = left.title.localeCompare(right.title)
+    if (titleResult !== 0) {
+      return titleResult * factor
+    }
+  } else if (sort.key === 'description') {
+    const descriptionResult = compareNullableText(left.description, right.description)
+    if (descriptionResult !== 0) {
+      return descriptionResult * factor
+    }
+  } else {
+    const dueDateResult = compareNullableText(left.dueDate, right.dueDate)
+    if (dueDateResult !== 0) {
+      return dueDateResult * factor
+    }
+  }
+
+  const fallbackTitleResult = left.title.localeCompare(right.title)
+  if (fallbackTitleResult !== 0) {
+    return fallbackTitleResult
+  }
+
+  return left.createdAt.localeCompare(right.createdAt)
+}
+
+function compareNullableText(left?: string, right?: string): number {
+  if (left && right) {
+    return left.localeCompare(right)
+  }
+  if (left) {
+    return -1
+  }
+  if (right) {
+    return 1
+  }
+  return 0
+}
+
+function buildTagSortLabel(tags: string[], projectTag: string): string {
+  return tags
+    .filter((tag) => tag !== projectTag)
+    .sort((left, right) => left.localeCompare(right))
+    .join('|')
 }

@@ -119,6 +119,7 @@ export {
   TableBody,
   TableFooter,
   TableHead,
+  SortableTableHead,
   TableRow,
   TableCell,
   TableCaption
@@ -172,7 +173,10 @@ export {
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,
-  DocumentWorkspacePanelContent
+  DocumentWorkspacePanelContent,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionGroup,
+  WorkspaceHeaderActionDivider
 } from './document-workspace'
 
 export { Kbd } from './kbd'

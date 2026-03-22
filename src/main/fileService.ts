@@ -3,7 +3,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { listPreviewTagsFromMarkdown, upsertTagsInMarkdown } from '../shared/noteTags'
 import { joinSafe, normalizeRelativePath } from '../shared/pathSafety'
-import { NoteListItem } from '../shared/types'
+import { ImportedNoteResult, NoteListItem } from '../shared/types'
 
 const notePathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
@@ -70,6 +70,30 @@ export class FileService {
     return relPath
   }
 
+  async importNotes(sourcePaths: string[]): Promise<ImportedNoteResult[]> {
+    const imported: ImportedNoteResult[] = []
+
+    for (const sourcePath of sourcePaths) {
+      if (!sourcePath || typeof sourcePath !== 'string') {
+        throw new Error('Note source path is required')
+      }
+
+      const sourceStats = await fs.stat(sourcePath)
+      if (!sourceStats.isFile()) {
+        throw new Error('Note source must be a file')
+      }
+
+      if (path.extname(sourcePath).toLowerCase() !== '.md') {
+        throw new Error('Only markdown notes are supported')
+      }
+
+      const importedNote = await this.importSingleNote(sourcePath)
+      imported.push(importedNote)
+    }
+
+    return imported
+  }
+
   async rename(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
     const oldRelPath = sanitizeNotePath(oldRelPathInput)
     const newRelPath = sanitizeNotePath(newRelPathInput)
@@ -129,6 +153,32 @@ export class FileService {
     await fs.writeFile(absoluteTarget, Buffer.from(buffer))
     return `attachments/${fileName}`
   }
+
+  private async importSingleNote(sourcePath: string): Promise<ImportedNoteResult> {
+    const ext = path.extname(sourcePath)
+    const sourceName = path.basename(sourcePath)
+    const sanitizedName = sanitizeNoteName(path.basename(sourcePath, ext))
+
+    let relPath = `${sanitizedName || 'imported-note'}.md`
+    let absolutePath = joinSafe(this.notesRoot, relPath)
+    let suffix = 2
+
+    while (await fileExists(absolutePath)) {
+      relPath = `${sanitizedName || 'imported-note'}-${suffix}.md`
+      absolutePath = joinSafe(this.notesRoot, relPath)
+      suffix += 1
+    }
+
+    const content = await fs.readFile(sourcePath, 'utf-8')
+    await fs.writeFile(absolutePath, content, { flag: 'wx' })
+    this.onInternalWrite(relPath)
+
+    return {
+      sourceName,
+      relPath,
+      renamed: relPath !== `${sanitizedName || 'imported-note'}.md`
+    }
+  }
 }
 
 export function sanitizeNotePath(input: string): string {
@@ -164,4 +214,13 @@ async function listMarkdownNotePaths(root: string): Promise<string[]> {
     }
   }
   return results.sort((a, b) => a.localeCompare(b))
+}
+
+async function fileExists(absolutePath: string): Promise<boolean> {
+  try {
+    await fs.access(absolutePath)
+    return true
+  } catch {
+    return false
+  }
 }

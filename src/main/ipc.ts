@@ -10,6 +10,7 @@ const contentSchema = z.string().max(2_000_000)
 const querySchema = z.string().min(1).max(200)
 const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
+const directoryTitleSchema = z.string().trim().min(1).max(200)
 const fileExtensionSchema = z.string().min(1).max(10)
 const tagsArraySchema = z.array(z.string().min(1).max(100)).max(50)
 const aiCompletionInputSchema = z.object({
@@ -173,6 +174,7 @@ const projectSchema = z.object({
   id: z.string().min(1).max(120),
   name: z.string().min(1).max(200),
   summary: z.string().max(2000),
+  folderPath: z.string().min(1).max(1024).optional(),
   status: z.enum(['on-track', 'at-risk', 'blocked', 'completed']),
   updatedAt: z.string().min(1).max(64),
   progress: z.number().min(0).max(100),
@@ -241,6 +243,14 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.restoreLast()
   })
 
+  ipcMain.handle(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
+    return runtime.chooseDirectory(directoryTitleSchema.parse(title))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
+    await runtime.openPath(sourcePathSchema.parse(targetPath))
+  })
+
   ipcMain.handle(IPC_CHANNELS.listNotes, async () => {
     return runtime.listNotes()
   })
@@ -261,6 +271,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.createNoteWithTags(noteNameSchema.parse(name), tagsArraySchema.parse(tags))
   })
 
+  ipcMain.handle(IPC_CHANNELS.importNotes, async () => {
+    return runtime.importNotes()
+  })
+
   ipcMain.handle(
     IPC_CHANNELS.renameNote,
     async (_event, oldRelPath: unknown, newRelPath: unknown) => {
@@ -279,7 +293,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
   ipcMain.handle(
     IPC_CHANNELS.exportProject,
     async (_event, projectName: unknown, content: unknown) => {
-      return runtime.exportProject(projectNameSchema.parse(projectName), contentSchema.parse(content))
+      return runtime.exportProject(
+        projectNameSchema.parse(projectName),
+        contentSchema.parse(content)
+      )
     }
   )
 
@@ -352,7 +369,10 @@ function buildNativeMenuTemplate(
         type: 'submenu',
         label: item.label ?? '',
         enabled: item.enabled ?? true,
-        submenu: buildNativeMenuTemplate((item.submenu as Array<z.infer<typeof nativeMenuItemSchema>>) ?? [], onSelect)
+        submenu: buildNativeMenuTemplate(
+          (item.submenu as Array<z.infer<typeof nativeMenuItemSchema>>) ?? [],
+          onSelect
+        )
       }
     }
 

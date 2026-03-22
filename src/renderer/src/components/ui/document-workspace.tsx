@@ -5,6 +5,8 @@ import { cn } from '../../lib/utils'
 const workspaceHeaderClass =
   'app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
 
+const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
+
 const DocumentWorkspace = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={cn('flex h-full w-full min-w-0', className)} {...props} />
@@ -53,25 +55,61 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
   ({ className, breadcrumb, actions, ...props }, ref) => (
     <header ref={ref} className={cn(workspaceHeaderClass, className)} {...props}>
       <div className="app-no-drag flex min-w-0 items-center gap-3">{breadcrumb}</div>
-      <div className="app-no-drag ml-auto flex shrink-0 items-center gap-2">{actions}</div>
+      {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
     </header>
   )
 )
 DocumentWorkspaceMainHeader.displayName = 'DocumentWorkspaceMainHeader'
 
 interface DocumentWorkspacePanelHeaderProps extends React.HTMLAttributes<HTMLElement> {
+  leading?: React.ReactNode
   actions?: React.ReactNode
 }
 
 const DocumentWorkspacePanelHeader = React.forwardRef<
   HTMLElement,
   DocumentWorkspacePanelHeaderProps
->(({ className, actions, children, ...props }, ref) => (
-  <header ref={ref} className={cn(workspaceHeaderClass, className)} {...props}>
-    <div className="app-no-drag flex min-w-0 items-center gap-2">{actions ?? children}</div>
-  </header>
-))
+>(({ className, leading, actions, children, ...props }, ref) => {
+  const resolvedLeading = leading ?? (!actions ? children : null)
+
+  return (
+    <header ref={ref} className={cn(workspaceHeaderClass, className)} {...props}>
+      {resolvedLeading ? (
+        <div className="app-no-drag flex min-w-0 items-center gap-3">{resolvedLeading}</div>
+      ) : null}
+      {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
+    </header>
+  )
+})
 DocumentWorkspacePanelHeader.displayName = 'DocumentWorkspacePanelHeader'
+
+const WorkspaceHeaderActions = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('flex items-center gap-2', className)} {...props} />
+  )
+)
+WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
+
+const WorkspaceHeaderActionGroup = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('flex items-center gap-2', className)} {...props} />
+))
+WorkspaceHeaderActionGroup.displayName = 'WorkspaceHeaderActionGroup'
+
+const WorkspaceHeaderActionDivider = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    aria-hidden="true"
+    className={cn('h-5 w-px shrink-0 bg-[var(--line)]', className)}
+    {...props}
+  />
+))
+WorkspaceHeaderActionDivider.displayName = 'WorkspaceHeaderActionDivider'
 
 const DocumentWorkspaceMainContent = React.forwardRef<
   HTMLDivElement,
@@ -96,5 +134,8 @@ export {
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,
-  DocumentWorkspacePanelContent
+  DocumentWorkspacePanelContent,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionGroup,
+  WorkspaceHeaderActionDivider
 }

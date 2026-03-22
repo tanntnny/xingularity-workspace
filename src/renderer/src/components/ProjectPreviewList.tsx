@@ -1,6 +1,12 @@
 import { ReactElement, useMemo } from 'react'
 import { Copy, Flag, Heart, Link, Pencil, Sparkles, Trash2 } from 'lucide-react'
-import type { NativeMenuItemDescriptor, Project, ProjectMilestone, ProjectStatus, ProjectSubtask } from '../../../shared/types'
+import type {
+  NativeMenuItemDescriptor,
+  Project,
+  ProjectMilestone,
+  ProjectStatus,
+  ProjectSubtask
+} from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import {
   ContextMenu,
@@ -14,12 +20,36 @@ import {
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import { cn } from '../lib/utils'
 
 export type { Project, ProjectMilestone, ProjectSubtask, ProjectStatus }
 export type ProjectListItem = Project
 export type ProjectSortField = 'name' | 'updated'
 export type ProjectSortDirection = 'asc' | 'desc'
 export type ProjectFilterMode = 'all' | 'favorites' | 'active' | 'completed'
+
+const projectStatusMeta: Record<ProjectStatus, { label: string; className: string }> = {
+  'on-track': {
+    label: 'on-track',
+    className:
+      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+  },
+  'at-risk': {
+    label: 'at-risk',
+    className:
+      'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
+  },
+  blocked: {
+    label: 'blocked',
+    className:
+      'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
+  },
+  completed: {
+    label: 'completed',
+    className:
+      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+  }
+}
 
 interface ProjectPreviewListProps {
   projects: Project[]
@@ -251,7 +281,9 @@ function ProjectSection({
                   : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
               }`}
               onClick={() => onSelect(project.id)}
-              onContextMenu={useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined}
+              onContextMenu={
+                useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
+              }
               onKeyDown={(event) => {
                 if (!onDelete || !isDeleteShortcut(event)) {
                   return
@@ -264,8 +296,11 @@ function ProjectSection({
                 <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
                 <div className="truncate text-lg font-bold">{project.name}</div>
               </div>
-              <div className="line-clamp-2 text-sm text-[var(--muted)]">{project.summary}</div>
               <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                <span className={cn(neutralChipClass, projectStatusMeta[project.status].className)}>
+                  <Flag size={12} aria-hidden="true" />
+                  {projectStatusMeta[project.status].label}
+                </span>
                 <span className={neutralChipClass}>
                   <Flag size={12} aria-hidden="true" />
                   {milestoneCount} milestones

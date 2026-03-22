@@ -122,6 +122,7 @@ export interface Project {
   id: string
   name: string
   summary: string
+  folderPath?: string
   status: ProjectStatus
   updatedAt: string
   progress: number
@@ -542,6 +543,22 @@ export interface NativeMenuItemDescriptor {
   submenu?: NativeMenuItemDescriptor[]
 }
 
+export interface ImportedNoteResult {
+  sourceName: string
+  relPath: string
+  renamed: boolean
+}
+
+export interface FailedNoteImportResult {
+  sourceName: string
+  error: string
+}
+
+export interface NoteImportResult {
+  imported: ImportedNoteResult[]
+  failed: FailedNoteImportResult[]
+}
+
 export interface RendererVaultApi {
   ui: {
     platform: string
@@ -555,12 +572,17 @@ export interface RendererVaultApi {
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
   }
+  desktop: {
+    chooseDirectory: (title: string) => Promise<Maybe<string>>
+    openPath: (targetPath: string) => Promise<void>
+  }
   files: {
     listNotes: () => Promise<NoteListItem[]>
     readNote: (relPath: string) => Promise<string>
     writeNote: (relPath: string, content: string) => Promise<void>
     createNote: (name: string) => Promise<string>
     createNoteWithTags: (name: string, tags: string[]) => Promise<string>
+    importNotes: () => Promise<NoteImportResult>
     rename: (fromRelPath: string, toRelPath: string) => Promise<void>
     delete: (relPath: string) => Promise<void>
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>

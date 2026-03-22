@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { app, dialog } from 'electron'
+import { app, dialog, shell } from 'electron'
 import { Mistral } from '@mistralai/mistralai'
 import type {
   Tool as MistralTool,
@@ -36,6 +36,7 @@ import {
   AgentRunRecord,
   AppSettingsUpdate,
   CompleteNoteWithAiInput,
+  NoteImportResult,
   Project,
   ProjectMilestone,
   SearchResult,
@@ -158,6 +159,43 @@ export class VaultRuntime {
     return relPath
   }
 
+  async importNotes(): Promise<NoteImportResult> {
+    this.assertReady()
+    const result = await dialog.showOpenDialog({
+      title: 'Import markdown notes',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { imported: [], failed: [] }
+    }
+
+    const imported: NoteImportResult['imported'] = []
+    const failed: NoteImportResult['failed'] = []
+
+    for (const sourcePath of result.filePaths) {
+      try {
+        const [nextImported] = await this.fileService!.importNotes([sourcePath])
+        const content = await this.fileService!.readNote(nextImported.relPath)
+        await this.indexer!.upsertFromRaw({
+          id: createStableId(nextImported.relPath),
+          relPath: nextImported.relPath,
+          content,
+          updatedAt: new Date().toISOString()
+        })
+        imported.push(nextImported)
+      } catch (error) {
+        failed.push({
+          sourceName: path.basename(sourcePath),
+          error: String(error)
+        })
+      }
+    }
+
+    return { imported, failed }
+  }
+
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     this.assertReady()
     await this.fileService!.rename(oldPath, newPath)
@@ -182,7 +220,11 @@ export class VaultRuntime {
     const safeRelPath = sanitizeNotePath(relPath)
     const suggestedName = path.basename(safeRelPath)
 
-    const result = await this.showMarkdownExportDialog('Export note', this.currentPaths!.rootPath, suggestedName)
+    const result = await this.showMarkdownExportDialog(
+      'Export note',
+      this.currentPaths!.rootPath,
+      suggestedName
+    )
 
     if (result.canceled || !result.filePath) {
       return null
@@ -196,7 +238,11 @@ export class VaultRuntime {
     this.assertReady()
     const downloadsPath = app.getPath('downloads')
     const suggestedName = `${this.sanitizeExportFileName(projectName)}.md`
-    const result = await this.showMarkdownExportDialog('Export project', downloadsPath, suggestedName)
+    const result = await this.showMarkdownExportDialog(
+      'Export project',
+      downloadsPath,
+      suggestedName
+    )
 
     if (result.canceled || !result.filePath) {
       return null
@@ -204,6 +250,26 @@ export class VaultRuntime {
 
     await fs.writeFile(result.filePath, content, 'utf-8')
     return result.filePath
+  }
+
+  async chooseDirectory(title: string): Promise<string | null> {
+    const result = await dialog.showOpenDialog({
+      title,
+      properties: ['openDirectory']
+    })
+
+    if (result.canceled) {
+      return null
+    }
+
+    return result.filePaths[0] ?? null
+  }
+
+  async openPath(targetPath: string): Promise<void> {
+    const openError = await shell.openPath(targetPath)
+    if (openError) {
+      throw new Error(openError)
+    }
   }
 
   private async showMarkdownExportDialog(

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
 
@@ -78,6 +79,38 @@ const TableHead = React.forwardRef<
 ))
 TableHead.displayName = 'TableHead'
 
+type SortDirection = 'asc' | 'desc'
+
+interface SortableTableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {
+  isActive?: boolean
+  sortDirection?: SortDirection
+  onToggleSort: () => void
+}
+
+const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHeadProps>(
+  (
+    { className, children, isActive = false, sortDirection = 'asc', onToggleSort, ...props },
+    ref
+  ) => {
+    const ariaSort = isActive ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+    const SortIcon = !isActive ? ArrowUpDown : sortDirection === 'asc' ? ArrowUp : ArrowDown
+
+    return (
+      <TableHead ref={ref} className={className} aria-sort={ariaSort} {...props}>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 text-left transition-colors hover:text-[var(--text)]"
+          onClick={onToggleSort}
+        >
+          <span className="min-w-0 flex-1">{children}</span>
+          <SortIcon size={12} aria-hidden="true" className="shrink-0" />
+        </button>
+      </TableHead>
+    )
+  }
+)
+SortableTableHead.displayName = 'SortableTableHead'
+
 const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
@@ -101,4 +134,14 @@ const TableCaption = React.forwardRef<
 ))
 TableCaption.displayName = 'TableCaption'
 
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption }
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  SortableTableHead,
+  TableRow,
+  TableCell,
+  TableCaption
+}

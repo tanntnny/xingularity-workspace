@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type DragEvent, type ReactElement } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import {
   ArrowRight,
   CalendarDays,
@@ -27,7 +27,10 @@ import type {
 import { InlineEditableText } from '../components/InlineEditableText'
 import {
   DocumentWorkspacePanelContent,
-  DocumentWorkspacePanelHeader
+  DocumentWorkspacePanelHeader,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionDivider,
+  WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
 import {
   Table,
@@ -35,9 +38,13 @@ import {
   TableCell,
   TableHead,
   TableHeader,
+  SortableTableHead,
   TableRow
 } from '../components/ui/table'
-import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
+import {
+  WorkspacePanelSection,
+  WorkspacePanelSectionHeader
+} from '../components/ui/workspace-panel-section'
 import { cn } from '../lib/utils'
 import {
   findWeekForDate,
@@ -88,14 +95,16 @@ export function WeeklyPlanWorkspace({
   onAddPriority,
   onUpdatePriority,
   onDeletePriority,
-  onReorderPriorities,
+  onReorderPriorities: _onReorderPriorities,
   onUpsertReview
 }: WeeklyPlanWorkspaceProps): ReactElement {
   const selectedWeek = state?.weeks.find((week) => week.id === selectedWeekId) ?? null
   const priorities = getWeekPriorities(state, selectedWeekId)
   const review = getWeekReview(state, selectedWeekId)
-  const [draggedPriorityId, setDraggedPriorityId] = useState<string | null>(null)
-  const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [prioritySort, setPrioritySort] = useState<WeeklyPrioritySortState>({
+    key: 'status',
+    direction: 'asc'
+  })
 
   const handleFocusCommit = async (nextValue: string): Promise<void> => {
     if (!selectedWeek) {
@@ -114,36 +123,18 @@ export function WeeklyPlanWorkspace({
     })
   }
 
-  const handlePriorityDrop = async (index: number): Promise<void> => {
-    if (!selectedWeekId || !draggedPriorityId) {
-      return
-    }
+  const sortedPriorities = useMemo(() => {
+    return [...priorities].sort((left, right) =>
+      compareWeeklyPriorities(left, right, prioritySort.key, prioritySort.direction)
+    )
+  }, [priorities, prioritySort])
 
-    const nextOrder = [...priorities]
-    const fromIndex = nextOrder.findIndex((priority) => priority.id === draggedPriorityId)
-    if (fromIndex < 0) {
-      setDraggedPriorityId(null)
-      setDropIndex(null)
-      return
-    }
-
-    const [movedPriority] = nextOrder.splice(fromIndex, 1)
-    const targetIndex = fromIndex < index ? index - 1 : index
-    nextOrder.splice(targetIndex, 0, movedPriority)
-    setDraggedPriorityId(null)
-    setDropIndex(null)
-    await onReorderPriorities({
-      weekId: selectedWeekId,
-      priorityIds: nextOrder.map((item) => item.id)
-    })
-  }
-
-  const getDropIndexForRow = (
-    event: DragEvent<HTMLTableRowElement>,
-    rowIndex: number
-  ): number => {
-    const bounds = event.currentTarget.getBoundingClientRect()
-    return event.clientY < bounds.top + bounds.height / 2 ? rowIndex : rowIndex + 1
+  const togglePrioritySort = (key: WeeklyPrioritySortKey): void => {
+    setPrioritySort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: key === 'title' ? 'asc' : 'asc' }
+    )
   }
 
   const handlePriorityCheckedChange = async (
@@ -272,17 +263,26 @@ export function WeeklyPlanWorkspace({
                 <Table className="mt-4 rounded-xl">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[56px] text-center">
+                      <SortableTableHead
+                        className="w-[56px] text-center"
+                        isActive={prioritySort.key === 'status'}
+                        sortDirection={prioritySort.direction}
+                        onToggleSort={() => togglePrioritySort('status')}
+                      >
                         <span className="inline-flex items-center justify-center">
                           <Circle size={12} aria-hidden="true" />
                         </span>
-                      </TableHead>
-                      <TableHead>
+                      </SortableTableHead>
+                      <SortableTableHead
+                        isActive={prioritySort.key === 'title'}
+                        sortDirection={prioritySort.direction}
+                        onToggleSort={() => togglePrioritySort('title')}
+                      >
                         <span className="inline-flex items-center gap-1.5">
                           <FileText size={12} aria-hidden="true" />
                           Priority
                         </span>
-                      </TableHead>
+                      </SortableTableHead>
                       <TableHead className="w-[120px] text-center">
                         <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
                           ACTIONS
@@ -300,39 +300,8 @@ export function WeeklyPlanWorkspace({
                         </TableCell>
                       </TableRow>
                     ) : null}
-                    {priorities.map((priority, index) => (
-                      <Fragment key={`priority-fragment-${priority.id}`}>
-                        <WeeklyDropPlaceholder
-                          active={draggedPriorityId !== null && dropIndex === index}
-                          onDragOver={(event) => {
-                            if (!draggedPriorityId) {
-                              return
-                            }
-                            event.preventDefault()
-                            setDropIndex(index)
-                          }}
-                          onDrop={() => {
-                            void handlePriorityDrop(index)
-                          }}
-                        />
-                        <TableRow
-                          key={priority.id}
-                          onDragOver={(event) => {
-                            if (!draggedPriorityId) {
-                              return
-                            }
-                            event.preventDefault()
-                            event.dataTransfer.dropEffect = 'move'
-                            setDropIndex(getDropIndexForRow(event, index))
-                          }}
-                          onDrop={(event) => {
-                            if (!draggedPriorityId) {
-                              return
-                            }
-                            event.preventDefault()
-                            void handlePriorityDrop(getDropIndexForRow(event, index))
-                          }}
-                        >
+                    {sortedPriorities.map((priority) => (
+                      <TableRow key={priority.id}>
                         <TableCell className="px-3 py-2 text-center align-middle">
                           <input
                             type="checkbox"
@@ -372,19 +341,6 @@ export function WeeklyPlanWorkspace({
                         </TableCell>
                         <TableCell className="px-2 py-1">
                           <div className="flex items-center justify-start gap-1">
-                            <RowDragHandle
-                              label={`Drag priority ${priority.title}`}
-                              onDragStart={(event) => {
-                                setDraggedPriorityId(priority.id)
-                                setDropIndex(index)
-                                event.dataTransfer.effectAllowed = 'move'
-                                event.dataTransfer.setData('text/plain', priority.id)
-                              }}
-                              onDragEnd={() => {
-                                setDraggedPriorityId(null)
-                                setDropIndex(null)
-                              }}
-                            />
                             <button
                               type="button"
                               onClick={() => {
@@ -398,21 +354,7 @@ export function WeeklyPlanWorkspace({
                           </div>
                         </TableCell>
                       </TableRow>
-                      </Fragment>
                     ))}
-                    <WeeklyDropPlaceholder
-                      active={draggedPriorityId !== null && dropIndex === priorities.length}
-                      onDragOver={(event) => {
-                        if (!draggedPriorityId) {
-                          return
-                        }
-                        event.preventDefault()
-                        setDropIndex(priorities.length)
-                      }}
-                      onDrop={() => {
-                        void handlePriorityDrop(priorities.length)
-                      }}
-                    />
                     <TableRow className="hover:bg-[var(--accent-soft)]/60">
                       <TableCell colSpan={3} className="p-0">
                         <button
@@ -516,30 +458,35 @@ export function WeeklyPlanSidebar({
     <div className="relative flex h-full flex-col">
       <DocumentWorkspacePanelHeader
         actions={
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                void handleQuickCreateWeek()
-              }}
-              disabled={!isReady}
-              className={flatSidebarButtonClass}
-              aria-label="New week"
-              title="New week"
-            >
-              <Plus size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleJumpToCurrent()}
-              disabled={!currentWeekId || !isReady}
-              className={flatSidebarButtonClass}
-              aria-label="Current week"
-              title="Current week"
-            >
-              <CalendarDays size={18} className="text-current" />
-            </button>
-          </>
+          <WorkspaceHeaderActions>
+            <WorkspaceHeaderActionGroup>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleQuickCreateWeek()
+                }}
+                disabled={!isReady}
+                className={flatSidebarButtonClass}
+                aria-label="New week"
+                title="New week"
+              >
+                <Plus size={16} />
+              </button>
+            </WorkspaceHeaderActionGroup>
+            <WorkspaceHeaderActionDivider />
+            <WorkspaceHeaderActionGroup>
+              <button
+                type="button"
+                onClick={() => handleJumpToCurrent()}
+                disabled={!currentWeekId || !isReady}
+                className={flatSidebarButtonClass}
+                aria-label="Current week"
+                title="Current week"
+              >
+                <CalendarDays size={18} className="text-current" />
+              </button>
+            </WorkspaceHeaderActionGroup>
+          </WorkspaceHeaderActions>
         }
       />
       <DocumentWorkspacePanelContent className="p-3">
@@ -614,62 +561,42 @@ export function WeeklyPlanSidebar({
   )
 }
 
-function RowDragHandle({
-  label,
-  onDragStart,
-  onDragEnd
-}: {
-  label: string
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
-  onDragEnd: () => void
-}): ReactElement {
-  return (
-    <button
-      type="button"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)] active:cursor-grabbing"
-      aria-label={label}
-      title={label}
-    >
-      <span className="grid grid-cols-2 gap-[2px]">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <span key={index} className="h-[3px] w-[3px] rounded-full bg-current opacity-80" />
-        ))}
-      </span>
-    </button>
-  )
+type WeeklyPrioritySortKey = 'status' | 'title'
+type WeeklyPrioritySortDirection = 'asc' | 'desc'
+
+interface WeeklyPrioritySortState {
+  key: WeeklyPrioritySortKey
+  direction: WeeklyPrioritySortDirection
 }
 
-function WeeklyDropPlaceholder({
-  active,
-  onDragOver,
-  onDrop
-}: {
-  active: boolean
-  onDragOver: (event: DragEvent<HTMLTableRowElement>) => void
-  onDrop: () => void
-}): ReactElement {
-  return (
-    <TableRow
-      className={cn('border-0 bg-transparent hover:bg-transparent', active ? '' : 'h-0')}
-      onDragOver={(event) => {
-        event.preventDefault()
-        onDragOver(event)
-      }}
-      onDrop={(event) => {
-        event.preventDefault()
-        onDrop()
-      }}
-    >
-      <TableCell colSpan={3} className={cn('border-0 p-0', active ? 'px-2 py-1' : '')}>
-        {active ? (
-          <div className="h-9 rounded-lg border-2 border-dashed border-[var(--accent)] bg-[var(--accent-soft)]/55" />
-        ) : null}
-      </TableCell>
-    </TableRow>
-  )
+function compareWeeklyPriorities(
+  left: WeeklyPlanPriority,
+  right: WeeklyPlanPriority,
+  key: WeeklyPrioritySortKey,
+  direction: WeeklyPrioritySortDirection
+): number {
+  const factor = direction === 'asc' ? 1 : -1
+
+  if (key === 'status') {
+    const statusResult =
+      WEEKLY_PRIORITY_STATUS_ORDER[left.status] - WEEKLY_PRIORITY_STATUS_ORDER[right.status]
+    if (statusResult !== 0) {
+      return statusResult * factor
+    }
+  } else {
+    const titleResult = left.title.localeCompare(right.title)
+    if (titleResult !== 0) {
+      return titleResult * factor
+    }
+  }
+
+  return left.order - right.order
+}
+
+const WEEKLY_PRIORITY_STATUS_ORDER: Record<WeeklyPlanPriority['status'], number> = {
+  planned: 0,
+  in_progress: 1,
+  done: 2
 }
 
 function labelForReviewKey(key: 'wins' | 'misses' | 'blockers' | 'nextWeek'): string {

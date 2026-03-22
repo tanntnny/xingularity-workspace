@@ -16,12 +16,15 @@ import {
   Type,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CalendarDays,
-  Target
+  Target,
+  FolderOpen
 } from 'lucide-react'
 import {
   CalendarTask,
   CreateWeeklyPlanWeekInput,
+  NoteImportResult,
   Project,
   ProjectIconStyle,
   ProjectMilestone,
@@ -81,9 +84,15 @@ import {
   DocumentWorkspaceMainHeader,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
-  DocumentWorkspacePanelHeader
+  DocumentWorkspacePanelHeader,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionDivider,
+  WorkspaceHeaderActionGroup
 } from './components/ui/document-workspace'
-import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './components/ui/workspace-panel-section'
+import {
+  WorkspacePanelSection,
+  WorkspacePanelSectionHeader
+} from './components/ui/workspace-panel-section'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
@@ -102,7 +111,12 @@ import {
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
 import { normalizeCalendarTasks } from './lib/calendarTasks'
-import { findWeekForDate, formatWeekRange, getSortedWeeks, getWeekPriorities } from './lib/weeklyPlan'
+import {
+  findWeekForDate,
+  formatWeekRange,
+  getSortedWeeks,
+  getWeekPriorities
+} from './lib/weeklyPlan'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
@@ -349,8 +363,7 @@ function App(): ReactElement {
   )
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectFilterMode>('all')
   const [projectSortField, setProjectSortField] = useState<ProjectSortField>('name')
-  const [projectSortDirection, setProjectSortDirection] =
-    useState<ProjectSortDirection>('asc')
+  const [projectSortDirection, setProjectSortDirection] = useState<ProjectSortDirection>('asc')
   const {
     data: weeklyPlanState,
     loading: weeklyPlanLoading,
@@ -717,7 +730,8 @@ function App(): ReactElement {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const isModifierPressed = event.metaKey || event.ctrlKey
-      const isSearchPalette = isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
+      const isSearchPalette =
+        isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
       if (isSearchPalette) {
         event.preventDefault()
         setCommandPaletteInitialQuery('')
@@ -725,7 +739,8 @@ function App(): ReactElement {
         return
       }
 
-      const isCommandPalette = isModifierPressed && event.shiftKey && event.key.toLowerCase() === 'p'
+      const isCommandPalette =
+        isModifierPressed && event.shiftKey && event.key.toLowerCase() === 'p'
       if (isCommandPalette) {
         event.preventDefault()
         setCommandPaletteInitialQuery('>')
@@ -916,16 +931,18 @@ function App(): ReactElement {
     return nextTasks
   }
 
-  const persistProjects = async (nextProjects: Project[]): Promise<void> => {
+  const persistProjects = async (nextProjects: Project[]): Promise<boolean> => {
     if (!vaultApi) {
-      return
+      return false
     }
 
     try {
       const nextSettings = await vaultApi.settings.update({ projects: nextProjects })
       setSettings(nextSettings)
+      return true
     } catch (error) {
       pushToast('error', String(error))
+      return false
     }
   }
 
@@ -1303,6 +1320,40 @@ function App(): ReactElement {
       setActivePage('notes')
       await openNote(relPath)
       pushToast('success', 'Project note created')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const importNotes = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Note import is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before importing notes')
+      setActivePage('settings')
+      return
+    }
+
+    try {
+      const result = await vaultApi.files.importNotes()
+      if (result.imported.length === 0 && result.failed.length === 0) {
+        return
+      }
+
+      const nextNotes = await vaultApi.files.listNotes()
+      setNotes(nextNotes)
+      setSearchQuery('')
+      setSearchResults([])
+      setActivePage('notes')
+
+      if (result.imported.length === 1) {
+        await openNote(result.imported[0].relPath)
+      }
+
+      pushNoteImportToast(result)
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -1809,6 +1860,103 @@ function App(): ReactElement {
     }
   }
 
+  const setProjectFolderPath = async (
+    projectId: string,
+    nextFolderPath?: string
+  ): Promise<boolean> => {
+    const normalizedFolderPath = nextFolderPath?.trim() || undefined
+    const existing = projects.find((project) => project.id === projectId)
+    if (!existing) {
+      return false
+    }
+
+    if ((existing.folderPath ?? undefined) === normalizedFolderPath) {
+      return true
+    }
+
+    const nextProjects = projects.map((project) =>
+      project.id === projectId
+        ? {
+            ...project,
+            folderPath: normalizedFolderPath,
+            updatedAt: new Date().toISOString()
+          }
+        : project
+    )
+
+    return persistProjects(nextProjects)
+  }
+
+  const chooseProjectFolder = async (project: Project): Promise<string | null> => {
+    if (!vaultApi) {
+      pushToast('error', 'Project folder links are only available inside the Electron app')
+      return null
+    }
+
+    try {
+      return await vaultApi.desktop.chooseDirectory(`Link folder for ${project.name}`)
+    } catch (error) {
+      pushToast('error', String(error))
+      return null
+    }
+  }
+
+  const linkProjectFolder = async (project: Project): Promise<void> => {
+    const selectedFolderPath = await chooseProjectFolder(project)
+    if (!selectedFolderPath) {
+      return
+    }
+
+    const saved = await setProjectFolderPath(project.id, selectedFolderPath)
+    if (!saved) {
+      return
+    }
+
+    pushToast('success', 'Project folder linked')
+  }
+
+  const openProjectFolder = async (project: Project): Promise<void> => {
+    const folderPath = project.folderPath?.trim()
+    if (!folderPath) {
+      await linkProjectFolder(project)
+      return
+    }
+
+    if (!vaultApi) {
+      pushToast('error', 'Project folder links are only available inside the Electron app')
+      return
+    }
+
+    try {
+      await vaultApi.desktop.openPath(folderPath)
+    } catch (error) {
+      pushToast('error', `Could not open linked folder: ${String(error)}`)
+    }
+  }
+
+  const relinkProjectFolder = async (project: Project): Promise<void> => {
+    const selectedFolderPath = await chooseProjectFolder(project)
+    if (!selectedFolderPath) {
+      return
+    }
+
+    const saved = await setProjectFolderPath(project.id, selectedFolderPath)
+    if (!saved) {
+      return
+    }
+
+    pushToast('success', 'Project folder updated')
+  }
+
+  const clearProjectFolder = async (project: Project): Promise<void> => {
+    const cleared = await setProjectFolderPath(project.id)
+    if (!cleared) {
+      return
+    }
+
+    pushToast('success', 'Project folder link cleared')
+  }
+
   const toggleCurrentNoteFavorite = (): void => {
     if (!currentNotePath) {
       return
@@ -2188,16 +2336,15 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const reorderProjectMilestones = (
-    projectId: string,
-    orderedMilestoneIds: string[]
-  ): void => {
+  const reorderProjectMilestones = (projectId: string, orderedMilestoneIds: string[]): void => {
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
         return project
       }
 
-      const milestoneById = new Map(project.milestones.map((milestone) => [milestone.id, milestone]))
+      const milestoneById = new Map(
+        project.milestones.map((milestone) => [milestone.id, milestone])
+      )
       const reorderedMilestones = orderedMilestoneIds
         .map((milestoneId) => milestoneById.get(milestoneId))
         .filter((milestone): milestone is ProjectMilestone => Boolean(milestone))
@@ -2574,6 +2721,33 @@ function App(): ReactElement {
     throw new Error('Could not create a unique note name')
   }
 
+  const pushNoteImportToast = (result: NoteImportResult): void => {
+    const renamedCount = result.imported.filter((item) => item.renamed).length
+
+    if (result.imported.length > 0 && result.failed.length === 0) {
+      const message =
+        result.imported.length === 1
+          ? renamedCount > 0
+            ? `Imported 1 note with a renamed file name`
+            : 'Imported 1 note'
+          : renamedCount > 0
+            ? `Imported ${result.imported.length} notes (${renamedCount} renamed)`
+            : `Imported ${result.imported.length} notes`
+      pushToast('success', message)
+      return
+    }
+
+    if (result.imported.length > 0) {
+      pushToast('info', `Imported ${result.imported.length} notes, ${result.failed.length} failed`)
+      return
+    }
+
+    pushToast(
+      'error',
+      `Import failed for ${result.failed.length} note${result.failed.length === 1 ? '' : 's'}`
+    )
+  }
+
   const isStandalonePage = activePage === 'schedules' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
   const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
@@ -2640,259 +2814,355 @@ function App(): ReactElement {
                 }
                 actions={
                   noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setIsPreviewMode(!isPreviewMode)}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title={isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Preview Mode'}
-                      >
-                        {isPreviewMode ? <Eye size={18} /> : <Pencil size={18} />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void exportCurrentNote()
-                        }}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Export Note"
-                      >
-                        <Download size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={toggleCurrentNoteFavorite}
-                        className={`flex items-center justify-center rounded border p-1.5 ${
-                          currentNoteIsFavorite
-                            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                        }`}
-                        title={currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-                      >
-                        <Heart size={18} className={currentNoteIsFavorite ? 'fill-current' : ''} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void deleteCurrentNote()
-                        }}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Delete Note"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </>
-                  ) : activePage === 'projects' && selectedProject ? (
-                    <>
-                      <Popover
-                        open={isProjectIconPickerOpen}
-                        onOpenChange={setIsProjectIconPickerOpen}
-                      >
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                            title="Customize project icon"
-                          >
-                            <NoteShapeIcon
-                              icon={selectedProject.icon}
-                              size={18}
-                              className="shrink-0"
-                            />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="end"
-                          className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                    <WorkspaceHeaderActions>
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => setIsPreviewMode(!isPreviewMode)}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title={isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Preview Mode'}
                         >
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Shape
-                          </div>
-                          <div className="mb-3 flex flex-wrap gap-1.5">
-                            {PROJECT_ICON_SHAPES.map((shape) => {
-                              const isActive = selectedProject.icon.shape === shape
-                              return (
-                                <button
-                                  key={shape}
-                                  type="button"
-                                  className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
-                                    isActive
-                                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                                      : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                                  }`}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      shape
-                                    })
-                                  }
-                                  title={shape}
-                                >
-                                  <NoteShapeIcon
-                                    icon={{ ...selectedProject.icon, shape }}
-                                    size={15}
-                                  />
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Style
-                          </div>
-                          <div className="mb-3 flex gap-1.5">
-                            {PROJECT_ICON_VARIANTS.map((variant) => {
-                              const isActive = selectedProject.icon.variant === variant
-                              return (
-                                <button
-                                  key={variant}
-                                  type="button"
-                                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                                    isActive
-                                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-                                      : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
-                                  }`}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      variant
-                                    })
-                                  }
-                                >
-                                  {variant}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Color
-                          </div>
-                          <div className="mb-3 flex flex-wrap gap-1.5">
-                            {PROJECT_ICON_COLORS.map((color) => {
-                              const isActive = selectedProject.icon.color === color
-                              return (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`h-6 w-6 rounded-full border-2 ${
-                                    isActive
-                                      ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
-                                      : 'border-transparent'
-                                  }`}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() =>
-                                    updateProjectIcon(selectedProject.id, {
-                                      ...selectedProject.icon,
-                                      color
-                                    })
-                                  }
-                                  title={color}
-                                />
-                              )
-                            })}
-                          </div>
+                          {isPreviewMode ? <Eye size={18} /> : <Pencil size={18} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void exportCurrentNote()
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Export Note"
+                        >
+                          <Download size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                      <WorkspaceHeaderActionDivider />
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={toggleCurrentNoteFavorite}
+                          className={`flex items-center justify-center rounded border p-1.5 ${
+                            currentNoteIsFavorite
+                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                          }`}
+                          title={
+                            currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
+                          }
+                        >
+                          <Heart
+                            size={18}
+                            className={currentNoteIsFavorite ? 'fill-current' : ''}
+                          />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                      <WorkspaceHeaderActionDivider />
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void deleteCurrentNote()
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Delete Note"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                    </WorkspaceHeaderActions>
+                  ) : activePage === 'projects' && selectedProject ? (
+                    <WorkspaceHeaderActions>
+                      <WorkspaceHeaderActionGroup>
+                        <div className="flex overflow-hidden rounded border border-[var(--line)] bg-[var(--panel-2)]">
                           <button
                             type="button"
-                            className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
-                            onClick={() => randomizeProjectIcon(selectedProject.id)}
+                            onClick={() => {
+                              void openProjectFolder(selectedProject)
+                            }}
+                            className="flex items-center justify-center px-2 py-1.5 hover:bg-[var(--accent-soft)]"
+                            title={
+                              selectedProject.folderPath?.trim()
+                                ? `Open linked folder\n${selectedProject.folderPath}`
+                                : 'Link project folder'
+                            }
+                            aria-label={
+                              selectedProject.folderPath?.trim()
+                                ? 'Open linked project folder'
+                                : 'Link project folder'
+                            }
                           >
-                            Randomize icon
+                            <FolderOpen size={18} />
                           </button>
-                        </PopoverContent>
-                      </Popover>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void exportProject(selectedProject)
-                        }}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Export Project"
-                      >
-                        <Download size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleProjectDone(selectedProject.id)}
-                        className={`flex items-center justify-center rounded border p-1.5 ${
-                          selectedProject.status === 'completed'
-                            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                        }`}
-                        title={
-                          selectedProject.status === 'completed'
-                            ? 'Mark Project as In Progress'
-                            : 'Mark Project as Done'
-                        }
-                      >
-                        <Check size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={toggleCurrentProjectFavorite}
-                        className={`flex items-center justify-center rounded border p-1.5 ${
-                          currentProjectIsFavorite
-                            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                        }`}
-                        title={
-                          currentProjectIsFavorite
-                            ? 'Remove Project from Favorites'
-                            : 'Add Project to Favorites'
-                        }
-                      >
-                        <Heart
-                          size={18}
-                          className={currentProjectIsFavorite ? 'fill-current' : ''}
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void removeSelectedProject()
-                        }}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Remove Project"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="flex items-center justify-center border-l border-[var(--line)] px-1.5 py-1.5 hover:bg-[var(--accent-soft)]"
+                                title="Project folder options"
+                                aria-label="Project folder options"
+                              >
+                                <ChevronDown size={14} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {selectedProject.folderPath?.trim() ? (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void openProjectFolder(selectedProject)
+                                    }}
+                                  >
+                                    Open folder
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void relinkProjectFolder(selectedProject)
+                                    }}
+                                  >
+                                    Change folder
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void clearProjectFolder(selectedProject)
+                                    }}
+                                  >
+                                    Clear link
+                                  </DropdownMenuItem>
+                                </>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void linkProjectFolder(selectedProject)
+                                  }}
+                                >
+                                  Link folder
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <Popover
+                          open={isProjectIconPickerOpen}
+                          onOpenChange={setIsProjectIconPickerOpen}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                              title="Customize project icon"
+                            >
+                              <NoteShapeIcon
+                                icon={selectedProject.icon}
+                                size={18}
+                                className="shrink-0"
+                              />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="end"
+                            className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                          >
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Shape
+                            </div>
+                            <div className="mb-3 flex flex-wrap gap-1.5">
+                              {PROJECT_ICON_SHAPES.map((shape) => {
+                                const isActive = selectedProject.icon.shape === shape
+                                return (
+                                  <button
+                                    key={shape}
+                                    type="button"
+                                    className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
+                                      isActive
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                                    }`}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        shape
+                                      })
+                                    }
+                                    title={shape}
+                                  >
+                                    <NoteShapeIcon
+                                      icon={{ ...selectedProject.icon, shape }}
+                                      size={15}
+                                    />
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Style
+                            </div>
+                            <div className="mb-3 flex gap-1.5">
+                              {PROJECT_ICON_VARIANTS.map((variant) => {
+                                const isActive = selectedProject.icon.variant === variant
+                                return (
+                                  <button
+                                    key={variant}
+                                    type="button"
+                                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                                      isActive
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
+                                    }`}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        variant
+                                      })
+                                    }
+                                  >
+                                    {variant}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                              Color
+                            </div>
+                            <div className="mb-3 flex flex-wrap gap-1.5">
+                              {PROJECT_ICON_COLORS.map((color) => {
+                                const isActive = selectedProject.icon.color === color
+                                return (
+                                  <button
+                                    key={color}
+                                    type="button"
+                                    className={`h-6 w-6 rounded-full border-2 ${
+                                      isActive
+                                        ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
+                                        : 'border-transparent'
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                    onClick={() =>
+                                      updateProjectIcon(selectedProject.id, {
+                                        ...selectedProject.icon,
+                                        color
+                                      })
+                                    }
+                                    title={color}
+                                  />
+                                )
+                              })}
+                            </div>
+                            <button
+                              type="button"
+                              className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
+                              onClick={() => randomizeProjectIcon(selectedProject.id)}
+                            >
+                              Randomize icon
+                            </button>
+                          </PopoverContent>
+                        </Popover>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void exportProject(selectedProject)
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Export Project"
+                        >
+                          <Download size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                      <WorkspaceHeaderActionDivider />
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => toggleProjectDone(selectedProject.id)}
+                          className={`flex items-center justify-center rounded border p-1.5 ${
+                            selectedProject.status === 'completed'
+                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                          }`}
+                          title={
+                            selectedProject.status === 'completed'
+                              ? 'Mark Project as In Progress'
+                              : 'Mark Project as Done'
+                          }
+                        >
+                          <Check size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={toggleCurrentProjectFavorite}
+                          className={`flex items-center justify-center rounded border p-1.5 ${
+                            currentProjectIsFavorite
+                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                          }`}
+                          title={
+                            currentProjectIsFavorite
+                              ? 'Remove Project from Favorites'
+                              : 'Add Project to Favorites'
+                          }
+                        >
+                          <Heart
+                            size={18}
+                            className={currentProjectIsFavorite ? 'fill-current' : ''}
+                          />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                      <WorkspaceHeaderActionDivider />
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void removeSelectedProject()
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Remove Project"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                    </WorkspaceHeaderActions>
                   ) : activePage === 'calendar' ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goToPrevMonth}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Previous month"
-                      >
-                        <ChevronLeft size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={goToToday}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Go to today"
-                      >
-                        <CalendarDays size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={goToNextMonth}
-                        className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                        title="Next month"
-                      >
-                        <ChevronRight size={18} />
-                      </button>
-                    </>
+                    <WorkspaceHeaderActions>
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={goToPrevMonth}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Previous month"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goToToday}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Go to today"
+                        >
+                          <CalendarDays size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goToNextMonth}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Next month"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                    </WorkspaceHeaderActions>
                   ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleDeleteSelectedWeeklyPlanWeek()
-                      }}
-                      className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                      title="Delete week"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <WorkspaceHeaderActions>
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleDeleteSelectedWeeklyPlanWeek()
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Delete week"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                    </WorkspaceHeaderActions>
                   ) : null
                 }
               />
@@ -3159,175 +3429,213 @@ function App(): ReactElement {
                   <DocumentWorkspacePanelHeader
                     actions={
                       activePage === 'notes' ? (
-                        <>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={panelIconButtonClass}
-                                aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                              >
-                                <Funnel size={18} aria-hidden="true" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={noteFilterMode}
-                                onValueChange={(value) => setNoteFilterMode(value as NoteFilterMode)}
-                              >
-                                <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="tagged">Tagged</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="untagged">
-                                  Untagged
-                                </DropdownMenuRadioItem>
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={panelIconButtonClass}
-                                aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                              >
-                                <ArrowUpDown size={18} aria-hidden="true" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={noteSortField}
-                                onValueChange={(value) => {
-                                  const field = value as NoteSortField
-                                  setNoteSortField(field)
-                                  setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
-                                }}
-                              >
-                                <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
-                              </DropdownMenuRadioGroup>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setNoteSortDirection((current) =>
-                                    current === 'asc' ? 'desc' : 'asc'
-                                  )
-                                }
-                              >
-                                {noteSortDirection === 'asc' ? (
-                                  <ArrowUp size={12} aria-hidden="true" />
-                                ) : (
-                                  <ArrowDown size={12} aria-hidden="true" />
-                                )}
-                                Direction: {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <button
-                            type="button"
-                            className={panelIconButtonClass}
-                            onClick={() => {
-                              void createNote()
-                            }}
-                            aria-label="Add new note"
-                            title="Add new note"
-                          >
-                            <Plus size={18} aria-hidden="true" />
-                          </button>
-                        </>
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButtonClass}
+                                  aria-label="Note actions"
+                                  title="Note actions"
+                                >
+                                  <Plus size={18} aria-hidden="true" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void createNote()
+                                  }}
+                                >
+                                  New note
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void importNotes()
+                                  }}
+                                >
+                                  Import markdown
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButtonClass}
+                                  aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                  title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                >
+                                  <Funnel size={18} aria-hidden="true" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup
+                                  value={noteFilterMode}
+                                  onValueChange={(value) =>
+                                    setNoteFilterMode(value as NoteFilterMode)
+                                  }
+                                >
+                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="tagged">
+                                    Tagged
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="untagged">
+                                    Untagged
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButtonClass}
+                                  aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                  title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                >
+                                  <ArrowUpDown size={18} aria-hidden="true" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup
+                                  value={noteSortField}
+                                  onValueChange={(value) => {
+                                    const field = value as NoteSortField
+                                    setNoteSortField(field)
+                                    setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
+                                  }}
+                                >
+                                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="created">
+                                    Created
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="updated">
+                                    Updated
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setNoteSortDirection((current) =>
+                                      current === 'asc' ? 'desc' : 'asc'
+                                    )
+                                  }
+                                >
+                                  {noteSortDirection === 'asc' ? (
+                                    <ArrowUp size={12} aria-hidden="true" />
+                                  ) : (
+                                    <ArrowDown size={12} aria-hidden="true" />
+                                  )}
+                                  Direction:{' '}
+                                  {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
                       ) : activePage === 'projects' ? (
-                        <>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={panelIconButtonClass}
-                                aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                              >
-                                <Funnel size={18} aria-hidden="true" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={projectFilterMode}
-                                onValueChange={(value) =>
-                                  setProjectFilterMode(value as ProjectFilterMode)
-                                }
-                              >
-                                <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="favorites">
-                                  Favorites
-                                </DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="active">
-                                  In Progress
-                                </DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="completed">Done</DropdownMenuRadioItem>
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className={panelIconButtonClass}
-                                aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                              >
-                                <ArrowUpDown size={18} aria-hidden="true" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={projectSortField}
-                                onValueChange={(value) => {
-                                  const field = value as ProjectSortField
-                                  setProjectSortField(field)
-                                  setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
-                                }}
-                              >
-                                <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="updated">Updated</DropdownMenuRadioItem>
-                              </DropdownMenuRadioGroup>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setProjectSortDirection((current) =>
-                                    current === 'asc' ? 'desc' : 'asc'
-                                  )
-                                }
-                              >
-                                {projectSortDirection === 'asc' ? (
-                                  <ArrowUp size={12} aria-hidden="true" />
-                                ) : (
-                                  <ArrowDown size={12} aria-hidden="true" />
-                                )}
-                                Direction: {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <button
-                            type="button"
-                            className={panelIconButtonClass}
-                            onClick={createProject}
-                            aria-label="Add new project"
-                            title="Add new project"
-                          >
-                            <Plus size={18} aria-hidden="true" />
-                          </button>
-                        </>
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <button
+                              type="button"
+                              className={panelIconButtonClass}
+                              onClick={createProject}
+                              aria-label="Add new project"
+                              title="Add new project"
+                            >
+                              <Plus size={18} aria-hidden="true" />
+                            </button>
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButtonClass}
+                                  aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                  title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                >
+                                  <Funnel size={18} aria-hidden="true" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup
+                                  value={projectFilterMode}
+                                  onValueChange={(value) =>
+                                    setProjectFilterMode(value as ProjectFilterMode)
+                                  }
+                                >
+                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="favorites">
+                                    Favorites
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="active">
+                                    In Progress
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="completed">
+                                    Done
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButtonClass}
+                                  aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                  title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                >
+                                  <ArrowUpDown size={18} aria-hidden="true" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup
+                                  value={projectSortField}
+                                  onValueChange={(value) => {
+                                    const field = value as ProjectSortField
+                                    setProjectSortField(field)
+                                    setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
+                                  }}
+                                >
+                                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="updated">
+                                    Updated
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setProjectSortDirection((current) =>
+                                      current === 'asc' ? 'desc' : 'asc'
+                                    )
+                                  }
+                                >
+                                  {projectSortDirection === 'asc' ? (
+                                    <ArrowUp size={12} aria-hidden="true" />
+                                  ) : (
+                                    <ArrowDown size={12} aria-hidden="true" />
+                                  )}
+                                  Direction:{' '}
+                                  {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
                       ) : activePage === 'calendar' ? (
                         <Popover
                           open={isCalendarBulkActionOpen}
                           onOpenChange={setIsCalendarBulkActionOpen}
                         >
                           <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className={panelIconButtonClass}
-                            >
+                            <button type="button" className={panelIconButtonClass}>
                               <Target size={18} className="inline-block" />
                             </button>
                           </PopoverTrigger>

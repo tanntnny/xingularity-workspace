@@ -58,7 +58,10 @@ import {
   DocumentWorkspaceMainHeader,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
-  DocumentWorkspacePanelHeader
+  DocumentWorkspacePanelHeader,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionDivider,
+  WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
 import { WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
 import { cn } from '../lib/utils'
@@ -656,32 +659,37 @@ export function AgentHistoryPage({
             </div>
           }
           actions={
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!activeSession) {
-                    return
-                  }
-                  setRenameDraft(activeSession.title)
-                  setIsRenaming(true)
-                }}
-                disabled={!activeSession}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Pencil size={14} />
-                <span>Rename</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteActiveSession}
-                disabled={!activeSession}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/5 px-3 text-xs font-medium text-rose-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Trash2 size={14} />
-                <span>Delete chat</span>
-              </button>
-            </>
+            <WorkspaceHeaderActions>
+              <WorkspaceHeaderActionGroup>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!activeSession) {
+                      return
+                    }
+                    setRenameDraft(activeSession.title)
+                    setIsRenaming(true)
+                  }}
+                  disabled={!activeSession}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Pencil size={14} />
+                  <span>Rename</span>
+                </button>
+              </WorkspaceHeaderActionGroup>
+              <WorkspaceHeaderActionDivider />
+              <WorkspaceHeaderActionGroup>
+                <button
+                  type="button"
+                  onClick={handleDeleteActiveSession}
+                  disabled={!activeSession}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/5 px-3 text-xs font-medium text-rose-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete chat</span>
+                </button>
+              </WorkspaceHeaderActionGroup>
+            </WorkspaceHeaderActions>
           }
         />
         <DocumentWorkspaceMainContent className="min-h-0">
@@ -985,24 +993,30 @@ export function AgentHistoryPage({
       </DocumentWorkspaceMain>
 
       <DocumentWorkspacePanel style={{ ['--workspace-pane-width' as string]: '340px' }}>
-        <DocumentWorkspacePanelHeader>
-          <div className="flex w-full items-center justify-between gap-3">
+        <DocumentWorkspacePanelHeader
+          leading={
             <div>
               <p className="text-sm font-semibold text-[var(--text)]">Chats</p>
               <p className="text-xs text-[var(--muted)]">Manage sessions and attached context</p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                void createSession()
-              }}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              <MessageSquarePlus size={14} />
-              <span>New chat</span>
-            </button>
-          </div>
-        </DocumentWorkspacePanelHeader>
+          }
+          actions={
+            <WorkspaceHeaderActions>
+              <WorkspaceHeaderActionGroup>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void createSession()
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                >
+                  <MessageSquarePlus size={14} />
+                  <span>New chat</span>
+                </button>
+              </WorkspaceHeaderActionGroup>
+            </WorkspaceHeaderActions>
+          }
+        />
         <DocumentWorkspacePanelContent className="space-y-5 p-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
             <WorkspacePanelSectionHeader

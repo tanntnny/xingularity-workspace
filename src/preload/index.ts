@@ -18,6 +18,10 @@ const api: RendererVaultApi = {
     create: () => ipcRenderer.invoke(IPC_CHANNELS.vaultCreate),
     restoreLast: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRestoreLast)
   },
+  desktop: {
+    chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),
+    openPath: (targetPath) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenPath, targetPath)
+  },
   files: {
     listNotes: () => ipcRenderer.invoke(IPC_CHANNELS.listNotes),
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
@@ -25,6 +29,7 @@ const api: RendererVaultApi = {
     createNote: (name) => ipcRenderer.invoke(IPC_CHANNELS.createNote, name),
     createNoteWithTags: (name, tags) =>
       ipcRenderer.invoke(IPC_CHANNELS.createNoteWithTags, name, tags),
+    importNotes: () => ipcRenderer.invoke(IPC_CHANNELS.importNotes),
     rename: (fromRelPath, toRelPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.renameNote, fromRelPath, toRelPath),
     delete: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deleteNote, relPath),
