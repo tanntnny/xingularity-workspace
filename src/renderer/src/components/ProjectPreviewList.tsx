@@ -19,6 +19,7 @@ import {
   isDeleteShortcut
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
 
@@ -27,29 +28,6 @@ export type ProjectListItem = Project
 export type ProjectSortField = 'name' | 'updated'
 export type ProjectSortDirection = 'asc' | 'desc'
 export type ProjectFilterMode = 'all' | 'favorites' | 'active' | 'completed'
-
-const projectStatusMeta: Record<ProjectStatus, { label: string; className: string }> = {
-  'on-track': {
-    label: 'on-track',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-  },
-  'at-risk': {
-    label: 'at-risk',
-    className:
-      'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
-  },
-  blocked: {
-    label: 'blocked',
-    className:
-      'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
-  },
-  completed: {
-    label: 'completed',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-  }
-}
 
 interface ProjectPreviewListProps {
   projects: Project[]
@@ -297,9 +275,11 @@ function ProjectSection({
                 <div className="truncate text-lg font-bold">{project.name}</div>
               </div>
               <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                <span className={cn(neutralChipClass, projectStatusMeta[project.status].className)}>
+                <span
+                  className={cn(neutralChipClass, PROJECT_STATUS_META[project.status].className)}
+                >
                   <Flag size={12} aria-hidden="true" />
-                  {projectStatusMeta[project.status].label}
+                  {PROJECT_STATUS_META[project.status].label}
                 </span>
                 <span className={neutralChipClass}>
                   <Flag size={12} aria-hidden="true" />

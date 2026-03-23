@@ -8,6 +8,7 @@ export interface CalendarEventInput {
   allDay: true
   extendedProps: {
     taskId: string
+    syncSignature?: string
   }
 }
 

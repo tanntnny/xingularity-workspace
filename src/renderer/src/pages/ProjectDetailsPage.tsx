@@ -23,6 +23,7 @@ import { Button } from '../components/ui/button'
 import { Calendar } from '../components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,7 @@ import {
   SortableTableHead,
   TableRow
 } from '../components/ui/table'
+import { PROJECT_STATUS_META, getProjectHealthSummary } from '../lib/projectStatus'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
 
@@ -143,18 +145,28 @@ export function ProjectDetailsPage({
 
   const projectTag = useMemo(() => generateProjectTag(project.name), [project.name])
 
-  const projectNotes = useMemo(() => {
-    return notes.filter((note) => note.tags.includes(projectTag))
-  }, [notes, projectTag])
+  const { projectNotes, availableNotesForAssociation } = useMemo(() => {
+    const linkedNotes: NoteListItem[] = []
+    const availableNotes: NoteListItem[] = []
 
-  const availableNotesForAssociation = useMemo(() => {
-    const available = notes.filter((note) => !note.tags.includes(projectTag))
-    if (!notePickerSearchQuery.trim()) {
-      return available.slice(0, 10)
+    for (const note of notes) {
+      if (note.tags.includes(projectTag)) {
+        linkedNotes.push(note)
+      } else {
+        availableNotes.push(note)
+      }
     }
-    const query = notePickerSearchQuery.toLowerCase()
-    return available.filter((note) => note.name.toLowerCase().includes(query)).slice(0, 10)
-  }, [notes, projectTag, notePickerSearchQuery])
+
+    const query = notePickerSearchQuery.trim().toLowerCase()
+    const filteredAvailableNotes = query
+      ? availableNotes.filter((note) => note.name.toLowerCase().includes(query))
+      : availableNotes
+
+    return {
+      projectNotes: linkedNotes,
+      availableNotesForAssociation: filteredAvailableNotes.slice(0, 10)
+    }
+  }, [notes, notePickerSearchQuery, projectTag])
 
   useEffect(() => {
     const validIds = new Set(project.milestones.map((milestone) => milestone.id))
@@ -211,27 +223,29 @@ export function ProjectDetailsPage({
       .sort((left, right) => compareProjectNoteRows(left, right, projectTag, noteSort))
   }, [noteSort, projectNotes, projectTag])
 
-  const sortedMilestones = useMemo(() => {
+  const visibleMilestones = useMemo(() => {
     return [...project.milestones]
       .sort((left, right) => compareMilestones(left, right, milestoneSort))
-      .map((milestone) => ({
-        ...milestone,
-        subtasks: [...milestone.subtasks].sort((left, right) =>
+      .reduce<ProjectMilestone[]>((accumulator, milestone) => {
+        if (hideCompletedItems && isMilestoneDone(milestone)) {
+          return accumulator
+        }
+
+        const subtasks = [...milestone.subtasks].sort((left, right) =>
           compareSubtasks(left, right, milestoneSort)
         )
-      }))
-  }, [milestoneSort, project.milestones])
 
-  const visibleMilestones = useMemo(() => {
-    return sortedMilestones
-      .filter((milestone) => !hideCompletedItems || !isMilestoneDone(milestone))
-      .map((milestone) => ({
-        ...milestone,
-        subtasks: hideCompletedItems
-          ? milestone.subtasks.filter((subtask) => !subtask.completed)
-          : milestone.subtasks
-      }))
-  }, [hideCompletedItems, sortedMilestones])
+        accumulator.push({
+          ...milestone,
+          subtasks: hideCompletedItems
+            ? subtasks.filter((subtask) => !subtask.completed)
+            : subtasks
+        })
+
+        return accumulator
+      }, [])
+  }, [hideCompletedItems, milestoneSort, project.milestones])
+  const healthSummary = useMemo(() => getProjectHealthSummary(project), [project])
 
   const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
     const actionId = await showNativeMenu(
@@ -300,10 +314,41 @@ export function ProjectDetailsPage({
         />
 
         <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
-          <span className={cn(neutralChipClass, projectStatusMeta[project.status].className)}>
-            <CircleDashed size={12} aria-hidden="true" />
-            {projectStatusMeta[project.status].label}
-          </span>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    neutralChipClass,
+                    'cursor-help',
+                    PROJECT_STATUS_META[project.status].className
+                  )}
+                  tabIndex={0}
+                >
+                  <CircleDashed size={12} aria-hidden="true" />
+                  {PROJECT_STATUS_META[project.status].label}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs space-y-1.5 text-left">
+                <div className="font-semibold text-[var(--text)]">
+                  Status: {PROJECT_STATUS_META[healthSummary.status].label}
+                </div>
+                <div>{healthSummary.reason}</div>
+                <div>
+                  {healthSummary.completedMilestones}/{healthSummary.totalMilestones} milestones
+                  complete
+                </div>
+                <div>
+                  In progress: {healthSummary.inProgressMilestones} · Pending:{' '}
+                  {healthSummary.pendingMilestones}
+                </div>
+                <div>
+                  Blocked: {healthSummary.blockedMilestones} · Overdue:{' '}
+                  {healthSummary.overdueMilestones}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <span className={neutralChipClass}>
             <CircleDashed size={12} aria-hidden="true" />
             Progress: {project.progress}%
@@ -1123,29 +1168,6 @@ interface ProjectNoteSortState {
 interface ProjectMilestoneSortState {
   key: ProjectMilestoneSortKey
   direction: SortDirection
-}
-
-const projectStatusMeta: Record<ProjectListItem['status'], { label: string; className: string }> = {
-  'on-track': {
-    label: 'on-track',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-  },
-  'at-risk': {
-    label: 'at-risk',
-    className:
-      'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
-  },
-  blocked: {
-    label: 'blocked',
-    className:
-      'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
-  },
-  completed: {
-    label: 'completed',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-  }
 }
 
 function compareProjectNoteRows(

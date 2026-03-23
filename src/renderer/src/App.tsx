@@ -10,7 +10,6 @@ import {
   Heart,
   Keyboard,
   Paintbrush,
-  Check,
   Trash2,
   Plus,
   Type,
@@ -19,7 +18,8 @@ import {
   ChevronDown,
   CalendarDays,
   Target,
-  FolderOpen
+  FolderOpen,
+  List
 } from 'lucide-react'
 import {
   CalendarTask,
@@ -112,11 +112,19 @@ import {
 } from './components/ui/breadcrumb'
 import { normalizeCalendarTasks } from './lib/calendarTasks'
 import {
+  computeProjectProgress,
+  deriveMilestoneStatus,
+  getProjectHealthSummary,
+  toLocalIsoDate
+} from './lib/projectStatus'
+import {
   findWeekForDate,
   formatWeekRange,
   getSortedWeeks,
   getWeekPriorities
 } from './lib/weeklyPlan'
+import { shiftIsoMonthClamped } from './lib/calendarDate'
+import type { NoteOutlineItem } from './lib/noteOutline'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
@@ -322,42 +330,51 @@ const PROJECT_SEED: Project[] = [
 
 function App(): ReactElement {
   const vaultApi = (window as unknown as { vaultApi?: RendererVaultApi }).vaultApi
-  const {
-    vault,
-    notes,
-    currentNotePath,
-    currentNoteContent,
-    searchQuery,
-    searchResults,
-    commandPaletteOpen,
-    settings,
-    setVault,
-    setNotes,
-    setCurrentNotePath,
-    setCurrentNoteContent,
-    setSearchQuery,
-    setSearchResults,
-    setCommandPaletteOpen,
-    setSettings,
-    pushToast
-  } = useVaultStore()
+  const vault = useVaultStore((state) => state.vault)
+  const notes = useVaultStore((state) => state.notes)
+  const currentNotePath = useVaultStore((state) => state.currentNotePath)
+  const currentNoteContent = useVaultStore((state) => state.currentNoteContent)
+  const searchQuery = useVaultStore((state) => state.searchQuery)
+  const searchResults = useVaultStore((state) => state.searchResults)
+  const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
+  const settingsProjects = useVaultStore((state) => state.settings.projects)
+  const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
+  const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
+  const lastOpenedProjectId = useVaultStore((state) => state.settings.lastOpenedProjectId)
+  const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
+  const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
+  const fontFamily = useVaultStore((state) => state.settings.fontFamily)
+  const profileName = useVaultStore((state) => state.settings.profile.name)
+  const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
+  const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
+  const projectIcons = useVaultStore((state) => state.settings.projectIcons)
+  const setVault = useVaultStore((state) => state.setVault)
+  const setNotes = useVaultStore((state) => state.setNotes)
+  const setCurrentNotePath = useVaultStore((state) => state.setCurrentNotePath)
+  const setCurrentNoteContent = useVaultStore((state) => state.setCurrentNoteContent)
+  const setSearchQuery = useVaultStore((state) => state.setSearchQuery)
+  const setSearchResults = useVaultStore((state) => state.setSearchResults)
+  const setCommandPaletteOpen = useVaultStore((state) => state.setCommandPaletteOpen)
+  const setSettings = useVaultStore((state) => state.setSettings)
+  const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
-  const [_isCalendarSidebarCollapsed, _setIsCalendarSidebarCollapsed] = useState(
-    () => settings.isSidebarCollapsed
-  )
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [calendarBulkTaskType, setCalendarBulkTaskType] = useState<CalendarTaskType>('assignment')
   const [calendarBulkScope, setCalendarBulkScope] =
     useState<(typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']>('day')
   const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
   const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [currentNoteOutline, setCurrentNoteOutline] = useState<NoteOutlineItem[]>([])
+  const [jumpToNoteHeading, setJumpToNoteHeading] = useState<((blockId: string) => void) | null>(
+    null
+  )
   const [noteFilterMode, setNoteFilterMode] = useState<NoteFilterMode>('all')
   const [noteSortField, setNoteSortField] = useState<NoteSortField>('created')
   const [noteSortDirection, setNoteSortDirection] = useState<NoteSortDirection>('desc')
   // Projects are now derived from settings for persistence
-  const projects = settings.projects.length > 0 ? settings.projects : PROJECT_SEED
+  const projects = settingsProjects.length > 0 ? settingsProjects : PROJECT_SEED
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     PROJECT_SEED[0]?.id ?? null
   )
@@ -380,7 +397,7 @@ function App(): ReactElement {
   const [selectedWeeklyPlanWeekId, setSelectedWeeklyPlanWeekId] = useState<string | null>(null)
   const [pendingWeekStart, setPendingWeekStart] = useState<string | null>(null)
   const weeklyPlanWeeks = useMemo(() => getSortedWeeks(weeklyPlanState), [weeklyPlanState])
-  const todayIso = toIsoDate(new Date())
+  const todayIso = toLocalIsoDate(new Date())
   const currentWeeklyPlanWeek = useMemo(
     () => findWeekForDate(weeklyPlanWeeks, todayIso) ?? null,
     [weeklyPlanWeeks, todayIso]
@@ -408,7 +425,7 @@ function App(): ReactElement {
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
   const lastPersistedNoteRef = useRef<{ relPath: string; content: string } | null>(null)
-  const calendarTasksRef = useRef(settings.calendarTasks)
+  const calendarTasksRef = useRef(calendarTasks)
   const shouldAnimateWorkspacePane =
     activePage === 'dashboard' ||
     activePage === 'notes' ||
@@ -426,7 +443,7 @@ function App(): ReactElement {
         return
       }
 
-      if (settings.lastOpenedNotePath === relPath) {
+      if (lastOpenedNotePath === relPath) {
         return
       }
 
@@ -437,7 +454,7 @@ function App(): ReactElement {
         pushToast('error', String(error))
       }
     },
-    [vaultApi, settings.lastOpenedNotePath, setSettings, pushToast]
+    [vaultApi, lastOpenedNotePath, setSettings, pushToast]
   )
 
   const persistLastOpenedProjectId = useCallback(
@@ -446,7 +463,7 @@ function App(): ReactElement {
         return
       }
 
-      if (settings.lastOpenedProjectId === projectId) {
+      if (lastOpenedProjectId === projectId) {
         return
       }
 
@@ -457,7 +474,7 @@ function App(): ReactElement {
         pushToast('error', String(error))
       }
     },
-    [vaultApi, settings.lastOpenedProjectId, setSettings, pushToast]
+    [vaultApi, lastOpenedProjectId, setSettings, pushToast]
   )
 
   const persistFavoriteNotePaths = useCallback(
@@ -467,7 +484,7 @@ function App(): ReactElement {
       }
 
       const normalized = Array.from(new Set(favoritePaths))
-      const current = settings.favoriteNotePaths
+      const current = favoriteNotePathSettings
       if (
         normalized.length === current.length &&
         normalized.every((relPath, index) => relPath === current[index])
@@ -482,7 +499,7 @@ function App(): ReactElement {
         pushToast('error', String(error))
       }
     },
-    [vaultApi, settings.favoriteNotePaths, setSettings, pushToast]
+    [vaultApi, favoriteNotePathSettings, setSettings, pushToast]
   )
 
   const persistFavoriteProjectIds = useCallback(
@@ -492,7 +509,7 @@ function App(): ReactElement {
       }
 
       const normalized = Array.from(new Set(favoriteProjectIds))
-      const current = settings.favoriteProjectIds
+      const current = favoriteProjectIdSettings
       if (
         normalized.length === current.length &&
         normalized.every((projectId, index) => projectId === current[index])
@@ -507,7 +524,7 @@ function App(): ReactElement {
         pushToast('error', String(error))
       }
     },
-    [vaultApi, settings.favoriteProjectIds, setSettings, pushToast]
+    [vaultApi, favoriteProjectIdSettings, setSettings, pushToast]
   )
 
   const selectProject = useCallback(
@@ -545,6 +562,12 @@ function App(): ReactElement {
   }
 
   const noteIsOpen = Boolean(currentNotePath)
+  useEffect(() => {
+    if (!noteIsOpen || isPreviewMode) {
+      setCurrentNoteOutline([])
+      setJumpToNoteHeading(null)
+    }
+  }, [isPreviewMode, noteIsOpen, currentNotePath])
   const currentNoteTags = useMemo(
     () => listTagsFromMarkdown(currentNoteContent),
     [currentNoteContent]
@@ -555,15 +578,15 @@ function App(): ReactElement {
   )
   // Unscheduled tasks (no date assigned)
   const unscheduledTasks = useMemo(() => {
-    return normalizeCalendarTasks(settings.calendarTasks).filter((task) => !task.date)
-  }, [settings.calendarTasks])
+    return normalizeCalendarTasks(calendarTasks).filter((task) => !task.date)
+  }, [calendarTasks])
 
   const scheduledCalendarTasks = useMemo(() => {
-    return normalizeCalendarTasks(settings.calendarTasks).filter((task) => Boolean(task.date))
-  }, [settings.calendarTasks])
+    return normalizeCalendarTasks(calendarTasks).filter((task) => Boolean(task.date))
+  }, [calendarTasks])
   const calendarUndoneCount = useMemo(() => {
-    return settings.calendarTasks.filter((task) => !task.completed).length
-  }, [settings.calendarTasks])
+    return calendarTasks.filter((task) => !task.completed).length
+  }, [calendarTasks])
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -571,20 +594,20 @@ function App(): ReactElement {
   )
   const favoriteProjectIds = useMemo(
     () =>
-      settings.favoriteProjectIds.filter((projectId) =>
+      favoriteProjectIdSettings.filter((projectId) =>
         projects.some((project) => project.id === projectId)
       ),
-    [settings.favoriteProjectIds, projects]
+    [favoriteProjectIdSettings, projects]
   )
   const currentProjectIsFavorite = selectedProjectId
     ? favoriteProjectIds.includes(selectedProjectId)
     : false
   const favoriteNotePaths = useMemo(
     () =>
-      settings.favoriteNotePaths.filter((relPath) =>
+      favoriteNotePathSettings.filter((relPath) =>
         notes.some((note) => note.relPath === relPath)
       ),
-    [settings.favoriteNotePaths, notes]
+    [favoriteNotePathSettings, notes]
   )
   const currentNoteIsFavorite = currentNotePath
     ? favoriteNotePaths.includes(currentNotePath)
@@ -592,8 +615,8 @@ function App(): ReactElement {
   const shouldRestoreLastOpenedNote =
     settingsLoaded &&
     !currentNotePath &&
-    Boolean(settings.lastOpenedNotePath) &&
-    notes.some((note) => note.relPath === settings.lastOpenedNotePath)
+    Boolean(lastOpenedNotePath) &&
+    notes.some((note) => note.relPath === lastOpenedNotePath)
   const middleHeaderBreadcrumbItem = useMemo(() => {
     if (activePage === 'notes') {
       if (searchQuery.trim()) {
@@ -672,7 +695,7 @@ function App(): ReactElement {
   }, [pendingWeekStart, weeklyPlanState])
 
   useEffect(() => {
-    if (!vaultApi || !vault) {
+    if (!vaultApi || !vault?.rootPath) {
       setSettingsLoaded(false)
       return
     }
@@ -700,12 +723,12 @@ function App(): ReactElement {
   }, [vaultApi, vault?.rootPath, setSettings, pushToast])
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--app-font-family', settings.fontFamily)
-  }, [settings.fontFamily])
+    document.documentElement.style.setProperty('--app-font-family', fontFamily)
+  }, [fontFamily])
 
   useEffect(() => {
-    calendarTasksRef.current = settings.calendarTasks
-  }, [settings.calendarTasks])
+    calendarTasksRef.current = calendarTasks
+  }, [calendarTasks])
 
   useEffect(() => {
     if (!vaultApi) {
@@ -799,7 +822,7 @@ function App(): ReactElement {
       return
     }
 
-    const storedId = settings.lastOpenedProjectId
+    const storedId = lastOpenedProjectId
     if (storedId && projects.some((project) => project.id === storedId)) {
       if (selectedProjectId !== storedId) {
         setSelectedProjectId(storedId)
@@ -808,7 +831,7 @@ function App(): ReactElement {
     }
 
     if (!projects.length) {
-      if (selectedProjectId !== null || settings.lastOpenedProjectId !== null) {
+      if (selectedProjectId !== null || lastOpenedProjectId !== null) {
         selectProject(null)
       }
       return
@@ -819,7 +842,7 @@ function App(): ReactElement {
     }
   }, [
     settingsLoaded,
-    settings.lastOpenedProjectId,
+    lastOpenedProjectId,
     projects,
     selectedProjectId,
     selectProject,
@@ -1116,15 +1139,11 @@ function App(): ReactElement {
   }
 
   const goToPrevMonth = (): void => {
-    const current = parseIsoDate(selectedCalendarDate)
-    current.setMonth(current.getMonth() - 1)
-    setSelectedCalendarDate(toIsoDate(current))
+    setSelectedCalendarDate(shiftIsoMonthClamped(selectedCalendarDate, -1))
   }
 
   const goToNextMonth = (): void => {
-    const current = parseIsoDate(selectedCalendarDate)
-    current.setMonth(current.getMonth() + 1)
-    setSelectedCalendarDate(toIsoDate(current))
+    setSelectedCalendarDate(shiftIsoMonthClamped(selectedCalendarDate, 1))
   }
 
   const goToToday = (): void => {
@@ -1219,7 +1238,7 @@ function App(): ReactElement {
       return
     }
 
-    const lastPath = settings.lastOpenedNotePath
+    const lastPath = lastOpenedNotePath
     if (!lastPath) {
       return
     }
@@ -1234,7 +1253,7 @@ function App(): ReactElement {
   }, [
     settingsLoaded,
     currentNotePath,
-    settings.lastOpenedNotePath,
+    lastOpenedNotePath,
     notes,
     openNote,
     persistLastOpenedNotePath
@@ -1245,7 +1264,7 @@ function App(): ReactElement {
       return
     }
 
-    if (favoriteNotePaths.length === settings.favoriteNotePaths.length) {
+    if (favoriteNotePaths.length === favoriteNotePathSettings.length) {
       return
     }
 
@@ -1253,7 +1272,7 @@ function App(): ReactElement {
   }, [
     settingsLoaded,
     favoriteNotePaths,
-    settings.favoriteNotePaths.length,
+    favoriteNotePathSettings.length,
     persistFavoriteNotePaths
   ])
 
@@ -1262,7 +1281,7 @@ function App(): ReactElement {
       return
     }
 
-    if (favoriteProjectIds.length === settings.favoriteProjectIds.length) {
+    if (favoriteProjectIds.length === favoriteProjectIdSettings.length) {
       return
     }
 
@@ -1270,7 +1289,7 @@ function App(): ReactElement {
   }, [
     settingsLoaded,
     favoriteProjectIds,
-    settings.favoriteProjectIds.length,
+    favoriteProjectIdSettings.length,
     persistFavoriteProjectIds
   ])
 
@@ -1646,7 +1665,7 @@ function App(): ReactElement {
         ? { ...project, icon: nextIcon, updatedAt: new Date().toISOString() }
         : project
     )
-    const nextProjectIcons = { ...settings.projectIcons, [projectId]: nextIcon }
+    const nextProjectIcons = { ...projectIcons, [projectId]: nextIcon }
     void persistProjectData(nextProjects, nextProjectIcons)
   }
 
@@ -1969,51 +1988,6 @@ function App(): ReactElement {
     void persistFavoriteNotePaths(nextFavoritePaths)
   }
 
-  const deriveMilestoneStatus = (milestone: ProjectMilestone): ProjectMilestone['status'] => {
-    const subtasks = milestone.subtasks
-    if (subtasks.length === 0) {
-      return milestone.status === 'blocked' ? 'blocked' : 'pending'
-    }
-
-    const completedCount = subtasks.filter((subtask) => subtask.completed).length
-    if (completedCount === subtasks.length) {
-      return 'completed'
-    }
-
-    if (completedCount > 0) {
-      return 'in-progress'
-    }
-
-    return milestone.status === 'blocked' ? 'blocked' : 'pending'
-  }
-
-  const computeProjectProgress = (
-    milestones: ProjectMilestone[],
-    status?: Project['status']
-  ): number => {
-    if (status === 'completed') {
-      return 100
-    }
-
-    if (milestones.length === 0) {
-      return 0
-    }
-
-    const total = milestones.reduce((sum, milestone) => {
-      if (milestone.status === 'completed') {
-        return sum + 1
-      }
-
-      if (milestone.status === 'in-progress') {
-        return sum + 0.5
-      }
-
-      return sum
-    }, 0)
-
-    return Math.round((total / milestones.length) * 100)
-  }
-
   const withComputedProjectState = (project: Project): Project => {
     const milestones = project.milestones.map((milestone) => {
       const normalizedSubtasks = (milestone.subtasks ?? []).map((subtask) => ({
@@ -2029,34 +2003,17 @@ function App(): ReactElement {
         status: deriveMilestoneStatus({ ...milestone, subtasks: normalizedSubtasks })
       }
 
-      if (milestone.status === 'blocked' && normalizedMilestone.status !== 'completed') {
-        normalizedMilestone.status = 'blocked'
-      }
-
       return normalizedMilestone
     })
 
+    const health = getProjectHealthSummary({ milestones }, todayIso)
+
     return {
       ...project,
+      status: health.status,
       milestones,
-      progress: computeProjectProgress(milestones, project.status)
+      progress: computeProjectProgress(milestones, health.status)
     }
-  }
-
-  const toggleProjectDone = (projectId: string): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      return withComputedProjectState({
-        ...project,
-        status: project.status === 'completed' ? 'on-track' : 'completed',
-        updatedAt: new Date().toISOString()
-      })
-    })
-
-    void persistProjects(nextProjects)
   }
 
   const createProject = (): void => {
@@ -2082,7 +2039,7 @@ function App(): ReactElement {
     }
 
     const nextProjects = [withComputedProjectState(nextProject), ...projects]
-    const nextProjectIcons = { ...settings.projectIcons, [nextProject.id]: nextProject.icon }
+    const nextProjectIcons = { ...projectIcons, [nextProject.id]: nextProject.icon }
     void persistProjectData(nextProjects, nextProjectIcons)
     selectProject(nextProject.id)
     setProjectSearchQuery('')
@@ -2259,7 +2216,7 @@ function App(): ReactElement {
     })
 
     setSettings({
-      ...settings,
+      ...useVaultStore.getState().settings,
       projects: nextProjects
     })
     void persistProjects(nextProjects)
@@ -2673,7 +2630,7 @@ function App(): ReactElement {
     const nextProjects = projects.filter((item) => item.id !== projectId)
     const nextSelectedProject =
       nextProjects.find((item) => item.id === selectedProjectId) ?? nextProjects[0] ?? null
-    const nextProjectIcons = { ...settings.projectIcons }
+    const nextProjectIcons = { ...projectIcons }
     delete nextProjectIcons[projectId]
     const saved = await persistProjectData(nextProjects, nextProjectIcons)
     if (!saved) {
@@ -2770,7 +2727,7 @@ function App(): ReactElement {
           notesCount={notes.length}
           projectsCount={projects.length}
           calendarUndoneCount={calendarUndoneCount}
-          profileName={settings.profile.name}
+          profileName={profileName}
           className={`${paletteSurfaceClass}${paletteBlurClass}`}
         />
 
@@ -2816,6 +2773,40 @@ function App(): ReactElement {
                   noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
+                        {!isPreviewMode && currentNoteOutline.length > 0 && jumpToNoteHeading ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                                title="Navigate headings"
+                                aria-label="Navigate headings"
+                              >
+                                <List size={18} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="max-h-80 w-72 overflow-y-auto"
+                            >
+                              {currentNoteOutline.map((item) => (
+                                <DropdownMenuItem
+                                  key={item.id}
+                                  onSelect={() => jumpToNoteHeading(item.id)}
+                                  className="text-[var(--text)]"
+                                  style={{
+                                    paddingLeft: `${0.75 + Math.max(0, item.level - 1) * 0.75}rem`
+                                  }}
+                                >
+                                  <span className="mr-2 text-xs text-[var(--muted)]">
+                                    H{item.level}
+                                  </span>
+                                  <span className="truncate">{item.label}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => setIsPreviewMode(!isPreviewMode)}
@@ -3071,22 +3062,6 @@ function App(): ReactElement {
                       <WorkspaceHeaderActionGroup>
                         <button
                           type="button"
-                          onClick={() => toggleProjectDone(selectedProject.id)}
-                          className={`flex items-center justify-center rounded border p-1.5 ${
-                            selectedProject.status === 'completed'
-                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                          }`}
-                          title={
-                            selectedProject.status === 'completed'
-                              ? 'Mark Project as In Progress'
-                              : 'Mark Project as Done'
-                          }
-                        >
-                          <Check size={18} />
-                        </button>
-                        <button
-                          type="button"
                           onClick={toggleCurrentProjectFavorite}
                           className={`flex items-center justify-center rounded border p-1.5 ${
                             currentProjectIsFavorite
@@ -3167,8 +3142,15 @@ function App(): ReactElement {
                 }
               />
 
-              <DocumentWorkspaceMainContent>
-                <div key={activePage} className="page-transition h-full w-full">
+              <DocumentWorkspaceMainContent
+                className={
+                  activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
+                }
+              >
+                <div
+                  key={activePage}
+                  className={`page-transition w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                >
                   {activePage === 'notes' ? (
                     searchQuery.trim() ? (
                       <SearchPage
@@ -3197,6 +3179,8 @@ function App(): ReactElement {
                         }}
                         vaultRootPath={vault?.rootPath}
                         isPreviewMode={isPreviewMode}
+                        onOutlineChange={setCurrentNoteOutline}
+                        onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
                       />
                     ) : shouldRestoreLastOpenedNote ? (
                       <div className="p-5 text-sm text-[var(--muted)]">Opening your last note…</div>
@@ -3210,7 +3194,7 @@ function App(): ReactElement {
                       projects={projects}
                       currentWeek={currentWeeklyPlanWeek}
                       currentWeekPriorities={currentWeekPriorities}
-                      tasks={settings.calendarTasks}
+                      tasks={calendarTasks}
                       weeklyPlanLoading={weeklyPlanLoading}
                       weeklyPlanReady={weeklyPlanReady}
                       onOpenProject={(projectId) => {
@@ -3379,11 +3363,11 @@ function App(): ReactElement {
                     />
                   ) : activePage === 'settings' ? (
                     <SettingsPage
-                      profileName={settings.profile.name}
-                      mistralApiKey={settings.ai.mistralApiKey}
+                      profileName={profileName}
+                      mistralApiKey={mistralApiKey}
                       fontOptions={FONT_OPTIONS}
-                      selectedFontFamily={settings.fontFamily}
-                      vaultLocation={vault?.rootPath ?? settings.lastVaultPath}
+                      selectedFontFamily={fontFamily}
+                      vaultLocation={vault?.rootPath ?? lastVaultPath}
                       onSaveProfile={(name) => {
                         void updateProfileName(name)
                       }}

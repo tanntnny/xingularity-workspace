@@ -1,7 +1,13 @@
 import { type ReactElement, useMemo } from 'react'
 import { AlertTriangle, ArrowRight, CircleCheckBig, LayoutDashboard, Target } from 'lucide-react'
-import type { CalendarTask, Project, WeeklyPlanPriority, WeeklyPlanWeek } from '../../../shared/types'
+import type {
+  CalendarTask,
+  Project,
+  WeeklyPlanPriority,
+  WeeklyPlanWeek
+} from '../../../shared/types'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
+import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { formatWeekRange } from '../lib/weeklyPlan'
 
 interface DashboardPageProps {
@@ -27,24 +33,6 @@ const priorityStatusClass: Record<WeeklyPlanPriority['status'], string> = {
     'border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] text-[var(--tag-neutral-text)]',
   in_progress: 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]',
   done: 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-}
-
-const projectStatusMeta: Record<
-  Exclude<Project['status'], 'completed'>,
-  { label: string; className: string }
-> = {
-  'on-track': {
-    label: 'On Track',
-    className: 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
-  },
-  'at-risk': {
-    label: 'At Risk',
-    className: 'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
-  },
-  blocked: {
-    label: 'Blocked',
-    className: 'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
-  }
 }
 
 const cardClass =
@@ -124,17 +112,17 @@ export function DashboardPage({
           <MetricCard
             label="Blocked"
             value={statusCounts.blocked}
-            className={projectStatusMeta.blocked.className}
+            className={PROJECT_STATUS_META.blocked.className}
           />
           <MetricCard
             label="At Risk"
             value={statusCounts.atRisk}
-            className={projectStatusMeta['at-risk'].className}
+            className={PROJECT_STATUS_META['at-risk'].className}
           />
           <MetricCard
             label="On Track"
             value={statusCounts.onTrack}
-            className={projectStatusMeta['on-track'].className}
+            className={PROJECT_STATUS_META['on-track'].className}
           />
         </section>
 
@@ -160,7 +148,7 @@ export function DashboardPage({
             {activeProjects.length ? (
               <div className="mt-5 space-y-3">
                 {activeProjects.slice(0, 5).map((project) => {
-                  const statusMeta = projectStatusMeta[project.status]
+                  const statusMeta = PROJECT_STATUS_META[project.status]
                   const milestoneCount = project.milestones.length
 
                   return (
@@ -177,15 +165,21 @@ export function DashboardPage({
                             {project.name}
                           </p>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-sm workspace-meta">{project.summary}</p>
+                        <p className="mt-1 line-clamp-2 text-sm workspace-meta">
+                          {project.summary}
+                        </p>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <span className={`${chipClass} ${statusMeta.className}`}>
-                            {statusMeta.label}
+                            {statusMeta.titleLabel}
                           </span>
-                          <span className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}>
+                          <span
+                            className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}
+                          >
                             {project.progress}% complete
                           </span>
-                          <span className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}>
+                          <span
+                            className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}
+                          >
                             {milestoneCount} milestones
                           </span>
                         </div>
@@ -306,7 +300,9 @@ function MetricCard({
   return (
     <div className={metricCardClass}>
       <div className={`${chipClass} ${className}`}>{label}</div>
-      <div className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-[var(--text)]">{value}</div>
+      <div className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-[var(--text)]">
+        {value}
+      </div>
       <p className="mt-2 text-sm workspace-meta">Active projects in this state.</p>
     </div>
   )

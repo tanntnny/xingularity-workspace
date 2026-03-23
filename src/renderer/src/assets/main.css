@@ -332,8 +332,21 @@
 
 /* FullCalendar skin aligned with Xingularity calendar styling */
 .calendar-full .fc {
-  height: 100%;
+  height: auto;
+  min-height: 0;
   font-family: var(--app-font-family);
+}
+
+.calendar-full .fc .fc-scroller,
+.calendar-full .fc .fc-scroller-harness,
+.calendar-full .fc .fc-scroller-liquid,
+.calendar-full .fc .fc-scroller-liquid-absolute {
+  overflow: visible !important;
+}
+
+.calendar-full .fc .fc-view-harness,
+.calendar-full .fc .fc-view-harness-active {
+  height: auto !important;
 }
 
 .calendar-full .fc-theme-standard td,

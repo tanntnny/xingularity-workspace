@@ -12,13 +12,20 @@ import {
   EventResizeStartArg,
   EventResizeStopArg
 } from '@fullcalendar/interaction'
-import { DayCellMountArg, EventDropArg, EventMountArg, EventHoveringArg } from '@fullcalendar/core'
+import {
+  DayCellMountArg,
+  EventApi,
+  EventDropArg,
+  EventMountArg,
+  EventHoveringArg
+} from '@fullcalendar/core'
 import { createPortal } from 'react-dom'
 import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
 import { Input } from './ui/input'
 import { buildCalendarEvents, normalizeCalendarTasks } from '../lib/calendarTasks'
+import { toIsoDate } from '../lib/calendarDate'
 import {
   Dialog,
   DialogContent,
@@ -96,7 +103,6 @@ export function CalendarMonthView({
       }
     >()
   )
-
   useEffect(() => {
     tasksByIdRef.current = tasksById
   }, [tasksById])
@@ -153,11 +159,42 @@ export function CalendarMonthView({
       return
     }
 
-    api.removeAllEvents()
-    calendarEvents.forEach((event) => {
-      api.addEvent(event)
+    const activeEventIds = new Set<string>()
+
+    for (const event of calendarEvents) {
+      activeEventIds.add(event.id)
+      const syncSignature = buildCalendarSyncSignature(tasksById[event.id])
+      const currentEvent = api.getEventById(event.id)
+
+      if (!currentEvent) {
+        api.addEvent({
+          ...event,
+          extendedProps: {
+            ...event.extendedProps,
+            syncSignature
+          }
+        })
+        continue
+      }
+
+      if (hasCalendarEventChanged(currentEvent, event, syncSignature)) {
+        currentEvent.remove()
+        api.addEvent({
+          ...event,
+          extendedProps: {
+            ...event.extendedProps,
+            syncSignature
+          }
+        })
+      }
+    }
+
+    api.getEvents().forEach((event) => {
+      if (!activeEventIds.has(event.id)) {
+        event.remove()
+      }
     })
-  }, [calendarEvents])
+  }, [calendarEvents, tasksById])
 
   useEffect(() => {
     const api = calendarRef.current?.getApi()
@@ -402,8 +439,8 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="calendar-full h-full overflow-hidden p-4">
-      <div className="h-full overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
+    <section className="calendar-full p-4">
+      <div className="relative rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -685,17 +722,43 @@ function TaskEditDialog({
   )
 }
 
-function toIsoDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function addIsoDays(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
   return next
+}
+
+function buildCalendarSyncSignature(task: CalendarTask | undefined): string {
+  if (!task) {
+    return ''
+  }
+
+  return JSON.stringify({
+    title: task.title,
+    date: task.date ?? '',
+    endDate: task.endDate ?? '',
+    completed: task.completed,
+    taskType: task.taskType ?? 'assignment',
+    time: task.time ?? ''
+  })
+}
+
+function hasCalendarEventChanged(
+  currentEvent: EventApi,
+  nextEvent: {
+    id: string
+    title: string
+    start: string
+    end?: string
+  },
+  syncSignature: string
+): boolean {
+  return (
+    currentEvent.title !== nextEvent.title ||
+    currentEvent.startStr !== nextEvent.start ||
+    (currentEvent.endStr ?? '') !== (nextEvent.end ?? '') ||
+    String(currentEvent.extendedProps.syncSignature ?? '') !== syncSignature
+  )
 }
 
 function getTooltipPositionFromMouse(clientX: number, clientY: number): { x: number; y: number } {

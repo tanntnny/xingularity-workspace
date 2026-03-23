@@ -5,6 +5,7 @@ import { Editor } from '../components/Editor'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { Preview } from '../components/Preview'
 import { TagChip } from '../components/TagChip'
+import type { NoteOutlineItem } from '../lib/noteOutline'
 
 interface EditorPageProps {
   notePath: string
@@ -21,6 +22,8 @@ interface EditorPageProps {
   onOpenMention?: (target: string) => void
   vaultRootPath?: string
   isPreviewMode?: boolean
+  onOutlineChange?: (items: NoteOutlineItem[]) => void
+  onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
 
 export function EditorPage({
@@ -37,7 +40,9 @@ export function EditorPage({
   onRename,
   onOpenMention,
   vaultRootPath,
-  isPreviewMode = false
+  isPreviewMode = false,
+  onOutlineChange,
+  onJumpToHeadingChange
 }: EditorPageProps): ReactElement {
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTagValue, setNewTagValue] = useState('')
@@ -108,7 +113,7 @@ export function EditorPage({
           )}
         </div>
       </div>
-      <div className="px-8 pb-8">
+      <div className="relative px-8 pb-8">
         {isPreviewMode ? (
           <Preview markdown={content} onOpenMention={onOpenMention} />
         ) : (
@@ -120,6 +125,8 @@ export function EditorPage({
             notes={notes}
             vaultRootPath={vaultRootPath}
             currentNotePath={notePath}
+            onOutlineChange={onOutlineChange}
+            onJumpToHeadingChange={onJumpToHeadingChange}
           />
         )}
       </div>

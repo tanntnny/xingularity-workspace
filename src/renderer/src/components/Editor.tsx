@@ -1,10 +1,11 @@
 import { useCreateBlockNote } from '@blocknote/react'
 import { filterSuggestionItems } from '@blocknote/core/extensions'
 import { BlockNoteView } from '@blocknote/mantine'
-import { DragEvent, ReactElement, useEffect, useRef, useState } from 'react'
+import { DragEvent, ReactElement, useCallback, useEffect, useRef, useState } from 'react'
 import { DefaultReactSuggestionItem, SuggestionMenuController } from '@blocknote/react'
 import { NoteListItem } from '../../../shared/types'
 import { mentionTokenFromRelPath, normalizeMentionTarget } from '../../../shared/noteMentions'
+import { extractNoteOutline, NoteOutlineItem } from '../lib/noteOutline'
 import '@blocknote/mantine/style.css'
 
 interface EditorProps {
@@ -15,6 +16,8 @@ interface EditorProps {
   notes: NoteListItem[]
   vaultRootPath?: string
   currentNotePath?: string
+  onOutlineChange?: (items: NoteOutlineItem[]) => void
+  onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
 
 function normalizeMarkdown(markdown: string): string {
@@ -106,7 +109,9 @@ export function Editor({
   onPasteImage,
   notes,
   vaultRootPath,
-  currentNotePath
+  currentNotePath,
+  onOutlineChange,
+  onJumpToHeadingChange
 }: EditorProps): ReactElement {
   const blockNoteThemeClasses =
     '[&_.bn-container]:bg-[var(--panel)] [&_.bn-container]:text-[var(--text)] [&_.bn-container]:[font-family:var(--app-font-family)] [&_.bn-editor]:bg-[var(--panel)] [&_.bn-editor]:text-[var(--text)] [&_.bn-block-content]:text-[var(--text)] [&_.bn-side-menu]:border-[var(--line)] [&_.bn-side-menu]:bg-[var(--panel-2)] [&_.bn-side-menu_button]:text-[var(--text)] [&_.bn-side-menu_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar]:border [&_.bn-formatting-toolbar]:border-[var(--line)] [&_.bn-formatting-toolbar]:bg-[var(--panel-2)] [&_.bn-formatting-toolbar]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-formatting-toolbar_button]:text-[var(--text)] [&_.bn-formatting-toolbar_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar_button[data-active="true"]]:bg-[var(--accent-soft)] [&_.bn-formatting-toolbar_button[data-active="true"]]:text-[var(--accent)] [&_.bn-slash-menu]:border [&_.bn-slash-menu]:border-[var(--line)] [&_.bn-slash-menu]:bg-[var(--panel-2)] [&_.bn-slash-menu]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-slash-menu-item]:text-[var(--text)] [&_.bn-slash-menu-item:hover]:bg-[var(--panel-3)] [&_.bn-slash-menu-item[data-active="true"]]:bg-[var(--panel-3)] [&_.bn-drag-handle]:text-[var(--muted)] [&_.bn-drag-handle:hover]:bg-[var(--panel-3)] [&_.bn-link-toolbar]:border [&_.bn-link-toolbar]:border-[var(--line)] [&_.bn-link-toolbar]:bg-[var(--panel-2)] [&_.bn-link-toolbar_input]:border-[var(--line)] [&_.bn-link-toolbar_input]:bg-[var(--panel)] [&_.bn-link-toolbar_input]:text-[var(--text)] [&_.bn-block-content[data-placeholder]::before]:text-[var(--muted)] [&_.bn-editor_h1]:text-[var(--text)] [&_.bn-editor_h2]:text-[var(--text)] [&_.bn-editor_h3]:text-[var(--text)] [&_.bn-editor_a]:text-[var(--accent)] [&_.bn-editor_code]:border [&_.bn-editor_code]:border-[var(--line)] [&_.bn-editor_code]:bg-[var(--panel-3)] [&_.bn-editor_code]:text-[var(--text)] [&_.bn-editor_pre]:border [&_.bn-editor_pre]:border-[var(--line)] [&_.bn-editor_pre]:bg-[var(--panel-3)] [&_.bn-editor_ul]:text-[var(--text)] [&_.bn-editor_ol]:text-[var(--text)] [&_.bn-editor_blockquote]:border-l-[var(--accent-line)] [&_.bn-editor_blockquote]:text-[var(--muted)]'
@@ -115,6 +120,10 @@ export function Editor({
   useEffect(() => {
     onPasteImageRef.current = onPasteImage
   }, [onPasteImage])
+  const onOutlineChangeRef = useRef(onOutlineChange)
+  useEffect(() => {
+    onOutlineChangeRef.current = onOutlineChange
+  }, [onOutlineChange])
 
   const editor = useCreateBlockNote(
     {
@@ -134,6 +143,24 @@ export function Editor({
   const lastSyncedValueRef = useRef('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const editorContainerRef = useRef<HTMLDivElement>(null)
+
+  const syncOutline = useCallback((): void => {
+    onOutlineChangeRef.current?.(extractNoteOutline(editor.document))
+  }, [editor])
+
+  const jumpToHeading = useCallback(
+    (blockId: string): void => {
+      editor.focus()
+      editor.setTextCursorPosition(blockId, 'start')
+
+      requestAnimationFrame(() => {
+        const selector = `[data-id="${CSS.escape(blockId)}"]`
+        const target = editorContainerRef.current?.querySelector<HTMLElement>(selector)
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    },
+    [editor]
+  )
 
   const duplicateNameCounts = notes.reduce<Record<string, number>>((acc, note) => {
     const normalizedName = normalizeMentionTarget(note.name)
@@ -310,7 +337,20 @@ export function Editor({
     const blocks = editor.tryParseMarkdownToBlocks(displayValue)
     editor.replaceBlocks(editor.document, blocks.length > 0 ? blocks : [{ type: 'paragraph' }])
     lastSyncedValueRef.current = value
+    syncOutline()
   }, [editor, value, vaultRootPath, currentNotePath])
+
+  useEffect(() => {
+    syncOutline()
+  }, [editor])
+
+  useEffect(() => {
+    if (!onJumpToHeadingChange) {
+      return
+    }
+    onJumpToHeadingChange(jumpToHeading)
+    return () => onJumpToHeadingChange(null)
+  }, [jumpToHeading, onJumpToHeadingChange])
 
   const onDrop = async (event: DragEvent<HTMLDivElement>): Promise<void> => {
     event.preventDefault()
@@ -342,6 +382,7 @@ export function Editor({
               : next
 
           lastSyncedValueRef.current = savedValue
+          syncOutline()
           onChange(savedValue)
         }}
       >
