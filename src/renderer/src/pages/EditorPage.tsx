@@ -128,7 +128,6 @@ export function EditorPage({
             currentNotePath={notePath}
             onOutlineChange={onOutlineChange}
             onJumpToHeadingChange={onJumpToHeadingChange}
-            onOpenMention={onOpenMention}
           />
         )}
       </div>
