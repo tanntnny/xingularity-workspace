@@ -4,98 +4,38 @@ export interface NoteOutlineItem {
   level: number
 }
 
-interface OutlineBlock {
-  id: string
-  type: string
-  props?: Record<string, unknown>
-  content?: unknown
-  children?: OutlineBlock[]
-}
+const HEADING_REGEX = /^(#{1,6})[ \t]+(.+?)\s*$/
 
-function extractStyledText(item: unknown): string {
-  if (!item || typeof item !== 'object') {
-    return ''
-  }
-
-  if ('text' in item && typeof item.text === 'string') {
-    return item.text
-  }
-
-  return ''
-}
-
-function extractInlineText(content: unknown): string {
-  if (!Array.isArray(content) || content.length === 0) {
-    return ''
-  }
-
-  return content
-    .map((item) => {
-      if (!item || typeof item !== 'object' || !('type' in item)) {
-        return ''
-      }
-
-      if (item.type === 'text') {
-        return extractStyledText(item)
-      }
-
-      if (item.type === 'link') {
-        if (!('content' in item) || !Array.isArray(item.content)) {
-          return ''
-        }
-
-        return item.content.map((child) => extractStyledText(child)).join('')
-      }
-
-      if ('content' in item && typeof item.content === 'string') {
-        return item.content
-      }
-
-      if ('content' in item && Array.isArray(item.content)) {
-        return item.content
-          .map((child) => {
-            if (typeof child === 'string') {
-              return child
-            }
-
-            if (child && typeof child === 'object' && 'text' in child) {
-              return String(child.text)
-            }
-
-            return ''
-          })
-          .join('')
-      }
-
-      return ''
-    })
-    .join('')
+function stripMarkdownFormatting(input: string): string {
+  return input
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
     .trim()
 }
 
-export function extractNoteOutline<T extends OutlineBlock>(blocks: T[]): NoteOutlineItem[] {
-  const outline: NoteOutlineItem[] = []
-
-  const visit = (items: OutlineBlock[]): void => {
-    items.forEach((block) => {
-      if (block.type === 'heading') {
-        const label = extractInlineText(block.content)
-        const level = typeof block.props?.level === 'number' ? block.props.level : 1
-        if (label) {
-          outline.push({
-            id: block.id,
-            label,
-            level: Math.max(1, Math.min(level, 6))
-          })
-        }
+export function extractNoteOutline(markdown: string): NoteOutlineItem[] {
+  return markdown
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const match = HEADING_REGEX.exec(line)
+      if (!match) {
+        return null
       }
 
-      if (block.children && block.children.length > 0) {
-        visit(block.children)
+      const label = stripMarkdownFormatting(match[2])
+      if (!label) {
+        return null
       }
+
+      return {
+        id: String(index + 1),
+        label,
+        level: match[1].length
+      } satisfies NoteOutlineItem
     })
-  }
-
-  visit(blocks)
-  return outline
+    .filter((item): item is NoteOutlineItem => item !== null)
 }

@@ -25,6 +25,7 @@ import {
   CalendarTask,
   CreateWeeklyPlanWeekInput,
   NoteImportResult,
+  NoteTreeNode,
   Project,
   ProjectIconStyle,
   ProjectMilestone,
@@ -58,6 +59,7 @@ import {
   type NoteSortDirection,
   type NoteSortField
 } from './components/NotePreviewList'
+import { NotesTreeView } from './components/NotesTreeView'
 import {
   ProjectPreviewList,
   type ProjectFilterMode,
@@ -93,6 +95,7 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
+import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
@@ -165,6 +168,15 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' }
 ] as const
+
+type NotePanelView = 'cards' | 'tree'
+
+type NoteTreeSelection =
+  | {
+      kind: 'note' | 'folder'
+      relPath: string
+    }
+  | null
 
 const panelIconButtonClass =
   'flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]'
@@ -373,6 +385,10 @@ function App(): ReactElement {
   const [noteFilterMode, setNoteFilterMode] = useState<NoteFilterMode>('all')
   const [noteSortField, setNoteSortField] = useState<NoteSortField>('created')
   const [noteSortDirection, setNoteSortDirection] = useState<NoteSortDirection>('desc')
+  const [notePanelView, setNotePanelView] = useState<NotePanelView>('cards')
+  const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
+  const [selectedNoteTreeEntry, setSelectedNoteTreeEntry] = useState<NoteTreeSelection>(null)
+  const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
   // Projects are now derived from settings for persistence
   const projects = settingsProjects.length > 0 ? settingsProjects : PROJECT_SEED
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
@@ -1292,6 +1308,38 @@ function App(): ReactElement {
     favoriteProjectIdSettings.length,
     persistFavoriteProjectIds
   ])
+
+  const loadNoteTree = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault) {
+      setNoteTree([])
+      return
+    }
+
+    try {
+      const nextTree = await vaultApi.files.listTree()
+      setNoteTree(nextTree)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [pushToast, setNoteTree, vault, vaultApi])
+
+  useEffect(() => {
+    if (!vaultApi || !vault) {
+      setNoteTree([])
+      setSelectedNoteTreeEntry(null)
+      return
+    }
+
+    void loadNoteTree()
+  }, [loadNoteTree, notes, vault, vaultApi])
+
+  useEffect(() => {
+    if (!currentNotePath) {
+      return
+    }
+
+    setSelectedNoteTreeEntry({ kind: 'note', relPath: currentNotePath })
+  }, [currentNotePath])
 
   const createNote = async (): Promise<void> => {
     if (!vaultApi) {
@@ -2678,6 +2726,289 @@ function App(): ReactElement {
     throw new Error('Could not create a unique note name')
   }
 
+  const createNoteAtPathWithFallback = useCallback(
+    async (parentDir: string): Promise<string> => {
+      if (!vaultApi) {
+        throw new Error('Vault API unavailable')
+      }
+
+      const base = buildDefaultNoteName()
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const suffix = attempt === 0 ? '' : `-${attempt + 1}`
+        const fileName = `${base}${suffix}.md`
+        const candidate = parentDir ? `${parentDir}/${fileName}` : fileName
+        try {
+          return await vaultApi.files.createNoteAtPath(candidate)
+        } catch (error) {
+          if (!String(error).includes('EEXIST')) {
+            throw error
+          }
+        }
+      }
+
+      throw new Error('Could not create a unique note name')
+    },
+    [vaultApi]
+  )
+
+  const createFolderWithFallback = useCallback(
+    async (parentDir: string): Promise<string> => {
+      if (!vaultApi) {
+        throw new Error('Vault API unavailable')
+      }
+
+      const base = 'untitled-folder'
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const suffix = attempt === 0 ? '' : `-${attempt + 1}`
+        const folderName = `${base}${suffix}`
+        const candidate = parentDir ? `${parentDir}/${folderName}` : folderName
+        try {
+          return await vaultApi.files.createFolder(candidate)
+        } catch (error) {
+          if (!String(error).includes('EEXIST')) {
+            throw error
+          }
+        }
+      }
+
+      throw new Error('Could not create a unique folder name')
+    },
+    [vaultApi]
+  )
+
+  const refreshNotesAndTree = useCallback(async (): Promise<NoteTreeNode[]> => {
+    if (!vaultApi) {
+      return []
+    }
+
+    const [nextNotes, nextTree] = await Promise.all([
+      vaultApi.files.listNotes(),
+      vaultApi.files.listTree()
+    ])
+
+    setNotes(nextNotes)
+    setNoteTree(nextTree)
+    return nextTree
+  }, [setNotes, setNoteTree, vaultApi])
+
+  const getTreeTargetDirectory = useCallback((): string => {
+    if (!selectedNoteTreeEntry) {
+      return ''
+    }
+
+    if (selectedNoteTreeEntry.kind === 'folder') {
+      return selectedNoteTreeEntry.relPath
+    }
+
+    const slashIndex = selectedNoteTreeEntry.relPath.lastIndexOf('/')
+    return slashIndex >= 0 ? selectedNoteTreeEntry.relPath.slice(0, slashIndex) : ''
+  }, [selectedNoteTreeEntry])
+
+  const createNoteFromTree = useCallback(async (targetDir?: string): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Create note is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before creating notes')
+      setActivePage('settings')
+      return
+    }
+
+    try {
+      const relPath = await createNoteAtPathWithFallback(targetDir ?? getTreeTargetDirectory())
+      await refreshNotesAndTree()
+      setSelectedNoteTreeEntry({ kind: 'note', relPath })
+      setPendingNoteTreeEditId(`note:${relPath}`)
+      setSearchQuery('')
+      setSearchResults([])
+      setActivePage('notes')
+      await openNote(relPath)
+      pushToast('success', 'Note created')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [
+    createNoteAtPathWithFallback,
+    getTreeTargetDirectory,
+    openNote,
+    pushToast,
+    refreshNotesAndTree,
+    setSearchQuery,
+    setSearchResults,
+    vault,
+    vaultApi
+  ])
+
+  const createFolderFromTree = useCallback(async (targetDir?: string): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Create folder is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before creating folders')
+      setActivePage('settings')
+      return
+    }
+
+    try {
+      const relPath = await createFolderWithFallback(targetDir ?? getTreeTargetDirectory())
+      await refreshNotesAndTree()
+      setSelectedNoteTreeEntry({ kind: 'folder', relPath })
+      setPendingNoteTreeEditId(`folder:${relPath}`)
+      pushToast('success', 'Folder created')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [createFolderWithFallback, getTreeTargetDirectory, pushToast, refreshNotesAndTree, vault, vaultApi])
+
+  const renameTreePath = useCallback(
+    async (relPath: string, nextName: string, kind: 'note' | 'folder'): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const trimmed = nextName.trim()
+      if (!trimmed) {
+        return
+      }
+
+      const slashIndex = relPath.lastIndexOf('/')
+      const parentDir = slashIndex >= 0 ? relPath.slice(0, slashIndex) : ''
+      const normalizedName = kind === 'note' && !trimmed.endsWith('.md') ? `${trimmed}.md` : trimmed
+      const nextRelPath = parentDir ? `${parentDir}/${normalizedName}` : normalizedName
+
+      try {
+        await vaultApi.files.renamePath(relPath, nextRelPath)
+        await refreshNotesAndTree()
+        setSelectedNoteTreeEntry({ kind, relPath: nextRelPath })
+        const nextCurrentNotePath =
+          kind === 'note'
+            ? currentNotePath === relPath
+              ? nextRelPath
+              : currentNotePath
+            : remapNestedPath(currentNotePath, relPath, nextRelPath)
+        if (nextCurrentNotePath !== currentNotePath) {
+          setCurrentNotePath(nextCurrentNotePath)
+          void persistLastOpenedNotePath(nextCurrentNotePath)
+        }
+        const nextFavoritePaths =
+          kind === 'note'
+            ? favoriteNotePaths.map((path) => (path === relPath ? nextRelPath : path))
+            : favoriteNotePaths.map((path) => remapNestedPath(path, relPath, nextRelPath) ?? path)
+        if (nextFavoritePaths.some((path, index) => path !== favoriteNotePaths[index])) {
+          void persistFavoriteNotePaths(nextFavoritePaths)
+        }
+        pushToast('success', `${kind === 'folder' ? 'Folder' : 'Note'} renamed`)
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [
+      currentNotePath,
+      favoriteNotePaths,
+      persistFavoriteNotePaths,
+      persistLastOpenedNotePath,
+      pushToast,
+      refreshNotesAndTree,
+      setCurrentNotePath,
+      vaultApi
+    ]
+  )
+
+  const deleteTreePath = useCallback(
+    async (relPath: string, kind: 'note' | 'folder'): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const itemName = relPath.split('/').pop() ?? relPath
+      const confirmed = window.confirm(
+        kind === 'folder'
+          ? `Delete folder "${itemName}" and all nested notes? This cannot be undone.`
+          : `Delete note "${itemName}"? This cannot be undone.`
+      )
+      if (!confirmed) {
+        return
+      }
+
+      try {
+        await vaultApi.files.deletePath(relPath)
+        await refreshNotesAndTree()
+        setSelectedNoteTreeEntry(null)
+        const nextFavoritePaths =
+          kind === 'note'
+            ? favoriteNotePaths.filter((path) => path !== relPath)
+            : favoriteNotePaths.filter((path) => !isNestedPath(path, relPath))
+        if (nextFavoritePaths.length !== favoriteNotePaths.length) {
+          void persistFavoriteNotePaths(nextFavoritePaths)
+        }
+        const shouldClearCurrent =
+          kind === 'note' ? currentNotePath === relPath : isNestedPath(currentNotePath, relPath)
+        if (shouldClearCurrent) {
+          setCurrentNotePath(null)
+          setCurrentNoteContent('')
+          void persistLastOpenedNotePath(null)
+        }
+        pushToast('success', `${kind === 'folder' ? 'Folder' : 'Note'} deleted`)
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [
+      currentNotePath,
+      favoriteNotePaths,
+      persistFavoriteNotePaths,
+      persistLastOpenedNotePath,
+      pushToast,
+      refreshNotesAndTree,
+      setCurrentNoteContent,
+      setCurrentNotePath,
+      vaultApi
+    ]
+  )
+
+  const moveTreePath = useCallback(
+    async (fromRelPath: string, toRelPath: string): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      await vaultApi.files.renamePath(fromRelPath, toRelPath)
+      await refreshNotesAndTree()
+      const movedKind = fromRelPath.toLowerCase().endsWith('.md') ? 'note' : 'folder'
+      setSelectedNoteTreeEntry({ kind: movedKind, relPath: toRelPath })
+      const nextCurrentNotePath =
+        movedKind === 'note'
+          ? currentNotePath === fromRelPath
+            ? toRelPath
+            : currentNotePath
+          : remapNestedPath(currentNotePath, fromRelPath, toRelPath)
+      if (nextCurrentNotePath !== currentNotePath) {
+        setCurrentNotePath(nextCurrentNotePath)
+        void persistLastOpenedNotePath(nextCurrentNotePath)
+      }
+      const nextFavoritePaths =
+        movedKind === 'note'
+          ? favoriteNotePaths.map((path) => (path === fromRelPath ? toRelPath : path))
+          : favoriteNotePaths.map((path) => remapNestedPath(path, fromRelPath, toRelPath) ?? path)
+      if (nextFavoritePaths.some((path, index) => path !== favoriteNotePaths[index])) {
+        void persistFavoriteNotePaths(nextFavoritePaths)
+      }
+    },
+    [
+      currentNotePath,
+      favoriteNotePaths,
+      persistFavoriteNotePaths,
+      persistLastOpenedNotePath,
+      refreshNotesAndTree,
+      setCurrentNotePath,
+      vaultApi
+    ]
+  )
+
   const pushNoteImportToast = (result: NoteImportResult): void => {
     const renamedCount = result.imported.filter((item) => item.renamed).length
 
@@ -3149,7 +3480,9 @@ function App(): ReactElement {
               >
                 <div
                   key={activePage}
-                  className={`page-transition w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                  className={`${activePage === 'notes' ? '' : 'page-transition '}w-full ${
+                    activePage === 'calendar' ? '' : 'h-full'
+                  }`.trim()}
                 >
                   {activePage === 'notes' ? (
                     searchQuery.trim() ? (
@@ -3429,11 +3762,20 @@ function App(): ReactElement {
                               <DropdownMenuContent align="start">
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    void createNote()
+                                    void (notePanelView === 'tree' ? createNoteFromTree() : createNote())
                                   }}
                                 >
                                   New note
                                 </DropdownMenuItem>
+                                {notePanelView === 'tree' ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void createFolderFromTree()
+                                    }}
+                                  >
+                                    New folder
+                                  </DropdownMenuItem>
+                                ) : null}
                                 <DropdownMenuItem
                                   onClick={() => {
                                     void importNotes()
@@ -3444,82 +3786,107 @@ function App(): ReactElement {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </WorkspaceHeaderActionGroup>
+                          {notePanelView === 'cards' ? (
+                            <>
+                              <WorkspaceHeaderActionDivider />
+                              <WorkspaceHeaderActionGroup>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={panelIconButtonClass}
+                                      aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                      title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                    >
+                                      <Funnel size={18} aria-hidden="true" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    <DropdownMenuRadioGroup
+                                      value={noteFilterMode}
+                                      onValueChange={(value) =>
+                                        setNoteFilterMode(value as NoteFilterMode)
+                                      }
+                                    >
+                                      <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                      <DropdownMenuRadioItem value="tagged">
+                                        Tagged
+                                      </DropdownMenuRadioItem>
+                                      <DropdownMenuRadioItem value="untagged">
+                                        Untagged
+                                      </DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={panelIconButtonClass}
+                                      aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                      title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                    >
+                                      <ArrowUpDown size={18} aria-hidden="true" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    <DropdownMenuRadioGroup
+                                      value={noteSortField}
+                                      onValueChange={(value) => {
+                                        const field = value as NoteSortField
+                                        setNoteSortField(field)
+                                        setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
+                                      }}
+                                    >
+                                      <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                      <DropdownMenuRadioItem value="created">
+                                        Created
+                                      </DropdownMenuRadioItem>
+                                      <DropdownMenuRadioItem value="updated">
+                                        Updated
+                                      </DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        setNoteSortDirection((current) =>
+                                          current === 'asc' ? 'desc' : 'asc'
+                                        )
+                                      }
+                                    >
+                                      {noteSortDirection === 'asc' ? (
+                                        <ArrowUp size={12} aria-hidden="true" />
+                                      ) : (
+                                        <ArrowDown size={12} aria-hidden="true" />
+                                      )}
+                                      Direction:{' '}
+                                      {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </WorkspaceHeaderActionGroup>
+                            </>
+                          ) : null}
                           <WorkspaceHeaderActionDivider />
                           <WorkspaceHeaderActionGroup>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={panelIconButtonClass}
-                                  aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                  title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                >
-                                  <Funnel size={18} aria-hidden="true" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuRadioGroup
-                                  value={noteFilterMode}
-                                  onValueChange={(value) =>
-                                    setNoteFilterMode(value as NoteFilterMode)
-                                  }
-                                >
-                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="tagged">
-                                    Tagged
-                                  </DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="untagged">
-                                    Untagged
-                                  </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={panelIconButtonClass}
-                                  aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                  title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                >
-                                  <ArrowUpDown size={18} aria-hidden="true" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuRadioGroup
-                                  value={noteSortField}
-                                  onValueChange={(value) => {
-                                    const field = value as NoteSortField
-                                    setNoteSortField(field)
-                                    setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
-                                  }}
-                                >
-                                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="created">
-                                    Created
-                                  </DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="updated">
-                                    Updated
-                                  </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    setNoteSortDirection((current) =>
-                                      current === 'asc' ? 'desc' : 'asc'
-                                    )
-                                  }
-                                >
-                                  {noteSortDirection === 'asc' ? (
-                                    <ArrowUp size={12} aria-hidden="true" />
-                                  ) : (
-                                    <ArrowDown size={12} aria-hidden="true" />
-                                  )}
-                                  Direction:{' '}
-                                  {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <ToggleGroup
+                              type="single"
+                              value={notePanelView}
+                              onValueChange={(value) => {
+                                if (value === 'cards' || value === 'tree') {
+                                  setNotePanelView(value)
+                                }
+                              }}
+                              variant="outline"
+                              size="sm"
+                            >
+                              <ToggleGroupItem value="cards" aria-label="Card view">
+                                <List size={14} aria-hidden="true" />
+                              </ToggleGroupItem>
+                              <ToggleGroupItem value="tree" aria-label="Tree view">
+                                <FolderOpen size={14} aria-hidden="true" />
+                              </ToggleGroupItem>
+                            </ToggleGroup>
                           </WorkspaceHeaderActionGroup>
                         </WorkspaceHeaderActions>
                       ) : activePage === 'projects' ? (
@@ -3700,23 +4067,59 @@ function App(): ReactElement {
 
                   <DocumentWorkspacePanelContent>
                     {activePage === 'notes' ? (
-                      <NotePreviewList
-                        notes={notes}
-                        favoritePaths={favoriteNotePaths}
-                        selectedPath={currentNotePath}
-                        filter={searchQuery}
-                        filterMode={noteFilterMode}
-                        sortField={noteSortField}
-                        sortDirection={noteSortDirection}
-                        onOpen={(relPath) => {
-                          setSearchQuery('')
-                          setSearchResults([])
-                          void openNote(relPath)
-                        }}
-                        onDelete={(relPath) => {
-                          void deleteNoteByPath(relPath)
-                        }}
-                      />
+                      notePanelView === 'tree' ? (
+                        <NotesTreeView
+                          tree={noteTree}
+                          searchTerm={searchQuery}
+                          activeNotePath={currentNotePath}
+                          selectedEntry={selectedNoteTreeEntry}
+                          pendingEditId={pendingNoteTreeEditId}
+                          onPendingEditHandled={() => setPendingNoteTreeEditId(null)}
+                          onSelectionChange={setSelectedNoteTreeEntry}
+                          onOpenNote={(relPath) => {
+                            setSearchQuery('')
+                            setSearchResults([])
+                            void openNote(relPath)
+                          }}
+                          onCreateNote={(parentDir) => {
+                            setSelectedNoteTreeEntry(
+                              parentDir ? { kind: 'folder', relPath: parentDir } : null
+                            )
+                            void createNoteFromTree(parentDir)
+                          }}
+                          onCreateFolder={(parentDir) => {
+                            setSelectedNoteTreeEntry(
+                              parentDir ? { kind: 'folder', relPath: parentDir } : null
+                            )
+                            void createFolderFromTree(parentDir)
+                          }}
+                          onRenamePath={(relPath, nextName, kind) => {
+                            void renameTreePath(relPath, nextName, kind)
+                          }}
+                          onDeletePath={(relPath, kind) => {
+                            void deleteTreePath(relPath, kind)
+                          }}
+                          onMovePath={moveTreePath}
+                        />
+                      ) : (
+                        <NotePreviewList
+                          notes={notes}
+                          favoritePaths={favoriteNotePaths}
+                          selectedPath={currentNotePath}
+                          filter={searchQuery}
+                          filterMode={noteFilterMode}
+                          sortField={noteSortField}
+                          sortDirection={noteSortDirection}
+                          onOpen={(relPath) => {
+                            setSearchQuery('')
+                            setSearchResults([])
+                            void openNote(relPath)
+                          }}
+                          onDelete={(relPath) => {
+                            void deleteNoteByPath(relPath)
+                          }}
+                        />
+                      )
                     ) : activePage === 'projects' ? (
                       <ProjectPreviewList
                         projects={projects}
@@ -3816,6 +4219,7 @@ function App(): ReactElement {
         onOpenNote={(relPath) => {
           setSearchQuery('')
           setSearchResults([])
+          setActivePage('notes')
           void openNote(relPath)
         }}
         onOpenProject={(projectId) => {
@@ -3938,6 +4342,34 @@ function formatProjectFilterMode(mode: ProjectFilterMode): string {
 
 function formatProjectSortLabel(field: ProjectSortField, direction: ProjectSortDirection): string {
   return `${field === 'name' ? 'Name' : 'Updated'} ${direction === 'asc' ? '↑' : '↓'}`
+}
+
+function isNestedPath(candidate: string | null, parentPath: string): boolean {
+  if (!candidate) {
+    return false
+  }
+
+  return candidate === parentPath || candidate.startsWith(`${parentPath}/`)
+}
+
+function remapNestedPath(
+  candidate: string | null,
+  fromPath: string,
+  toPath: string
+): string | null {
+  if (!candidate) {
+    return candidate
+  }
+
+  if (candidate === fromPath) {
+    return toPath
+  }
+
+  if (!candidate.startsWith(`${fromPath}/`)) {
+    return candidate
+  }
+
+  return `${toPath}${candidate.slice(fromPath.length)}`
 }
 
 function buildDefaultNoteName(): string {

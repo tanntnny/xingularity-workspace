@@ -1,12 +1,30 @@
-import { useCreateBlockNote } from '@blocknote/react'
-import { filterSuggestionItems } from '@blocknote/core/extensions'
-import { BlockNoteView } from '@blocknote/mantine'
-import { DragEvent, ReactElement, useCallback, useEffect, useRef, useState } from 'react'
-import { DefaultReactSuggestionItem, SuggestionMenuController } from '@blocknote/react'
+import { history, historyKeymap, indentWithTab, defaultKeymap } from '@codemirror/commands'
+import { autocompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete'
+import { EditorSelection, EditorState, type Extension, RangeSetBuilder } from '@codemirror/state'
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  keymap,
+  placeholder,
+  ViewPlugin
+} from '@codemirror/view'
+import { markdown } from '@codemirror/lang-markdown'
+import {
+  DragEvent,
+  ReactElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef
+} from 'react'
 import { NoteListItem } from '../../../shared/types'
 import { mentionTokenFromRelPath, normalizeMentionTarget } from '../../../shared/noteMentions'
 import { extractNoteOutline, NoteOutlineItem } from '../lib/noteOutline'
-import '@blocknote/mantine/style.css'
 
 interface EditorProps {
   value: string
@@ -18,88 +36,325 @@ interface EditorProps {
   currentNotePath?: string
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
+  onOpenMention?: (target: string) => void
 }
 
-function normalizeMarkdown(markdown: string): string {
-  return markdown.replace(/\r\n/g, '\n')
+const HEADING_REGEX = /^(#{1,6})([ \t]+)(.*)$/
+const MENTION_REGEX = /\[\[([^\[\]\n]+?)\]\]/g
+
+function mimeTypeToExtension(mimeType: string): string {
+  switch (mimeType) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return '.jpg'
+    case 'image/png':
+      return '.png'
+    case 'image/gif':
+      return '.gif'
+    case 'image/webp':
+      return '.webp'
+    case 'image/svg+xml':
+      return '.svg'
+    default:
+      return '.png'
+  }
 }
 
-// Helper to convert relative markdown paths to absolute vault-file:// URLs for display
-function convertMarkdownImagesToFileUrls(
-  markdown: string,
+function normalizeMarkdown(markdownValue: string): string {
+  return markdownValue.replace(/\r\n/g, '\n')
+}
+
+function buildRelativeAttachmentPath(
   vaultRootPath: string,
-  currentNotePath: string
-): string {
-  if (!vaultRootPath || !currentNotePath) return markdown
+  currentNotePath: string,
+  absolutePath: string
+): string | null {
+  if (!absolutePath.startsWith(vaultRootPath)) {
+    return null
+  }
 
-  // Match markdown image syntax: ![alt](path)
-  return markdown.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, path) => {
-    // Skip if already a vault-file:// or http:// URL
-    if (
-      path.startsWith('vault-file://') ||
-      path.startsWith('http://') ||
-      path.startsWith('https://')
-    ) {
-      return match
+  const vaultRelative = absolutePath.slice(vaultRootPath.length + 1)
+  const noteDir = currentNotePath.includes('/')
+    ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
+    : ''
+  const prefix = noteDir.length === 0 ? '../' : `${'../'.repeat(noteDir.split('/').length + 1)}`
+
+  return `${prefix}${vaultRelative}`
+}
+
+function insertTextAtSelection(view: EditorView, text: string): void {
+  const { from, to } = view.state.selection.main
+  view.dispatch({
+    changes: { from, to, insert: text },
+    selection: { anchor: from + text.length },
+    scrollIntoView: true
+  })
+}
+
+function getEditingLineNumbers(selection: EditorSelection, doc: EditorState['doc']): Set<number> {
+  const editingLines = new Set<number>()
+
+  for (const range of selection.ranges) {
+    const startLine = doc.lineAt(range.from).number
+    const endLine = doc.lineAt(range.to).number
+
+    for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+      editingLines.add(lineNumber)
     }
+  }
 
-    // Handle relative paths like ../attachments/image.png
-    if (path.startsWith('../')) {
-      // Get the directory of the current note
-      const noteDir = currentNotePath.includes('/')
-        ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
-        : ''
+  return editingLines
+}
 
-      // Resolve the relative path
-      let resolvedPath = path
-      let currentDir = noteDir
+function isLineEditable(
+  lineNumber: number,
+  editingLines: Set<number>,
+  hasFocus: boolean
+): boolean {
+  if (!hasFocus) {
+    return false
+  }
+  return editingLines.has(lineNumber)
+}
 
-      while (resolvedPath.startsWith('../')) {
-        resolvedPath = resolvedPath.slice(3)
-        if (currentDir.includes('/')) {
-          currentDir = currentDir.slice(0, currentDir.lastIndexOf('/'))
-        } else {
-          currentDir = ''
+class MentionWidget extends WidgetType {
+  constructor(
+    private readonly target: string,
+    private readonly onOpenMention?: (target: string) => void
+  ) {
+    super()
+  }
+
+  eq(other: MentionWidget): boolean {
+    return other.target === this.target && other.onOpenMention === this.onOpenMention
+  }
+
+  toDOM(): HTMLElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'cm-note-link-button'
+    button.textContent = this.target
+    button.setAttribute('aria-label', `Open note ${this.target}`)
+    button.addEventListener('mousedown', (event) => event.preventDefault())
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      this.onOpenMention?.(this.target)
+    })
+    return button
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
+function createMarkdownRenderPlugin(
+  getOpenMention: () => ((target: string) => void) | undefined
+): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations
+
+      constructor(view: EditorView) {
+        this.decorations = this.buildDecorations(view)
+      }
+
+      update(update: { view: EditorView; docChanged: boolean; selectionSet: boolean; viewportChanged: boolean }) {
+        if (update.docChanged || update.selectionSet || update.viewportChanged) {
+          this.decorations = this.buildDecorations(update.view)
         }
       }
 
-      const fullPath = currentDir ? `${currentDir}/${resolvedPath}` : resolvedPath
-      const absolutePath = `${vaultRootPath}/${fullPath}`
-      return `![${alt}](vault-file://${absolutePath})`
-    }
+      buildDecorations(view: EditorView) {
+        const builder = new RangeSetBuilder<Decoration>()
+        const editingLines = getEditingLineNumbers(view.state.selection, view.state.doc)
+        const hasFocus = view.hasFocus
+        const onOpenMention = getOpenMention()
 
-    // Handle absolute vault paths
-    const absolutePath = `${vaultRootPath}/${path}`
-    return `![${alt}](vault-file://${absolutePath})`
+        for (let lineNumber = 1; lineNumber <= view.state.doc.lines; lineNumber += 1) {
+          if (isLineEditable(lineNumber, editingLines, hasFocus)) {
+            continue
+          }
+
+          const line = view.state.doc.line(lineNumber)
+          const text = line.text
+          if (!text.trim()) {
+            continue
+          }
+
+          const headingMatch = HEADING_REGEX.exec(text)
+          if (headingMatch) {
+            const markerLength = headingMatch[1].length + headingMatch[2].length
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({ class: `cm-md-heading-line cm-md-heading-${headingMatch[1].length}` })
+            )
+            builder.add(
+              line.from,
+              line.from + markerLength,
+              Decoration.replace({ inclusive: false })
+            )
+            builder.add(
+              line.from + markerLength,
+              line.to,
+              Decoration.mark({ class: 'cm-md-heading-content' })
+            )
+          }
+
+          for (const match of text.matchAll(MENTION_REGEX)) {
+            const fullMatch = match[0]
+            const target = match[1]?.trim()
+            if (!fullMatch || !target) {
+              continue
+            }
+
+            const from = line.from + (match.index ?? 0)
+            builder.add(
+              from,
+              from + fullMatch.length,
+              Decoration.replace({
+                widget: new MentionWidget(target, onOpenMention),
+                inclusive: false
+              })
+            )
+          }
+        }
+
+        return builder.finish()
+      }
+    },
+    {
+      decorations: (value) => value.decorations
+    }
+  )
+}
+
+function createEditorTheme(): Extension {
+  return EditorView.theme({
+    '&': {
+      minHeight: '60vh',
+      height: '100%',
+      backgroundColor: 'var(--panel)',
+      color: 'var(--text)',
+      fontFamily: 'var(--app-font-family)',
+      fontSize: '15px',
+      border: '0',
+      outline: 'none',
+      boxShadow: 'none'
+    },
+    '&.cm-editor': {
+      border: '0',
+      outline: 'none',
+      boxShadow: 'none'
+    },
+    '.cm-scroller': {
+      overflow: 'auto',
+      fontFamily: 'var(--app-font-family)',
+      lineHeight: '1.65'
+    },
+    '.cm-content': {
+      padding: '0.5rem 0.25rem 2rem',
+      minHeight: '60vh',
+      caretColor: 'var(--accent)'
+    },
+    '.cm-focused': {
+      outline: 'none'
+    },
+    '.cm-line': {
+      padding: '0.125rem 0'
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: 'var(--accent)'
+    },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
+      backgroundColor: 'var(--accent-soft)'
+    },
+    '.cm-activeLine': {
+      backgroundColor: 'transparent'
+    },
+    '.cm-placeholder': {
+      color: 'var(--muted)'
+    },
+    '.cm-tooltip': {
+      border: '1px solid var(--line)',
+      backgroundColor: 'var(--panel-2)',
+      color: 'var(--text)'
+    },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': {
+      backgroundColor: 'var(--accent-soft)',
+      color: 'var(--text)'
+    },
+    '.cm-md-heading-line': {
+      paddingTop: '0.1rem',
+      paddingBottom: '0.1rem'
+    },
+    '.cm-md-heading-content': {
+      color: 'var(--text)',
+      fontWeight: '700'
+    },
+    '.cm-md-heading-1 .cm-md-heading-content': {
+      fontSize: '2.25rem',
+      lineHeight: '1.1',
+      letterSpacing: '-0.03em'
+    },
+    '.cm-md-heading-2 .cm-md-heading-content': {
+      fontSize: '1.65rem',
+      lineHeight: '1.2',
+      letterSpacing: '-0.02em'
+    },
+    '.cm-md-heading-3 .cm-md-heading-content': {
+      fontSize: '1.35rem',
+      lineHeight: '1.25'
+    },
+    '.cm-md-heading-4 .cm-md-heading-content': {
+      fontSize: '1.15rem',
+      lineHeight: '1.3'
+    },
+    '.cm-md-heading-5 .cm-md-heading-content, .cm-md-heading-6 .cm-md-heading-content': {
+      fontSize: '1rem',
+      lineHeight: '1.4'
+    },
+    '.cm-note-link-button': {
+      appearance: 'none',
+      background: 'transparent',
+      border: '0',
+      color: 'var(--accent)',
+      cursor: 'pointer',
+      font: 'inherit',
+      padding: '0',
+      textDecoration: 'underline',
+      textUnderlineOffset: '2px'
+    }
   })
 }
 
-// Helper to convert vault-file:// URLs back to relative markdown paths for saving
-function convertFileUrlsToMarkdownPaths(
-  markdown: string,
-  vaultRootPath: string,
-  currentNotePath: string
-): string {
-  if (!vaultRootPath || !currentNotePath) return markdown
+function scheduleEditorPaint(view: EditorView): () => void {
+  let cancelled = false
+  let frameOne = 0
+  let frameTwo = 0
 
-  return markdown.replace(/!\[([^\]]*)\]\(vault-file:\/\/([^)]+)\)/g, (match, alt, filePath) => {
-    // Convert absolute file path back to vault-relative
-    if (filePath.startsWith(vaultRootPath)) {
-      const vaultRelative = filePath.slice(vaultRootPath.length + 1) // +1 for the /
-
-      // Convert to relative path from current note
-      const noteDir = currentNotePath.includes('/')
-        ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
-        : ''
-
-      const depth = noteDir ? noteDir.split('/').length + 1 : 1
-      const prefix = '../'.repeat(depth)
-
-      return `![${alt}](${prefix}${vaultRelative})`
+  const runMeasure = (): void => {
+    if (cancelled) {
+      return
     }
+    view.requestMeasure()
+  }
 
-    return match
+  runMeasure()
+  frameOne = requestAnimationFrame(() => {
+    runMeasure()
+    frameTwo = requestAnimationFrame(() => {
+      runMeasure()
+    })
   })
+
+  return () => {
+    cancelled = true
+    cancelAnimationFrame(frameOne)
+    cancelAnimationFrame(frameTwo)
+  }
 }
 
 export function Editor({
@@ -111,286 +366,286 @@ export function Editor({
   vaultRootPath,
   currentNotePath,
   onOutlineChange,
-  onJumpToHeadingChange
+  onJumpToHeadingChange,
+  onOpenMention
 }: EditorProps): ReactElement {
-  const blockNoteThemeClasses =
-    '[&_.bn-container]:bg-[var(--panel)] [&_.bn-container]:text-[var(--text)] [&_.bn-container]:[font-family:var(--app-font-family)] [&_.bn-editor]:bg-[var(--panel)] [&_.bn-editor]:text-[var(--text)] [&_.bn-block-content]:text-[var(--text)] [&_.bn-side-menu]:border-[var(--line)] [&_.bn-side-menu]:bg-[var(--panel-2)] [&_.bn-side-menu_button]:text-[var(--text)] [&_.bn-side-menu_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar]:border [&_.bn-formatting-toolbar]:border-[var(--line)] [&_.bn-formatting-toolbar]:bg-[var(--panel-2)] [&_.bn-formatting-toolbar]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-formatting-toolbar_button]:text-[var(--text)] [&_.bn-formatting-toolbar_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar_button[data-active="true"]]:bg-[var(--accent-soft)] [&_.bn-formatting-toolbar_button[data-active="true"]]:text-[var(--accent)] [&_.bn-slash-menu]:border [&_.bn-slash-menu]:border-[var(--line)] [&_.bn-slash-menu]:bg-[var(--panel-2)] [&_.bn-slash-menu]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-slash-menu-item]:text-[var(--text)] [&_.bn-slash-menu-item:hover]:bg-[var(--panel-3)] [&_.bn-slash-menu-item[data-active="true"]]:bg-[var(--panel-3)] [&_.bn-drag-handle]:text-[var(--muted)] [&_.bn-drag-handle:hover]:bg-[var(--panel-3)] [&_.bn-link-toolbar]:border [&_.bn-link-toolbar]:border-[var(--line)] [&_.bn-link-toolbar]:bg-[var(--panel-2)] [&_.bn-link-toolbar_input]:border-[var(--line)] [&_.bn-link-toolbar_input]:bg-[var(--panel)] [&_.bn-link-toolbar_input]:text-[var(--text)] [&_.bn-block-content[data-placeholder]::before]:text-[var(--muted)] [&_.bn-editor_h1]:text-[var(--text)] [&_.bn-editor_h2]:text-[var(--text)] [&_.bn-editor_h3]:text-[var(--text)] [&_.bn-editor_a]:text-[var(--accent)] [&_.bn-editor_code]:border [&_.bn-editor_code]:border-[var(--line)] [&_.bn-editor_code]:bg-[var(--panel-3)] [&_.bn-editor_code]:text-[var(--text)] [&_.bn-editor_pre]:border [&_.bn-editor_pre]:border-[var(--line)] [&_.bn-editor_pre]:bg-[var(--panel-3)] [&_.bn-editor_ul]:text-[var(--text)] [&_.bn-editor_ol]:text-[var(--text)] [&_.bn-editor_blockquote]:border-l-[var(--accent-line)] [&_.bn-editor_blockquote]:text-[var(--muted)]'
-
-  const onPasteImageRef = useRef(onPasteImage)
-  useEffect(() => {
-    onPasteImageRef.current = onPasteImage
-  }, [onPasteImage])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const editorViewRef = useRef<EditorView | null>(null)
+  const onChangeRef = useRef(onChange)
   const onOutlineChangeRef = useRef(onOutlineChange)
+  const onPasteImageRef = useRef(onPasteImage)
+  const onDropFileRef = useRef(onDropFile)
+  const onOpenMentionRef = useRef(onOpenMention)
+  const notesRef = useRef(notes)
+  const currentNotePathRef = useRef(currentNotePath)
+  const vaultRootPathRef = useRef(vaultRootPath)
+  const lastSyncedValueRef = useRef('')
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
   useEffect(() => {
     onOutlineChangeRef.current = onOutlineChange
   }, [onOutlineChange])
 
-  const editor = useCreateBlockNote(
-    {
-      uploadFile: async (file: File) => {
-        console.log('BlockNote uploadFile called with:', file.name, file.type)
-        // Convert File to Blob and determine extension
-        const extension = file.name.split('.').pop() || 'png'
-        const imageUrl = await onPasteImageRef.current(file, `.${extension}`)
-        console.log('Image URL returned:', imageUrl)
-
-        // Return the full file path that can be resolved by Electron
-        return imageUrl || ''
-      }
-    },
-    []
-  )
-  const lastSyncedValueRef = useRef('')
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  const editorContainerRef = useRef<HTMLDivElement>(null)
-
-  const syncOutline = useCallback((): void => {
-    onOutlineChangeRef.current?.(extractNoteOutline(editor.document))
-  }, [editor])
-
-  const jumpToHeading = useCallback(
-    (blockId: string): void => {
-      editor.focus()
-      editor.setTextCursorPosition(blockId, 'start')
-
-      requestAnimationFrame(() => {
-        const selector = `[data-id="${CSS.escape(blockId)}"]`
-        const target = editorContainerRef.current?.querySelector<HTMLElement>(selector)
-        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      })
-    },
-    [editor]
-  )
-
-  const duplicateNameCounts = notes.reduce<Record<string, number>>((acc, note) => {
-    const normalizedName = normalizeMentionTarget(note.name)
-    acc[normalizedName] = (acc[normalizedName] ?? 0) + 1
-    return acc
-  }, {})
-
-  const getMentionItems = (query: string): DefaultReactSuggestionItem[] => {
-    const mentionQuery = query.startsWith('[') ? query.slice(1) : query
-    const search = normalizeMentionTarget(mentionQuery)
-    const baseNotes = notes.filter((note) => note.relPath !== currentNotePath)
-
-    const options = baseNotes
-      .filter((note) => {
-        if (!search) {
-          return true
-        }
-        return (
-          normalizeMentionTarget(note.relPath).includes(search) ||
-          normalizeMentionTarget(note.name).includes(search)
-        )
-      })
-      .slice(0, 12)
-
-    const suggestionItems = options.map((note) => {
-      const normalizedName = normalizeMentionTarget(note.name)
-      const hasNameCollision = (duplicateNameCounts[normalizedName] ?? 0) > 1
-      const mentionTarget = hasNameCollision
-        ? note.relPath.replace(/\.md$/i, '')
-        : note.name.replace(/\.md$/i, '')
-      const token = mentionTokenFromRelPath(mentionTarget)
-
-      return {
-        title: token,
-        aliases: [note.relPath, note.name, mentionTarget],
-        subtext: note.relPath,
-        onItemClick: () => {
-          editor.insertInlineContent([token])
-        }
-      } satisfies DefaultReactSuggestionItem
-    })
-
-    return filterSuggestionItems(suggestionItems, search)
-  }
-
-  // Attach paste listener to capture image pastes
   useEffect(() => {
-    const handlePaste = async (event: Event): Promise<void> => {
-      if (!(event instanceof ClipboardEvent)) return
+    onPasteImageRef.current = onPasteImage
+  }, [onPasteImage])
 
-      console.log('[PASTE] Event detected, checking clipboard...')
-      const items = event.clipboardData?.items
-      if (!items) {
-        console.log('[PASTE] No clipboard items')
-        return
-      }
-
-      console.log('[PASTE] Clipboard items count:', items.length)
-
-      // Check if there's an image in the clipboard
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        console.log('[PASTE] Item', i, 'type:', item.type)
-        if (item.type.startsWith('image/')) {
-          console.log('[PASTE] Image found! Preventing default...')
-          event.preventDefault()
-          event.stopPropagation()
-
-          const blob = item.getAsFile()
-          if (!blob) {
-            console.log('[PASTE] Failed to get blob from item')
-            continue
-          }
-
-          console.log('[PASTE] Got blob, size:', blob.size, 'type:', blob.type)
-
-          // Determine file extension based on MIME type
-          const mimeType = item.type
-          let extension = '.png'
-          if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
-            extension = '.jpg'
-          } else if (mimeType === 'image/png') {
-            extension = '.png'
-          } else if (mimeType === 'image/gif') {
-            extension = '.gif'
-          } else if (mimeType === 'image/webp') {
-            extension = '.webp'
-          } else if (mimeType === 'image/svg+xml') {
-            extension = '.svg'
-          }
-
-          console.log('[PASTE] Calling onPasteImage with extension:', extension)
-          // Call the handler to save the image
-          const imageUrl = await onPasteImage(blob, extension)
-          console.log('[PASTE] Got image URL:', imageUrl)
-
-          if (imageUrl) {
-            // Insert image block at cursor position
-            try {
-              const cursorPosition = editor.getTextCursorPosition()
-              console.log('[PASTE] Cursor position:', cursorPosition)
-
-              // Insert an image block
-              editor.insertBlocks(
-                [
-                  {
-                    type: 'image',
-                    props: {
-                      url: imageUrl,
-                      caption: '',
-                      previewWidth: 512
-                    }
-                  }
-                ],
-                cursorPosition.block,
-                'after'
-              )
-              console.log('[PASTE] Image block inserted successfully!')
-            } catch (error) {
-              console.error('[PASTE] Failed to insert image block:', error)
-            }
-          } else {
-            console.error('[PASTE] No image URL returned from handler')
-          }
-
-          break // Only handle the first image
-        }
-      }
-    }
-
-    const container = editorContainerRef.current
-    console.log('[EDITOR] Setting up paste listener, container:', container ? 'found' : 'not found')
-    if (container) {
-      // Use capture phase to intercept before BlockNote
-      container.addEventListener('paste', handlePaste, { capture: true })
-      return () => {
-        console.log('[EDITOR] Removing paste listener')
-        container.removeEventListener('paste', handlePaste, { capture: true })
-      }
-    }
-    return undefined
-  }, [editor, onPasteImage])
-
-  // Detect system theme
   useEffect(() => {
-    const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    setTheme(darkModeQuery.matches ? 'dark' : 'light')
+    onDropFileRef.current = onDropFile
+  }, [onDropFile])
 
-    const listener = (e: MediaQueryListEvent): void => {
-      setTheme(e.matches ? 'dark' : 'light')
-    }
+  useEffect(() => {
+    onOpenMentionRef.current = onOpenMention
+  }, [onOpenMention])
 
-    darkModeQuery.addEventListener('change', listener)
-    return () => darkModeQuery.removeEventListener('change', listener)
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
+
+  useEffect(() => {
+    currentNotePathRef.current = currentNotePath
+  }, [currentNotePath])
+
+  useEffect(() => {
+    vaultRootPathRef.current = vaultRootPath
+  }, [vaultRootPath])
+
+  const syncOutline = useCallback((markdownValue: string): void => {
+    onOutlineChangeRef.current?.(extractNoteOutline(markdownValue))
   }, [])
 
-  useEffect(() => {
-    if (normalizeMarkdown(value) === normalizeMarkdown(lastSyncedValueRef.current)) {
+  const mentionCompletions = useMemo(
+    () =>
+      (context: CompletionContext) => {
+        const match = context.matchBefore(/\[\[[^[\]\n]*$/)
+        if (!match) {
+          return null
+        }
+
+        if (match.from === match.to && !context.explicit) {
+          return null
+        }
+
+        const mentionQuery = context.state.sliceDoc(match.from + 2, match.to)
+        const search = normalizeMentionTarget(mentionQuery)
+        const activeNotePath = currentNotePathRef.current
+        const availableNotes = notesRef.current.filter((note) => note.relPath !== activeNotePath)
+        const duplicateNameCounts = availableNotes.reduce<Record<string, number>>((acc, note) => {
+          const normalizedName = normalizeMentionTarget(note.name)
+          acc[normalizedName] = (acc[normalizedName] ?? 0) + 1
+          return acc
+        }, {})
+
+        const options: Completion[] = availableNotes
+          .filter((note) => {
+            if (!search) {
+              return true
+            }
+
+            return (
+              normalizeMentionTarget(note.relPath).includes(search) ||
+              normalizeMentionTarget(note.name).includes(search)
+            )
+          })
+          .slice(0, 12)
+          .map((note) => {
+            const normalizedName = normalizeMentionTarget(note.name)
+            const hasNameCollision = (duplicateNameCounts[normalizedName] ?? 0) > 1
+            const mentionTarget = hasNameCollision
+              ? note.relPath.replace(/\.md$/i, '')
+              : note.name.replace(/\.md$/i, '')
+
+            return {
+              label: mentionTarget,
+              displayLabel: mentionTokenFromRelPath(mentionTarget),
+              detail: note.relPath,
+              type: 'variable',
+              apply: mentionTokenFromRelPath(mentionTarget)
+            } satisfies Completion
+          })
+
+        return {
+          from: match.from,
+          options,
+          validFor: /\[\[[^[\]\n]*$/
+        }
+      },
+    []
+  )
+
+  const jumpToHeading = useCallback((lineId: string): void => {
+    const view = editorViewRef.current
+    if (!view) {
       return
     }
 
-    // Convert relative markdown image paths to file:// URLs for display
-    const displayValue =
-      vaultRootPath && currentNotePath
-        ? convertMarkdownImagesToFileUrls(value, vaultRootPath, currentNotePath)
-        : value
-
-    const currentEditorValue = editor.blocksToMarkdownLossy(editor.document)
-    if (normalizeMarkdown(currentEditorValue) === normalizeMarkdown(displayValue)) {
-      lastSyncedValueRef.current = value
+    const lineNumber = Number.parseInt(lineId, 10)
+    if (Number.isNaN(lineNumber) || lineNumber < 1 || lineNumber > view.state.doc.lines) {
       return
     }
 
-    const blocks = editor.tryParseMarkdownToBlocks(displayValue)
-    editor.replaceBlocks(editor.document, blocks.length > 0 ? blocks : [{ type: 'paragraph' }])
+    const line = view.state.doc.line(lineNumber)
+    view.dispatch({
+      selection: { anchor: line.from },
+      scrollIntoView: true
+    })
+    view.focus()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!containerRef.current || editorViewRef.current) {
+      return
+    }
+
+    const editorTheme = createEditorTheme()
+    const renderPlugin = createMarkdownRenderPlugin(() => onOpenMentionRef.current)
+
+    const state = EditorState.create({
+      doc: value,
+      extensions: [
+        editorTheme,
+        markdown(),
+        history(),
+        drawSelection(),
+        dropCursor(),
+        highlightActiveLine(),
+        EditorView.lineWrapping,
+        placeholder('Write markdown...'),
+        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        autocompletion({
+          override: [mentionCompletions],
+          defaultKeymap: true,
+          activateOnTyping: true
+        }),
+        renderPlugin,
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged) {
+            return
+          }
+
+          const nextValue = update.state.doc.toString()
+          lastSyncedValueRef.current = nextValue
+          syncOutline(nextValue)
+          onChangeRef.current(nextValue)
+        }),
+        EditorView.domEventHandlers({
+          paste: (event, view) => {
+            const items = event.clipboardData?.items
+            if (!items) {
+              return false
+            }
+
+            for (let index = 0; index < items.length; index += 1) {
+              const item = items[index]
+              if (!item.type.startsWith('image/')) {
+                continue
+              }
+
+              const blob = item.getAsFile()
+              if (!blob) {
+                return false
+              }
+
+              event.preventDefault()
+              void (async () => {
+                const extension = mimeTypeToExtension(item.type)
+                const fileUrl = await onPasteImageRef.current(blob, extension)
+                if (!fileUrl) {
+                  return
+                }
+
+                const absolutePath = fileUrl.startsWith('vault-file://')
+                  ? fileUrl.slice('vault-file://'.length)
+                  : fileUrl
+                const nextCurrentNotePath = currentNotePathRef.current
+                const nextVaultRootPath = vaultRootPathRef.current
+                const relativePath =
+                  nextCurrentNotePath && nextVaultRootPath
+                    ? buildRelativeAttachmentPath(nextVaultRootPath, nextCurrentNotePath, absolutePath)
+                    : null
+
+                insertTextAtSelection(view, `![](${relativePath ?? fileUrl})`)
+              })()
+
+              return true
+            }
+
+            return false
+          },
+          drop: (event) => {
+            const file = event.dataTransfer?.files?.[0] as (File & { path?: string }) | undefined
+            if (!file?.path) {
+              return false
+            }
+
+            event.preventDefault()
+            void onDropFileRef.current(file.path)
+            return true
+          }
+        })
+      ]
+    })
+
+    const view = new EditorView({
+      state,
+      parent: containerRef.current
+    })
+
+    editorViewRef.current = view
     lastSyncedValueRef.current = value
-    syncOutline()
-  }, [editor, value, vaultRootPath, currentNotePath])
+    syncOutline(value)
+    const cancelScheduledPaint = scheduleEditorPaint(view)
 
-  useEffect(() => {
-    syncOutline()
-  }, [editor])
+    return () => {
+      cancelScheduledPaint()
+      editorViewRef.current = null
+      view.destroy()
+    }
+  }, [currentNotePath, mentionCompletions, syncOutline])
 
-  useEffect(() => {
-    if (!onJumpToHeadingChange) {
+  useLayoutEffect(() => {
+    const view = editorViewRef.current
+    if (!view) {
       return
     }
-    onJumpToHeadingChange(jumpToHeading)
-    return () => onJumpToHeadingChange(null)
+
+    if (normalizeMarkdown(lastSyncedValueRef.current) === normalizeMarkdown(value)) {
+      return
+    }
+
+    const currentValue = view.state.doc.toString()
+    if (normalizeMarkdown(currentValue) === normalizeMarkdown(value)) {
+      lastSyncedValueRef.current = value
+      syncOutline(value)
+      return
+    }
+
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value }
+    })
+    lastSyncedValueRef.current = value
+    syncOutline(value)
+    return scheduleEditorPaint(view)
+  }, [syncOutline, value])
+
+  useEffect(() => {
+    onJumpToHeadingChange?.(jumpToHeading)
+    return () => onJumpToHeadingChange?.(null)
   }, [jumpToHeading, onJumpToHeadingChange])
 
-  const onDrop = async (event: DragEvent<HTMLDivElement>): Promise<void> => {
+  const onDragOver = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault()
-    const file = event.dataTransfer.files?.[0] as File & { path?: string }
-    if (file?.path) {
-      await onDropFile(file.path)
-    }
   }
 
   return (
     <div
-      ref={editorContainerRef}
-      className={`min-h-[60vh] bg-[var(--panel)] p-2 ${blockNoteThemeClasses}`}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        void onDrop(event)
-      }}
+      className="note-editor-shell min-h-[60vh] rounded-lg bg-[var(--panel)]"
+      onDragOver={onDragOver}
     >
-      <BlockNoteView
-        editor={editor}
-        theme={theme}
-        onChange={() => {
-          const next = editor.blocksToMarkdownLossy(editor.document)
-
-          // Convert file:// URLs back to relative markdown paths for saving
-          const savedValue =
-            vaultRootPath && currentNotePath
-              ? convertFileUrlsToMarkdownPaths(next, vaultRootPath, currentNotePath)
-              : next
-
-          lastSyncedValueRef.current = savedValue
-          syncOutline()
-          onChange(savedValue)
-        }}
-      >
-        <SuggestionMenuController
-          triggerCharacter="["
-          getItems={async (query) => getMentionItems(query)}
-        />
-      </BlockNoteView>
+      <div ref={containerRef} />
     </div>
   )
 }

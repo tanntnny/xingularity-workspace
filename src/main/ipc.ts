@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '../shared/ipc'
 import { VaultRuntime } from './runtime'
 
 const notePathSchema = z.string().min(1).max(512)
+const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
 const projectNameSchema = z.string().min(1).max(200)
 const contentSchema = z.string().max(2_000_000)
@@ -255,6 +256,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.listNotes()
   })
 
+  ipcMain.handle(IPC_CHANNELS.listNoteTree, async () => {
+    return runtime.listNoteTree()
+  })
+
   ipcMain.handle(IPC_CHANNELS.readNote, async (_event, relPath: unknown) => {
     return runtime.readNote(notePathSchema.parse(relPath))
   })
@@ -267,8 +272,16 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.createNote(noteNameSchema.parse(name))
   })
 
+  ipcMain.handle(IPC_CHANNELS.createNoteAtPath, async (_event, relPath: unknown) => {
+    return runtime.createNoteAtPath(notePathSchema.parse(relPath))
+  })
+
   ipcMain.handle(IPC_CHANNELS.createNoteWithTags, async (_event, name: unknown, tags: unknown) => {
     return runtime.createNoteWithTags(noteNameSchema.parse(name), tagsArraySchema.parse(tags))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.createFolder, async (_event, relPath: unknown) => {
+    return runtime.createFolder(genericPathSchema.parse(relPath))
   })
 
   ipcMain.handle(IPC_CHANNELS.importNotes, async () => {
@@ -282,8 +295,19 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
   )
 
+  ipcMain.handle(IPC_CHANNELS.renamePath, async (_event, oldRelPath: unknown, newRelPath: unknown) => {
+    await runtime.renamePath(
+      genericPathSchema.parse(oldRelPath),
+      genericPathSchema.parse(newRelPath)
+    )
+  })
+
   ipcMain.handle(IPC_CHANNELS.deleteNote, async (_event, relPath: unknown) => {
     await runtime.deleteNote(notePathSchema.parse(relPath))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.deletePath, async (_event, relPath: unknown) => {
+    await runtime.deletePath(genericPathSchema.parse(relPath))
   })
 
   ipcMain.handle(IPC_CHANNELS.exportNote, async (_event, relPath: unknown, content: unknown) => {

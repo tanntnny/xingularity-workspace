@@ -111,9 +111,14 @@ export class VaultRuntime {
     }
   }
 
-  async listNotes() {
+  async listNotes(): ReturnType<FileService['listNotes']> {
     this.assertReady()
     return this.fileService!.listNotes()
+  }
+
+  async listNoteTree(): ReturnType<FileService['listTree']> {
+    this.assertReady()
+    return this.fileService!.listTree()
   }
 
   async readNote(relPath: string): Promise<string> {
@@ -146,6 +151,19 @@ export class VaultRuntime {
     return relPath
   }
 
+  async createNoteAtPath(relPath: string): Promise<string> {
+    this.assertReady()
+    const nextRelPath = await this.fileService!.createNoteAtPath(relPath)
+    const content = await this.fileService!.readNote(nextRelPath)
+    await this.indexer!.upsertFromRaw({
+      id: createStableId(nextRelPath),
+      relPath: nextRelPath,
+      content,
+      updatedAt: new Date().toISOString()
+    })
+    return nextRelPath
+  }
+
   async createNoteWithTags(name: string, tags: string[]): Promise<string> {
     this.assertReady()
     const relPath = await this.fileService!.createNoteWithTags(name, tags)
@@ -157,6 +175,13 @@ export class VaultRuntime {
       updatedAt: new Date().toISOString()
     })
     return relPath
+  }
+
+  async createFolder(relPath: string): Promise<string> {
+    this.assertReady()
+    const nextRelPath = await this.fileService!.createFolder(relPath)
+    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    return nextRelPath
   }
 
   async importNotes(): Promise<NoteImportResult> {
@@ -209,10 +234,22 @@ export class VaultRuntime {
     })
   }
 
+  async renamePath(oldPath: string, newPath: string): Promise<void> {
+    this.assertReady()
+    await this.fileService!.renamePath(oldPath, newPath)
+    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+  }
+
   async deleteNote(relPath: string): Promise<void> {
     this.assertReady()
     await this.fileService!.delete(relPath)
     await this.indexer!.deleteByRelPath(sanitizeNotePath(relPath))
+  }
+
+  async deletePath(relPath: string): Promise<void> {
+    this.assertReady()
+    await this.fileService!.deletePath(relPath)
+    await this.indexer!.rebuild(this.currentPaths!.notesPath)
   }
 
   async exportNote(relPath: string, content: string): Promise<string | null> {

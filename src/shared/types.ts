@@ -43,6 +43,24 @@ export interface NoteListItem {
   tags: string[]
 }
 
+interface NoteTreeEntryBase {
+  id: string
+  relPath: string
+  name: string
+}
+
+export interface NoteTreeFolder extends NoteTreeEntryBase {
+  kind: 'folder'
+  children: NoteTreeNode[]
+}
+
+export interface NoteTreeFile extends NoteTreeEntryBase {
+  kind: 'note'
+  note: NoteListItem
+}
+
+export type NoteTreeNode = NoteTreeFolder | NoteTreeFile
+
 export interface SearchResult {
   id: string
   relPath: string
@@ -578,13 +596,18 @@ export interface RendererVaultApi {
   }
   files: {
     listNotes: () => Promise<NoteListItem[]>
+    listTree: () => Promise<NoteTreeNode[]>
     readNote: (relPath: string) => Promise<string>
     writeNote: (relPath: string, content: string) => Promise<void>
     createNote: (name: string) => Promise<string>
+    createNoteAtPath: (relPath: string) => Promise<string>
     createNoteWithTags: (name: string, tags: string[]) => Promise<string>
+    createFolder: (relPath: string) => Promise<string>
     importNotes: () => Promise<NoteImportResult>
     rename: (fromRelPath: string, toRelPath: string) => Promise<void>
+    renamePath: (fromRelPath: string, toRelPath: string) => Promise<void>
     delete: (relPath: string) => Promise<void>
+    deletePath: (relPath: string) => Promise<void>
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }

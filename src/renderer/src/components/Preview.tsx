@@ -33,7 +33,12 @@ export function Preview({ markdown, onOpenMention }: PreviewProps): ReactElement
             }
 
             return (
-              <a href={href} target="_blank" rel="noreferrer">
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-700"
+              >
                 {children}
               </a>
             )

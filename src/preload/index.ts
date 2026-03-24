@@ -24,15 +24,21 @@ const api: RendererVaultApi = {
   },
   files: {
     listNotes: () => ipcRenderer.invoke(IPC_CHANNELS.listNotes),
+    listTree: () => ipcRenderer.invoke(IPC_CHANNELS.listNoteTree),
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
     writeNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.writeNote, relPath, content),
     createNote: (name) => ipcRenderer.invoke(IPC_CHANNELS.createNote, name),
+    createNoteAtPath: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createNoteAtPath, relPath),
     createNoteWithTags: (name, tags) =>
       ipcRenderer.invoke(IPC_CHANNELS.createNoteWithTags, name, tags),
+    createFolder: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createFolder, relPath),
     importNotes: () => ipcRenderer.invoke(IPC_CHANNELS.importNotes),
     rename: (fromRelPath, toRelPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.renameNote, fromRelPath, toRelPath),
+    renamePath: (fromRelPath, toRelPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.renamePath, fromRelPath, toRelPath),
     delete: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deleteNote, relPath),
+    deletePath: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deletePath, relPath),
     exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content),
     exportProject: (projectName, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
@@ -55,7 +61,7 @@ const api: RendererVaultApi = {
     deleteSession: (sessionId) =>
       ipcRenderer.invoke(IPC_CHANNELS.agentChatDeleteSession, sessionId),
     approveTool: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentChatApproveTool, input),
-    onEvent: (listener) => {
+    onEvent: (listener): (() => void) => {
       const wrapped = (_event: Electron.IpcRendererEvent, payload: AgentChatEvent) =>
         listener(payload)
       ipcRenderer.on(IPC_CHANNELS.agentChatEvent, wrapped)

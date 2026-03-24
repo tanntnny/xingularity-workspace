@@ -20,3 +20,15 @@ export function mentionsToMarkdownLinks(markdown: string): string {
     return `[${target}](${href})`
   })
 }
+
+export function markdownLinksToMentions(markdown: string): string {
+  const mentionLinkRegex = new RegExp(
+    `\\[([^\\]]+?)\\]\\(${NOTE_MENTION_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\)]+)\\)`,
+    'g'
+  )
+
+  return markdown.replace(mentionLinkRegex, (_match, _label: string, rawTarget: string) => {
+    const target = decodeURIComponent(rawTarget).trim()
+    return `[[${target}]]`
+  })
+}

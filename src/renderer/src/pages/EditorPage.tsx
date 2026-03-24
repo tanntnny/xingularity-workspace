@@ -65,8 +65,8 @@ export function EditorPage({
             value={currentName}
             onCommit={onRename}
             displayAs="h1"
-            displayClassName="m-0 min-w-0 cursor-text truncate text-4xl font-bold text-[var(--text)] hover:text-[var(--accent)]"
-            inputClassName="m-0 min-w-0 flex-1 border-0 bg-transparent text-4xl font-bold text-[var(--text)] outline-none"
+            displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-4xl font-bold text-[var(--text)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-[var(--accent)]"
+            inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-[var(--text)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
             title="Click to rename"
           />
         </div>
@@ -118,6 +118,7 @@ export function EditorPage({
           <Preview markdown={content} onOpenMention={onOpenMention} />
         ) : (
           <Editor
+            key={notePath}
             value={content}
             onChange={onChange}
             onDropFile={onDropFile}
@@ -127,6 +128,7 @@ export function EditorPage({
             currentNotePath={notePath}
             onOutlineChange={onOutlineChange}
             onJumpToHeadingChange={onJumpToHeadingChange}
+            onOpenMention={onOpenMention}
           />
         )}
       </div>

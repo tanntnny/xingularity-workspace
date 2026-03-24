@@ -1,5 +1,4 @@
 import './assets/main.css'
-import '@blocknote/core/style.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

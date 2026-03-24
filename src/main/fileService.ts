@@ -2,10 +2,11 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { listPreviewTagsFromMarkdown, upsertTagsInMarkdown } from '../shared/noteTags'
-import { joinSafe, normalizeRelativePath } from '../shared/pathSafety'
-import { ImportedNoteResult, NoteListItem } from '../shared/types'
+import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shared/pathSafety'
+import { ImportedNoteResult, NoteListItem, NoteTreeFile, NoteTreeFolder, NoteTreeNode } from '../shared/types'
 
 const notePathSchema = z.string().min(1).max(512)
+const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
 
 type InternalWriteCallback = (relPath: string) => void
@@ -19,21 +20,11 @@ export class FileService {
 
   async listNotes(): Promise<NoteListItem[]> {
     const notes = await listMarkdownNotePaths(this.notesRoot)
-    return Promise.all(
-      notes.map(async (absolutePath) => {
-        const stats = await fs.stat(absolutePath)
-        const content = await fs.readFile(absolutePath, 'utf-8')
-        const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
-        return {
-          relPath,
-          name: path.basename(relPath),
-          dir: path.dirname(relPath) === '.' ? '' : path.dirname(relPath),
-          createdAt: stats.birthtime.toISOString(),
-          updatedAt: stats.mtime.toISOString(),
-          tags: listPreviewTagsFromMarkdown(content)
-        }
-      })
-    )
+    return Promise.all(notes.map((absolutePath) => this.readNoteListItem(absolutePath)))
+  }
+
+  async listTree(): Promise<NoteTreeNode[]> {
+    return listTreeNodes(this.notesRoot, this.notesRoot)
   }
 
   async readNote(relPathInput: string): Promise<string> {
@@ -53,8 +44,14 @@ export class FileService {
   async createNote(nameInput: string): Promise<string> {
     const sanitizedName = sanitizeNoteName(nameInput)
     const relPath = `${sanitizedName}.md`
+    return this.createNoteAtPath(relPath)
+  }
+
+  async createNoteAtPath(relPathInput: string): Promise<string> {
+    const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     const initial = ''
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
     await fs.writeFile(absolutePath, initial, { flag: 'wx' })
     this.onInternalWrite(relPath)
     return relPath
@@ -67,6 +64,13 @@ export class FileService {
     const initial = upsertTagsInMarkdown('', tags)
     await fs.writeFile(absolutePath, initial, { flag: 'wx' })
     this.onInternalWrite(relPath)
+    return relPath
+  }
+
+  async createFolder(relPathInput: string): Promise<string> {
+    const relPath = sanitizeEntryPath(relPathInput)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    await fs.mkdir(absolutePath, { recursive: false })
     return relPath
   }
 
@@ -97,8 +101,16 @@ export class FileService {
   async rename(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
     const oldRelPath = sanitizeNotePath(oldRelPathInput)
     const newRelPath = sanitizeNotePath(newRelPathInput)
+    await this.renamePath(oldRelPath, newRelPath)
+  }
+
+  async renamePath(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
+    const oldRelPath = sanitizeEntryPath(oldRelPathInput)
+    const newRelPath = sanitizeEntryPath(newRelPathInput)
     const from = joinSafe(this.notesRoot, oldRelPath)
     const to = joinSafe(this.notesRoot, newRelPath)
+    const fromStats = await fs.stat(from)
+    assertMoveTargetIsValid(oldRelPath, newRelPath, fromStats.isDirectory())
     await fs.mkdir(path.dirname(to), { recursive: true })
     await fs.rename(from, to)
     this.onInternalWrite(oldRelPath)
@@ -107,8 +119,18 @@ export class FileService {
 
   async delete(relPathInput: string): Promise<void> {
     const relPath = sanitizeNotePath(relPathInput)
+    await this.deletePath(relPath)
+  }
+
+  async deletePath(relPathInput: string): Promise<void> {
+    const relPath = sanitizeEntryPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
-    await fs.rm(absolutePath)
+    const stats = await fs.stat(absolutePath)
+    if (stats.isDirectory()) {
+      await fs.rm(absolutePath, { recursive: true })
+    } else {
+      await fs.rm(absolutePath)
+    }
     this.onInternalWrite(relPath)
   }
 
@@ -179,15 +201,34 @@ export class FileService {
       renamed: relPath !== `${sanitizedName || 'imported-note'}.md`
     }
   }
+
+  private async readNoteListItem(absolutePath: string): Promise<NoteListItem> {
+    const stats = await fs.stat(absolutePath)
+    const content = await fs.readFile(absolutePath, 'utf-8')
+    const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+    return {
+      relPath,
+      name: path.basename(relPath),
+      dir: path.dirname(relPath) === '.' ? '' : path.dirname(relPath),
+      createdAt: stats.birthtime.toISOString(),
+      updatedAt: stats.mtime.toISOString(),
+      tags: listPreviewTagsFromMarkdown(content)
+    }
+  }
 }
 
 export function sanitizeNotePath(input: string): string {
   const parsed = notePathSchema.parse(input)
-  const normalized = normalizeRelativePath(parsed)
+  const normalized = sanitizeEntryPath(parsed)
   if (!normalized.toLowerCase().endsWith('.md')) {
     throw new Error('Only markdown notes are supported')
   }
   return normalized
+}
+
+export function sanitizeEntryPath(input: string): string {
+  const parsed = genericPathSchema.parse(input)
+  return assertSafeRelativePath(parsed)
 }
 
 function sanitizeNoteName(input: string): string {
@@ -214,6 +255,75 @@ async function listMarkdownNotePaths(root: string): Promise<string[]> {
     }
   }
   return results.sort((a, b) => a.localeCompare(b))
+}
+
+async function listTreeNodes(root: string, currentDir: string): Promise<NoteTreeNode[]> {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true })
+  const folders: NoteTreeFolder[] = []
+  const notes: NoteTreeFile[] = []
+
+  for (const entry of entries) {
+    const absolutePath = path.join(currentDir, entry.name)
+    const relPath = normalizeRelativePath(path.relative(root, absolutePath))
+
+    if (entry.isDirectory()) {
+      folders.push({
+        id: `folder:${relPath}`,
+        kind: 'folder',
+        relPath,
+        name: entry.name,
+        children: await listTreeNodes(root, absolutePath)
+      })
+      continue
+    }
+
+    if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      const note = await readNoteTreeFile(root, absolutePath)
+      notes.push({
+        id: `note:${note.relPath}`,
+        kind: 'note',
+        relPath: note.relPath,
+        name: note.name,
+        note
+      })
+    }
+  }
+
+  folders.sort((left, right) => left.name.localeCompare(right.name))
+  notes.sort((left, right) => left.name.localeCompare(right.name))
+  return [...folders, ...notes]
+}
+
+async function readNoteTreeFile(root: string, absolutePath: string): Promise<NoteListItem> {
+  const stats = await fs.stat(absolutePath)
+  const content = await fs.readFile(absolutePath, 'utf-8')
+  const relPath = normalizeRelativePath(path.relative(root, absolutePath))
+  return {
+    relPath,
+    name: path.basename(relPath),
+    dir: path.dirname(relPath) === '.' ? '' : path.dirname(relPath),
+    createdAt: stats.birthtime.toISOString(),
+    updatedAt: stats.mtime.toISOString(),
+    tags: listPreviewTagsFromMarkdown(content)
+  }
+}
+
+function assertMoveTargetIsValid(
+  oldRelPath: string,
+  newRelPath: string,
+  isDirectory: boolean
+): void {
+  if (oldRelPath === newRelPath) {
+    throw new Error('Source and destination paths must be different')
+  }
+
+  if (!isDirectory) {
+    return
+  }
+
+  if (newRelPath === oldRelPath || newRelPath.startsWith(`${oldRelPath}/`)) {
+    throw new Error('Cannot move a folder into itself or one of its descendants')
+  }
 }
 
 async function fileExists(absolutePath: string): Promise<boolean> {
