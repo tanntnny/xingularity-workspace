@@ -99,3 +99,45 @@ export function extractNoteOutline<T extends OutlineBlock>(blocks: T[]): NoteOut
   visit(blocks)
   return outline
 }
+
+function stripMarkdownHeadingDecorators(label: string): string {
+  return label
+    .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+    .replace(/[*_~`]/g, '')
+    .trim()
+}
+
+export function extractNoteOutlineFromMarkdown(markdown: string): NoteOutlineItem[] {
+  const outline: NoteOutlineItem[] = []
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  let inCodeFence = false
+
+  lines.forEach((line, index) => {
+    if (/^\s*```/.test(line)) {
+      inCodeFence = !inCodeFence
+      return
+    }
+
+    if (inCodeFence) {
+      return
+    }
+
+    const match = /^(#{1,6})\s+(.*\S.*)\s*$/.exec(line)
+    if (!match) {
+      return
+    }
+
+    const label = stripMarkdownHeadingDecorators(match[2])
+    if (!label) {
+      return
+    }
+
+    outline.push({
+      id: `heading-line-${index + 1}`,
+      label,
+      level: match[1].length
+    })
+  })
+
+  return outline
+}

@@ -48,6 +48,7 @@ export function NotesTreeView({
   onMovePath
 }: NotesTreeViewProps): ReactElement {
   const treeRef = useRef<TreeApi<NoteTreeNode> | null>(null)
+  const lastSyncedSelectionIdRef = useRef<string | undefined>(undefined)
   const { ref: containerRef, height } = useElementSize()
 
   const currentSelectionId = selectedEntry
@@ -59,6 +60,7 @@ export function NotesTreeView({
   useEffect(() => {
     const selectedId = currentSelectionId
     if (!selectedId) {
+      lastSyncedSelectionIdRef.current = undefined
       return
     }
 
@@ -67,10 +69,15 @@ export function NotesTreeView({
       return
     }
 
+    if (lastSyncedSelectionIdRef.current === selectedId) {
+      return
+    }
+
     instance.openParents(selectedId)
     instance.select(selectedId)
     instance.scrollTo(selectedId, 'smart')
-  }, [currentSelectionId, tree])
+    lastSyncedSelectionIdRef.current = selectedId
+  }, [currentSelectionId])
 
   useEffect(() => {
     if (!pendingEditId) {

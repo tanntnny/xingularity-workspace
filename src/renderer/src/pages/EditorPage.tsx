@@ -1,46 +1,48 @@
-import { ReactElement, useState } from 'react'
+import { ReactElement, RefObject, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { NoteListItem } from '../../../shared/types'
-import { Editor } from '../components/Editor'
+import { Editor, type NoteEditorHandle } from '../components/Editor'
+import type { NoteEditorBlock } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
-import { Preview } from '../components/Preview'
 import { TagChip } from '../components/TagChip'
 import type { NoteOutlineItem } from '../lib/noteOutline'
 
 interface EditorPageProps {
+  editorRef?: RefObject<NoteEditorHandle | null>
+  editorSessionKey: number
+  initialBlocks?: NoteEditorBlock[] | null
   notePath: string
   content: string
   tags: string[]
   notes: NoteListItem[]
-  onChange: (next: string) => void
+  onDirty: () => void
   onDropFile: (sourcePath: string) => Promise<void>
   onPasteImage: (imageBlob: Blob, fileExtension: string) => Promise<string | null>
-  onAddTag: (rawTag: string) => void
-  onRemoveTag: (tag: string) => void
+  onAddTag: (rawTag: string) => Promise<void> | void
+  onRemoveTag: (tag: string) => Promise<void> | void
   onFindByTag: (tag: string) => void
   onRename: (newName: string) => Promise<void>
-  onOpenMention?: (target: string) => void
   vaultRootPath?: string
-  isPreviewMode?: boolean
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
 
 export function EditorPage({
+  editorRef,
+  editorSessionKey,
+  initialBlocks,
   notePath,
   content,
   tags,
   notes,
-  onChange,
+  onDirty,
   onDropFile,
   onPasteImage,
   onAddTag,
   onRemoveTag,
   onFindByTag,
   onRename,
-  onOpenMention,
   vaultRootPath,
-  isPreviewMode = false,
   onOutlineChange,
   onJumpToHeadingChange
 }: EditorPageProps): ReactElement {
@@ -51,7 +53,7 @@ export function EditorPage({
 
   const handleAddTag = (): void => {
     if (newTagValue.trim()) {
-      onAddTag(newTagValue.trim())
+      void onAddTag(newTagValue.trim())
       setNewTagValue('')
       setIsAddingTag(false)
     }
@@ -72,7 +74,14 @@ export function EditorPage({
         </div>
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-5">
           {tags.map((tag) => (
-            <TagChip key={tag} tag={tag} onClick={onFindByTag} onRemove={onRemoveTag} />
+            <TagChip
+              key={tag}
+              tag={tag}
+              onClick={onFindByTag}
+              onRemove={(nextTag) => {
+                void onRemoveTag(nextTag)
+              }}
+            />
           ))}
           {isAddingTag ? (
             <div className="inline-flex items-center gap-1.5">
@@ -114,22 +123,20 @@ export function EditorPage({
         </div>
       </div>
       <div className="relative px-8 pb-8">
-        {isPreviewMode ? (
-          <Preview markdown={content} onOpenMention={onOpenMention} />
-        ) : (
-          <Editor
-            key={notePath}
-            value={content}
-            onChange={onChange}
-            onDropFile={onDropFile}
-            onPasteImage={onPasteImage}
-            notes={notes}
-            vaultRootPath={vaultRootPath}
-            currentNotePath={notePath}
-            onOutlineChange={onOutlineChange}
-            onJumpToHeadingChange={onJumpToHeadingChange}
-          />
-        )}
+        <Editor
+          ref={editorRef}
+          key={`${notePath}:${editorSessionKey}`}
+          initialBlocks={initialBlocks}
+          value={content}
+          onDirty={onDirty}
+          onDropFile={onDropFile}
+          onPasteImage={onPasteImage}
+          notes={notes}
+          vaultRootPath={vaultRootPath}
+          currentNotePath={notePath}
+          onOutlineChange={onOutlineChange}
+          onJumpToHeadingChange={onJumpToHeadingChange}
+        />
       </div>
     </div>
   )

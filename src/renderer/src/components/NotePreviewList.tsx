@@ -234,6 +234,7 @@ function NoteSection({
           const noteButton = (
             <button
               type="button"
+              data-testid={`note-preview:${note.relPath}`}
               className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                 isSelected
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'

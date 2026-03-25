@@ -1,7 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Pencil,
-  Eye,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -42,7 +40,6 @@ import {
   PROJECT_ICON_VARIANTS
 } from '../../shared/projectIcons'
 import { replaceNoteBody, splitNoteContent } from '../../shared/noteContent'
-import { normalizeMentionTarget } from '../../shared/noteMentions'
 import {
   listTagsFromMarkdown,
   normalizeTag,
@@ -60,6 +57,7 @@ import {
   type NoteSortField
 } from './components/NotePreviewList'
 import { NotesTreeView } from './components/NotesTreeView'
+import type { NoteEditorHandle } from './components/Editor'
 import {
   ProjectPreviewList,
   type ProjectFilterMode,
@@ -115,6 +113,13 @@ import {
 } from './components/ui/breadcrumb'
 import { normalizeCalendarTasks } from './lib/calendarTasks'
 import {
+  cloneNoteEditorBlocks,
+  type NoteEditorBlock,
+  type NoteEditorSnapshot,
+  type NoteEditorSessionSnapshot
+} from './lib/noteEditorSession'
+import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
+import {
   computeProjectProgress,
   deriveMilestoneStatus,
   getProjectHealthSummary,
@@ -138,6 +143,27 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings',
   schedules: 'Schedules',
   agentHistory: 'Agent Chat'
+}
+
+if (typeof window !== 'undefined') {
+  ;(window as Window & {
+    __XINGULARITY_E2E__?: {
+      getCurrentNoteSnapshot: () => { path: string | null; content: string }
+      setCurrentNoteBody: (body: string) => void
+    }
+  }).__XINGULARITY_E2E__ = {
+    getCurrentNoteSnapshot: () => {
+      const state = useVaultStore.getState()
+      return {
+        path: state.currentNotePath,
+        content: state.currentNoteContent
+      }
+    },
+    setCurrentNoteBody: (body) => {
+      const state = useVaultStore.getState()
+      state.setCurrentNoteContent(replaceNoteBody(state.currentNoteContent, body))
+    }
+  }
 }
 
 const FONT_OPTIONS: FontOption[] = [
@@ -377,8 +403,11 @@ function App(): ReactElement {
   const [calendarBulkScope, setCalendarBulkScope] =
     useState<(typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']>('day')
   const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [currentNoteOutline, setCurrentNoteOutline] = useState<NoteOutlineItem[]>([])
+  const [currentNoteEditorBlocks, setCurrentNoteEditorBlocks] = useState<NoteEditorBlock[] | null>(
+    null
+  )
+  const [currentNoteEditorVersion, setCurrentNoteEditorVersion] = useState(0)
   const [jumpToNoteHeading, setJumpToNoteHeading] = useState<((blockId: string) => void) | null>(
     null
   )
@@ -441,6 +470,13 @@ function App(): ReactElement {
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
   const lastPersistedNoteRef = useRef<{ relPath: string; content: string } | null>(null)
+  const currentNotePathRef = useRef(currentNotePath)
+  const currentNoteContentRef = useRef(currentNoteContent)
+  const currentNoteEditorRef = useRef<NoteEditorHandle | null>(null)
+  const currentNoteEditorDirtyRef = useRef(false)
+  const noteEditorSessionsRef = useRef<Record<string, NoteEditorSessionSnapshot>>({})
+  const pendingNoteSaveRef = useRef<{ relPath: string; content: string } | null>(null)
+  const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const calendarTasksRef = useRef(calendarTasks)
   const shouldAnimateWorkspacePane =
     activePage === 'dashboard' ||
@@ -452,6 +488,14 @@ function App(): ReactElement {
     activePage === 'projects' ||
     activePage === 'calendar' ||
     activePage === 'weeklyPlan'
+
+  useEffect(() => {
+    currentNotePathRef.current = currentNotePath
+  }, [currentNotePath])
+
+  useEffect(() => {
+    currentNoteContentRef.current = currentNoteContent
+  }, [currentNoteContent])
 
   const persistLastOpenedNotePath = useCallback(
     async (relPath: string | null): Promise<void> => {
@@ -579,11 +623,11 @@ function App(): ReactElement {
 
   const noteIsOpen = Boolean(currentNotePath)
   useEffect(() => {
-    if (!noteIsOpen || isPreviewMode) {
+    if (!noteIsOpen) {
       setCurrentNoteOutline([])
       setJumpToNoteHeading(null)
     }
-  }, [isPreviewMode, noteIsOpen, currentNotePath])
+  }, [noteIsOpen, currentNotePath])
   const currentNoteTags = useMemo(
     () => listTagsFromMarkdown(currentNoteContent),
     [currentNoteContent]
@@ -591,6 +635,73 @@ function App(): ReactElement {
   const currentNoteBody = useMemo(
     () => splitNoteContent(currentNoteContent).body,
     [currentNoteContent]
+  )
+
+  const resetCurrentNoteEditorSession = useCallback((): void => {
+    currentNoteEditorDirtyRef.current = false
+    setCurrentNoteEditorBlocks(null)
+    setCurrentNoteEditorVersion((current) => current + 1)
+  }, [])
+
+  const checkpointCurrentNote = useCallback(async (): Promise<NoteEditorSessionSnapshot | null> => {
+    const relPath = currentNotePathRef.current
+    if (!relPath) {
+      return null
+    }
+
+    if (!currentNoteEditorDirtyRef.current || !currentNoteEditorRef.current) {
+      return noteEditorSessionsRef.current[relPath] ?? null
+    }
+
+    const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.captureSnapshot()
+    const nextContent = replaceNoteBody(currentNoteContentRef.current, snapshot.body)
+    const nextSession: NoteEditorSessionSnapshot = {
+      blocks: cloneNoteEditorBlocks(snapshot.blocks),
+      body: snapshot.body,
+      content: nextContent
+    }
+
+    noteEditorSessionsRef.current[relPath] = nextSession
+    currentNoteContentRef.current = nextContent
+    currentNoteEditorDirtyRef.current = false
+    setCurrentNoteContent(nextContent)
+
+    return nextSession
+  }, [setCurrentNoteContent])
+
+  const setCurrentNoteContentSnapshot = useCallback(
+    (nextContent: string, options?: { preserveCurrentBlocks?: boolean }): void => {
+      const relPath = currentNotePathRef.current
+      const previousContent = currentNoteContentRef.current
+
+      if (relPath) {
+        const previousBody = splitNoteContent(previousContent).body
+        const nextBody = splitNoteContent(nextContent).body
+        const existingSession = noteEditorSessionsRef.current[relPath]
+
+        if (options?.preserveCurrentBlocks && existingSession) {
+          noteEditorSessionsRef.current[relPath] = {
+            ...existingSession,
+            body: nextBody,
+            content: nextContent
+          }
+        } else if (previousBody !== nextBody) {
+          delete noteEditorSessionsRef.current[relPath]
+          currentNoteEditorDirtyRef.current = false
+          resetCurrentNoteEditorSession()
+        } else if (existingSession) {
+          noteEditorSessionsRef.current[relPath] = {
+            ...existingSession,
+            body: nextBody,
+            content: nextContent
+          }
+        }
+      }
+
+      currentNoteContentRef.current = nextContent
+      setCurrentNoteContent(nextContent)
+    },
+    [resetCurrentNoteEditorSession, setCurrentNoteContent]
   )
   // Unscheduled tasks (no date assigned)
   const unscheduledTasks = useMemo(() => {
@@ -865,38 +976,72 @@ function App(): ReactElement {
     setSelectedProjectId
   ])
 
-  useEffect(() => {
+  const noteSaveCoordinator = useMemo(() => {
     if (!vaultApi) {
+      return null
+    }
+
+    return createNoteSaveCoordinator({
+      writeNote: async ({ relPath, content }) => {
+        await vaultApi.files.writeNote(relPath, content)
+      },
+      onPersisted: async ({ relPath, content }) => {
+        lastPersistedNoteRef.current = { relPath, content }
+        const nextNotes = await vaultApi.files.listNotes()
+        setNotes(nextNotes)
+      }
+    })
+  }, [vaultApi, setNotes])
+
+  const flushCurrentNote = useCallback(async (): Promise<void> => {
+    if (noteSaveTimerRef.current) {
+      clearTimeout(noteSaveTimerRef.current)
+      noteSaveTimerRef.current = null
+    }
+
+    pendingNoteSaveRef.current = null
+
+    const relPath = currentNotePathRef.current
+    if (!noteSaveCoordinator || !relPath) {
       return
     }
 
-    if (!noteIsOpen || !currentNotePath) {
-      return
-    }
+    const checkpoint = await checkpointCurrentNote()
+    const content = checkpoint?.content ?? currentNoteContentRef.current
 
     const lastPersisted = lastPersistedNoteRef.current
-    if (
-      lastPersisted?.relPath === currentNotePath &&
-      lastPersisted.content === currentNoteContent
-    ) {
+    if (lastPersisted?.relPath === relPath && lastPersisted.content === content) {
       return
     }
 
-    const notePath = currentNotePath
-    const noteContent = currentNoteContent
-    const timer = setTimeout(() => {
-      void vaultApi.files
-        .writeNote(notePath, noteContent)
-        .then(() => {
-          lastPersistedNoteRef.current = { relPath: notePath, content: noteContent }
-        })
-        .then(() => vaultApi.files.listNotes())
-        .then((nextNotes) => setNotes(nextNotes))
-        .catch((error: unknown) => pushToast('error', String(error)))
-    }, 400)
+    await noteSaveCoordinator.enqueue({ relPath, content })
+  }, [checkpointCurrentNote, noteSaveCoordinator])
 
-    return () => clearTimeout(timer)
-  }, [vaultApi, currentNoteContent, currentNotePath, noteIsOpen, setNotes, pushToast])
+  const scheduleCurrentNoteAutosave = useCallback((): void => {
+    if (!noteSaveCoordinator || !currentNotePathRef.current) {
+      return
+    }
+
+    pendingNoteSaveRef.current = {
+      relPath: currentNotePathRef.current,
+      content: currentNoteContentRef.current
+    }
+    if (noteSaveTimerRef.current) {
+      clearTimeout(noteSaveTimerRef.current)
+    }
+    noteSaveTimerRef.current = setTimeout(() => {
+      pendingNoteSaveRef.current = null
+      noteSaveTimerRef.current = null
+      void flushCurrentNote().catch((error: unknown) => {
+        pushToast('error', String(error))
+      })
+    }, 400)
+  }, [flushCurrentNote, noteSaveCoordinator, pushToast])
+
+  const handleCurrentNoteEditorDirty = useCallback((): void => {
+    currentNoteEditorDirtyRef.current = true
+    scheduleCurrentNoteAutosave()
+  }, [scheduleCurrentNoteAutosave])
 
   const updateFontFamily = async (fontFamily: string): Promise<void> => {
     if (!vaultApi) {
@@ -1210,7 +1355,11 @@ function App(): ReactElement {
       setSettingsLoaded(false)
       setVault(result.info)
       setNotes(result.notes)
+      noteEditorSessionsRef.current = {}
+      currentNotePathRef.current = null
+      currentNoteContentRef.current = ''
       setCurrentNotePath(null)
+      resetCurrentNoteEditorSession()
       setCurrentNoteContent('')
       pushToast('success', `Vault ready at ${result.info.rootPath}`)
     } catch (error) {
@@ -1225,21 +1374,43 @@ function App(): ReactElement {
       }
 
       try {
+        if (currentNotePathRef.current && currentNotePathRef.current !== relPath) {
+          await flushCurrentNote()
+        }
+
+        const cachedSession = noteEditorSessionsRef.current[relPath]
+        if (cachedSession) {
+          lastPersistedNoteRef.current = { relPath, content: cachedSession.content }
+          currentNotePathRef.current = relPath
+          currentNoteContentRef.current = cachedSession.content
+          currentNoteEditorDirtyRef.current = false
+          setCurrentNotePath(relPath)
+          setCurrentNoteContent(cachedSession.content)
+          setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(cachedSession.blocks))
+          setCurrentNoteEditorVersion((current) => current + 1)
+          void persistLastOpenedNotePath(relPath)
+          return
+        }
+
         const content = await vaultApi.files.readNote(relPath)
         lastPersistedNoteRef.current = { relPath, content }
+        currentNotePathRef.current = relPath
+        currentNoteContentRef.current = content
+        currentNoteEditorDirtyRef.current = false
         setCurrentNotePath(relPath)
         setCurrentNoteContent(content)
-        setIsPreviewMode(false) // Reset to edit mode when opening a new note
+        setCurrentNoteEditorBlocks(null)
+        setCurrentNoteEditorVersion((current) => current + 1)
         void persistLastOpenedNotePath(relPath)
       } catch (error) {
         pushToast('error', String(error))
       }
     },
     [
+      flushCurrentNote,
       vaultApi,
       setCurrentNotePath,
       setCurrentNoteContent,
-      setIsPreviewMode,
       pushToast,
       persistLastOpenedNotePath
     ]
@@ -1535,14 +1706,17 @@ function App(): ReactElement {
       setCommandPaletteAiLoading(true)
 
       try {
+        await checkpointCurrentNote()
+        const noteContent = currentNoteContentRef.current
         const completion = await vaultApi.ai.completeNote({
           notePath: currentNotePath,
-          noteContent: currentNoteContent,
+          noteContent,
           prompt: trimmedPrompt
         })
 
-        const nextContent = appendAiCompletion(currentNoteContent, completion)
-        setCurrentNoteContent(nextContent)
+        const nextContent = appendAiCompletion(noteContent, completion)
+        setCurrentNoteContentSnapshot(nextContent)
+        scheduleCurrentNoteAutosave()
         pushToast('success', 'AI note completion added')
         return true
       } catch (error) {
@@ -1552,7 +1726,14 @@ function App(): ReactElement {
         setCommandPaletteAiLoading(false)
       }
     },
-    [currentNoteContent, currentNotePath, pushToast, setCurrentNoteContent, vaultApi]
+    [
+      checkpointCurrentNote,
+      currentNotePath,
+      pushToast,
+      scheduleCurrentNoteAutosave,
+      setCurrentNoteContentSnapshot,
+      vaultApi
+    ]
   )
 
   useEffect(() => {
@@ -1575,13 +1756,15 @@ function App(): ReactElement {
     }
 
     try {
+      await checkpointCurrentNote()
       const vaultRelative = await vaultApi.attachments.import(sourcePath)
       const fromDir = currentNotePath.includes('/')
         ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
         : ''
       const prefix = fromDir.length === 0 ? '../' : `${'../'.repeat(fromDir.split('/').length + 1)}`
       const markdownLink = `${prefix}${vaultRelative}`
-      setCurrentNoteContent(`${currentNoteContent}\n\n![](${markdownLink})\n`)
+      setCurrentNoteContentSnapshot(`${currentNoteContentRef.current}\n\n![](${markdownLink})\n`)
+      scheduleCurrentNoteAutosave()
       pushToast('success', 'Attachment imported')
     } catch (error) {
       pushToast('error', String(error))
@@ -1611,18 +1794,18 @@ function App(): ReactElement {
 
       // Import the attachment - returns vault-relative path like "attachments/123456-pasted.png"
       const vaultRelative = await vaultApi.attachments.importFromBuffer(uint8Array, fileExtension)
-
-      // Return vault-file:// URL for BlockNote to display
-      // Convert vault path + relative path to absolute path, then use custom protocol
-      const absolutePath = `${vault.rootPath}/${vaultRelative}`
-      return `vault-file://${absolutePath}`
+      const fromDir = currentNotePath.includes('/')
+        ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
+        : ''
+      const prefix = fromDir.length === 0 ? '../' : `${'../'.repeat(fromDir.split('/').length + 1)}`
+      return `${prefix}${vaultRelative}`
     } catch (error) {
       console.error('Failed to import image from clipboard:', error)
       return null
     }
   }
 
-  const addTagToCurrentNote = (rawTag: string): void => {
+  const addTagToCurrentNote = async (rawTag: string): Promise<void> => {
     if (!currentNotePath) {
       return
     }
@@ -1638,18 +1821,25 @@ function App(): ReactElement {
       return
     }
 
-    setCurrentNoteContent(
-      upsertTagsInMarkdown(currentNoteContent, [...currentNoteTags, normalized])
+    await checkpointCurrentNote()
+    setCurrentNoteContentSnapshot(
+      upsertTagsInMarkdown(currentNoteContentRef.current, [...currentNoteTags, normalized]),
+      { preserveCurrentBlocks: true }
     )
+    scheduleCurrentNoteAutosave()
   }
 
-  const removeTagFromCurrentNote = (tag: string): void => {
+  const removeTagFromCurrentNote = async (tag: string): Promise<void> => {
     if (!currentNotePath) {
       return
     }
 
+    await checkpointCurrentNote()
     const next = currentNoteTags.filter((item) => item !== tag)
-    setCurrentNoteContent(upsertTagsInMarkdown(currentNoteContent, next))
+    setCurrentNoteContentSnapshot(upsertTagsInMarkdown(currentNoteContentRef.current, next), {
+      preserveCurrentBlocks: true
+    })
+    scheduleCurrentNoteAutosave()
   }
 
   const addTagToNote = async (relPath: string, rawTag: string): Promise<void> => {
@@ -1703,10 +1893,6 @@ function App(): ReactElement {
     void runSearch(tag)
   }
 
-  const updateCurrentNoteBody = (nextBody: string): void => {
-    setCurrentNoteContent((current) => replaceNoteBody(current, nextBody))
-  }
-
   const updateProjectIcon = (projectId: string, nextIcon: ProjectIconStyle): void => {
     const nextProjects = projects.map((project) =>
       project.id === projectId
@@ -1720,45 +1906,6 @@ function App(): ReactElement {
   const randomizeProjectIcon = (projectId: string): void => {
     const seed = `${projectId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     updateProjectIcon(projectId, createRandomProjectIcon(seed))
-  }
-
-  const resolveMentionTarget = (target: string): string | null => {
-    const normalizedTarget = normalizeMentionTarget(target)
-    if (!normalizedTarget) {
-      return null
-    }
-
-    const byRelPath = notes.find(
-      (note) => normalizeMentionTarget(note.relPath) === normalizedTarget
-    )
-    if (byRelPath) {
-      return byRelPath.relPath
-    }
-
-    const byName = notes.filter((note) => normalizeMentionTarget(note.name) === normalizedTarget)
-    if (byName.length === 1) {
-      return byName[0].relPath
-    }
-
-    return null
-  }
-
-  const openMentionTarget = async (target: string): Promise<void> => {
-    const relPath = resolveMentionTarget(target)
-    if (!relPath) {
-      const normalizedTarget = normalizeMentionTarget(target)
-      const byNameMatches = notes.filter(
-        (note) => normalizeMentionTarget(note.name) === normalizedTarget
-      )
-      if (normalizedTarget && byNameMatches.length > 1) {
-        pushToast('error', `Multiple notes match [[${target}]]. Use folder/name format.`)
-        return
-      }
-      pushToast('error', `Note mention not found: [[${target}]]`)
-      return
-    }
-
-    await openNote(relPath)
   }
 
   const renameCurrentNote = async (newName: string): Promise<void> => {
@@ -1776,9 +1923,16 @@ function App(): ReactElement {
         : ''
       const newPath = dir ? `${dir}/${newName}.md` : `${newName}.md`
 
+      await flushCurrentNote()
       await vaultApi.files.rename(currentNotePath, newPath)
       const nextNotes = await vaultApi.files.listNotes()
       setNotes(nextNotes)
+      const existingSession = noteEditorSessionsRef.current[currentNotePath]
+      if (existingSession) {
+        noteEditorSessionsRef.current[newPath] = existingSession
+        delete noteEditorSessionsRef.current[currentNotePath]
+      }
+      currentNotePathRef.current = newPath
       setCurrentNotePath(newPath)
       void persistLastOpenedNotePath(newPath)
       if (favoriteNotePaths.includes(currentNotePath)) {
@@ -1807,11 +1961,15 @@ function App(): ReactElement {
       await vaultApi.files.delete(relPath)
       const nextNotes = await vaultApi.files.listNotes()
       setNotes(nextNotes)
+      delete noteEditorSessionsRef.current[relPath]
       if (favoriteNotePaths.includes(relPath)) {
         void persistFavoriteNotePaths(favoriteNotePaths.filter((path) => path !== relPath))
       }
       if (currentNotePath === relPath) {
+        currentNotePathRef.current = null
+        currentNoteContentRef.current = ''
         setCurrentNotePath(null)
+        resetCurrentNoteEditorSession()
         setCurrentNoteContent('')
         void persistLastOpenedNotePath(null)
       }
@@ -1835,7 +1993,11 @@ function App(): ReactElement {
     }
 
     try {
-      const exportedPath = await vaultApi.files.exportNote(currentNotePath, currentNoteContent)
+      await flushCurrentNote()
+      const exportedPath = await vaultApi.files.exportNote(
+        currentNotePath,
+        currentNoteContentRef.current
+      )
       if (!exportedPath) {
         return
       }
@@ -2884,6 +3046,21 @@ function App(): ReactElement {
         await vaultApi.files.renamePath(relPath, nextRelPath)
         await refreshNotesAndTree()
         setSelectedNoteTreeEntry({ kind, relPath: nextRelPath })
+        if (kind === 'note') {
+          const existingSession = noteEditorSessionsRef.current[relPath]
+          if (existingSession) {
+            noteEditorSessionsRef.current[nextRelPath] = existingSession
+            delete noteEditorSessionsRef.current[relPath]
+          }
+        } else {
+          Object.entries(noteEditorSessionsRef.current).forEach(([path, session]) => {
+            const remappedPath = remapNestedPath(path, relPath, nextRelPath)
+            if (remappedPath && remappedPath !== path) {
+              noteEditorSessionsRef.current[remappedPath] = session
+              delete noteEditorSessionsRef.current[path]
+            }
+          })
+        }
         const nextCurrentNotePath =
           kind === 'note'
             ? currentNotePath === relPath
@@ -2891,6 +3068,7 @@ function App(): ReactElement {
               : currentNotePath
             : remapNestedPath(currentNotePath, relPath, nextRelPath)
         if (nextCurrentNotePath !== currentNotePath) {
+          currentNotePathRef.current = nextCurrentNotePath
           setCurrentNotePath(nextCurrentNotePath)
           void persistLastOpenedNotePath(nextCurrentNotePath)
         }
@@ -2947,8 +3125,20 @@ function App(): ReactElement {
         }
         const shouldClearCurrent =
           kind === 'note' ? currentNotePath === relPath : isNestedPath(currentNotePath, relPath)
+        if (kind === 'note') {
+          delete noteEditorSessionsRef.current[relPath]
+        } else {
+          Object.keys(noteEditorSessionsRef.current).forEach((path) => {
+            if (isNestedPath(path, relPath)) {
+              delete noteEditorSessionsRef.current[path]
+            }
+          })
+        }
         if (shouldClearCurrent) {
+          currentNotePathRef.current = null
+          currentNoteContentRef.current = ''
           setCurrentNotePath(null)
+          resetCurrentNoteEditorSession()
           setCurrentNoteContent('')
           void persistLastOpenedNotePath(null)
         }
@@ -2986,7 +3176,23 @@ function App(): ReactElement {
             ? toRelPath
             : currentNotePath
           : remapNestedPath(currentNotePath, fromRelPath, toRelPath)
+      if (movedKind === 'note') {
+        const existingSession = noteEditorSessionsRef.current[fromRelPath]
+        if (existingSession) {
+          noteEditorSessionsRef.current[toRelPath] = existingSession
+          delete noteEditorSessionsRef.current[fromRelPath]
+        }
+      } else {
+        Object.entries(noteEditorSessionsRef.current).forEach(([path, session]) => {
+          const remappedPath = remapNestedPath(path, fromRelPath, toRelPath)
+          if (remappedPath && remappedPath !== path) {
+            noteEditorSessionsRef.current[remappedPath] = session
+            delete noteEditorSessionsRef.current[path]
+          }
+        })
+      }
       if (nextCurrentNotePath !== currentNotePath) {
+        currentNotePathRef.current = nextCurrentNotePath
         setCurrentNotePath(nextCurrentNotePath)
         void persistLastOpenedNotePath(nextCurrentNotePath)
       }
@@ -3104,7 +3310,7 @@ function App(): ReactElement {
                   noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
-                        {!isPreviewMode && currentNoteOutline.length > 0 && jumpToNoteHeading ? (
+                        {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button
@@ -3138,14 +3344,6 @@ function App(): ReactElement {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => setIsPreviewMode(!isPreviewMode)}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                          title={isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Preview Mode'}
-                        >
-                          {isPreviewMode ? <Eye size={18} /> : <Pencil size={18} />}
-                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -3496,22 +3694,21 @@ function App(): ReactElement {
                       />
                     ) : noteIsOpen && currentNotePath ? (
                       <EditorPage
+                        editorRef={currentNoteEditorRef}
+                        editorSessionKey={currentNoteEditorVersion}
+                        initialBlocks={currentNoteEditorBlocks}
                         notePath={currentNotePath}
                         content={currentNoteBody}
                         tags={currentNoteTags}
                         notes={notes}
-                        onChange={updateCurrentNoteBody}
+                        onDirty={handleCurrentNoteEditorDirty}
                         onDropFile={(sourcePath) => importAttachment(sourcePath)}
                         onPasteImage={importImageFromBlob}
                         onAddTag={addTagToCurrentNote}
                         onRemoveTag={removeTagFromCurrentNote}
                         onFindByTag={findByTag}
                         onRename={renameCurrentNote}
-                        onOpenMention={(target) => {
-                          void openMentionTarget(target)
-                        }}
                         vaultRootPath={vault?.rootPath}
-                        isPreviewMode={isPreviewMode}
                         onOutlineChange={setCurrentNoteOutline}
                         onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
                       />
