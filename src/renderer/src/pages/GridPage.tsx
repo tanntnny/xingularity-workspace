@@ -17,7 +17,7 @@ import {
   useReactFlow
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowUpRight, Clock3, FolderKanban, Sparkles, X } from 'lucide-react'
+import { FolderKanban, Sparkles, X } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import {
   GridBoardItem,
@@ -71,10 +71,10 @@ type GridNode = Node<GridNodeData, 'grid-card'>
 const GRID_NODE_WIDTH = 312
 const GRID_NODE_HEIGHT = 190
 const GRID_TEXT_NODE_WIDTH = 296
-const GRID_TEXT_NODE_HEIGHT = 220
+const GRID_TEXT_NODE_HEIGHT = 84
 const GRID_MIN_CARD_WIDTH = 240
 const GRID_MIN_CARD_HEIGHT = 160
-const GRID_MIN_TEXT_HEIGHT = 180
+const GRID_MIN_TEXT_HEIGHT = 76
 const GRID_CARD_RADIUS = '12px'
 const GRID_RESIZE_EDGE_HIT_SIZE = 12
 const GRID_RESIZE_CORNER_SIZE = 22
@@ -551,9 +551,9 @@ function GridCanvas({
         <Background
           id="grid-background"
           color="var(--accent)"
-          gap={30}
-          size={1}
-          style={{ opacity: 0.16 }}
+          gap={48}
+          size={1.8}
+          style={{ opacity: 0.24 }}
           variant={BackgroundVariant.Dots}
         />
       </ReactFlow>
@@ -615,80 +615,82 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         }
       }}
       data-testid={`grid-card:${data.kind}:${data.sourceId}`}
-      className={`group h-full rounded-[12px] border transition duration-200 ${
-        selected
-          ? 'border-[var(--accent)] bg-[var(--panel)]'
-          : 'border-[var(--line)] bg-[var(--panel)]'
+      className={`group h-full rounded-[12px] border border-[var(--accent)] bg-[var(--panel)] transition duration-200 ${
+        selected ? 'shadow-[0_0_0_1px_var(--accent)]' : ''
       }`}
     >
-      <NodeResizeControl
-        position="top"
-        variant={ResizeControlVariant.Line}
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-ns-resize"
-        style={horizontalEdgeResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="right"
-        variant={ResizeControlVariant.Line}
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-ew-resize"
-        style={verticalEdgeResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="bottom"
-        variant={ResizeControlVariant.Line}
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-ns-resize"
-        style={horizontalEdgeResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="left"
-        variant={ResizeControlVariant.Line}
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-ew-resize"
-        style={verticalEdgeResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="top-left"
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-nwse-resize"
-        style={cornerResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="top-right"
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-nesw-resize"
-        style={cornerResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="bottom-left"
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-nesw-resize"
-        style={cornerResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
-      <NodeResizeControl
-        position="bottom-right"
-        minWidth={GRID_MIN_CARD_WIDTH}
-        minHeight={minHeight}
-        className="transition-opacity cursor-nwse-resize"
-        style={cornerResizeStyle}
-        onResizeEnd={(_event, params) => data.onResizeEnd(params)}
-      />
+      {isText ? null : (
+        <>
+          <NodeResizeControl
+            position="top"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ns-resize"
+            style={horizontalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="right"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ew-resize"
+            style={verticalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="bottom"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ns-resize"
+            style={horizontalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="left"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ew-resize"
+            style={verticalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="top-left"
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-nwse-resize"
+            style={cornerResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="top-right"
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-nesw-resize"
+            style={cornerResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="bottom-left"
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-nesw-resize"
+            style={cornerResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="bottom-right"
+            minWidth={GRID_MIN_CARD_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-nwse-resize"
+            style={cornerResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+        </>
+      )}
       <div
         className="relative flex h-full flex-col overflow-hidden rounded-[12px] px-4 py-4"
         style={{ borderRadius: GRID_CARD_RADIUS }}
@@ -715,12 +717,12 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
               />
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center text-[var(--accent)]">
                 {data.icon ? <NoteShapeIcon icon={data.icon} size={18} /> : <FolderKanban size={18} />}
               </div>
-              <div className="min-w-0">
-                <div className="max-w-[200px] truncate text-lg font-semibold text-[var(--text)]">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-lg font-semibold text-[var(--text)]">
                   {data.title}
                 </div>
               </div>
@@ -739,57 +741,47 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
             <X size={15} />
           </button>
         </div>
-        <div className="mb-4 mt-3 -mx-4 border-t border-[var(--line)]" />
 
-        <div className="relative flex-1 overflow-hidden">
-          {isNote ? (
-            <div className="h-full overflow-hidden text-sm text-[var(--text)]">
-              <div className="h-full overflow-auto pr-1">
-                <NoteCardPreview fallbackText={data.bodyPreview} />
-              </div>
-            </div>
-          ) : !isText ? (
-            <div className="mb-3 text-sm text-[var(--muted)]">{data.subtitle}</div>
-          ) : null}
-          {!isText && !isNote ? (
-            <div className="space-y-3">
-              <div className="line-clamp-3 text-sm leading-6 text-[var(--muted)]">
-                {data.summary || 'No summary yet.'}
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                    <span>Progress</span>
-                    <span>{Math.round(data.progress ?? 0)}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[var(--panel-2)]">
-                    <div
-                      className="h-full rounded-full bg-[var(--accent)]"
-                      style={{ width: `${Math.max(6, Math.min(100, data.progress ?? 0))}%` }}
-                    />
+        {isText ? null : (
+          <>
+            <div className="mb-4 mt-3 -mx-4 border-t border-[var(--line)]" />
+
+            <div className="relative flex-1 overflow-hidden">
+              {isNote ? (
+                <div className="h-full overflow-hidden text-sm text-[var(--text)]">
+                  <div className="h-full overflow-auto pr-1">
+                    <NoteCardPreview fallbackText={data.bodyPreview} />
                   </div>
                 </div>
-                <span className="rounded-full border border-[rgba(125,183,255,0.24)] bg-[rgba(125,183,255,0.1)] px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
-                  {data.status}
-                </span>
-              </div>
+              ) : (
+                <div className="mb-3 text-sm text-[var(--muted)]">{data.subtitle}</div>
+              )}
+              {!isNote ? (
+                <div className="space-y-3">
+                  <div className="line-clamp-3 text-sm leading-6 text-[var(--muted)]">
+                    {data.summary || 'No summary yet.'}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                        <span>Progress</span>
+                        <span>{Math.round(data.progress ?? 0)}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-[var(--panel-2)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--accent)]"
+                          style={{ width: `${Math.max(6, Math.min(100, data.progress ?? 0))}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="rounded-full border border-[rgba(125,183,255,0.24)] bg-[rgba(125,183,255,0.1)] px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
+                      {data.status}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
-
-        {isNote ? null : (
-          <div className="relative mt-4 flex items-center justify-between text-xs text-[var(--muted)]">
-            <div className="flex items-center gap-1.5">
-              <Clock3 size={13} />
-              <span>{isText ? 'Editable on canvas' : formatRelativeLabel(data.updatedAt)}</span>
-            </div>
-            {!isText ? (
-              <div className="flex items-center gap-1.5 text-[var(--accent)]">
-                <span>Open</span>
-                <ArrowUpRight size={13} />
-              </div>
-            ) : null}
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -798,22 +790,6 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
 
 function createGridTextId(): string {
   return `grid-text:${crypto.randomUUID()}`
-}
-
-function formatRelativeLabel(iso?: string): string {
-  if (!iso) {
-    return 'Recently updated'
-  }
-
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) {
-    return 'Recently updated'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric'
-  }).format(date)
 }
 
 function NoteCardPreview({ fallbackText }: { fallbackText?: string }): ReactElement {

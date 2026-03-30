@@ -269,31 +269,14 @@ test.describe('grid page', () => {
       await expect(textCard).toBeVisible()
       await textCard.click()
 
-      const textCorner = page.locator('.react-flow__resize-control.bottom.right.handle').last()
-      await expect(textCorner).toBeAttached()
-      const textCornerBox = await textCorner.boundingBox()
-      expect(textCornerBox).not.toBeNull()
-      if (!textCornerBox) {
-        throw new Error('Text diagonal resize corner bounding box not available')
-      }
-
-      await page.mouse.move(
-        textCornerBox.x + textCornerBox.width / 2,
-        textCornerBox.y + textCornerBox.height / 2
-      )
-      await page.mouse.down()
-      await page.mouse.move(
-        textCornerBox.x + textCornerBox.width / 2 + 88,
-        textCornerBox.y + textCornerBox.height / 2 + 53,
-        { steps: 12 }
-      )
-      await page.mouse.up()
-
       const textBoardItem = await waitForBoardItem(vaultRoot, (item) => item.kind === 'text')
       expect(textBoardItem.size?.width).toBeDefined()
       expect(textBoardItem.size?.height).toBeDefined()
-      expect(textBoardItem.size?.width ?? 0).toBeGreaterThan(296)
-      expect(textBoardItem.size?.height ?? 0).toBeGreaterThan(220)
+      expect(textBoardItem.size?.width).toBe(296)
+      expect(textBoardItem.size?.height).toBe(84)
+
+      const resizeControlCount = await textCard.locator('.react-flow__resize-control').count()
+      expect(resizeControlCount).toBe(0)
 
       await electronApp.close()
       electronApp = null
