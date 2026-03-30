@@ -18,11 +18,17 @@ export interface NoteMetadata {
   updated?: string
 }
 
+export interface StoredNoteDocument {
+  version: 1
+  tags: string[]
+  blocks: unknown[]
+}
+
 export interface NoteRecord {
   id: string
   relPath: string
   metadata: NoteMetadata
-  body: string
+  body: StoredNoteDocument
 }
 
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
@@ -41,6 +47,7 @@ export interface NoteListItem {
   createdAt: string
   updatedAt: string
   tags: string[]
+  bodyPreview?: string
 }
 
 interface NoteTreeEntryBase {
@@ -630,7 +637,9 @@ export interface RendererVaultApi {
     listNotes: () => Promise<NoteListItem[]>
     listTree: () => Promise<NoteTreeNode[]>
     readNote: (relPath: string) => Promise<string>
+    readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
     writeNote: (relPath: string, content: string) => Promise<void>
+    writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
     createNote: (name: string) => Promise<string>
     createNoteAtPath: (relPath: string) => Promise<string>
     createNoteWithTags: (name: string, tags: string[]) => Promise<string>

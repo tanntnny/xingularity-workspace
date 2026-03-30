@@ -26,7 +26,10 @@ const api: RendererVaultApi = {
     listNotes: () => ipcRenderer.invoke(IPC_CHANNELS.listNotes),
     listTree: () => ipcRenderer.invoke(IPC_CHANNELS.listNoteTree),
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
+    readNoteDocument: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNoteDocument, relPath),
     writeNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.writeNote, relPath, content),
+    writeNoteDocument: (relPath, document): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.writeNoteDocument, relPath, document),
     createNote: (name) => ipcRenderer.invoke(IPC_CHANNELS.createNote, name),
     createNoteAtPath: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createNoteAtPath, relPath),
     createNoteWithTags: (name, tags) =>

@@ -11,6 +11,7 @@ import { AgentChatStore } from './agentChatStore'
 import { AgentHistoryStore } from './agentHistoryStore'
 import { FileService, sanitizeNotePath } from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
+import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -40,6 +41,7 @@ import {
   Project,
   ProjectMilestone,
   SearchResult,
+  StoredNoteDocument,
   VaultOpenResult
 } from '../shared/types'
 
@@ -126,14 +128,30 @@ export class VaultRuntime {
     return this.fileService!.readNote(relPath)
   }
 
+  async readNoteDocument(relPath: string): Promise<StoredNoteDocument> {
+    this.assertReady()
+    return this.fileService!.readNoteDocument(relPath)
+  }
+
   async writeNote(relPath: string, content: string): Promise<void> {
     this.assertReady()
     await this.fileService!.writeNote(relPath, content)
-    const fresh = await this.fileService!.readNote(relPath)
+    const fresh = await this.fileService!.readNoteDocument(relPath)
     await this.indexer!.upsertFromRaw({
       id: createStableId(relPath),
       relPath: sanitizeNotePath(relPath),
-      content: fresh,
+      content: serializeStoredNoteDocument(fresh),
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  async writeNoteDocument(relPath: string, document: StoredNoteDocument): Promise<void> {
+    this.assertReady()
+    await this.fileService!.writeNoteDocument(relPath, document)
+    await this.indexer!.upsertFromRaw({
+      id: createStableId(relPath),
+      relPath: sanitizeNotePath(relPath),
+      content: serializeStoredNoteDocument(document),
       updatedAt: new Date().toISOString()
     })
   }
@@ -141,7 +159,7 @@ export class VaultRuntime {
   async createNote(name: string): Promise<string> {
     this.assertReady()
     const relPath = await this.fileService!.createNote(name)
-    const content = await this.fileService!.readNote(relPath)
+    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
     await this.indexer!.upsertFromRaw({
       id: createStableId(relPath),
       relPath,
@@ -154,7 +172,9 @@ export class VaultRuntime {
   async createNoteAtPath(relPath: string): Promise<string> {
     this.assertReady()
     const nextRelPath = await this.fileService!.createNoteAtPath(relPath)
-    const content = await this.fileService!.readNote(nextRelPath)
+    const content = serializeStoredNoteDocument(
+      await this.fileService!.readNoteDocument(nextRelPath)
+    )
     await this.indexer!.upsertFromRaw({
       id: createStableId(nextRelPath),
       relPath: nextRelPath,
@@ -167,7 +187,7 @@ export class VaultRuntime {
   async createNoteWithTags(name: string, tags: string[]): Promise<string> {
     this.assertReady()
     const relPath = await this.fileService!.createNoteWithTags(name, tags)
-    const content = await this.fileService!.readNote(relPath)
+    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
     await this.indexer!.upsertFromRaw({
       id: createStableId(relPath),
       relPath,
@@ -202,7 +222,9 @@ export class VaultRuntime {
     for (const sourcePath of result.filePaths) {
       try {
         const [nextImported] = await this.fileService!.importNotes([sourcePath])
-        const content = await this.fileService!.readNote(nextImported.relPath)
+        const content = serializeStoredNoteDocument(
+          await this.fileService!.readNoteDocument(nextImported.relPath)
+        )
         await this.indexer!.upsertFromRaw({
           id: createStableId(nextImported.relPath),
           relPath: nextImported.relPath,
@@ -225,7 +247,7 @@ export class VaultRuntime {
     this.assertReady()
     await this.fileService!.rename(oldPath, newPath)
     await this.indexer!.deleteByRelPath(sanitizeNotePath(oldPath))
-    const content = await this.fileService!.readNote(newPath)
+    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(newPath))
     await this.indexer!.upsertFromRaw({
       id: createStableId(newPath),
       relPath: sanitizeNotePath(newPath),
@@ -255,7 +277,7 @@ export class VaultRuntime {
   async exportNote(relPath: string, content: string): Promise<string | null> {
     this.assertReady()
     const safeRelPath = sanitizeNotePath(relPath)
-    const suggestedName = path.basename(safeRelPath)
+    const suggestedName = `${path.basename(stripNoteExtension(safeRelPath))}.md`
 
     const result = await this.showMarkdownExportDialog(
       'Export note',
@@ -325,7 +347,7 @@ export class VaultRuntime {
     return (
       input
         .trim()
-        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '-')
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
         .replace(/\s+/g, ' ')
         .replace(/^-+|-+$/g, '')
         .slice(0, 120) || 'untitled-project'
@@ -382,7 +404,7 @@ export class VaultRuntime {
           {
             role: 'system',
             content:
-              "You are an AI writing assistant for markdown notes. Continue or improve the user's current note based on their instruction. Return only the markdown text to add next, with no code fences, labels, or explanation."
+              'You are an AI writing assistant for rich text notes. Continue or improve the user note based on their instruction. Return only the plain text to add next, with no labels or explanation.'
           },
           {
             role: 'user',
@@ -727,6 +749,11 @@ export class VaultRuntime {
       (relPath) => this.watcher?.markInternalWrite(relPath)
     )
 
+    const migratedLegacyPaths = await this.fileService.migrateLegacyMarkdownNotes()
+    if (Object.keys(migratedLegacyPaths).length > 0) {
+      await this.remapSettingsForMigratedNotes(migratedLegacyPaths)
+    }
+
     this.indexer = await initializeIndexerWithRetry(
       this.currentPaths.indexPath,
       this.currentPaths.fileMapPath,
@@ -781,6 +808,32 @@ export class VaultRuntime {
         console.error('[VaultRuntime] vault listener failed', error)
       }
     }
+  }
+
+  private async remapSettingsForMigratedNotes(pathMap: Record<string, string>): Promise<void> {
+    if (!this.currentPaths) {
+      return
+    }
+
+    const current = await this.settings.readVault(this.currentPaths.rootPath)
+    const remap = (relPath: string | null): string | null =>
+      relPath ? pathMap[relPath] ?? relPath : null
+
+    await this.settings.updateVault(this.currentPaths.rootPath, {
+      lastOpenedNotePath: remap(current.lastOpenedNotePath),
+      favoriteNotePaths: current.favoriteNotePaths.map((relPath) => pathMap[relPath] ?? relPath),
+      gridBoard: {
+        ...current.gridBoard,
+        items: current.gridBoard.items.map((item) =>
+          item.kind === 'note' && item.noteRelPath
+            ? {
+                ...item,
+                noteRelPath: remap(item.noteRelPath) ?? item.noteRelPath
+              }
+            : item
+        )
+      }
+    })
   }
 
   private getAgentHistoryStore(): AgentHistoryStore {
@@ -1318,7 +1371,7 @@ const AGENT_CHAT_TOOLS: MistralTool[] = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Relative note path, usually ending in .md.' }
+          path: { type: 'string', description: 'Relative note path, usually ending in .xnote.' }
         },
         required: ['path']
       }

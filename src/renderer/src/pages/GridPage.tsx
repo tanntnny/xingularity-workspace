@@ -17,7 +17,8 @@ import {
   useReactFlow
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowUpRight, Clock3, FolderKanban, NotebookTabs, Sparkles, Type, X } from 'lucide-react'
+import { ArrowUpRight, Clock3, FolderKanban, Sparkles, X } from 'lucide-react'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import {
   GridBoardItem,
   GridBoardState,
@@ -25,6 +26,7 @@ import {
   Project,
   ProjectIconStyle
 } from '../../../shared/types'
+import { InlineEditableText } from '../components/InlineEditableText'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 
 export interface GridWorkspaceActions {
@@ -51,13 +53,13 @@ type GridNodeData = {
   sourceId: string
   title: string
   subtitle: string
-  tags?: string[]
   updatedAt?: string
   summary?: string
   progress?: number
   status?: string
   icon?: ProjectIconStyle
   textContent?: string
+  bodyPreview?: string
   onOpen: () => void
   onRemove: () => void
   onUpdateText?: (nextText: string) => void
@@ -70,13 +72,12 @@ const GRID_NODE_WIDTH = 312
 const GRID_NODE_HEIGHT = 190
 const GRID_TEXT_NODE_WIDTH = 296
 const GRID_TEXT_NODE_HEIGHT = 220
-const GRID_SNAP_SIZE = 30
 const GRID_MIN_CARD_WIDTH = 240
 const GRID_MIN_CARD_HEIGHT = 160
 const GRID_MIN_TEXT_HEIGHT = 180
 const GRID_CARD_RADIUS = '12px'
-const GRID_RESIZE_BORDER_WIDTH = 18
-const GRID_RESIZE_CORNER_SIZE = 34
+const GRID_RESIZE_EDGE_HIT_SIZE = 12
+const GRID_RESIZE_CORNER_SIZE = 22
 
 const nodeTypes: NodeTypes = {
   'grid-card': GridCardNode
@@ -293,12 +294,12 @@ function GridCanvas({
             ? {
                 ...item,
                 position: {
-                  x: snapToGridValue(params.x),
-                  y: snapToGridValue(params.y)
+                  x: params.x,
+                  y: params.y
                 },
                 size: {
-                  width: snapToGridValue(params.width),
-                  height: snapToGridValue(params.height)
+                  width: params.width,
+                  height: params.height
                 }
               }
             : item
@@ -329,10 +330,10 @@ function GridCanvas({
                 itemId: item.id,
                 kind: 'note',
                 sourceId: note.relPath,
-                title: note.name.replace(/\.md$/i, ''),
+                title: stripNoteExtension(note.name),
                 subtitle: note.dir || 'Vault root',
-                tags: note.tags,
                 updatedAt: note.updatedAt,
+                bodyPreview: note.bodyPreview,
                 onOpen: () => onOpenNote(note.relPath),
                 onRemove: () => removeItem(item.id),
                 onResizeEnd: (params) => handleNodeResizeEnd(item.id, params)
@@ -539,8 +540,6 @@ function GridCanvas({
             viewport
           })
         }}
-        snapToGrid
-        snapGrid={[GRID_SNAP_SIZE, GRID_SNAP_SIZE]}
         nodesDraggable
         elementsSelectable
         nodesConnectable={false}
@@ -552,7 +551,7 @@ function GridCanvas({
         <Background
           id="grid-background"
           color="var(--accent)"
-          gap={GRID_SNAP_SIZE}
+          gap={30}
           size={1}
           style={{ opacity: 0.16 }}
           variant={BackgroundVariant.Dots}
@@ -585,10 +584,19 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
   const isText = data.kind === 'text'
   const [textDraft, setTextDraft] = useState(data.textContent ?? '')
   const minHeight = isText ? GRID_MIN_TEXT_HEIGHT : GRID_MIN_CARD_HEIGHT
-  const edgeResizeStyle = {
+  const verticalEdgeResizeStyle = {
     opacity: 0,
-    borderColor: 'transparent',
-    borderWidth: GRID_RESIZE_BORDER_WIDTH
+    width: GRID_RESIZE_EDGE_HIT_SIZE,
+    height: '100%',
+    backgroundColor: 'transparent',
+    border: 'none'
+  } as const
+  const horizontalEdgeResizeStyle = {
+    opacity: 0,
+    width: '100%',
+    height: GRID_RESIZE_EDGE_HIT_SIZE,
+    backgroundColor: 'transparent',
+    border: 'none'
   } as const
   const cornerResizeStyle = {
     opacity: 0,
@@ -609,8 +617,8 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
       data-testid={`grid-card:${data.kind}:${data.sourceId}`}
       className={`group h-full rounded-[12px] border transition duration-200 ${
         selected
-          ? 'border-[var(--accent)] bg-[var(--panel)] shadow-[0_22px_60px_rgba(15,23,42,0.16)]'
-          : 'border-[var(--line)] bg-[var(--panel)] shadow-[0_16px_40px_rgba(15,23,42,0.08)]'
+          ? 'border-[var(--accent)] bg-[var(--panel)]'
+          : 'border-[var(--line)] bg-[var(--panel)]'
       }`}
     >
       <NodeResizeControl
@@ -619,7 +627,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         minWidth={GRID_MIN_CARD_WIDTH}
         minHeight={minHeight}
         className="transition-opacity cursor-ns-resize"
-        style={edgeResizeStyle}
+        style={horizontalEdgeResizeStyle}
         onResizeEnd={(_event, params) => data.onResizeEnd(params)}
       />
       <NodeResizeControl
@@ -628,7 +636,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         minWidth={GRID_MIN_CARD_WIDTH}
         minHeight={minHeight}
         className="transition-opacity cursor-ew-resize"
-        style={edgeResizeStyle}
+        style={verticalEdgeResizeStyle}
         onResizeEnd={(_event, params) => data.onResizeEnd(params)}
       />
       <NodeResizeControl
@@ -637,7 +645,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         minWidth={GRID_MIN_CARD_WIDTH}
         minHeight={minHeight}
         className="transition-opacity cursor-ns-resize"
-        style={edgeResizeStyle}
+        style={horizontalEdgeResizeStyle}
         onResizeEnd={(_event, params) => data.onResizeEnd(params)}
       />
       <NodeResizeControl
@@ -646,7 +654,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         minWidth={GRID_MIN_CARD_WIDTH}
         minHeight={minHeight}
         className="transition-opacity cursor-ew-resize"
-        style={edgeResizeStyle}
+        style={verticalEdgeResizeStyle}
         onResizeEnd={(_event, params) => data.onResizeEnd(params)}
       />
       <NodeResizeControl
@@ -685,49 +693,39 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         className="relative flex h-full flex-col overflow-hidden rounded-[12px] px-4 py-4"
         style={{ borderRadius: GRID_CARD_RADIUS }}
       >
-        <div
-          className={`pointer-events-none absolute inset-x-0 top-0 h-20 opacity-70 ${
-            isNote
-              ? 'bg-[radial-gradient(circle_at_top_left,var(--accent-soft),transparent_68%)]'
-              : isText
-                ? 'bg-[radial-gradient(circle_at_top_left,rgba(244,114,182,0.16),transparent_68%)]'
-                : 'bg-[radial-gradient(circle_at_top_left,rgba(125,183,255,0.16),transparent_68%)]'
-          }`}
-        />
-        <div className="relative mb-4 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${
-                isNote
-                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                  : isText
-                    ? 'border-[rgba(244,114,182,0.28)] bg-[rgba(244,114,182,0.1)] text-[rgb(190,24,93)]'
-                    : 'border-[rgba(125,183,255,0.24)] bg-[rgba(125,183,255,0.1)] text-[var(--accent)]'
-              }`}
-            >
-              {isNote ? (
-                <NotebookTabs size={18} />
-              ) : isText ? (
-                <Type size={18} />
-              ) : data.icon ? (
-                <NoteShapeIcon icon={data.icon} size={18} />
-              ) : (
-                <FolderKanban size={18} />
-              )}
+        <div className="flex items-start justify-between gap-3">
+          {isNote ? (
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-lg font-semibold text-[var(--text)]">{data.title}</div>
             </div>
-            <div>
-              <div
-                className={`text-[11px] uppercase tracking-[0.26em] ${
-                  isText ? 'text-[rgb(190,24,93)]' : 'text-[var(--accent)]'
-                }`}
-              >
-                {isNote ? 'Note' : isText ? 'Text' : 'Project'}
+          ) : isText ? (
+            <div className="min-w-0 flex-1">
+              <InlineEditableText
+                value={textDraft}
+                onCommit={(nextValue) => {
+                  setTextDraft(nextValue)
+                  data.onUpdateText?.(nextValue)
+                }}
+                displayAs="div"
+                displayClassName="truncate text-lg font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]"
+                inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-lg font-semibold text-[var(--text)] outline-none"
+                placeholder="Write anything..."
+                allowEmpty
+                title="Click to edit"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center text-[var(--accent)]">
+                {data.icon ? <NoteShapeIcon icon={data.icon} size={18} /> : <FolderKanban size={18} />}
               </div>
-              <div className="mt-1 max-w-[200px] truncate text-lg font-semibold text-[var(--text)]">
-                {isText ? 'Text block' : data.title}
+              <div className="min-w-0">
+                <div className="max-w-[200px] truncate text-lg font-semibold text-[var(--text)]">
+                  {data.title}
+                </div>
               </div>
             </div>
-          </div>
+          )}
           <button
             type="button"
             data-testid={`grid-remove:${data.kind}:${data.sourceId}`}
@@ -741,43 +739,21 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
             <X size={15} />
           </button>
         </div>
+        <div className="mb-4 mt-3 -mx-4 border-t border-[var(--line)]" />
 
-        <div className="relative flex-1">
-          <div className="mb-3 text-sm text-[var(--muted)]">{data.subtitle}</div>
-          {isText ? (
-            <textarea
-              data-testid={`grid-text-input:${data.itemId}`}
-              value={textDraft}
-              onChange={(event) => setTextDraft(event.currentTarget.value)}
-              onBlur={() => {
-                if (textDraft !== (data.textContent ?? '')) {
-                  data.onUpdateText?.(textDraft)
-                }
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              placeholder="Write anything..."
-              className="nodrag nopan nowheel h-[118px] w-full resize-none rounded-2xl border border-[rgba(244,114,182,0.22)] bg-[rgba(255,241,247,0.62)] px-3 py-3 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
-            />
-          ) : isNote ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {(data.tags?.length ? data.tags : ['untagged']).slice(0, 4).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] text-[var(--accent)]"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-sm leading-6 text-[var(--muted)]">
-                Keep related thinking close together and open the source note when you need the full
-                editor.
+        <div className="relative flex-1 overflow-hidden">
+          {isNote ? (
+            <div className="h-full overflow-hidden text-sm text-[var(--text)]">
+              <div className="h-full overflow-auto pr-1">
+                <NoteCardPreview fallbackText={data.bodyPreview} />
               </div>
             </div>
-          ) : (
+          ) : !isText ? (
+            <div className="mb-3 text-sm text-[var(--muted)]">{data.subtitle}</div>
+          ) : null}
+          {!isText && !isNote ? (
             <div className="space-y-3">
-              <div className="line-clamp-3 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-sm leading-6 text-[var(--muted)]">
+              <div className="line-clamp-3 text-sm leading-6 text-[var(--muted)]">
                 {data.summary || 'No summary yet.'}
               </div>
               <div className="flex items-center gap-3">
@@ -798,21 +774,23 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
                 </span>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className="relative mt-4 flex items-center justify-between text-xs text-[var(--muted)]">
-          <div className="flex items-center gap-1.5">
-            <Clock3 size={13} />
-            <span>{isText ? 'Editable on canvas' : formatRelativeLabel(data.updatedAt)}</span>
-          </div>
-          {!isText ? (
-            <div className="flex items-center gap-1.5 text-[var(--accent)]">
-              <span>Open</span>
-              <ArrowUpRight size={13} />
-            </div>
           ) : null}
         </div>
+
+        {isNote ? null : (
+          <div className="relative mt-4 flex items-center justify-between text-xs text-[var(--muted)]">
+            <div className="flex items-center gap-1.5">
+              <Clock3 size={13} />
+              <span>{isText ? 'Editable on canvas' : formatRelativeLabel(data.updatedAt)}</span>
+            </div>
+            {!isText ? (
+              <div className="flex items-center gap-1.5 text-[var(--accent)]">
+                <span>Open</span>
+                <ArrowUpRight size={13} />
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -820,10 +798,6 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
 
 function createGridTextId(): string {
   return `grid-text:${crypto.randomUUID()}`
-}
-
-function snapToGridValue(value: number): number {
-  return Math.round(value / GRID_SNAP_SIZE) * GRID_SNAP_SIZE
 }
 
 function formatRelativeLabel(iso?: string): string {
@@ -840,4 +814,12 @@ function formatRelativeLabel(iso?: string): string {
     month: 'short',
     day: 'numeric'
   }).format(date)
+}
+
+function NoteCardPreview({ fallbackText }: { fallbackText?: string }): ReactElement {
+  return (
+    <div className="whitespace-pre-wrap text-[var(--text)]">
+      {fallbackText?.trim() || 'Empty note.'}
+    </div>
+  )
 }

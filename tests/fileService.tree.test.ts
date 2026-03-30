@@ -3,6 +3,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FileService } from '../src/main/fileService'
+import {
+  createStoredNoteDocumentFromText,
+  serializeStoredNoteDocument
+} from '../src/shared/noteDocument'
 
 const tempDirs: string[] = []
 
@@ -32,12 +36,18 @@ describe('FileService tree operations', () => {
     await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
   })
 
-  it('builds a nested tree with empty folders and markdown notes', async () => {
+  it('builds a nested tree with empty folders and note documents', async () => {
     const { notesDir, service } = await makeService()
     await fs.mkdir(path.join(notesDir, 'alpha', 'nested'), { recursive: true })
     await fs.mkdir(path.join(notesDir, 'empty-folder'))
-    await fs.writeFile(path.join(notesDir, 'root-note.md'), '# Root\n')
-    await fs.writeFile(path.join(notesDir, 'alpha', 'nested', 'child-note.md'), '# Child\n')
+    await fs.writeFile(
+      path.join(notesDir, 'root-note.xnote'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('# Root\n'))
+    )
+    await fs.writeFile(
+      path.join(notesDir, 'alpha', 'nested', 'child-note.xnote'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('# Child\n'))
+    )
     await fs.writeFile(path.join(notesDir, 'ignored.txt'), 'ignore me')
 
     const tree = await service.listTree()
@@ -45,7 +55,7 @@ describe('FileService tree operations', () => {
     expect(tree.map((node) => `${node.kind}:${node.name}`)).toEqual([
       'folder:alpha',
       'folder:empty-folder',
-      'note:root-note.md'
+      'note:root-note.xnote'
     ])
 
     const alphaFolder = tree[0]
@@ -66,8 +76,8 @@ describe('FileService tree operations', () => {
     }
     expect(nestedFolder.children[0]).toMatchObject({
       kind: 'note',
-      relPath: 'alpha/nested/child-note.md',
-      name: 'child-note.md'
+      relPath: 'alpha/nested/child-note.xnote',
+      name: 'child-note.xnote'
     })
   })
 
@@ -75,11 +85,11 @@ describe('FileService tree operations', () => {
     const { notesDir, service } = await makeService()
 
     await service.createFolder('projects')
-    const notePath = await service.createNoteAtPath('projects/today.md')
-    expect(notePath).toBe('projects/today.md')
+    const notePath = await service.createNoteAtPath('projects/today.xnote')
+    expect(notePath).toBe('projects/today.xnote')
 
     await service.renamePath('projects', 'archive')
-    await expect(fs.stat(path.join(notesDir, 'archive', 'today.md'))).resolves.toBeTruthy()
+    await expect(fs.stat(path.join(notesDir, 'archive', 'today.xnote'))).resolves.toBeTruthy()
 
     await service.deletePath('archive')
     await expect(fs.stat(path.join(notesDir, 'archive'))).rejects.toThrow()

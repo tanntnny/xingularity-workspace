@@ -3,6 +3,10 @@ import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import {
+  createStoredNoteDocumentFromText,
+  serializeStoredNoteDocument
+} from '../src/shared/noteDocument'
 
 declare global {
   interface Window {
@@ -18,7 +22,11 @@ async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
-  await fs.writeFile(path.join(rootPath, 'notes', 'alpha.md'), 'Alpha note\n', 'utf-8')
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'alpha.xnote'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha note\n')),
+    'utf-8'
+  )
   return rootPath
 }
 
@@ -46,7 +54,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.md')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }

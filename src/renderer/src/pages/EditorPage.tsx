@@ -1,8 +1,9 @@
 import { ReactElement, RefObject, useState } from 'react'
 import { Plus } from 'lucide-react'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
-import type { NoteEditorBlock } from '../lib/noteEditorSession'
+import type { NoteEditorBlock, NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import type { NoteOutlineItem } from '../lib/noteOutline'
@@ -12,17 +13,16 @@ interface EditorPageProps {
   editorSessionKey: number
   initialBlocks?: NoteEditorBlock[] | null
   notePath: string
-  content: string
   tags: string[]
   notes: NoteListItem[]
   onDirty: () => void
-  onDropFile: (sourcePath: string) => Promise<void>
+  onSnapshotChange?: (snapshot: NoteEditorSnapshot) => void
+  onDropFile: (sourcePath: string) => Promise<string | null>
   onPasteImage: (imageBlob: Blob, fileExtension: string) => Promise<string | null>
   onAddTag: (rawTag: string) => Promise<void> | void
   onRemoveTag: (tag: string) => Promise<void> | void
   onFindByTag: (tag: string) => void
   onRename: (newName: string) => Promise<void>
-  vaultRootPath?: string
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
@@ -32,24 +32,23 @@ export function EditorPage({
   editorSessionKey,
   initialBlocks,
   notePath,
-  content,
   tags,
   notes,
   onDirty,
+  onSnapshotChange,
   onDropFile,
   onPasteImage,
   onAddTag,
   onRemoveTag,
   onFindByTag,
   onRename,
-  vaultRootPath,
   onOutlineChange,
   onJumpToHeadingChange
 }: EditorPageProps): ReactElement {
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTagValue, setNewTagValue] = useState('')
 
-  const currentName = notePath.split('/').pop()?.replace(/\.md$/, '') || ''
+  const currentName = stripNoteExtension(notePath).split('/').pop() || ''
 
   const handleAddTag = (): void => {
     if (newTagValue.trim()) {
@@ -127,12 +126,11 @@ export function EditorPage({
           ref={editorRef}
           key={`${notePath}:${editorSessionKey}`}
           initialBlocks={initialBlocks}
-          value={content}
           onDirty={onDirty}
+          onSnapshotChange={onSnapshotChange}
           onDropFile={onDropFile}
           onPasteImage={onPasteImage}
           notes={notes}
-          vaultRootPath={vaultRootPath}
           currentNotePath={notePath}
           onOutlineChange={onOutlineChange}
           onJumpToHeadingChange={onJumpToHeadingChange}

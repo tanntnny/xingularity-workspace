@@ -2,6 +2,7 @@ import { CSSProperties, ReactElement, useEffect, useRef, useState } from 'react'
 import { useElementSize } from '@mantine/hooks'
 import { ChevronRight, FileText, Folder, FolderOpen, FolderPlus, Pencil, Trash2 } from 'lucide-react'
 import { Tree, TreeApi, NodeRendererProps } from 'react-arborist'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import type { NoteTreeNode } from '../../../shared/types'
 import {
   ContextMenu,
@@ -293,7 +294,7 @@ function TreeNode({
               />
           ) : (
               <span className="min-w-0 truncate">
-                {isFolder ? node.data.name : node.data.name.replace(/\.md$/i, '')}
+                {isFolder ? node.data.name : stripNoteExtension(node.data.name)}
               </span>
             )}
             {!isEditing ? (
@@ -306,7 +307,7 @@ function TreeNode({
                   onStartEditing()
                 }}
                 title={`Rename ${isFolder ? 'folder' : 'note'}`}
-                aria-label={`Rename ${isFolder ? 'folder' : 'note'} ${node.data.name.replace(/\.md$/i, '')}`}
+                aria-label={`Rename ${isFolder ? 'folder' : 'note'} ${stripNoteExtension(node.data.name)}`}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -355,7 +356,7 @@ function TreeNodeInput({
       autoFocus
       type="text"
       data-testid={`note-tree-input:${node.data.relPath}`}
-      defaultValue={node.data.kind === 'folder' ? node.data.name : node.data.name.replace(/\.md$/i, '')}
+      defaultValue={node.data.kind === 'folder' ? node.data.name : stripNoteExtension(node.data.name)}
       className="h-7 flex-1 rounded border border-[var(--accent-line)] bg-[var(--panel)] px-2 text-sm outline-none"
       onFocus={(event) => event.currentTarget.select()}
       onMouseDown={(event) => event.stopPropagation()}

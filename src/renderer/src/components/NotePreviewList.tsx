@@ -1,5 +1,6 @@
 import { ReactElement, useMemo } from 'react'
 import { Copy, FileText, FolderInput, Heart, Link, Pencil, Trash2 } from 'lucide-react'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
 import { Badge } from './ui/badge'
@@ -250,7 +251,7 @@ function NoteSection({
                 onDelete(note.relPath)
               }}
             >
-              <div className="truncate text-lg font-bold">{note.name.replace(/\.md$/i, '')}</div>
+              <div className="truncate text-lg font-bold">{stripNoteExtension(note.name)}</div>
               <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
                 <Badge variant="neutral">
                   <Pencil size={12} aria-hidden="true" />

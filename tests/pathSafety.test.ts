@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { assertSafeRelativePath, ensureWithinBase, joinSafe } from '../src/shared/pathSafety'
 
 describe('path safety', () => {
-  it('accepts markdown path in vault', () => {
-    expect(assertSafeRelativePath('folder/my-note.md')).toBe('folder/my-note.md')
+  it('accepts note document path in vault', () => {
+    expect(assertSafeRelativePath('folder/my-note.xnote')).toBe('folder/my-note.xnote')
   })
 
   it('rejects traversal paths', () => {
@@ -14,12 +14,12 @@ describe('path safety', () => {
 
   it('joins safe path inside base', () => {
     const base = path.resolve('/tmp/vault/notes')
-    const target = joinSafe(base, 'hello.md')
+    const target = joinSafe(base, 'hello.xnote')
     expect(target.startsWith(base)).toBe(true)
   })
 
   it('denies absolute target outside base', () => {
     const base = path.resolve('/tmp/vault/notes')
-    expect(() => ensureWithinBase(base, '/tmp/other/place.md')).toThrowError()
+    expect(() => ensureWithinBase(base, '/tmp/other/place.xnote')).toThrowError()
   })
 })

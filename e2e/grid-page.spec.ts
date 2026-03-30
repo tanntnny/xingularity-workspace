@@ -4,6 +4,10 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { AppSettings, GridBoardItem } from '../src/shared/types'
+import {
+  createStoredNoteDocumentFromText,
+  serializeStoredNoteDocument
+} from '../src/shared/noteDocument'
 
 declare global {
   interface Window {
@@ -19,7 +23,15 @@ async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-grid-enabled-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
-  await fs.writeFile(path.join(rootPath, 'notes', 'alpha.md'), 'Alpha note\n', 'utf-8')
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'alpha.xnote'),
+    serializeStoredNoteDocument(
+      createStoredNoteDocumentFromText(
+        'A distinctive note body for canvas preview.\nSecond line for preview coverage.\n'
+      )
+    ),
+    'utf-8'
+  )
   return rootPath
 }
 
@@ -89,7 +101,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.md')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -145,8 +157,23 @@ test.describe('grid page', () => {
       await page.getByRole('button', { name: 'Add note' }).click()
       await page.getByRole('button', { name: /Alpha/i }).click()
 
-      const noteCard = page.getByTestId('grid-card:note:alpha.md')
+      const initialNoteItem = await waitForBoardItem(
+        vaultRoot,
+        (item) => item.id === 'grid-note:alpha.xnote'
+      )
+
+      const noteCard = page.getByTestId('grid-card:note:alpha.xnote')
       await expect(noteCard).toBeVisible()
+      await expect(noteCard).toContainText('alpha')
+      await expect(noteCard).toContainText('A distinctive note body for canvas preview.')
+
+      const noteCardStyles = await noteCard.evaluate((element) => {
+        const computed = window.getComputedStyle(element as HTMLElement)
+        return {
+          boxShadow: computed.boxShadow
+        }
+      })
+      expect(noteCardStyles.boxShadow).toBe('none')
 
       const noteBox = await noteCard.boundingBox()
       expect(noteBox).not.toBeNull()
@@ -167,12 +194,32 @@ test.describe('grid page', () => {
 
       const noteItemAfterDrag = await waitForBoardItem(
         vaultRoot,
-        (item) => item.id === 'grid-note:alpha.md'
+        (item) => item.id === 'grid-note:alpha.xnote'
       )
-      expect(noteItemAfterDrag.position.x % 30).toBe(0)
-      expect(noteItemAfterDrag.position.y % 30).toBe(0)
+      expect(noteItemAfterDrag.position.x).not.toBe(initialNoteItem.position.x)
+      expect(noteItemAfterDrag.position.y).not.toBe(initialNoteItem.position.y)
 
       await noteCard.click()
+      const noteCardAfterSelectBox = await noteCard.boundingBox()
+      expect(noteCardAfterSelectBox).not.toBeNull()
+      if (!noteCardAfterSelectBox) {
+        throw new Error('Selected note card bounding box not available')
+      }
+
+      const noteRightEdge = page.locator('.react-flow__resize-control.right.line').last()
+      await expect(noteRightEdge).toBeAttached()
+      const noteRightEdgeBox = await noteRightEdge.boundingBox()
+      expect(noteRightEdgeBox).not.toBeNull()
+      if (!noteRightEdgeBox) {
+        throw new Error('Right resize edge bounding box not available')
+      }
+
+      const noteRightEdgeOverflow =
+        noteRightEdgeBox.x +
+        noteRightEdgeBox.width -
+        (noteCardAfterSelectBox.x + noteCardAfterSelectBox.width)
+      expect(noteRightEdgeOverflow).toBeLessThanOrEqual(8)
+
       const noteCorner = page.locator('.react-flow__resize-control.bottom.right.handle').last()
       await expect(noteCorner).toBeAttached()
       const noteCornerBox = await noteCorner.boundingBox()
@@ -180,6 +227,17 @@ test.describe('grid page', () => {
       if (!noteCornerBox) {
         throw new Error('Diagonal resize corner bounding box not available')
       }
+
+      const noteCornerOverflowX =
+        noteCornerBox.x +
+        noteCornerBox.width -
+        (noteCardAfterSelectBox.x + noteCardAfterSelectBox.width)
+      const noteCornerOverflowY =
+        noteCornerBox.y +
+        noteCornerBox.height -
+        (noteCardAfterSelectBox.y + noteCardAfterSelectBox.height)
+      expect(noteCornerOverflowX).toBeLessThanOrEqual(14)
+      expect(noteCornerOverflowY).toBeLessThanOrEqual(14)
 
       await page.mouse.move(
         noteCornerBox.x + noteCornerBox.width / 2,
@@ -197,14 +255,12 @@ test.describe('grid page', () => {
 
       const noteItemAfterResize = await waitForBoardItem(
         vaultRoot,
-        (item) => item.id === 'grid-note:alpha.md'
+        (item) => item.id === 'grid-note:alpha.xnote'
       )
       expect(noteItemAfterResize.size?.width).toBeDefined()
       expect(noteItemAfterResize.size?.height).toBeDefined()
       expect(noteItemAfterResize.size?.width ?? 0).toBeGreaterThan(312)
       expect(noteItemAfterResize.size?.height ?? 0).toBeGreaterThan(190)
-      expect((noteItemAfterResize.size?.width ?? 0) % 30).toBe(0)
-      expect((noteItemAfterResize.size?.height ?? 0) % 30).toBe(0)
 
       await page.getByRole('button', { name: 'Add to canvas' }).click()
       await page.getByRole('button', { name: 'Add text' }).click()
@@ -236,8 +292,6 @@ test.describe('grid page', () => {
       const textBoardItem = await waitForBoardItem(vaultRoot, (item) => item.kind === 'text')
       expect(textBoardItem.size?.width).toBeDefined()
       expect(textBoardItem.size?.height).toBeDefined()
-      expect((textBoardItem.size?.width ?? 0) % 30).toBe(0)
-      expect((textBoardItem.size?.height ?? 0) % 30).toBe(0)
       expect(textBoardItem.size?.width ?? 0).toBeGreaterThan(296)
       expect(textBoardItem.size?.height ?? 0).toBeGreaterThan(220)
 
@@ -247,13 +301,13 @@ test.describe('grid page', () => {
       const relaunchedPage = await electronApp.firstWindow()
       await openGridPage(relaunchedPage)
 
-      await expect(relaunchedPage.getByTestId('grid-card:note:alpha.md')).toBeVisible()
+      await expect(relaunchedPage.getByTestId('grid-card:note:alpha.xnote')).toBeVisible()
       await expect(relaunchedPage.locator('[data-testid^="grid-card:text:"]').first()).toBeVisible()
 
       const persistedSettings = await readVaultSettings(vaultRoot)
       const persistedNote = findBoardItem(
         persistedSettings.gridBoard.items,
-        (item) => item.id === 'grid-note:alpha.md'
+        (item) => item.id === 'grid-note:alpha.xnote'
       )
       const persistedText = findBoardItem(
         persistedSettings.gridBoard.items,

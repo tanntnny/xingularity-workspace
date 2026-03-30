@@ -3,6 +3,10 @@ import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import {
+  createStoredNoteDocumentFromText,
+  serializeStoredNoteDocument
+} from '../src/shared/noteDocument'
 
 declare global {
   interface Window {
@@ -18,8 +22,16 @@ async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-note-tree-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
-  await fs.writeFile(path.join(rootPath, 'notes', 'alpha.md'), 'Alpha note\n', 'utf-8')
-  await fs.writeFile(path.join(rootPath, 'notes', 'beta.md'), 'Beta note\n', 'utf-8')
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'alpha.xnote'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha note\n')),
+    'utf-8'
+  )
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'beta.xnote'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Beta note\n')),
+    'utf-8'
+  )
   return rootPath
 }
 
@@ -47,7 +59,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.md')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -61,13 +73,13 @@ test.describe('notes tree view', () => {
       await page.getByTestId('note-panel-toggle:tree').click()
       await expect(page.getByTestId('notes-tree-view')).toBeVisible()
 
-      const alphaRow = page.getByTestId('note-tree-row:alpha.md')
+      const alphaRow = page.getByTestId('note-tree-row:alpha.xnote')
       await expect(alphaRow).toBeVisible()
 
       await alphaRow.hover()
-      await page.getByTestId('note-tree-rename:alpha.md').click()
+      await page.getByTestId('note-tree-rename:alpha.xnote').click()
 
-      const renameInput = page.getByTestId('note-tree-input:alpha.md')
+      const renameInput = page.getByTestId('note-tree-input:alpha.xnote')
       await expect(renameInput).toBeVisible()
       await renameInput.fill('alpha-renamed')
       await renameInput.press('Enter')
@@ -75,7 +87,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha-renamed.md'))
+            await fs.access(path.join(vaultRoot, 'notes', 'alpha-renamed.xnote'))
             return true
           } catch {
             return false
@@ -86,7 +98,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha.md'))
+            await fs.access(path.join(vaultRoot, 'notes', 'alpha.xnote'))
             return true
           } catch {
             return false
@@ -94,7 +106,7 @@ test.describe('notes tree view', () => {
         })
         .toBe(false)
 
-      await expect(page.getByTestId('note-tree-row:alpha-renamed.md')).toBeVisible()
+      await expect(page.getByTestId('note-tree-row:alpha-renamed.xnote')).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

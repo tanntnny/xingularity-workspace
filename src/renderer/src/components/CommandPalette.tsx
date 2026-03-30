@@ -1,5 +1,6 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, FolderKanban, LayoutDashboard, LayoutGrid, Plus, Clock } from 'lucide-react'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import {
   Command,
@@ -83,7 +84,9 @@ export function CommandPalette({
   const isAiMode = mode === 'ai'
   const searchQuery = mode === 'search' ? trimmedQuery : trimmedQuery.slice(1).trim()
   const aiActionValue = `?${searchQuery || 'ai'}`
-  const aiNoteLabel = activeNotePath?.split('/').pop()?.replace(/\.md$/i, '') || 'current note'
+  const aiNoteLabel = activeNotePath?.split('/').pop()
+    ? stripNoteExtension(activeNotePath.split('/').pop()!)
+    : 'current note'
 
   // Reset state when closing
   useEffect(() => {
@@ -256,7 +259,7 @@ export function CommandPalette({
     const noteItems = filteredNotes.map((note) => ({
       id: `note:${note.relPath}`,
       value: `note:${note.relPath}`,
-      title: note.name.replace(/\.md$/i, ''),
+      title: stripNoteExtension(note.name),
       subtitle: note.relPath,
       keywords: [note.name, note.relPath, ...note.tags],
       tags: note.tags,
@@ -409,7 +412,7 @@ export function CommandPalette({
                       onSelect={handleSelect}
                     >
                       <Clock className="mr-2 h-4 w-4 text-[var(--muted)]" />
-                      <span className="truncate">{note.name.replace(/\.md$/i, '')}</span>
+                      <span className="truncate">{stripNoteExtension(note.name)}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

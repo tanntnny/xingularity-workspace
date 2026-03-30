@@ -4,13 +4,13 @@ export type NoteEditorBlock = PartialBlock
 
 export interface NoteEditorSessionSnapshot {
   blocks: NoteEditorBlock[]
-  body: string
   content: string
+  tags: string[]
 }
 
 export interface NoteEditorSnapshot {
   blocks: NoteEditorBlock[]
-  body: string
+  content: string
 }
 
 export function cloneNoteEditorBlocks(blocks: NoteEditorBlock[]): NoteEditorBlock[] {

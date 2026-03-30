@@ -14,6 +14,11 @@ const sourcePathSchema = z.string().min(1).max(1024)
 const directoryTitleSchema = z.string().trim().min(1).max(200)
 const fileExtensionSchema = z.string().min(1).max(10)
 const tagsArraySchema = z.array(z.string().min(1).max(100)).max(50)
+const noteDocumentSchema = z.object({
+  version: z.literal(1),
+  tags: z.array(z.string()).max(200),
+  blocks: z.array(z.unknown()).max(20_000)
+})
 const aiCompletionInputSchema = z.object({
   notePath: z.string().min(1).max(512),
   noteContent: z.string().max(2_000_000),
@@ -295,9 +300,20 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.readNote(notePathSchema.parse(relPath))
   })
 
+  ipcMain.handle(IPC_CHANNELS.readNoteDocument, async (_event, relPath: unknown) => {
+    return runtime.readNoteDocument(notePathSchema.parse(relPath))
+  })
+
   ipcMain.handle(IPC_CHANNELS.writeNote, async (_event, relPath: unknown, content: unknown) => {
     await runtime.writeNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.writeNoteDocument,
+    async (_event, relPath: unknown, document: unknown) => {
+      await runtime.writeNoteDocument(notePathSchema.parse(relPath), noteDocumentSchema.parse(document))
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.createNote, async (_event, name: unknown) => {
     return runtime.createNote(noteNameSchema.parse(name))

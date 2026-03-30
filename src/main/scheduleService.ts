@@ -1,6 +1,7 @@
 import type { VaultRuntime } from './runtime'
 import { ScheduleStore } from './scheduleStore'
 import { runScript } from './scheduleRunner'
+import { stripNoteExtension } from '../shared/noteDocument'
 import type {
   ScheduleJob,
   ScheduleJobInput,
@@ -371,7 +372,8 @@ export class ScheduleService {
     try {
       const notes = await this.runtime.listNotes()
       const match = notes.find(
-        (n) => n.name.toLowerCase() === action.name.toLowerCase().replace(/\.md$/i, '')
+        (n) =>
+          stripNoteExtension(n.name).toLowerCase() === stripNoteExtension(action.name).toLowerCase()
       )
       if (!match) return false
 

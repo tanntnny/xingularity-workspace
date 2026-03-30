@@ -1,9 +1,21 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { listPreviewTagsFromMarkdown, upsertTagsInMarkdown } from '../shared/noteTags'
+import {
+  createEmptyNoteDocument,
+  createStoredNoteDocumentFromMarkdown,
+  createStoredNoteDocumentFromText,
+  getNoteDisplayName,
+  isNotePath,
+  NOTE_FILE_EXTENSION,
+  noteBlocksToPreviewText,
+  noteBlocksToText,
+  parseStoredNoteDocument,
+  serializeStoredNoteDocument,
+  withNoteExtension
+} from '../shared/noteDocument'
 import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shared/pathSafety'
-import { ImportedNoteResult, NoteListItem, NoteTreeFile, NoteTreeFolder, NoteTreeNode } from '../shared/types'
+import { ImportedNoteResult, NoteListItem, NoteTreeFile, NoteTreeFolder, NoteTreeNode, StoredNoteDocument } from '../shared/types'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -19,7 +31,7 @@ export class FileService {
   ) {}
 
   async listNotes(): Promise<NoteListItem[]> {
-    const notes = await listMarkdownNotePaths(this.notesRoot)
+    const notes = await listNotePaths(this.notesRoot)
     return Promise.all(notes.map((absolutePath) => this.readNoteListItem(absolutePath)))
   }
 
@@ -28,41 +40,55 @@ export class FileService {
   }
 
   async readNote(relPathInput: string): Promise<string> {
+    const document = await this.readNoteDocument(relPathInput)
+    return noteBlocksToText(document.blocks)
+  }
+
+  async readNoteDocument(relPathInput: string): Promise<StoredNoteDocument> {
     const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
-    return fs.readFile(absolutePath, 'utf-8')
+    const raw = await fs.readFile(absolutePath, 'utf-8')
+    return parseStoredNoteDocument(raw)
   }
 
   async writeNote(relPathInput: string, content: string): Promise<void> {
     const relPath = sanitizeNotePath(relPathInput)
+    const existing = await this.readNoteDocument(relPath)
+    await this.writeNoteDocument(relPath, createStoredNoteDocumentFromText(content, existing.tags))
+  }
+
+  async writeNoteDocument(relPathInput: string, document: StoredNoteDocument): Promise<void> {
+    const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, content, 'utf-8')
+    await fs.writeFile(absolutePath, serializeStoredNoteDocument(document), 'utf-8')
     this.onInternalWrite(relPath)
   }
 
   async createNote(nameInput: string): Promise<string> {
     const sanitizedName = sanitizeNoteName(nameInput)
-    const relPath = `${sanitizedName}.md`
-    return this.createNoteAtPath(relPath)
+    return this.createNoteAtPath(`${sanitizedName}${NOTE_FILE_EXTENSION}`)
   }
 
   async createNoteAtPath(relPathInput: string): Promise<string> {
     const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
-    const initial = ''
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, initial, { flag: 'wx' })
+    await fs.writeFile(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument()), {
+      flag: 'wx'
+    })
     this.onInternalWrite(relPath)
     return relPath
   }
 
   async createNoteWithTags(nameInput: string, tags: string[]): Promise<string> {
     const sanitizedName = sanitizeNoteName(nameInput)
-    const relPath = `${sanitizedName}.md`
+    const relPath = `${sanitizedName}${NOTE_FILE_EXTENSION}`
     const absolutePath = joinSafe(this.notesRoot, relPath)
-    const initial = upsertTagsInMarkdown('', tags)
-    await fs.writeFile(absolutePath, initial, { flag: 'wx' })
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.writeFile(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument(tags)), {
+      flag: 'wx'
+    })
     this.onInternalWrite(relPath)
     return relPath
   }
@@ -91,11 +117,36 @@ export class FileService {
         throw new Error('Only markdown notes are supported')
       }
 
-      const importedNote = await this.importSingleNote(sourcePath)
-      imported.push(importedNote)
+      imported.push(await this.importSingleNote(sourcePath))
     }
 
     return imported
+  }
+
+  async migrateLegacyMarkdownNotes(): Promise<Record<string, string>> {
+    const legacyFiles = await listLegacyMarkdownPaths(this.notesRoot)
+    const migrated: Record<string, string> = {}
+
+    for (const legacyAbsolutePath of legacyFiles) {
+      const legacyRelPath = normalizeRelativePath(path.relative(this.notesRoot, legacyAbsolutePath))
+      const preferredRelPath = `${stripLegacyMarkdownExtension(legacyRelPath)}${NOTE_FILE_EXTENSION}`
+      const nextRelPath = await findAvailableNoteRelPath(this.notesRoot, preferredRelPath)
+      const nextAbsolutePath = joinSafe(this.notesRoot, nextRelPath)
+      const raw = await fs.readFile(legacyAbsolutePath, 'utf-8')
+
+      await fs.mkdir(path.dirname(nextAbsolutePath), { recursive: true })
+      await fs.writeFile(
+        nextAbsolutePath,
+        serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(raw)),
+        { flag: 'wx' }
+      )
+      await fs.rm(legacyAbsolutePath)
+
+      migrated[legacyRelPath] = nextRelPath
+      this.onInternalWrite(nextRelPath)
+    }
+
+    return migrated
   }
 
   async rename(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
@@ -166,9 +217,7 @@ export class FileService {
       throw new Error('File extension is required')
     }
 
-    // Ensure extension starts with a dot
     const ext = fileExtension.startsWith('.') ? fileExtension : `.${fileExtension}`
-
     const fileName = `${Date.now()}-pasted${ext.toLowerCase()}`
     const absoluteTarget = joinSafe(this.attachmentsRoot, fileName)
 
@@ -177,42 +226,42 @@ export class FileService {
   }
 
   private async importSingleNote(sourcePath: string): Promise<ImportedNoteResult> {
-    const ext = path.extname(sourcePath)
     const sourceName = path.basename(sourcePath)
-    const sanitizedName = sanitizeNoteName(path.basename(sourcePath, ext))
-
-    let relPath = `${sanitizedName || 'imported-note'}.md`
-    let absolutePath = joinSafe(this.notesRoot, relPath)
-    let suffix = 2
-
-    while (await fileExists(absolutePath)) {
-      relPath = `${sanitizedName || 'imported-note'}-${suffix}.md`
-      absolutePath = joinSafe(this.notesRoot, relPath)
-      suffix += 1
-    }
-
+    const sanitizedName = sanitizeNoteName(path.basename(sourcePath, path.extname(sourcePath)))
+    const relPath = await findAvailableNoteRelPath(
+      this.notesRoot,
+      `${sanitizedName || 'imported-note'}${NOTE_FILE_EXTENSION}`
+    )
+    const absolutePath = joinSafe(this.notesRoot, relPath)
     const content = await fs.readFile(sourcePath, 'utf-8')
-    await fs.writeFile(absolutePath, content, { flag: 'wx' })
+    await fs.writeFile(
+      absolutePath,
+      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(content)),
+      { flag: 'wx' }
+    )
     this.onInternalWrite(relPath)
 
     return {
       sourceName,
       relPath,
-      renamed: relPath !== `${sanitizedName || 'imported-note'}.md`
+      renamed: relPath !== `${sanitizedName || 'imported-note'}${NOTE_FILE_EXTENSION}`
     }
   }
 
   private async readNoteListItem(absolutePath: string): Promise<NoteListItem> {
     const stats = await fs.stat(absolutePath)
-    const content = await fs.readFile(absolutePath, 'utf-8')
+    const raw = await fs.readFile(absolutePath, 'utf-8')
     const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+    const document = parseStoredNoteDocument(raw)
+
     return {
       relPath,
       name: path.basename(relPath),
       dir: path.dirname(relPath) === '.' ? '' : path.dirname(relPath),
       createdAt: stats.birthtime.toISOString(),
       updatedAt: stats.mtime.toISOString(),
-      tags: listPreviewTagsFromMarkdown(content)
+      tags: document.tags,
+      bodyPreview: noteBlocksToPreviewText(document.blocks)
     }
   }
 }
@@ -220,8 +269,8 @@ export class FileService {
 export function sanitizeNotePath(input: string): string {
   const parsed = notePathSchema.parse(input)
   const normalized = sanitizeEntryPath(parsed)
-  if (!normalized.toLowerCase().endsWith('.md')) {
-    throw new Error('Only markdown notes are supported')
+  if (!isNotePath(normalized)) {
+    throw new Error(`Only ${NOTE_FILE_EXTENSION} notes are supported`)
   }
   return normalized
 }
@@ -233,28 +282,47 @@ export function sanitizeEntryPath(input: string): string {
 
 function sanitizeNoteName(input: string): string {
   const parsed = noteNameSchema.parse(input)
-  return parsed
+  return stripLegacyMarkdownExtension(withNoteExtension(parsed).replace(new RegExp(`${NOTE_FILE_EXTENSION.replace('.', '\\.')}$`, 'i'), ''))
     .trim()
-    .replace(/\.md$/i, '')
     .replace(/[^a-zA-Z0-9-_ ]/g, '')
     .replace(/\s+/g, '-')
     .toLowerCase()
 }
 
-async function listMarkdownNotePaths(root: string): Promise<string[]> {
+function stripLegacyMarkdownExtension(input: string): string {
+  return input.replace(/\.md$/i, '')
+}
+
+async function listNotePaths(root: string): Promise<string[]> {
   const entries = await fs.readdir(root, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
     if (entry.isDirectory()) {
-      results.push(...(await listMarkdownNotePaths(absolutePath)))
+      results.push(...(await listNotePaths(absolutePath)))
+      continue
+    }
+    if (entry.isFile() && isNotePath(entry.name)) {
+      results.push(absolutePath)
+    }
+  }
+  return results.sort((left, right) => left.localeCompare(right))
+}
+
+async function listLegacyMarkdownPaths(root: string): Promise<string[]> {
+  const entries = await fs.readdir(root, { withFileTypes: true })
+  const results: string[] = []
+  for (const entry of entries) {
+    const absolutePath = path.join(root, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...(await listLegacyMarkdownPaths(absolutePath)))
       continue
     }
     if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
       results.push(absolutePath)
     }
   }
-  return results.sort((a, b) => a.localeCompare(b))
+  return results.sort((left, right) => left.localeCompare(right))
 }
 
 async function listTreeNodes(root: string, currentDir: string): Promise<NoteTreeNode[]> {
@@ -277,7 +345,7 @@ async function listTreeNodes(root: string, currentDir: string): Promise<NoteTree
       continue
     }
 
-    if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+    if (entry.isFile() && isNotePath(entry.name)) {
       const note = await readNoteTreeFile(root, absolutePath)
       notes.push({
         id: `note:${note.relPath}`,
@@ -296,16 +364,36 @@ async function listTreeNodes(root: string, currentDir: string): Promise<NoteTree
 
 async function readNoteTreeFile(root: string, absolutePath: string): Promise<NoteListItem> {
   const stats = await fs.stat(absolutePath)
-  const content = await fs.readFile(absolutePath, 'utf-8')
+  const raw = await fs.readFile(absolutePath, 'utf-8')
   const relPath = normalizeRelativePath(path.relative(root, absolutePath))
+  const document = parseStoredNoteDocument(raw)
   return {
     relPath,
     name: path.basename(relPath),
     dir: path.dirname(relPath) === '.' ? '' : path.dirname(relPath),
     createdAt: stats.birthtime.toISOString(),
     updatedAt: stats.mtime.toISOString(),
-    tags: listPreviewTagsFromMarkdown(content)
+    tags: document.tags,
+    bodyPreview: noteBlocksToPreviewText(document.blocks)
   }
+}
+
+async function findAvailableNoteRelPath(root: string, preferredRelPath: string): Promise<string> {
+  const baseDir = path.dirname(preferredRelPath)
+  const baseName = getNoteDisplayName(preferredRelPath)
+  let nextRelPath = normalizeRelativePath(
+    `${baseDir === '.' ? '' : `${baseDir}/`}${baseName}${NOTE_FILE_EXTENSION}`
+  )
+  let suffix = 2
+
+  while (await fileExists(joinSafe(root, nextRelPath))) {
+    nextRelPath = normalizeRelativePath(
+      `${baseDir === '.' ? '' : `${baseDir}/`}${baseName}-${suffix}${NOTE_FILE_EXTENSION}`
+    )
+    suffix += 1
+  }
+
+  return nextRelPath
 }
 
 function assertMoveTargetIsValid(

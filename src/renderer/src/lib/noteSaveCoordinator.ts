@@ -1,6 +1,9 @@
+import type { StoredNoteDocument } from '../../../shared/types'
+
 export interface NoteSaveRequest {
   relPath: string
   content: string
+  document: StoredNoteDocument
 }
 
 interface CreateNoteSaveCoordinatorOptions {

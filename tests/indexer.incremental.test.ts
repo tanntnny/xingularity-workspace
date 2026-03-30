@@ -2,6 +2,10 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import {
+  createStoredNoteDocumentFromText,
+  serializeStoredNoteDocument
+} from '../src/shared/noteDocument'
 
 const dirs: string[] = []
 
@@ -22,8 +26,14 @@ describe('sqlite index incremental updates', () => {
     const dbPath = path.join(metaRoot, 'index.sqlite')
     const fileMapPath = path.join(metaRoot, 'filemap.json')
 
-    const firstNotePath = path.join(notesRoot, 'first.md')
-    await fs.writeFile(firstNotePath, '---\ntitle: First\ntags: [alpha]\n---\n\nBody #beta', 'utf-8')
+    const firstNotePath = path.join(notesRoot, 'first.xnote')
+    await fs.writeFile(
+      firstNotePath,
+      serializeStoredNoteDocument(
+        createStoredNoteDocumentFromText('# First\nBody text', ['alpha', 'beta'])
+      ),
+      'utf-8'
+    )
 
     let indexer: InstanceType<typeof SqliteIndexer>
     try {
@@ -40,19 +50,21 @@ describe('sqlite index incremental updates', () => {
     await indexer.rebuild(notesRoot)
 
     const initialResults = indexer.query('alpha')
-    expect(initialResults.some((r) => r.relPath === 'first.md')).toBe(true)
+    expect(initialResults.some((r) => r.relPath === 'first.xnote')).toBe(true)
 
     await indexer.upsertFromRaw({
       id: 'note:first',
-      relPath: 'first.md',
-      content: '---\ntitle: First updated\ntags: [gamma]\n---\n\nNew body text',
+      relPath: 'first.xnote',
+      content: serializeStoredNoteDocument(
+        createStoredNoteDocumentFromText('# First updated\nNew body text', ['gamma'])
+      ),
       updatedAt: new Date().toISOString()
     })
 
     const updatedResults = indexer.query('gamma')
     expect(updatedResults[0]?.title).toContain('First updated')
 
-    await indexer.deleteByRelPath('first.md')
+    await indexer.deleteByRelPath('first.xnote')
     const afterDelete = indexer.query('first')
     expect(afterDelete.length).toBe(0)
 

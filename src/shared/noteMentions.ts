@@ -1,16 +1,18 @@
+import { stripNoteExtension } from './noteDocument'
+
 const NOTE_MENTION_PREFIX = 'note-mention://'
-const NOTE_MENTION_REGEX = /\[\[([^\[\]\n]+?)\]\]/g
+const NOTE_MENTION_REGEX = /\[\[([^\]\n]+?)\]\]/g
 
 export function noteMentionPrefix(): string {
   return NOTE_MENTION_PREFIX
 }
 
 export function normalizeMentionTarget(input: string): string {
-  return input.trim().replace(/\.md$/i, '').replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase()
+  return stripNoteExtension(input.trim()).replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase()
 }
 
 export function mentionTokenFromRelPath(relPath: string): string {
-  return `[[${relPath.replace(/\.md$/i, '')}]]`
+  return `[[${stripNoteExtension(relPath)}]]`
 }
 
 export function mentionsToMarkdownLinks(markdown: string): string {

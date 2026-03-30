@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { sha256 } from '../../shared/hash'
+import { isNotePath } from '../../shared/noteDocument'
 import { FileMap, SearchResult } from '../../shared/types'
 import { ParsedNote, parseNoteContent } from './noteParser'
 
@@ -49,7 +50,7 @@ export class SqliteIndexer {
 
     this.fileMap = {}
 
-    const files = await listMarkdownFiles(notesRoot)
+    const files = await listNoteFiles(notesRoot)
     for (const absolutePath of files) {
       const relPath = path.relative(notesRoot, absolutePath).replace(/\\/g, '/')
       const content = await fs.readFile(absolutePath, 'utf-8')
@@ -249,7 +250,9 @@ export class SqliteIndexer {
   private async recoverFromCorruption(): Promise<void> {
     try {
       this.db.close()
-    } catch {}
+    } catch {
+      // Ignore close failures while recreating the index database.
+    }
 
     await fs.mkdir(path.dirname(this.dbPath), { recursive: true })
     await removeSqliteArtifacts(this.dbPath)
@@ -289,16 +292,16 @@ function toFtsQuery(input: string): string {
   return terms.join(' AND ')
 }
 
-async function listMarkdownFiles(root: string): Promise<string[]> {
+async function listNoteFiles(root: string): Promise<string[]> {
   const entries = await fs.readdir(root, { withFileTypes: true })
   const files: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
     if (entry.isDirectory()) {
-      files.push(...(await listMarkdownFiles(absolutePath)))
+      files.push(...(await listNoteFiles(absolutePath)))
       continue
     }
-    if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+    if (entry.isFile() && isNotePath(entry.name)) {
       files.push(absolutePath)
     }
   }

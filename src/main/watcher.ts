@@ -1,5 +1,6 @@
 import chokidar, { FSWatcher } from 'chokidar'
 import path from 'node:path'
+import { isNotePath } from '../shared/noteDocument'
 
 type VaultEvent = 'add' | 'change' | 'unlink'
 
@@ -43,7 +44,7 @@ export class VaultWatcher {
 
   private enqueue(absPath: string, type: VaultEvent): void {
     const relPath = path.relative(this.notesRoot, absPath).replace(/\\/g, '/')
-    if (!relPath.toLowerCase().endsWith('.md')) {
+    if (!isNotePath(relPath)) {
       return
     }
 

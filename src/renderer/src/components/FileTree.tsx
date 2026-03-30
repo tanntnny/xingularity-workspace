@@ -1,5 +1,6 @@
 import { ReactElement, ReactNode, useMemo } from 'react'
 import { Copy, FolderInput, Link, Pencil, Trash2 } from 'lucide-react'
+import { isNotePath, stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import {
   ContextMenu,
@@ -50,7 +51,7 @@ export function FileTree({
     const counts = new Map<string, number>()
     for (const note of notes) {
       const firstSegment = note.relPath.split('/')[0]
-      const folder = firstSegment.endsWith('.md') ? 'Inbox' : firstSegment
+      const folder = isNotePath(firstSegment) ? 'Inbox' : firstSegment
       counts.set(folder, (counts.get(folder) ?? 0) + 1)
     }
     return Array.from(counts.entries())
@@ -65,7 +66,7 @@ export function FileTree({
   const tags = useMemo(() => {
     const guessed = new Set<string>()
     for (const note of notes) {
-      const parts = note.relPath.toLowerCase().replace('.md', '').split(/[\/-]/)
+      const parts = stripNoteExtension(note.relPath.toLowerCase()).split(/[/-]/)
       for (const part of parts) {
         if (part.length > 4 && !['notes', 'inbox'].includes(part)) {
           guessed.add(part)
@@ -181,9 +182,7 @@ export function FileTree({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuDestructiveItem
-                  onClick={() => onDelete(note.relPath)}
-                >
+                <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                   <ContextMenuShortcut keys={['cmd', 'backspace']} />

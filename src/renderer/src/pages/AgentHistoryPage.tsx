@@ -28,6 +28,7 @@ import type {
   Project,
   RendererVaultApi
 } from '../../../shared/types'
+import { stripNoteExtension } from '../../../shared/noteDocument'
 import {
   Conversation,
   ConversationContent,
@@ -160,7 +161,7 @@ function buildMentionSuggestions(notes: NoteListItem[], projects: Project[]): Me
   const noteSuggestions = notes.map((note) => ({
     id: `note:${note.relPath}`,
     kind: 'note' as const,
-    label: note.name.replace(/\.md$/i, ''),
+    label: stripNoteExtension(note.name),
     detail: note.relPath,
     notePath: note.relPath
   }))
