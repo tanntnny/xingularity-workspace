@@ -21,7 +21,7 @@ Your vault stores note content and attachments. When you pick a vault location, 
 To change the vault location:
 
 1. Open `Settings`.
-2. Open the `Notification` tab.
+2. Open the `Workspace` tab.
 3. Use `Change Vault Location`.
 
 On startup, the app attempts to restore the last opened vault automatically.
@@ -166,10 +166,11 @@ The current settings page stores a Mistral API key used for these agent-related 
 
 ## Settings
 
-Settings is split into three tabs:
+Settings is split into four tabs:
 
 - `Profile`: profile name
-- `Notification`: font family and vault location
+- `Workspace`: vault location
+- `Appearance`: font family
 - `Agent`: Mistral API key
 
 ## Keyboard Shortcuts

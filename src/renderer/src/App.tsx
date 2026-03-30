@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Check,
   Download,
   Funnel,
   Heart,
@@ -10,6 +11,8 @@ import {
   Paintbrush,
   Trash2,
   Plus,
+  RotateCcw,
+  Search,
   Type,
   ChevronLeft,
   ChevronRight,
@@ -22,11 +25,14 @@ import {
 import {
   CalendarTask,
   CreateWeeklyPlanWeekInput,
+  GridBoardState,
+  NoteListItem,
   NoteImportResult,
   NoteTreeNode,
   Project,
   ProjectIconStyle,
   ProjectMilestone,
+  ProjectStatus,
   ProjectSubtask,
   RendererVaultApi,
   TaskReminder,
@@ -102,6 +108,7 @@ import { AgentHistoryPage } from './pages/AgentHistoryPage'
 import { SchedulesPage } from './pages/SchedulesPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { GridPage, type GridWorkspaceActions } from './pages/GridPage'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
 import {
@@ -132,12 +139,14 @@ import {
   getWeekPriorities
 } from './lib/weeklyPlan'
 import { shiftIsoMonthClamped } from './lib/calendarDate'
+import { GRID_PAGE_ENABLED } from './lib/featureFlags'
 import type { NoteOutlineItem } from './lib/noteOutline'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
   notes: 'Notes',
   projects: 'Projects',
+  grid: 'Grid',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   settings: 'Settings',
@@ -146,12 +155,14 @@ const PAGE_LABELS: Record<AppPage, string> = {
 }
 
 if (typeof window !== 'undefined') {
-  ;(window as Window & {
-    __XINGULARITY_E2E__?: {
-      getCurrentNoteSnapshot: () => { path: string | null; content: string }
-      setCurrentNoteBody: (body: string) => void
+  ;(
+    window as Window & {
+      __XINGULARITY_E2E__?: {
+        getCurrentNoteSnapshot: () => { path: string | null; content: string }
+        setCurrentNoteBody: (body: string) => void
+      }
     }
-  }).__XINGULARITY_E2E__ = {
+  ).__XINGULARITY_E2E__ = {
     getCurrentNoteSnapshot: () => {
       const state = useVaultStore.getState()
       return {
@@ -197,12 +208,10 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
 
 type NotePanelView = 'cards' | 'tree'
 
-type NoteTreeSelection =
-  | {
-      kind: 'note' | 'folder'
-      relPath: string
-    }
-  | null
+type NoteTreeSelection = {
+  kind: 'note' | 'folder'
+  relPath: string
+} | null
 
 const panelIconButtonClass =
   'flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]'
@@ -376,6 +385,7 @@ function App(): ReactElement {
   const searchResults = useVaultStore((state) => state.searchResults)
   const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
   const settingsProjects = useVaultStore((state) => state.settings.projects)
+  const gridBoardSettings = useVaultStore((state) => state.settings.gridBoard)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const lastOpenedProjectId = useVaultStore((state) => state.settings.lastOpenedProjectId)
@@ -420,6 +430,18 @@ function App(): ReactElement {
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
   // Projects are now derived from settings for persistence
   const projects = settingsProjects.length > 0 ? settingsProjects : PROJECT_SEED
+  const hasVault = Boolean(vault?.rootPath)
+  const gridBoard = useMemo(
+    () => sanitizeGridBoardState(gridBoardSettings, notes, projects),
+    [gridBoardSettings, notes, projects]
+  )
+  const [gridBoardDraft, setGridBoardDraft] = useState<GridBoardState>(gridBoard)
+  const [gridWorkspaceActions, setGridWorkspaceActions] = useState<GridWorkspaceActions | null>(
+    null
+  )
+  const [isGridAddPopoverOpen, setIsGridAddPopoverOpen] = useState(false)
+  const [gridAddMode, setGridAddMode] = useState<'note' | 'project'>('note')
+  const [gridAddQuery, setGridAddQuery] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     PROJECT_SEED[0]?.id ?? null
   )
@@ -479,19 +501,79 @@ function App(): ReactElement {
   const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const calendarTasksRef = useRef(calendarTasks)
   const shouldAnimateWorkspacePane =
-    activePage === 'dashboard' ||
-    activePage === 'notes' ||
-    activePage === 'projects' ||
-    activePage === 'calendar'
+    hasVault &&
+    (activePage === 'dashboard' ||
+      activePage === 'notes' ||
+      activePage === 'projects' ||
+      activePage === 'grid' ||
+      activePage === 'calendar')
   const showWorkspacePanel =
-    activePage === 'notes' ||
-    activePage === 'projects' ||
-    activePage === 'calendar' ||
-    activePage === 'weeklyPlan'
+    hasVault &&
+    (activePage === 'notes' ||
+      activePage === 'projects' ||
+      activePage === 'calendar' ||
+      activePage === 'weeklyPlan')
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
   }, [currentNotePath])
+
+  useEffect(() => {
+    setGridBoardDraft(gridBoard)
+  }, [gridBoard])
+
+  useEffect(() => {
+    if (activePage !== 'grid') {
+      setIsGridAddPopoverOpen(false)
+      setGridAddQuery('')
+    }
+  }, [activePage])
+
+  const gridBoardNoteItemIds = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of gridBoardDraft.items) {
+      if (item.kind === 'note' && item.noteRelPath) {
+        map.set(item.noteRelPath, item.id)
+      }
+    }
+    return map
+  }, [gridBoardDraft.items])
+
+  const gridBoardProjectItemIds = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of gridBoardDraft.items) {
+      if (item.kind === 'project' && item.projectId) {
+        map.set(item.projectId, item.id)
+      }
+    }
+    return map
+  }, [gridBoardDraft.items])
+
+  const filteredGridAddNotes = useMemo(() => {
+    const query = gridAddQuery.trim().toLowerCase()
+    return notes.filter((note) => {
+      if (!query) {
+        return true
+      }
+      return (
+        note.name.toLowerCase().includes(query) ||
+        note.relPath.toLowerCase().includes(query) ||
+        note.tags.some((tag) => tag.toLowerCase().includes(query))
+      )
+    })
+  }, [gridAddQuery, notes])
+
+  const filteredGridAddProjects = useMemo(() => {
+    const query = gridAddQuery.trim().toLowerCase()
+    return projects.filter((project) => {
+      if (!query) {
+        return true
+      }
+      return (
+        project.name.toLowerCase().includes(query) || project.summary.toLowerCase().includes(query)
+      )
+    })
+  }, [gridAddQuery, projects])
 
   useEffect(() => {
     currentNoteContentRef.current = currentNoteContent
@@ -731,9 +813,7 @@ function App(): ReactElement {
     : false
   const favoriteNotePaths = useMemo(
     () =>
-      favoriteNotePathSettings.filter((relPath) =>
-        notes.some((note) => note.relPath === relPath)
-      ),
+      favoriteNotePathSettings.filter((relPath) => notes.some((note) => note.relPath === relPath)),
     [favoriteNotePathSettings, notes]
   )
   const currentNoteIsFavorite = currentNotePath
@@ -745,6 +825,10 @@ function App(): ReactElement {
     Boolean(lastOpenedNotePath) &&
     notes.some((note) => note.relPath === lastOpenedNotePath)
   const middleHeaderBreadcrumbItem = useMemo(() => {
+    if (!hasVault) {
+      return 'Select Vault'
+    }
+
     if (activePage === 'notes') {
       if (searchQuery.trim()) {
         return 'Search Results'
@@ -766,6 +850,10 @@ function App(): ReactElement {
       return selectedProject?.name ?? 'No Project Selected'
     }
 
+    if (activePage === 'grid') {
+      return GRID_PAGE_ENABLED ? 'Spatial Board' : 'Unavailable in This Version'
+    }
+
     if (activePage === 'dashboard') {
       return currentWeeklyPlanWeek
         ? formatWeekRange(currentWeeklyPlanWeek.startDate, currentWeeklyPlanWeek.endDate)
@@ -785,6 +873,7 @@ function App(): ReactElement {
     return null
   }, [
     activePage,
+    hasVault,
     searchQuery,
     currentNotePath,
     selectedCalendarDate,
@@ -878,7 +967,19 @@ function App(): ReactElement {
   }, [vaultApi, setNotes, setVault, pushToast])
 
   useEffect(() => {
+    if (hasVault || !commandPaletteOpen) {
+      return
+    }
+
+    setCommandPaletteOpen(false)
+  }, [commandPaletteOpen, hasVault, setCommandPaletteOpen])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (!hasVault) {
+        return
+      }
+
       const isModifierPressed = event.metaKey || event.ctrlKey
       const isSearchPalette =
         isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
@@ -918,6 +1019,7 @@ function App(): ReactElement {
       const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
       const pageByKey: Partial<Record<string, AppPage>> = {
         d: 'dashboard',
+        ...(GRID_PAGE_ENABLED ? { g: 'grid' } : {}),
         '1': 'notes',
         '2': 'projects',
         '3': 'calendar',
@@ -936,7 +1038,7 @@ function App(): ReactElement {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [setCommandPaletteOpen])
+  }, [hasVault, setCommandPaletteInitialQuery, setCommandPaletteOpen])
 
   useEffect(() => {
     if (activePage !== 'projects' || !selectedProject) {
@@ -1129,6 +1231,74 @@ function App(): ReactElement {
       return false
     }
   }
+
+  const persistGridBoard = useCallback(
+    async (nextGridBoard: GridBoardState): Promise<boolean> => {
+      if (!vaultApi) {
+        return false
+      }
+
+      try {
+        const nextSettings = await vaultApi.settings.update({ gridBoard: nextGridBoard })
+        setSettings(nextSettings)
+        return true
+      } catch (error) {
+        pushToast('error', String(error))
+        return false
+      }
+    },
+    [pushToast, setSettings, vaultApi]
+  )
+
+  const handleGridBoardChange = useCallback(
+    (nextGridBoard: GridBoardState): void => {
+      if (isGridBoardStateEqual(gridBoardDraft, nextGridBoard)) {
+        return
+      }
+
+      setGridBoardDraft(nextGridBoard)
+      void persistGridBoard(nextGridBoard)
+    },
+    [gridBoardDraft, persistGridBoard]
+  )
+
+  const openGridAddPicker = useCallback((mode: 'note' | 'project'): void => {
+    setGridAddMode(mode)
+    setGridAddQuery('')
+    setIsGridAddPopoverOpen(true)
+  }, [])
+
+  const handleAddGridText = useCallback((): void => {
+    gridWorkspaceActions?.addText()
+    setIsGridAddPopoverOpen(false)
+    setGridAddQuery('')
+  }, [gridWorkspaceActions])
+
+  const handleAddGridNote = useCallback(
+    (relPath: string): void => {
+      gridWorkspaceActions?.addNote(relPath)
+      setIsGridAddPopoverOpen(false)
+      setGridAddQuery('')
+    },
+    [gridWorkspaceActions]
+  )
+
+  const handleAddGridProject = useCallback(
+    (projectId: string): void => {
+      gridWorkspaceActions?.addProject(projectId)
+      setIsGridAddPopoverOpen(false)
+      setGridAddQuery('')
+    },
+    [gridWorkspaceActions]
+  )
+
+  useEffect(() => {
+    if (!settingsLoaded || !vaultApi || isGridBoardStateEqual(gridBoardSettings, gridBoard)) {
+      return
+    }
+
+    void persistGridBoard(gridBoard)
+  }, [gridBoard, gridBoardSettings, persistGridBoard, settingsLoaded, vaultApi])
 
   const persistProjectData = async (
     nextProjects: Project[],
@@ -1456,12 +1626,7 @@ function App(): ReactElement {
     }
 
     void persistFavoriteNotePaths(favoriteNotePaths)
-  }, [
-    settingsLoaded,
-    favoriteNotePaths,
-    favoriteNotePathSettings.length,
-    persistFavoriteNotePaths
-  ])
+  }, [settingsLoaded, favoriteNotePaths, favoriteNotePathSettings.length, persistFavoriteNotePaths])
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -2217,12 +2382,14 @@ function App(): ReactElement {
     })
 
     const health = getProjectHealthSummary({ milestones }, todayIso)
+    const nextStatus: ProjectStatus =
+      project.status === 'completed' && health.status !== 'completed' ? 'completed' : health.status
 
     return {
       ...project,
-      status: health.status,
+      status: nextStatus,
       milestones,
-      progress: computeProjectProgress(milestones, health.status)
+      progress: computeProjectProgress(milestones, nextStatus)
     }
   }
 
@@ -2289,6 +2456,37 @@ function App(): ReactElement {
         : project
     )
     void persistProjects(nextProjects)
+  }
+
+  const toggleProjectDone = (projectId: string): void => {
+    const existing = projects.find((project) => project.id === projectId)
+    if (!existing) {
+      return
+    }
+
+    const derivedStatus = getProjectHealthSummary(
+      { milestones: existing.milestones },
+      todayIso
+    ).status
+    const nextStatus: ProjectStatus =
+      existing.status === 'completed'
+        ? derivedStatus === 'completed'
+          ? 'on-track'
+          : derivedStatus
+        : 'completed'
+
+    const nextProjects = projects.map((project) =>
+      project.id === projectId
+        ? withComputedProjectState({
+            ...project,
+            status: nextStatus,
+            updatedAt: new Date().toISOString()
+          })
+        : project
+    )
+
+    void persistProjects(nextProjects)
+    pushToast('success', nextStatus === 'completed' ? 'Project marked done' : 'Project reopened')
   }
 
   const addMilestoneToProject = (projectId: string, title: string, dueDate: string): void => {
@@ -2966,65 +3164,78 @@ function App(): ReactElement {
     return slashIndex >= 0 ? selectedNoteTreeEntry.relPath.slice(0, slashIndex) : ''
   }, [selectedNoteTreeEntry])
 
-  const createNoteFromTree = useCallback(async (targetDir?: string): Promise<void> => {
-    if (!vaultApi) {
-      pushToast('error', 'Create note is only available inside the Electron app')
-      return
-    }
+  const createNoteFromTree = useCallback(
+    async (targetDir?: string): Promise<void> => {
+      if (!vaultApi) {
+        pushToast('error', 'Create note is only available inside the Electron app')
+        return
+      }
 
-    if (!vault) {
-      pushToast('error', 'Select a vault in Settings before creating notes')
-      setActivePage('settings')
-      return
-    }
+      if (!vault) {
+        pushToast('error', 'Select a vault in Settings before creating notes')
+        setActivePage('settings')
+        return
+      }
 
-    try {
-      const relPath = await createNoteAtPathWithFallback(targetDir ?? getTreeTargetDirectory())
-      await refreshNotesAndTree()
-      setSelectedNoteTreeEntry({ kind: 'note', relPath })
-      setPendingNoteTreeEditId(`note:${relPath}`)
-      setSearchQuery('')
-      setSearchResults([])
-      setActivePage('notes')
-      await openNote(relPath)
-      pushToast('success', 'Note created')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }, [
-    createNoteAtPathWithFallback,
-    getTreeTargetDirectory,
-    openNote,
-    pushToast,
-    refreshNotesAndTree,
-    setSearchQuery,
-    setSearchResults,
-    vault,
-    vaultApi
-  ])
+      try {
+        const relPath = await createNoteAtPathWithFallback(targetDir ?? getTreeTargetDirectory())
+        await refreshNotesAndTree()
+        setSelectedNoteTreeEntry({ kind: 'note', relPath })
+        setPendingNoteTreeEditId(`note:${relPath}`)
+        setSearchQuery('')
+        setSearchResults([])
+        setActivePage('notes')
+        await openNote(relPath)
+        pushToast('success', 'Note created')
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [
+      createNoteAtPathWithFallback,
+      getTreeTargetDirectory,
+      openNote,
+      pushToast,
+      refreshNotesAndTree,
+      setSearchQuery,
+      setSearchResults,
+      vault,
+      vaultApi
+    ]
+  )
 
-  const createFolderFromTree = useCallback(async (targetDir?: string): Promise<void> => {
-    if (!vaultApi) {
-      pushToast('error', 'Create folder is only available inside the Electron app')
-      return
-    }
+  const createFolderFromTree = useCallback(
+    async (targetDir?: string): Promise<void> => {
+      if (!vaultApi) {
+        pushToast('error', 'Create folder is only available inside the Electron app')
+        return
+      }
 
-    if (!vault) {
-      pushToast('error', 'Select a vault in Settings before creating folders')
-      setActivePage('settings')
-      return
-    }
+      if (!vault) {
+        pushToast('error', 'Select a vault in Settings before creating folders')
+        setActivePage('settings')
+        return
+      }
 
-    try {
-      const relPath = await createFolderWithFallback(targetDir ?? getTreeTargetDirectory())
-      await refreshNotesAndTree()
-      setSelectedNoteTreeEntry({ kind: 'folder', relPath })
-      setPendingNoteTreeEditId(`folder:${relPath}`)
-      pushToast('success', 'Folder created')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }, [createFolderWithFallback, getTreeTargetDirectory, pushToast, refreshNotesAndTree, vault, vaultApi])
+      try {
+        const relPath = await createFolderWithFallback(targetDir ?? getTreeTargetDirectory())
+        await refreshNotesAndTree()
+        setSelectedNoteTreeEntry({ kind: 'folder', relPath })
+        setPendingNoteTreeEditId(`folder:${relPath}`)
+        pushToast('success', 'Folder created')
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [
+      createFolderWithFallback,
+      getTreeTargetDirectory,
+      pushToast,
+      refreshNotesAndTree,
+      vault,
+      vaultApi
+    ]
+  )
 
   const renameTreePath = useCallback(
     async (relPath: string, nextName: string, kind: 'note' | 'folder'): Promise<void> => {
@@ -3041,6 +3252,10 @@ function App(): ReactElement {
       const parentDir = slashIndex >= 0 ? relPath.slice(0, slashIndex) : ''
       const normalizedName = kind === 'note' && !trimmed.endsWith('.md') ? `${trimmed}.md` : trimmed
       const nextRelPath = parentDir ? `${parentDir}/${normalizedName}` : normalizedName
+
+      if (nextRelPath === relPath) {
+        return
+      }
 
       try {
         await vaultApi.files.renamePath(relPath, nextRelPath)
@@ -3245,17 +3460,33 @@ function App(): ReactElement {
   const isStandalonePage = activePage === 'schedules' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
   const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
+  const headerPageLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
+  const handleSidebarPageChange = useCallback(
+    (page: AppPage): void => {
+      if (!hasVault) {
+        return
+      }
+
+      setActivePage(page)
+    },
+    [hasVault]
+  )
+  const handleOpenSearchPalette = useCallback((): void => {
+    if (!hasVault) {
+      return
+    }
+
+    setCommandPaletteInitialQuery('')
+    setCommandPaletteOpen(true)
+  }, [hasVault, setCommandPaletteOpen])
 
   return (
     <div className="flex h-screen">
       <SidebarProvider className="h-full">
         <AppSidebar
           activePage={activePage}
-          onChange={setActivePage}
-          onOpenSearchPalette={() => {
-            setCommandPaletteInitialQuery('')
-            setCommandPaletteOpen(true)
-          }}
+          onChange={handleSidebarPageChange}
+          onOpenSearchPalette={handleOpenSearchPalette}
           onSidebarInteract={() => {
             if (commandPaletteOpen) {
               setCommandPaletteOpen(false)
@@ -3265,15 +3496,16 @@ function App(): ReactElement {
           projectsCount={projects.length}
           calendarUndoneCount={calendarUndoneCount}
           profileName={profileName}
+          isLocked={!hasVault}
           className={`${paletteSurfaceClass}${paletteBlurClass}`}
         />
 
         <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
           <div className="flex h-full min-w-0">
-            {activePage === 'schedules' ? (
+            {hasVault && activePage === 'schedules' ? (
               <SchedulesPage vaultApi={vaultApi} pushToast={pushToast} />
             ) : null}
-            {activePage === 'agentHistory' ? (
+            {hasVault && activePage === 'agentHistory' ? (
               <AgentHistoryPage
                 vaultApi={vaultApi}
                 pushToast={pushToast}
@@ -3290,7 +3522,7 @@ function App(): ReactElement {
                     <BreadcrumbList className="text-[var(--muted)]">
                       <BreadcrumbItem>
                         <BreadcrumbPage className="text-sm text-[var(--muted)]">
-                          {PAGE_LABELS[activePage]}
+                          {headerPageLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
                       {middleHeaderBreadcrumbItem ? (
@@ -3586,6 +3818,31 @@ function App(): ReactElement {
                         >
                           <Download size={18} />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleProjectDone(selectedProject.id)}
+                          className={`flex items-center justify-center rounded border p-1.5 ${
+                            selectedProject.status === 'completed'
+                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                          }`}
+                          title={
+                            selectedProject.status === 'completed'
+                              ? 'Reopen Project'
+                              : 'Mark Project Done'
+                          }
+                          aria-label={
+                            selectedProject.status === 'completed'
+                              ? 'Reopen project'
+                              : 'Mark project done'
+                          }
+                        >
+                          {selectedProject.status === 'completed' ? (
+                            <RotateCcw size={18} />
+                          ) : (
+                            <Check size={18} />
+                          )}
+                        </button>
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
@@ -3620,6 +3877,173 @@ function App(): ReactElement {
                           title="Remove Project"
                         >
                           <Trash2 size={18} />
+                        </button>
+                      </WorkspaceHeaderActionGroup>
+                    </WorkspaceHeaderActions>
+                  ) : activePage === 'grid' ? (
+                    <WorkspaceHeaderActions>
+                      <WorkspaceHeaderActionGroup>
+                        <Popover
+                          open={isGridAddPopoverOpen}
+                          onOpenChange={(open) => {
+                            setIsGridAddPopoverOpen(open)
+                            if (!open) {
+                              setGridAddQuery('')
+                            }
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
+                              title="Add to canvas"
+                              aria-label="Add to canvas"
+                              disabled={!gridWorkspaceActions}
+                            >
+                              <Plus size={18} />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="end"
+                            className="w-80 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                          >
+                            <div className="mb-3 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openGridAddPicker('note')}
+                                className={`rounded-lg border px-3 py-1.5 text-sm ${
+                                  gridAddMode === 'note'
+                                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                    : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
+                                }`}
+                              >
+                                Add note
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openGridAddPicker('project')}
+                                className={`rounded-lg border px-3 py-1.5 text-sm ${
+                                  gridAddMode === 'project'
+                                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                    : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
+                                }`}
+                              >
+                                Add project
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleAddGridText}
+                                className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
+                              >
+                                Add text
+                              </button>
+                            </div>
+                            <label className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-[var(--muted)]">
+                              <Search size={14} aria-hidden="true" />
+                              <input
+                                value={gridAddQuery}
+                                onChange={(event) => setGridAddQuery(event.currentTarget.value)}
+                                placeholder={
+                                  gridAddMode === 'note'
+                                    ? 'Search notes by title, path, or tag'
+                                    : 'Search projects by name or summary'
+                                }
+                                className="w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+                              />
+                            </label>
+                            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                              {gridAddMode === 'note'
+                                ? filteredGridAddNotes.slice(0, 16).map((note) => {
+                                    const existingItemId = gridBoardNoteItemIds.get(note.relPath)
+                                    return (
+                                      <button
+                                        key={note.relPath}
+                                        type="button"
+                                        onClick={() => handleAddGridNote(note.relPath)}
+                                        className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="truncate text-sm font-semibold text-[var(--text)]">
+                                              {note.name.replace(/\.md$/i, '')}
+                                            </div>
+                                            <div className="mt-1 truncate text-xs text-[var(--muted)]">
+                                              {note.relPath}
+                                            </div>
+                                          </div>
+                                          <div className="rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--accent)]">
+                                            {existingItemId ? 'On canvas' : 'Add'}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    )
+                                  })
+                                : filteredGridAddProjects.slice(0, 16).map((project) => {
+                                    const existingItemId = gridBoardProjectItemIds.get(project.id)
+                                    return (
+                                      <button
+                                        key={project.id}
+                                        type="button"
+                                        onClick={() => handleAddGridProject(project.id)}
+                                        className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="flex min-w-0 gap-3">
+                                            <NoteShapeIcon
+                                              icon={project.icon}
+                                              size={16}
+                                              className="mt-0.5 shrink-0"
+                                            />
+                                            <div className="min-w-0">
+                                              <div className="truncate text-sm font-semibold text-[var(--text)]">
+                                                {project.name}
+                                              </div>
+                                              <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">
+                                                {project.summary || 'Project'}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="rounded-full border border-[rgba(125,183,255,0.2)] bg-[rgba(125,183,255,0.1)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--text)]">
+                                            {existingItemId ? 'On canvas' : 'Add'}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                              {(
+                                gridAddMode === 'note'
+                                  ? filteredGridAddNotes.length === 0
+                                  : filteredGridAddProjects.length === 0
+                              ) ? (
+                                <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] px-3 py-4 text-sm text-[var(--muted)]">
+                                  No {gridAddMode}s match this search.
+                                </div>
+                              ) : null}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </WorkspaceHeaderActionGroup>
+                      <WorkspaceHeaderActionDivider />
+                      <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => gridWorkspaceActions?.fitAllCards()}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
+                          title="Fit all cards"
+                          aria-label="Fit all cards"
+                          disabled={!gridWorkspaceActions}
+                        >
+                          <Target size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => gridWorkspaceActions?.resetBoard()}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
+                          title="Reset board"
+                          aria-label="Reset board"
+                          disabled={!gridWorkspaceActions}
+                        >
+                          <RotateCcw size={18} />
                         </button>
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
@@ -3682,7 +4106,17 @@ function App(): ReactElement {
                     activePage === 'calendar' ? '' : 'h-full'
                   }`.trim()}
                 >
-                  {activePage === 'notes' ? (
+                  {!hasVault ? (
+                    <VaultSelectionPage
+                      lastVaultPath={lastVaultPath}
+                      onOpenVault={() => {
+                        void openVault('open')
+                      }}
+                      onCreateVault={() => {
+                        void openVault('create')
+                      }}
+                    />
+                  ) : activePage === 'notes' ? (
                     searchQuery.trim() ? (
                       <SearchPage
                         results={searchResults}
@@ -3844,6 +4278,41 @@ function App(): ReactElement {
                         Pick a project from the right panel to open details
                       </div>
                     )
+                  ) : activePage === 'grid' ? (
+                    GRID_PAGE_ENABLED ? (
+                      <GridPage
+                        board={gridBoardDraft}
+                        notes={notes}
+                        projects={projects}
+                        onActionsChange={setGridWorkspaceActions}
+                        onBoardChange={handleGridBoardChange}
+                        onOpenNote={(relPath) => {
+                          setActivePage('notes')
+                          setSearchQuery('')
+                          setSearchResults([])
+                          void openNote(relPath)
+                        }}
+                        onOpenProject={(projectId) => {
+                          setActivePage('projects')
+                          selectProject(projectId)
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center p-8">
+                        <div className="max-w-lg rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.16)]">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                            Unavailable
+                          </div>
+                          <h2 className="mt-3 text-2xl font-semibold text-[var(--text)]">
+                            Grid is disabled in this version
+                          </h2>
+                          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+                            The Grid page remains in the codebase, but it is not exposed as an
+                            active workspace in this release.
+                          </p>
+                        </div>
+                      </div>
+                    )
                   ) : activePage === 'weeklyPlan' ? (
                     <WeeklyPlanWorkspace
                       state={weeklyPlanState}
@@ -3959,7 +4428,9 @@ function App(): ReactElement {
                               <DropdownMenuContent align="start">
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    void (notePanelView === 'tree' ? createNoteFromTree() : createNote())
+                                    void (notePanelView === 'tree'
+                                      ? createNoteFromTree()
+                                      : createNote())
                                   }}
                                 >
                                   New note
@@ -4035,7 +4506,9 @@ function App(): ReactElement {
                                         setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
                                       }}
                                     >
-                                      <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                      <DropdownMenuRadioItem value="name">
+                                        Name
+                                      </DropdownMenuRadioItem>
                                       <DropdownMenuRadioItem value="created">
                                         Created
                                       </DropdownMenuRadioItem>
@@ -4077,10 +4550,18 @@ function App(): ReactElement {
                               variant="outline"
                               size="sm"
                             >
-                              <ToggleGroupItem value="cards" aria-label="Card view">
+                              <ToggleGroupItem
+                                value="cards"
+                                aria-label="Card view"
+                                data-testid="note-panel-toggle:cards"
+                              >
                                 <List size={14} aria-hidden="true" />
                               </ToggleGroupItem>
-                              <ToggleGroupItem value="tree" aria-label="Tree view">
+                              <ToggleGroupItem
+                                value="tree"
+                                aria-label="Tree view"
+                                data-testid="note-panel-toggle:tree"
+                              >
                                 <FolderOpen size={14} aria-hidden="true" />
                               </ToggleGroupItem>
                             </ToggleGroup>
@@ -4178,77 +4659,81 @@ function App(): ReactElement {
                           </WorkspaceHeaderActionGroup>
                         </WorkspaceHeaderActions>
                       ) : activePage === 'calendar' ? (
-                        <Popover
-                          open={isCalendarBulkActionOpen}
-                          onOpenChange={setIsCalendarBulkActionOpen}
-                        >
-                          <PopoverTrigger asChild>
-                            <button type="button" className={panelIconButtonClass}>
-                              <Target size={18} className="inline-block" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="start"
-                            className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                          >
-                            <div className="space-y-3">
-                              <label className="flex flex-col gap-1">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                  Scope
-                                </span>
-                                <select
-                                  value={calendarBulkScope}
-                                  onChange={(event) =>
-                                    setCalendarBulkScope(
-                                      event.currentTarget
-                                        .value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
-                                    )
-                                  }
-                                  className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                >
-                                  {CALENDAR_BULK_SCOPE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="flex flex-col gap-1">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                  Task Type
-                                </span>
-                                <select
-                                  value={calendarBulkTaskType}
-                                  onChange={(event) =>
-                                    setCalendarBulkTaskType(
-                                      event.currentTarget.value as CalendarTaskType
-                                    )
-                                  }
-                                  className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                >
-                                  {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <button
-                                type="button"
-                                className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)]"
-                                onClick={() => {
-                                  void reassignCalendarTaskTypeForScope(
-                                    calendarBulkScope,
-                                    calendarBulkTaskType
-                                  )
-                                }}
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <Popover
+                              open={isCalendarBulkActionOpen}
+                              onOpenChange={setIsCalendarBulkActionOpen}
+                            >
+                              <PopoverTrigger asChild>
+                                <button type="button" className={panelIconButtonClass}>
+                                  <Target size={18} className="inline-block" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="start"
+                                className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
                               >
-                                Apply
-                              </button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
+                                <div className="space-y-3">
+                                  <label className="flex flex-col gap-1">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                      Scope
+                                    </span>
+                                    <select
+                                      value={calendarBulkScope}
+                                      onChange={(event) =>
+                                        setCalendarBulkScope(
+                                          event.currentTarget
+                                            .value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
+                                        )
+                                      }
+                                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
+                                    >
+                                      {CALENDAR_BULK_SCOPE_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="flex flex-col gap-1">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                      Task Type
+                                    </span>
+                                    <select
+                                      value={calendarBulkTaskType}
+                                      onChange={(event) =>
+                                        setCalendarBulkTaskType(
+                                          event.currentTarget.value as CalendarTaskType
+                                        )
+                                      }
+                                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
+                                    >
+                                      {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                                    onClick={() => {
+                                      void reassignCalendarTaskTypeForScope(
+                                        calendarBulkScope,
+                                        calendarBulkTaskType
+                                      )
+                                    }}
+                                  >
+                                    Apply
+                                  </button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : activePage === 'settings' ? (
                         <button
                           type="button"
                           className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
@@ -4258,7 +4743,7 @@ function App(): ReactElement {
                         >
                           Reset Font
                         </button>
-                      )
+                      ) : null
                     }
                   />
 
@@ -4400,7 +4885,7 @@ function App(): ReactElement {
         </SidebarInset>
       </SidebarProvider>
       <CommandPalette
-        open={commandPaletteOpen}
+        open={hasVault && commandPaletteOpen}
         initialQuery={commandPaletteInitialQuery}
         notes={notes}
         searchResults={commandPaletteResults}
@@ -4424,6 +4909,10 @@ function App(): ReactElement {
           selectProject(projectId)
         }}
         onOpenPage={(page) => {
+          if (!hasVault) {
+            return
+          }
+
           setActivePage(page)
         }}
       />
@@ -4432,6 +4921,183 @@ function App(): ReactElement {
 }
 
 export default App
+
+function VaultSelectionPage({
+  lastVaultPath,
+  onOpenVault,
+  onCreateVault
+}: {
+  lastVaultPath: string | null
+  onOpenVault: () => void
+  onCreateVault: () => void
+}): ReactElement {
+  return (
+    <div data-testid="vault-required-page" className="flex h-full items-center justify-center p-8">
+      <div className="max-w-2xl rounded-[28px] border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.12)]">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
+          <FolderOpen size={26} />
+        </div>
+        <h2 className="mt-5 text-3xl font-semibold text-[var(--text)]">Select a vault first</h2>
+        <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          Open an existing vault or create a new one before accessing notes, projects, calendar,
+          grid, and automation pages.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            data-testid="vault-required-open"
+            onClick={onOpenVault}
+            className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--accent)] hover:border-[var(--accent)]"
+          >
+            Open Existing Vault
+          </button>
+          <button
+            type="button"
+            data-testid="vault-required-create"
+            onClick={onCreateVault}
+            className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-2.5 text-sm font-medium text-[var(--text)] hover:border-[var(--accent)]"
+          >
+            Create New Vault
+          </button>
+        </div>
+        <div className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3 text-left text-sm text-[var(--muted)]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">
+            Last Known Vault
+          </div>
+          <div className="mt-2 break-words text-[var(--text)]">
+            {lastVaultPath ?? 'No previous vault remembered on this device.'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function sanitizeGridBoardState(
+  board: GridBoardState | undefined,
+  notes: NoteListItem[],
+  projects: Project[]
+): GridBoardState {
+  const notePaths = new Set(notes.map((note) => note.relPath))
+  const projectIds = new Set(projects.map((project) => project.id))
+  const fallback: GridBoardState = {
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    },
+    items: []
+  }
+
+  if (!board) {
+    return fallback
+  }
+
+  const viewport = {
+    x: Number.isFinite(board.viewport?.x) ? board.viewport.x : fallback.viewport.x,
+    y: Number.isFinite(board.viewport?.y) ? board.viewport.y : fallback.viewport.y,
+    zoom: Number.isFinite(board.viewport?.zoom) ? board.viewport.zoom : fallback.viewport.zoom
+  }
+
+  const items = Array.isArray(board.items)
+    ? board.items.flatMap((item) => {
+        if (
+          !item ||
+          typeof item.id !== 'string' ||
+          (item.kind !== 'note' && item.kind !== 'project' && item.kind !== 'text') ||
+          !Number.isFinite(item.position?.x) ||
+          !Number.isFinite(item.position?.y) ||
+          !Number.isFinite(item.zIndex)
+        ) {
+          return []
+        }
+
+        if (item.kind === 'note') {
+          if (!(typeof item.noteRelPath === 'string' && notePaths.has(item.noteRelPath))) {
+            return []
+          }
+        } else if (item.kind === 'project') {
+          if (!(typeof item.projectId === 'string' && projectIds.has(item.projectId))) {
+            return []
+          }
+        } else if (!(item.textContent === undefined || typeof item.textContent === 'string')) {
+          return []
+        }
+
+        const size =
+          Number.isFinite(item.size?.width) &&
+          Number.isFinite(item.size?.height) &&
+          item.size.width > 0 &&
+          item.size.height > 0
+            ? {
+                width: item.size.width,
+                height: item.size.height
+              }
+            : undefined
+
+        return [
+          {
+            ...item,
+            size
+          }
+        ]
+      })
+    : fallback.items
+
+  return {
+    viewport,
+    items
+  }
+}
+
+function isGridBoardStateEqual(left: GridBoardState | undefined, right: GridBoardState): boolean {
+  if (!left) {
+    return (
+      right.items.length === 0 &&
+      right.viewport.x === 0 &&
+      right.viewport.y === 0 &&
+      right.viewport.zoom === 1
+    )
+  }
+
+  if (
+    left.viewport.x !== right.viewport.x ||
+    left.viewport.y !== right.viewport.y ||
+    left.viewport.zoom !== right.viewport.zoom ||
+    left.items.length !== right.items.length
+  ) {
+    return false
+  }
+
+  return left.items.every((item, index) => isGridBoardItemEqual(item, right.items[index]))
+}
+
+function isGridBoardItemEqual(
+  left: GridBoardState['items'][number],
+  right: GridBoardState['items'][number] | undefined
+): boolean {
+  if (!right) {
+    return false
+  }
+
+  const leftWidth = left.size?.width
+  const leftHeight = left.size?.height
+  const rightWidth = right.size?.width
+  const rightHeight = right.size?.height
+
+  return (
+    left.id === right.id &&
+    left.kind === right.kind &&
+    left.noteRelPath === right.noteRelPath &&
+    left.projectId === right.projectId &&
+    left.textContent === right.textContent &&
+    left.position.x === right.position.x &&
+    left.position.y === right.position.y &&
+    left.zIndex === right.zIndex &&
+    leftWidth === rightWidth &&
+    leftHeight === rightHeight
+  )
+}
 
 function getNextWeeklyPlanStart(weeks: WeeklyPlanWeek[]): string {
   if (!weeks.length) {

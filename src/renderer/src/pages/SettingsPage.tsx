@@ -31,7 +31,9 @@ export function SettingsPage({
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
-  const [activeTab, setActiveTab] = useState<'profile' | 'notification' | 'agent'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'appearance' | 'agent'>(
+    'profile'
+  )
 
   useEffect(() => {
     setProfileDraft(profileName)
@@ -75,12 +77,13 @@ export function SettingsPage({
     <section className="grid gap-3.5 p-5" aria-label="App settings">
       <h2 className="text-2xl font-bold">Settings</h2>
       <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-        Update your profile and choose your preferred app appearance.
+        Manage your identity, workspace storage, appearance, and AI connection settings.
       </p>
 
       <TabMenu value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
         <TabMenuItem value="profile">Profile</TabMenuItem>
-        <TabMenuItem value="notification">Notification</TabMenuItem>
+        <TabMenuItem value="workspace">Workspace</TabMenuItem>
+        <TabMenuItem value="appearance">Appearance</TabMenuItem>
         <TabMenuItem value="agent">Agent</TabMenuItem>
       </TabMenu>
 
@@ -110,12 +113,38 @@ export function SettingsPage({
         </div>
       ) : null}
 
-      {activeTab === 'notification' ? (
+      {activeTab === 'workspace' ? (
         <div className="grid gap-5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Notification</h3>
+            <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-              Configure app-level preferences for how the workspace feels and where it lives.
+              Review where your local vault lives and change it when you want to work from a
+              different folder.
+            </p>
+          </div>
+
+          <div className="grid max-w-[360px] gap-1.5" aria-label="Vault location">
+            <span className="text-sm text-[var(--muted)]">Vault Location</span>
+            <div className="break-words rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-sm text-[var(--text)]">
+              {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
+            </div>
+            <button
+              type="button"
+              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              onClick={onChangeVaultLocation}
+            >
+              Change Vault Location
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === 'appearance' ? (
+        <div className="grid gap-5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+          <div className="grid gap-1">
+            <h3 className="text-lg font-semibold text-[var(--text)]">Appearance</h3>
+            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+              Tune how the app reads by choosing a font family and previewing it before you save.
             </p>
           </div>
 
@@ -134,20 +163,6 @@ export function SettingsPage({
               ))}
             </select>
           </label>
-
-          <div className="grid max-w-[360px] gap-1.5" aria-label="Vault location">
-            <span className="text-sm text-[var(--muted)]">Vault Location</span>
-            <div className="break-words rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-sm text-[var(--text)]">
-              {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
-            </div>
-            <button
-              type="button"
-              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
-              onClick={onChangeVaultLocation}
-            >
-              Change Vault Location
-            </button>
-          </div>
 
           <p
             className="max-w-[560px] rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5"

@@ -25,12 +25,21 @@ export function createDefaultAppSettings(): AppSettings {
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
     projectIcons: {},
-    projects: []
+    projects: [],
+    gridBoard: {
+      viewport: {
+        x: 0,
+        y: 0,
+        zoom: 1
+      },
+      items: []
+    }
   }
 }
 
 function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   const defaults = createDefaultAppSettings()
+  const parsedGridBoard = parsed.gridBoard
   return {
     ...defaults,
     ...parsed,
@@ -51,6 +60,62 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       : defaults.calendarTasks,
     projectIcons: parsed.projectIcons ?? defaults.projectIcons,
     projects: Array.isArray(parsed.projects) ? parsed.projects : defaults.projects,
+    gridBoard:
+      parsedGridBoard &&
+      typeof parsedGridBoard === 'object' &&
+      Array.isArray(parsedGridBoard.items) &&
+      parsedGridBoard.viewport &&
+      typeof parsedGridBoard.viewport === 'object'
+        ? {
+            viewport: {
+              x:
+                typeof parsedGridBoard.viewport.x === 'number'
+                  ? parsedGridBoard.viewport.x
+                  : defaults.gridBoard.viewport.x,
+              y:
+                typeof parsedGridBoard.viewport.y === 'number'
+                  ? parsedGridBoard.viewport.y
+                  : defaults.gridBoard.viewport.y,
+              zoom:
+                typeof parsedGridBoard.viewport.zoom === 'number'
+                  ? parsedGridBoard.viewport.zoom
+                  : defaults.gridBoard.viewport.zoom
+            },
+            items: parsedGridBoard.items.flatMap((item) => {
+              if (
+                typeof item !== 'object' ||
+                item === null ||
+                typeof item.id !== 'string' ||
+                (item.kind !== 'note' && item.kind !== 'project' && item.kind !== 'text') ||
+                typeof item.position?.x !== 'number' ||
+                typeof item.position?.y !== 'number' ||
+                typeof item.zIndex !== 'number'
+              ) {
+                return []
+              }
+
+              const size =
+                typeof item.size?.width === 'number' &&
+                Number.isFinite(item.size.width) &&
+                item.size.width > 0 &&
+                typeof item.size?.height === 'number' &&
+                Number.isFinite(item.size.height) &&
+                item.size.height > 0
+                  ? {
+                      width: item.size.width,
+                      height: item.size.height
+                    }
+                  : undefined
+
+              return [
+                {
+                  ...item,
+                  size
+                }
+              ]
+            })
+          }
+        : defaults.gridBoard,
     lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath,
     lastOpenedNotePath: parsed.lastOpenedNotePath ?? defaults.lastOpenedNotePath,
     lastOpenedProjectId: parsed.lastOpenedProjectId ?? defaults.lastOpenedProjectId,

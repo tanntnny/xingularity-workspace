@@ -12,7 +12,7 @@ The app keeps note content and attachments inside a user-selected vault on disk 
 - Weekly plan workspace for week creation, priorities, linked work items, and end-of-week review notes
 - Schedules page for script-based automations with permissions, triggers, run history, and review-before-apply flows
 - Agent Chat page for chat sessions, workspace mentions, run history, and tool activity rendering
-- Settings for profile name, vault location, font family, and Mistral API key configuration
+- Settings for profile name, vault location, font family, and Mistral API key configuration across Profile, Workspace, Appearance, and Agent tabs
 
 ## Navigation
 

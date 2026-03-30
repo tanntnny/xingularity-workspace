@@ -111,8 +111,8 @@ Supported automation action types currently include:
 ## Settings
 
 - Update profile name
-- Choose app font family
 - Review and change vault location
+- Choose app font family
 - Save Mistral API key for assistant workflows
 
 ## Search And Command Access

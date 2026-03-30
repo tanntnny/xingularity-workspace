@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileText, FolderKanban, LayoutDashboard, Plus, Clock } from 'lucide-react'
+import { FileText, FolderKanban, LayoutDashboard, LayoutGrid, Plus, Clock } from 'lucide-react'
 import { NoteListItem } from '../../../shared/types'
 import {
   Command,
@@ -11,6 +11,7 @@ import {
   CommandSeparator,
   CommandShortcut
 } from './ui/command'
+import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 
 export interface CommandPaletteSearchResult {
   id: string
@@ -27,6 +28,7 @@ type CommandPalettePage =
   | 'dashboard'
   | 'notes'
   | 'projects'
+  | 'grid'
   | 'calendar'
   | 'weeklyPlan'
   | 'schedules'
@@ -212,6 +214,16 @@ export function CommandPalette({
         onSelect: () => onOpenPage('projects'),
         icon: FolderKanban
       },
+      ...(GRID_PAGE_ENABLED
+        ? [
+            {
+              value: '>go grid',
+              label: 'Go to Grid',
+              onSelect: () => onOpenPage('grid'),
+              icon: LayoutGrid
+            }
+          ]
+        : []),
       {
         value: '>go calendar',
         label: 'Go to Calendar',

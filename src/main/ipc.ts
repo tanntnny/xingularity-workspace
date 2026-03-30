@@ -183,6 +183,36 @@ const projectSchema = z.object({
   icon: projectIconSchema
 })
 
+const gridBoardViewportSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  zoom: z.number().positive().max(4)
+})
+
+const gridBoardItemSchema = z.object({
+  id: z.string().min(1).max(200),
+  kind: z.enum(['note', 'project', 'text']),
+  noteRelPath: z.string().min(1).max(512).optional(),
+  projectId: z.string().min(1).max(120).optional(),
+  textContent: z.string().max(20_000).optional(),
+  position: z.object({
+    x: z.number(),
+    y: z.number()
+  }),
+  size: z
+    .object({
+      width: z.number().positive().max(10_000),
+      height: z.number().positive().max(10_000)
+    })
+    .optional(),
+  zIndex: z.number().int().min(0).max(10_000)
+})
+
+const gridBoardStateSchema = z.object({
+  viewport: gridBoardViewportSchema,
+  items: z.array(gridBoardItemSchema).max(500)
+})
+
 const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
@@ -199,6 +229,7 @@ const settingsUpdateSchema = z.object({
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
   projects: z.array(projectSchema).max(100).optional(),
+  gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   lastOpenedProjectId: z.string().min(1).max(120).nullable().optional(),
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
@@ -295,12 +326,15 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.renamePath, async (_event, oldRelPath: unknown, newRelPath: unknown) => {
-    await runtime.renamePath(
-      genericPathSchema.parse(oldRelPath),
-      genericPathSchema.parse(newRelPath)
-    )
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.renamePath,
+    async (_event, oldRelPath: unknown, newRelPath: unknown) => {
+      await runtime.renamePath(
+        genericPathSchema.parse(oldRelPath),
+        genericPathSchema.parse(newRelPath)
+      )
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.deleteNote, async (_event, relPath: unknown) => {
     await runtime.deleteNote(notePathSchema.parse(relPath))

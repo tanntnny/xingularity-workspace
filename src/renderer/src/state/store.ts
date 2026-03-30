@@ -55,7 +55,15 @@ export const useVaultStore = create<VaultState>((set) => ({
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     calendarTasks: [],
     projectIcons: {},
-    projects: []
+    projects: [],
+    gridBoard: {
+      viewport: {
+        x: 0,
+        y: 0,
+        zoom: 1
+      },
+      items: []
+    }
   },
   toasts: [],
   loading: false,

@@ -1,7 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../assets/logo.png?asset'
 
 export function createMainWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'

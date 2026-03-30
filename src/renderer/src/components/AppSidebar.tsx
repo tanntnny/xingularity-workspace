@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardList,
   LayoutDashboard,
+  LayoutGrid,
   FileText,
   FolderKanban,
   Search,
@@ -26,11 +27,14 @@ import {
   SidebarSeparator
 } from './ui/sidebar'
 import { Kbd } from './ui/kbd'
+import appLogo from '../../../../assets/logo.png'
+import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 
 export type AppPage =
   | 'dashboard'
   | 'notes'
   | 'projects'
+  | 'grid'
   | 'weeklyPlan'
   | 'calendar'
   | 'settings'
@@ -46,11 +50,27 @@ interface AppSidebarProps {
   projectsCount: number
   calendarUndoneCount: number
   profileName: string
+  isLocked?: boolean
   className?: string
 }
 
-const HOME_PAGES: Array<{ id: AppPage; label: string; icon: typeof FileText; shortcut: string }> = [
+type SidebarPageItem = {
+  id: AppPage
+  label: string
+  icon: typeof FileText
+  shortcut: string
+}
+
+const GRID_HOME_PAGE: SidebarPageItem = {
+  id: 'grid',
+  label: 'Grid',
+  icon: LayoutGrid,
+  shortcut: '⌘G'
+}
+
+const HOME_PAGES: SidebarPageItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
+  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE] : []),
   { id: 'notes', label: 'Notes', icon: FileText, shortcut: '⌘1' },
   { id: 'projects', label: 'Projects', icon: FolderKanban, shortcut: '⌘2' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '⌘3' },
@@ -106,6 +126,7 @@ export function AppSidebar({
   projectsCount,
   calendarUndoneCount,
   profileName,
+  isLocked = false,
   className
 }: AppSidebarProps): ReactElement {
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
@@ -125,18 +146,35 @@ export function AppSidebar({
       className={`app-sidebar-glass ${className ?? ''}`.trim()}
       onPointerDownCapture={() => onSidebarInteract?.()}
     >
-      <SidebarHeader className="flex flex-col items-center h-[80px] shrink-0 justify-center border-b border-[var(--line)] px-2 pb-0">
-        <p className="text-sidebar-foreground group-data-[collapsible=icon]:hidden">Xingularity</p>
+      <SidebarHeader className="flex h-[96px] shrink-0 items-center justify-center border-b border-[var(--line)] px-3 mt-3 pb-0">
+        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+          <img
+            src={appLogo}
+            alt="Xingularity logo"
+            className="h-11 w-11 shrink-0 rounded-2xl border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
+          />
+          <div className="leading-tight group-data-[collapsible=icon]:hidden">
+            <p className="text-sm font-semibold tracking-[0.12em] text-sidebar-foreground/70">
+              XINGULARITY
+            </p>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-sidebar-foreground/45">
+              Workspace
+            </p>
+          </div>
+        </div>
       </SidebarHeader>
 
       <div className="px-4 py-6 leading-tight group-data-[collapsible=icon]:hidden">
         <p className="text-[1.1rem] font-semibold text-sidebar-foreground">
           Welcome back, {welcomeName}
         </p>
-        <p className="pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">Status: Synced</p>
+        <p className="pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
+          Status: {isLocked ? 'Select vault' : 'Synced'}
+        </p>
         <button
           type="button"
           onClick={onOpenSearchPalette}
+          disabled={isLocked}
           className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)]/60 px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] hover:bg-[var(--panel)]/80"
           aria-label="Open command palette"
           title="Open command palette"
@@ -163,7 +201,11 @@ export function AppSidebar({
                     onClick={() => onChange(page.id)}
                     tooltip={page.label}
                   >
-                    <ButtonBase sx={SIDEBAR_MENU_BUTTON_SX}>
+                    <ButtonBase
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isLocked}
+                    >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
                       <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
@@ -199,7 +241,11 @@ export function AppSidebar({
                     onClick={() => onChange(page.id)}
                     tooltip={page.label}
                   >
-                    <ButtonBase sx={SIDEBAR_MENU_BUTTON_SX}>
+                    <ButtonBase
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isLocked}
+                    >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
                       <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
@@ -224,7 +270,11 @@ export function AppSidebar({
               onClick={() => onChange(SETTINGS_PAGE.id)}
               tooltip={SETTINGS_PAGE.label}
             >
-              <ButtonBase sx={SIDEBAR_MENU_BUTTON_SX}>
+              <ButtonBase
+                data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
+                sx={SIDEBAR_MENU_BUTTON_SX}
+                disabled={isLocked}
+              >
                 <SETTINGS_PAGE.icon size={17} strokeWidth={2} />
                 <span>{SETTINGS_PAGE.label}</span>
                 <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">

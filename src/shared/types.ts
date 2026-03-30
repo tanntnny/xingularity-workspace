@@ -148,6 +148,36 @@ export interface Project {
   icon: ProjectIconStyle
 }
 
+export type GridBoardItemKind = 'note' | 'project' | 'text'
+
+export interface GridBoardViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+export interface GridBoardItem {
+  id: string
+  kind: GridBoardItemKind
+  noteRelPath?: string
+  projectId?: string
+  textContent?: string
+  position: {
+    x: number
+    y: number
+  }
+  size?: {
+    width: number
+    height: number
+  }
+  zIndex: number
+}
+
+export interface GridBoardState {
+  viewport: GridBoardViewport
+  items: GridBoardItem[]
+}
+
 export interface FileMapEntry {
   id: string
   hash: string
@@ -173,6 +203,7 @@ export interface AppSettings {
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
+  gridBoard: GridBoardState
 }
 
 export interface AppSettingsUpdate {
@@ -187,6 +218,7 @@ export interface AppSettingsUpdate {
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
+  gridBoard?: GridBoardState
   lastOpenedNotePath?: Maybe<string>
   lastOpenedProjectId?: Maybe<string>
   favoriteNotePaths?: string[]

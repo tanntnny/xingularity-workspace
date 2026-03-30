@@ -1,4 +1,4 @@
-import { CSSProperties, ReactElement, useEffect, useRef } from 'react'
+import { CSSProperties, ReactElement, useEffect, useRef, useState } from 'react'
 import { useElementSize } from '@mantine/hooks'
 import { ChevronRight, FileText, Folder, FolderOpen, FolderPlus, Pencil, Trash2 } from 'lucide-react'
 import { Tree, TreeApi, NodeRendererProps } from 'react-arborist'
@@ -10,6 +10,9 @@ import {
   ContextMenuItem,
   ContextMenuTrigger
 } from './ui/context-menu'
+
+const TREE_ICON_CLASS = 'h-4 w-4 shrink-0'
+const TREE_CHEVRON_CLASS = 'h-3.5 w-3.5 shrink-0'
 
 type TreeSelection = {
   kind: 'note' | 'folder'
@@ -50,6 +53,7 @@ export function NotesTreeView({
   const treeRef = useRef<TreeApi<NoteTreeNode> | null>(null)
   const lastSyncedSelectionIdRef = useRef<string | undefined>(undefined)
   const { ref: containerRef, height } = useElementSize()
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const currentSelectionId = selectedEntry
     ? toTreeId(selectedEntry.kind, selectedEntry.relPath)
@@ -92,9 +96,19 @@ export function NotesTreeView({
     instance.openParents(pendingEditId)
     instance.select(pendingEditId)
     instance.scrollTo(pendingEditId, 'smart')
-    instance.edit(pendingEditId)
+    setEditingId(pendingEditId)
     onPendingEditHandled()
   }, [onPendingEditHandled, pendingEditId, tree])
+
+  useEffect(() => {
+    if (!editingId) {
+      return
+    }
+
+    if (!resolveNodeById(tree, editingId)) {
+      setEditingId(null)
+    }
+  }, [editingId, tree])
 
   if (tree.length === 0) {
     return (
@@ -105,7 +119,7 @@ export function NotesTreeView({
   }
 
   return (
-    <div ref={containerRef} className="h-full min-h-0 p-2">
+    <div ref={containerRef} className="h-full min-h-0 p-2" data-testid="notes-tree-view">
       {height > 0 ? (
         <Tree
           ref={treeRef}
@@ -171,19 +185,19 @@ export function NotesTreeView({
               await onMovePath(entry.relPath, nextRelPath)
             }
           }}
-          onRename={({ id, name }) => {
-            const entry = resolveNodeById(tree, id)
-            if (!entry) {
-              return
-            }
-            onRenamePath(entry.relPath, name, entry.kind)
-          }}
         >
           {(props) => (
             <TreeNode
               {...props}
+              isEditing={editingId === props.node.id}
               onCreateNote={onCreateNote}
               onCreateFolder={onCreateFolder}
+              onCancelEditing={() => setEditingId(null)}
+              onCommitRename={(value) => {
+                setEditingId(null)
+                onRenamePath(props.node.data.relPath, value, props.node.data.kind)
+              }}
+              onStartEditing={() => setEditingId(props.node.id)}
               onDeletePath={onDeletePath}
             />
           )}
@@ -197,16 +211,27 @@ function TreeNode({
   node,
   style,
   dragHandle,
+  isEditing,
   onCreateNote,
   onCreateFolder,
+  onCancelEditing,
+  onCommitRename,
+  onStartEditing,
   onDeletePath
 }: NodeRendererProps<NoteTreeNode> & {
+  isEditing: boolean
   onCreateNote: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
+  onCancelEditing: () => void
+  onCommitRename: (value: string) => void
+  onStartEditing: () => void
   onDeletePath: (relPath: string, kind: 'note' | 'folder') => void
 }): ReactElement {
   const parentDir = node.data.kind === 'folder' ? node.data.relPath : node.data.note.dir
   const isFolder = node.data.kind === 'folder'
+  const handleRenameRequest = (): void => {
+    onStartEditing()
+  }
 
   return (
     <ContextMenu>
@@ -214,12 +239,16 @@ function TreeNode({
         <div style={style as CSSProperties} className="group">
           <div
             ref={dragHandle}
+            data-testid={`note-tree-row:${node.data.relPath}`}
             className={`flex h-[30px] items-center gap-2 rounded-md px-2 text-sm ${
               node.isSelected
                 ? 'bg-[var(--accent-soft)] text-[var(--text)]'
                 : 'text-[var(--text)] hover:bg-[var(--panel-2)]'
             }`}
             onClick={() => {
+              if (isEditing) {
+                return
+              }
               node.select()
               if (isFolder) {
                 node.toggle()
@@ -243,40 +272,67 @@ function TreeNode({
             >
               {isFolder ? (
                 <ChevronRight
-                  size={14}
-                  className={`transition-transform ${node.isOpen ? 'rotate-90' : ''}`}
+                  className={`${TREE_CHEVRON_CLASS} transition-transform ${node.isOpen ? 'rotate-90' : ''}`}
                 />
               ) : null}
             </button>
             {isFolder ? (
-              node.isOpen ? <FolderOpen size={16} className="text-[var(--accent)]" /> : <Folder size={16} className="text-[var(--accent)]" />
+              node.isOpen ? (
+                <FolderOpen className={`${TREE_ICON_CLASS} text-[var(--accent)]`} strokeWidth={1.9} />
+              ) : (
+                <Folder className={`${TREE_ICON_CLASS} text-[var(--accent)]`} strokeWidth={1.9} />
+              )
             ) : (
-              <FileText size={16} className="text-[var(--muted)]" />
+              <FileText className={`${TREE_ICON_CLASS} text-[var(--muted)]`} strokeWidth={1.9} />
             )}
-            {node.isEditing ? (
-              <TreeNodeInput node={node} />
-            ) : (
+            {isEditing ? (
+              <TreeNodeInput
+                node={node}
+                onCancel={onCancelEditing}
+                onCommit={onCommitRename}
+              />
+          ) : (
               <span className="min-w-0 truncate">
                 {isFolder ? node.data.name : node.data.name.replace(/\.md$/i, '')}
               </span>
             )}
+            {!isEditing ? (
+              <button
+                type="button"
+                data-testid={`note-tree-rename:${node.data.relPath}`}
+                className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onStartEditing()
+                }}
+                title={`Rename ${isFolder ? 'folder' : 'note'}`}
+                aria-label={`Rename ${isFolder ? 'folder' : 'note'} ${node.data.name.replace(/\.md$/i, '')}`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={() => onCreateNote(parentDir)}>
+        <ContextMenuItem onSelect={() => onCreateNote(parentDir)}>
           <FileText className="mr-2 h-4 w-4" />
           New note
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCreateFolder(parentDir)}>
+        <ContextMenuItem onSelect={() => onCreateFolder(parentDir)}>
           <FolderPlus className="mr-2 h-4 w-4" />
           New folder
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => node.edit()}>
+        <ContextMenuItem
+          onClick={handleRenameRequest}
+          onSelect={handleRenameRequest}
+        >
           <Pencil className="mr-2 h-4 w-4" />
           Rename
         </ContextMenuItem>
-        <ContextMenuDestructiveItem onClick={() => onDeletePath(node.data.relPath, node.data.kind)}>
+        <ContextMenuDestructiveItem
+          onSelect={() => onDeletePath(node.data.relPath, node.data.kind)}
+        >
           <Trash2 className="mr-2 h-4 w-4" />
           Delete
         </ContextMenuDestructiveItem>
@@ -285,23 +341,37 @@ function TreeNode({
   )
 }
 
-function TreeNodeInput({ node }: { node: NodeRendererProps<NoteTreeNode>['node'] }): ReactElement {
+function TreeNodeInput({
+  node,
+  onCancel,
+  onCommit
+}: {
+  node: NodeRendererProps<NoteTreeNode>['node']
+  onCancel: () => void
+  onCommit: (value: string) => void
+}): ReactElement {
   return (
     <input
       autoFocus
       type="text"
+      data-testid={`note-tree-input:${node.data.relPath}`}
       defaultValue={node.data.kind === 'folder' ? node.data.name : node.data.name.replace(/\.md$/i, '')}
       className="h-7 flex-1 rounded border border-[var(--accent-line)] bg-[var(--panel)] px-2 text-sm outline-none"
       onFocus={(event) => event.currentTarget.select()}
-      onBlur={(event) => node.submit(event.currentTarget.value)}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onBlur={(event) => onCommit(event.currentTarget.value)}
       onKeyDown={(event) => {
+        event.stopPropagation()
         if (event.key === 'Escape') {
-          node.reset()
+          event.preventDefault()
+          onCancel()
           return
         }
 
         if (event.key === 'Enter') {
-          node.submit(event.currentTarget.value)
+          event.preventDefault()
+          onCommit(event.currentTarget.value)
         }
       }}
     />

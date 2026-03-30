@@ -188,8 +188,8 @@ Key behaviors:
 Primary responsibilities:
 
 - edit profile name
-- select app font
 - review and change vault location
+- select app font
 - save the Mistral API key
 
 Main data sources:

@@ -32,10 +32,7 @@ export class AppErrorBoundary extends React.Component<
       componentStack: info.componentStack ?? undefined
     })
 
-    useVaultStore.getState().pushToast('error', `[renderer] ${error.message}`, {
-      description: [error.stack, info.componentStack].filter(Boolean).join('\n\n'),
-      persist: true
-    })
+    useVaultStore.getState().pushToast('error', `[renderer] ${error.message}`)
   }
 
   render(): ReactNode {
