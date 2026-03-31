@@ -20,6 +20,7 @@ interface TopBarProps {
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
+  knowledge: 'Knowledge',
   notes: 'Notes',
   projects: 'Projects',
   grid: 'Grid',
@@ -28,6 +29,12 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings',
   schedules: 'Schedules',
   agentHistory: 'Agent Chat'
+}
+
+const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
+  dashboard: 'Board',
+  knowledge: 'Board',
+  grid: 'Board'
 }
 
 export function TopBar({
@@ -49,6 +56,7 @@ export function TopBar({
   }
 
   const itemName = getItemName()
+  const sectionLabel = PAGE_SECTION_LABELS[activePage]
 
   return (
     <div className="app-drag-region flex h-[44px] w-full shrink-0 items-center border-b border-[var(--line)] bg-[var(--panel)]">
@@ -113,6 +121,26 @@ export function TopBar({
                 <BreadcrumbItem>
                   <BreadcrumbPage className="max-w-[200px] truncate text-[var(--text)]">
                     {itemName}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            ) : sectionLabel ? (
+              <>
+                <BreadcrumbItem>
+                  <BreadcrumbLink
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    className="text-[var(--muted)] hover:text-[var(--text)]"
+                  >
+                    {sectionLabel}
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+
+                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="text-[var(--text)]">
+                    {PAGE_LABELS[activePage]}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </>

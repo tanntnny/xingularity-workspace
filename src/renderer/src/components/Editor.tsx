@@ -21,7 +21,6 @@ import {
 import { noteBlocksToText, stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import {
-  mentionTokenFromRelPath,
   normalizeMentionTarget,
   noteMentionHref,
   parseNoteMentionHref
@@ -211,10 +210,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         const mentionTarget = hasNameCollision
           ? stripNoteExtension(note.relPath)
           : stripNoteExtension(note.name)
-        const token = mentionTokenFromRelPath(mentionTarget)
+        const visibleLabel = mentionTarget
 
         return {
-          title: token,
+          title: visibleLabel,
           aliases: [note.relPath, note.name, mentionTarget],
           subtext: note.relPath,
           onItemClick: () => {
@@ -223,7 +222,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                 {
                   type: 'link',
                   href: noteMentionHref(mentionTarget),
-                  content: token
+                  content: visibleLabel
                 }
               ])
             })

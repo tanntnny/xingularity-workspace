@@ -48,6 +48,7 @@ export interface NoteListItem {
   updatedAt: string
   tags: string[]
   bodyPreview?: string
+  mentionTargets?: string[]
 }
 
 interface NoteTreeEntryBase {

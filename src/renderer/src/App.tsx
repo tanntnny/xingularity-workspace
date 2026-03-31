@@ -49,6 +49,7 @@ import {
 } from '../../shared/projectIcons'
 import {
   appendTextToNoteBlocks,
+  getNoteDisplayName,
   noteBlocksToText,
   noteTextToBlocks,
   serializeStoredNoteDocument,
@@ -56,7 +57,7 @@ import {
   withNoteExtension
 } from '../../shared/noteDocument'
 import { normalizeTag, generateProjectTag } from '../../shared/noteTags'
-import { mentionTokenFromRelPath, normalizeMentionTarget } from '../../shared/noteMentions'
+import { normalizeMentionTarget } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
@@ -114,6 +115,7 @@ import { SchedulesPage } from './pages/SchedulesPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GridPage, type GridWorkspaceActions } from './pages/GridPage'
+import { KnowledgePage } from './pages/KnowledgePage'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
 import {
@@ -149,6 +151,7 @@ import type { NoteOutlineItem } from './lib/noteOutline'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
+  knowledge: 'Knowledge',
   notes: 'Notes',
   projects: 'Projects',
   grid: 'Grid',
@@ -510,6 +513,7 @@ function App(): ReactElement {
   const shouldAnimateWorkspacePane =
     hasVault &&
     (activePage === 'dashboard' ||
+      activePage === 'knowledge' ||
       activePage === 'notes' ||
       activePage === 'projects' ||
       activePage === 'grid' ||
@@ -715,6 +719,42 @@ function App(): ReactElement {
   }
 
   const noteIsOpen = Boolean(currentNotePath)
+  const currentNoteBacklinks = useMemo(() => {
+    if (!currentNotePath) {
+      return []
+    }
+
+    const exactPathLookup = new Map<string, string>()
+    const noteNameGroups = new Map<string, NoteListItem[]>()
+
+    notes.forEach((note) => {
+      exactPathLookup.set(normalizeMentionTarget(note.relPath), note.relPath)
+      const nameKey = normalizeMentionTarget(note.name)
+      const matches = noteNameGroups.get(nameKey)
+      if (matches) {
+        matches.push(note)
+      } else {
+        noteNameGroups.set(nameKey, [note])
+      }
+    })
+
+    return notes.filter((note) => {
+      if (note.relPath === currentNotePath || !note.mentionTargets?.length) {
+        return false
+      }
+
+      return note.mentionTargets.some((target) => {
+        const normalizedTarget = normalizeMentionTarget(target)
+        const exactMatch = exactPathLookup.get(normalizedTarget)
+        if (exactMatch) {
+          return exactMatch === currentNotePath
+        }
+
+        const byNameMatches = noteNameGroups.get(normalizedTarget) ?? []
+        return byNameMatches.length === 1 && byNameMatches[0].relPath === currentNotePath
+      })
+    })
+  }, [currentNotePath, notes])
   useEffect(() => {
     if (!noteIsOpen) {
       setCurrentNoteOutline([])
@@ -735,7 +775,7 @@ function App(): ReactElement {
       return null
     }
 
-    if (!currentNoteEditorDirtyRef.current || !currentNoteEditorRef.current) {
+    if (!currentNoteEditorRef.current) {
       return noteEditorSessionsRef.current[relPath] ?? null
     }
 
@@ -861,6 +901,10 @@ function App(): ReactElement {
 
     if (activePage === 'grid') {
       return GRID_PAGE_ENABLED ? 'Spatial Board' : 'Unavailable in This Version'
+    }
+
+    if (activePage === 'knowledge') {
+      return 'Note graph'
     }
 
     if (activePage === 'dashboard') {
@@ -1030,6 +1074,7 @@ function App(): ReactElement {
       const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
       const pageByKey: Partial<Record<string, AppPage>> = {
         d: 'dashboard',
+        k: 'knowledge',
         ...(GRID_PAGE_ENABLED ? { g: 'grid' } : {}),
         '1': 'notes',
         '2': 'projects',
@@ -3343,24 +3388,6 @@ function App(): ReactElement {
     ]
   )
 
-  const copyCurrentNoteBacklink = useCallback(async (): Promise<void> => {
-    if (!currentNotePath) {
-      return
-    }
-
-    if (typeof navigator === 'undefined' || !navigator.clipboard) {
-      pushToast('error', 'Clipboard is unavailable in this environment')
-      return
-    }
-
-    try {
-      await navigator.clipboard.writeText(mentionTokenFromRelPath(currentNotePath))
-      pushToast('success', 'Backlink copied')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }, [currentNotePath, pushToast])
-
   const openOrCreateNoteMention = useCallback(
     async (rawTarget: string): Promise<void> => {
       if (!vaultApi) {
@@ -3772,17 +3799,40 @@ function App(): ReactElement {
                   noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void copyCurrentNoteBacklink()
-                          }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
-                          title="Copy backlink"
-                          aria-label="Copy backlink"
-                        >
-                          <Link2 size={18} />
-                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                              title="Show backlinks"
+                              aria-label="Show backlinks"
+                            >
+                              <Link2 size={18} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-72">
+                            {currentNoteBacklinks.length > 0 ? (
+                              currentNoteBacklinks.map((note) => (
+                                <DropdownMenuItem
+                                  key={note.relPath}
+                                  onSelect={() => {
+                                    void openNote(note.relPath)
+                                  }}
+                                  className="flex flex-col items-start gap-0.5"
+                                >
+                                  <span className="max-w-full truncate font-medium">
+                                    {getNoteDisplayName(note.relPath)}
+                                  </span>
+                                  <span className="max-w-full truncate text-xs text-[var(--muted)]">
+                                    {stripNoteExtension(note.relPath)}
+                                  </span>
+                                </DropdownMenuItem>
+                              ))
+                            ) : (
+                              <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -4413,6 +4463,16 @@ function App(): ReactElement {
                       }}
                       onOpenWeeklyPlan={() => {
                         setActivePage('weeklyPlan')
+                      }}
+                    />
+                  ) : activePage === 'knowledge' ? (
+                    <KnowledgePage
+                      notes={notes}
+                      onOpenNote={(relPath) => {
+                        setActivePage('notes')
+                        setSearchQuery('')
+                        setSearchResults([])
+                        void openNote(relPath)
                       }}
                     />
                   ) : activePage === 'projects' ? (

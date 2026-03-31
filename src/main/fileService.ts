@@ -14,6 +14,7 @@ import {
   serializeStoredNoteDocument,
   withNoteExtension
 } from '../shared/noteDocument'
+import { extractMentionTargets } from '../shared/noteMentions'
 import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shared/pathSafety'
 import { ImportedNoteResult, NoteListItem, NoteTreeFile, NoteTreeFolder, NoteTreeNode, StoredNoteDocument } from '../shared/types'
 
@@ -261,7 +262,8 @@ export class FileService {
       createdAt: stats.birthtime.toISOString(),
       updatedAt: stats.mtime.toISOString(),
       tags: document.tags,
-      bodyPreview: noteBlocksToPreviewText(document.blocks)
+      bodyPreview: noteBlocksToPreviewText(document.blocks),
+      mentionTargets: extractMentionTargets(document.blocks)
     }
   }
 }

@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileText, FolderKanban, LayoutDashboard, LayoutGrid, Plus, Clock } from 'lucide-react'
+import { Clock, FileText, FolderKanban, GitBranch, LayoutDashboard, LayoutGrid, Plus } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import {
@@ -27,6 +27,7 @@ export interface CommandPaletteSearchResult {
 
 type CommandPalettePage =
   | 'dashboard'
+  | 'knowledge'
   | 'notes'
   | 'projects'
   | 'grid'
@@ -204,6 +205,13 @@ export function CommandPalette({
         label: 'Go to Dashboard',
         onSelect: () => onOpenPage('dashboard'),
         icon: LayoutDashboard
+      },
+      {
+        value: '>go knowledge',
+        label: 'Go to Knowledge',
+        shortcut: '⌘K',
+        onSelect: () => onOpenPage('knowledge'),
+        icon: GitBranch
       },
       {
         value: '>go notes',

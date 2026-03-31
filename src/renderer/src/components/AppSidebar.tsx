@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   FileText,
   FolderKanban,
+  GitBranch,
   Search,
   Settings,
   Zap
@@ -32,6 +33,7 @@ import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 
 export type AppPage =
   | 'dashboard'
+  | 'knowledge'
   | 'notes'
   | 'projects'
   | 'grid'
@@ -68,9 +70,13 @@ const GRID_HOME_PAGE: SidebarPageItem = {
   shortcut: '⌘G'
 }
 
-const HOME_PAGES: SidebarPageItem[] = [
+const BOARD_PAGES: SidebarPageItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
-  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE] : []),
+  { id: 'knowledge', label: 'Knowledge', icon: GitBranch, shortcut: '⌘K' },
+  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE] : [])
+]
+
+const HOME_PAGES: SidebarPageItem[] = [
   { id: 'notes', label: 'Notes', icon: FileText, shortcut: '⌘1' },
   { id: 'projects', label: 'Projects', icon: FolderKanban, shortcut: '⌘2' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '⌘3' },
@@ -189,6 +195,37 @@ export function AppSidebar({
       <SidebarSeparator />
 
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Board</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {BOARD_PAGES.map((page) => (
+                <SidebarMenuItem key={page.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activePage === page.id}
+                    onClick={() => onChange(page.id)}
+                    tooltip={page.label}
+                  >
+                    <ButtonBase
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isLocked}
+                    >
+                      <page.icon size={17} strokeWidth={2} />
+                      <span>{page.label}</span>
+                      <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
+                        {renderShortcut(page.shortcut)}
+                      </Kbd>
+                    </ButtonBase>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarSeparator />
+
         <SidebarGroup>
           <SidebarGroupLabel>Home</SidebarGroupLabel>
           <SidebarGroupContent>
