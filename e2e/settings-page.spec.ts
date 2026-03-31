@@ -53,8 +53,13 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
+  const gridPageButton = page.getByTestId('sidebar-page:grid')
+  try {
+    await expect(gridPageButton).toBeVisible({ timeout: 5_000 })
+  } catch {
+    await page.evaluate(() => window.vaultApi.vault.restoreLast())
+    await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
+  }
 
   return { electronApp, page }
 }

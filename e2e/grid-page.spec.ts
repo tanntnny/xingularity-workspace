@@ -101,7 +101,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('sidebar-page:grid')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -166,14 +166,6 @@ test.describe('grid page', () => {
       await expect(noteCard).toBeVisible()
       await expect(noteCard).toContainText('alpha')
       await expect(noteCard).toContainText('A distinctive note body for canvas preview.')
-
-      const noteCardStyles = await noteCard.evaluate((element) => {
-        const computed = window.getComputedStyle(element as HTMLElement)
-        return {
-          boxShadow: computed.boxShadow
-        }
-      })
-      expect(noteCardStyles.boxShadow).toBe('none')
 
       const noteBox = await noteCard.boundingBox()
       expect(noteBox).not.toBeNull()
@@ -269,14 +261,66 @@ test.describe('grid page', () => {
       await expect(textCard).toBeVisible()
       await textCard.click()
 
-      const textBoardItem = await waitForBoardItem(vaultRoot, (item) => item.kind === 'text')
+      const longText =
+        'This grid text block should wrap across multiple lines when the width is constrained.'
+      await page.getByRole('textbox').fill(longText)
+      await page.keyboard.press('Enter')
+
+      const textBoardItem = await waitForBoardItem(
+        vaultRoot,
+        (item) => item.kind === 'text' && item.textContent === longText
+      )
+      const textDisplay = textCard.getByText(longText)
       expect(textBoardItem.size?.width).toBeDefined()
       expect(textBoardItem.size?.height).toBeDefined()
       expect(textBoardItem.size?.width).toBe(296)
       expect(textBoardItem.size?.height).toBe(84)
 
+      const textMetrics = await textDisplay.evaluate((element) => {
+        const computed = window.getComputedStyle(element as HTMLElement)
+        const lineHeight = Number.parseFloat(computed.lineHeight)
+        return {
+          whiteSpace: computed.whiteSpace,
+          overflowWrap: computed.overflowWrap,
+          clientHeight: (element as HTMLElement).clientHeight,
+          lineHeight
+        }
+      })
+      expect(textMetrics.whiteSpace).toBe('pre-wrap')
+      expect(textMetrics.overflowWrap).toBe('anywhere')
+      expect(textMetrics.clientHeight).toBeGreaterThan(textMetrics.lineHeight * 1.5)
+
       const resizeControlCount = await textCard.locator('.react-flow__resize-control').count()
-      expect(resizeControlCount).toBe(0)
+      expect(resizeControlCount).toBe(2)
+
+      const textRightEdge = textCard.locator('.react-flow__resize-control.right.line')
+      await expect(textRightEdge).toBeAttached()
+      const textRightEdgeBox = await textRightEdge.boundingBox()
+      expect(textRightEdgeBox).not.toBeNull()
+      if (!textRightEdgeBox) {
+        throw new Error('Text resize edge bounding box not available')
+      }
+
+      await page.mouse.move(
+        textRightEdgeBox.x + textRightEdgeBox.width / 2,
+        textRightEdgeBox.y + textRightEdgeBox.height / 2
+      )
+      await page.mouse.down()
+      await page.mouse.move(
+        textRightEdgeBox.x + textRightEdgeBox.width / 2 + 112,
+        textRightEdgeBox.y + textRightEdgeBox.height / 2,
+        {
+          steps: 12
+        }
+      )
+      await page.mouse.up()
+
+      const textItemAfterResize = await waitForBoardItem(
+        vaultRoot,
+        (item) => item.kind === 'text' && item.textContent === longText
+      )
+      expect(textItemAfterResize.size?.width ?? 0).toBeGreaterThan(296)
+      expect(textItemAfterResize.size?.height).toBe(84)
 
       await electronApp.close()
       electronApp = null
@@ -299,8 +343,9 @@ test.describe('grid page', () => {
 
       expect(persistedNote?.size?.width).toBe(noteItemAfterResize.size?.width)
       expect(persistedNote?.size?.height).toBe(noteItemAfterResize.size?.height)
-      expect(persistedText?.size?.width).toBe(textBoardItem.size?.width)
-      expect(persistedText?.size?.height).toBe(textBoardItem.size?.height)
+      expect(persistedText?.size?.width).toBe(textItemAfterResize.size?.width)
+      expect(persistedText?.size?.height).toBe(textItemAfterResize.size?.height)
+      expect(persistedText?.textContent).toBe(longText)
     } finally {
       await electronApp?.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

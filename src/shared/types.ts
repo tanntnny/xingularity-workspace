@@ -163,12 +163,22 @@ export interface GridBoardViewport {
   zoom: number
 }
 
+export interface GridTextStyle {
+  fontSize?: 'sm' | 'md' | 'lg'
+  isBold?: boolean
+  isItalic?: boolean
+  isUnderline?: boolean
+  textAlign?: 'left' | 'center' | 'right'
+  color?: 'default' | 'accent' | 'muted'
+}
+
 export interface GridBoardItem {
   id: string
   kind: GridBoardItemKind
   noteRelPath?: string
   projectId?: string
   textContent?: string
+  textStyle?: GridTextStyle
   position: {
     x: number
     y: number

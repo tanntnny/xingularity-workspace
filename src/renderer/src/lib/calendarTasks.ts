@@ -1,4 +1,6 @@
-import { CalendarTask } from '../../../shared/types'
+import { CalendarTask, Project } from '../../../shared/types'
+
+export type CalendarEventSource = 'task' | 'milestone'
 
 export interface CalendarEventInput {
   id: string
@@ -6,8 +8,16 @@ export interface CalendarEventInput {
   start: string
   end?: string
   allDay: true
+  editable?: boolean
+  startEditable?: boolean
+  durationEditable?: boolean
   extendedProps: {
-    taskId: string
+    source: CalendarEventSource
+    taskId?: string
+    projectId?: string
+    projectName?: string
+    milestoneId?: string
+    completed?: boolean
     syncSignature?: string
   }
 }
@@ -41,10 +51,38 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[]
         end: endIso ? toIsoDate(addIsoDays(parseIsoDate(endIso), 1)) : undefined,
         allDay: true as const,
         extendedProps: {
+          source: 'task',
           taskId: task.id
         }
       }
     })
+}
+
+export function buildMilestoneCalendarEvents(projects: Project[]): CalendarEventInput[] {
+  return projects.flatMap((project) =>
+    project.milestones
+      .filter((milestone) => Boolean(milestone.dueDate))
+      .map((milestone) => ({
+        id: getMilestoneCalendarEventId(project.id, milestone.id),
+        title: milestone.title,
+        start: milestone.dueDate,
+        allDay: true as const,
+        editable: true,
+        startEditable: true,
+        durationEditable: false,
+        extendedProps: {
+          source: 'milestone',
+          projectId: project.id,
+          projectName: project.name,
+          milestoneId: milestone.id,
+          completed: milestone.status === 'completed'
+        }
+      }))
+  )
+}
+
+export function getMilestoneCalendarEventId(projectId: string, milestoneId: string): string {
+  return `calendar-milestone:${projectId}:${milestoneId}`
 }
 
 function toIsoDate(date: Date): string {

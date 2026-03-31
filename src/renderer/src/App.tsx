@@ -26,6 +26,7 @@ import {
   CalendarTask,
   CreateWeeklyPlanWeekInput,
   GridBoardState,
+  GridTextStyle,
   NoteListItem,
   NoteImportResult,
   NoteTreeNode,
@@ -120,7 +121,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
-import { normalizeCalendarTasks } from './lib/calendarTasks'
+import { buildMilestoneCalendarEvents, normalizeCalendarTasks } from './lib/calendarTasks'
 import {
   cloneNoteEditorBlocks,
   type NoteEditorBlock,
@@ -405,6 +406,11 @@ function App(): ReactElement {
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
+  const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
+    projectId: string
+    milestoneId: string
+    token: number
+  } | null>(null)
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [calendarBulkTaskType, setCalendarBulkTaskType] = useState<CalendarTaskType>('assignment')
   const [calendarBulkScope, setCalendarBulkScope] =
@@ -422,7 +428,7 @@ function App(): ReactElement {
   const [noteFilterMode, setNoteFilterMode] = useState<NoteFilterMode>('all')
   const [noteSortField, setNoteSortField] = useState<NoteSortField>('created')
   const [noteSortDirection, setNoteSortDirection] = useState<NoteSortDirection>('desc')
-  const [notePanelView, setNotePanelView] = useState<NotePanelView>('cards')
+  const [notePanelView, setNotePanelView] = useState<NotePanelView>('tree')
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntry, setSelectedNoteTreeEntry] = useState<NoteTreeSelection>(null)
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
@@ -793,6 +799,7 @@ function App(): ReactElement {
   const scheduledCalendarTasks = useMemo(() => {
     return normalizeCalendarTasks(calendarTasks).filter((task) => Boolean(task.date))
   }, [calendarTasks])
+  const milestoneCalendarEvents = useMemo(() => buildMilestoneCalendarEvents(projects), [projects])
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -957,14 +964,16 @@ function App(): ReactElement {
         if (!restored) {
           return
         }
+        const restoredTree = await vaultApi.files.listTree()
         setVault(restored.info)
         setNotes(restored.notes)
+        setNoteTree(restoredTree)
         pushToast('success', `Restored vault ${restored.info.rootPath}`)
       } catch (error) {
         pushToast('error', String(error))
       }
     })()
-  }, [vaultApi, setNotes, setVault, pushToast])
+  }, [vaultApi, setNoteTree, setNotes, setVault, pushToast])
 
   useEffect(() => {
     if (hasVault || !commandPaletteOpen) {
@@ -1519,6 +1528,19 @@ function App(): ReactElement {
     setSelectedCalendarDate(toIsoDate(new Date()))
   }
 
+  const openMilestoneFromCalendar = useCallback(
+    (projectId: string, milestoneId: string): void => {
+      selectProject(projectId)
+      setFocusedMilestoneTarget({
+        projectId,
+        milestoneId,
+        token: Date.now()
+      })
+      setActivePage('projects')
+    },
+    [selectProject]
+  )
+
   const reassignCalendarTaskTypeForScope = async (
     scope: (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value'],
     taskType: CalendarTaskType
@@ -1560,9 +1582,11 @@ function App(): ReactElement {
       if (!result) {
         return
       }
+      const openedTree = await vaultApi.files.listTree()
       setSettingsLoaded(false)
       setVault(result.info)
       setNotes(result.notes)
+      setNoteTree(openedTree)
       noteEditorSessionsRef.current = {}
       currentNotePathRef.current = null
       currentNoteContentRef.current = ''
@@ -2655,6 +2679,15 @@ function App(): ReactElement {
       })
     })
     void persistProjects(nextProjects)
+  }
+
+  const rescheduleProjectMilestoneFromCalendar = (
+    projectId: string,
+    milestoneId: string,
+    nextDueDate: string
+  ): void => {
+    updateProjectMilestoneDueDate(projectId, milestoneId, nextDueDate)
+    setSelectedCalendarDate(nextDueDate)
   }
 
   const updateProjectMilestoneDescription = (
@@ -4259,6 +4292,16 @@ function App(): ReactElement {
                       <ProjectDetailsPage
                         project={selectedProject}
                         notes={notes}
+                        focusedMilestoneId={
+                          focusedMilestoneTarget?.projectId === selectedProject.id
+                            ? focusedMilestoneTarget.milestoneId
+                            : null
+                        }
+                        focusedMilestoneToken={
+                          focusedMilestoneTarget?.projectId === selectedProject.id
+                            ? focusedMilestoneTarget.token
+                            : 0
+                        }
                         onRename={(nextName) => renameProject(selectedProject.id, nextName)}
                         onUpdateSummary={(nextSummary) =>
                           updateProjectSummary(selectedProject.id, nextSummary)
@@ -4412,8 +4455,11 @@ function App(): ReactElement {
                     <CalendarMonthView
                       selectedDate={selectedCalendarDate}
                       tasks={scheduledCalendarTasks}
+                      milestoneEvents={milestoneCalendarEvents}
                       onSelectDate={setSelectedCalendarDate}
                       onCreateTask={createTaskForDate}
+                      onOpenMilestone={openMilestoneFromCalendar}
+                      onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
                       onRescheduleTask={(taskId, newDate) => {
                         void rescheduleCalendarTask(taskId, newDate)
                       }}
@@ -5106,6 +5152,7 @@ function sanitizeGridBoardState(
           return []
         }
 
+        const textStyle = sanitizeGridTextStyle(item.textStyle)
         const rawWidth = item.size?.width
         const rawHeight = item.size?.height
         const size =
@@ -5124,6 +5171,7 @@ function sanitizeGridBoardState(
         return [
           {
             ...item,
+            textStyle,
             size
           }
         ]
@@ -5177,11 +5225,55 @@ function isGridBoardItemEqual(
     left.noteRelPath === right.noteRelPath &&
     left.projectId === right.projectId &&
     left.textContent === right.textContent &&
+    isGridTextStyleEqual(left.textStyle, right.textStyle) &&
     left.position.x === right.position.x &&
     left.position.y === right.position.y &&
     left.zIndex === right.zIndex &&
     leftWidth === rightWidth &&
     leftHeight === rightHeight
+  )
+}
+
+function sanitizeGridTextStyle(style: GridTextStyle | undefined): GridTextStyle | undefined {
+  if (!style || typeof style !== 'object') {
+    return undefined
+  }
+
+  const nextStyle: GridTextStyle = {}
+
+  if (style.fontSize === 'sm' || style.fontSize === 'md' || style.fontSize === 'lg') {
+    nextStyle.fontSize = style.fontSize
+  }
+  if (style.isBold === true) {
+    nextStyle.isBold = true
+  }
+  if (style.isItalic === true) {
+    nextStyle.isItalic = true
+  }
+  if (style.isUnderline === true) {
+    nextStyle.isUnderline = true
+  }
+  if (style.textAlign === 'left' || style.textAlign === 'center' || style.textAlign === 'right') {
+    nextStyle.textAlign = style.textAlign
+  }
+  if (style.color === 'default' || style.color === 'accent' || style.color === 'muted') {
+    nextStyle.color = style.color
+  }
+
+  return Object.keys(nextStyle).length > 0 ? nextStyle : undefined
+}
+
+function isGridTextStyleEqual(
+  left: GridTextStyle | undefined,
+  right: GridTextStyle | undefined
+): boolean {
+  return (
+    left?.fontSize === right?.fontSize &&
+    left?.isBold === right?.isBold &&
+    left?.isItalic === right?.isItalic &&
+    left?.isUnderline === right?.isUnderline &&
+    left?.textAlign === right?.textAlign &&
+    left?.color === right?.color
   )
 }
 

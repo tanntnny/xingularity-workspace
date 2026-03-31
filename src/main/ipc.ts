@@ -194,12 +194,22 @@ const gridBoardViewportSchema = z.object({
   zoom: z.number().positive().max(4)
 })
 
+const gridTextStyleSchema = z.object({
+  fontSize: z.enum(['sm', 'md', 'lg']).optional(),
+  isBold: z.boolean().optional(),
+  isItalic: z.boolean().optional(),
+  isUnderline: z.boolean().optional(),
+  textAlign: z.enum(['left', 'center', 'right']).optional(),
+  color: z.enum(['default', 'accent', 'muted']).optional()
+})
+
 const gridBoardItemSchema = z.object({
   id: z.string().min(1).max(200),
   kind: z.enum(['note', 'project', 'text']),
   noteRelPath: z.string().min(1).max(512).optional(),
   projectId: z.string().min(1).max(120).optional(),
   textContent: z.string().max(20_000).optional(),
+  textStyle: gridTextStyleSchema.optional(),
   position: z.object({
     x: z.number(),
     y: z.number()

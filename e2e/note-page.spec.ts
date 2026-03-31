@@ -119,14 +119,16 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  const alphaPreview = page.getByTestId('note-preview:alpha.xnote')
+  const gridPageButton = page.getByTestId('sidebar-page:grid')
 
   try {
-    await expect(alphaPreview).toBeVisible({ timeout: 5_000 })
+    await expect(gridPageButton).toBeVisible({ timeout: 5_000 })
   } catch {
     await page.evaluate(() => window.vaultApi.vault.restoreLast())
-    await expect(alphaPreview).toBeVisible({ timeout: 20_000 })
+    await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
   }
+  await page.getByTestId('sidebar-page:notes').click()
+  await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -152,7 +154,14 @@ async function readNoteDocumentFromVault(
 }
 
 async function openNote(page: Page, relPath: string): Promise<void> {
-  await page.getByTestId(`note-preview:${relPath}`).click()
+  const treeToggle = page.getByTestId('note-panel-toggle:tree')
+  if ((await treeToggle.getAttribute('data-state')) === 'on') {
+    const treeRow = page.getByTestId(`note-tree-row:${relPath}`)
+    await expect(treeRow).toBeVisible({ timeout: 20_000 })
+    await treeRow.click()
+  } else {
+    await page.getByTestId(`note-preview:${relPath}`).click()
+  }
   await expect
     .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
     .toBe(relPath)

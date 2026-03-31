@@ -49,6 +49,10 @@ export function deriveMilestoneStatus(milestone: ProjectMilestone): ProjectMiles
   const subtasks = milestone.subtasks ?? []
   const completedCount = subtasks.filter((subtask) => subtask.completed).length
 
+  if (milestone.status === 'completed') {
+    return 'completed'
+  }
+
   if (subtasks.length > 0 && completedCount === subtasks.length) {
     return 'completed'
   }

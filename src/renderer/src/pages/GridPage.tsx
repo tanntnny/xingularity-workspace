@@ -22,12 +22,25 @@ import { stripNoteExtension } from '../../../shared/noteDocument'
 import {
   GridBoardItem,
   GridBoardState,
+  GridTextStyle,
   NoteListItem,
   Project,
   ProjectIconStyle
 } from '../../../shared/types'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger
+} from '../components/ui/context-menu'
+import { cn } from '../lib/utils'
 
 export interface GridWorkspaceActions {
   resetBoard: () => void
@@ -59,10 +72,13 @@ type GridNodeData = {
   status?: string
   icon?: ProjectIconStyle
   textContent?: string
+  textStyle?: GridTextStyle
   bodyPreview?: string
   onOpen: () => void
+  onSelect: () => void
   onRemove: () => void
   onUpdateText?: (nextText: string) => void
+  onUpdateTextStyle?: (nextStyle: GridTextStyle | undefined) => void
   onResizeEnd: (params: ResizeParams) => void
 }
 
@@ -75,9 +91,19 @@ const GRID_TEXT_NODE_HEIGHT = 84
 const GRID_MIN_CARD_WIDTH = 240
 const GRID_MIN_CARD_HEIGHT = 160
 const GRID_MIN_TEXT_HEIGHT = 76
+const GRID_MIN_TEXT_WIDTH = 160
 const GRID_CARD_RADIUS = '12px'
 const GRID_RESIZE_EDGE_HIT_SIZE = 12
 const GRID_RESIZE_CORNER_SIZE = 22
+
+const GRID_TEXT_STYLE_DEFAULTS: Required<GridTextStyle> = {
+  fontSize: 'md',
+  isBold: false,
+  isItalic: false,
+  isUnderline: false,
+  textAlign: 'left',
+  color: 'default'
+}
 
 const nodeTypes: NodeTypes = {
   'grid-card': GridCardNode
@@ -278,6 +304,22 @@ function GridCanvas({
     [updateItems]
   )
 
+  const updateTextItemStyle = useCallback(
+    (itemId: string, nextStyle: GridTextStyle | undefined): void => {
+      updateItems((items) =>
+        items.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                textStyle: nextStyle
+              }
+            : item
+        )
+      )
+    },
+    [updateItems]
+  )
+
   const resolvedSelectedItemId = useMemo(
     () =>
       selectedItemId && visibleItems.some((item) => item.id === selectedItemId)
@@ -335,6 +377,7 @@ function GridCanvas({
                 updatedAt: note.updatedAt,
                 bodyPreview: note.bodyPreview,
                 onOpen: () => onOpenNote(note.relPath),
+                onSelect: () => setSelectedItemId(item.id),
                 onRemove: () => removeItem(item.id),
                 onResizeEnd: (params) => handleNodeResizeEnd(item.id, params)
               },
@@ -369,6 +412,7 @@ function GridCanvas({
                 icon: project.icon,
                 updatedAt: project.updatedAt,
                 onOpen: () => onOpenProject(project.id),
+                onSelect: () => setSelectedItemId(item.id),
                 onRemove: () => removeItem(item.id),
                 onResizeEnd: (params) => handleNodeResizeEnd(item.id, params)
               },
@@ -392,9 +436,12 @@ function GridCanvas({
               title: 'Text',
               subtitle: 'Canvas text block',
               textContent: item.textContent ?? '',
+              textStyle: item.textStyle,
               onOpen: () => undefined,
+              onSelect: () => setSelectedItemId(item.id),
               onRemove: () => removeItem(item.id),
               onUpdateText: (nextText) => updateTextItem(item.id, nextText),
+              onUpdateTextStyle: (nextStyle) => updateTextItemStyle(item.id, nextStyle),
               onResizeEnd: (params) => handleNodeResizeEnd(item.id, params)
             },
             style: {
@@ -413,6 +460,7 @@ function GridCanvas({
       resolvedSelectedItemId,
       handleNodeResizeEnd,
       updateTextItem,
+      updateTextItemStyle,
       visibleItems
     ]
   )
@@ -582,7 +630,7 @@ function GridCanvas({
 function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
   const isNote = data.kind === 'note'
   const isText = data.kind === 'text'
-  const [textDraft, setTextDraft] = useState(data.textContent ?? '')
+  const textStyle = resolveGridTextStyle(data.textStyle)
   const minHeight = isText ? GRID_MIN_TEXT_HEIGHT : GRID_MIN_CARD_HEIGHT
   const verticalEdgeResizeStyle = {
     opacity: 0,
@@ -607,8 +655,19 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
     border: 'none'
   } as const
 
-  return (
+  const updateTextStyle = (
+    updater: (current: Required<GridTextStyle>) => Required<GridTextStyle>
+  ): void => {
+    if (!isText) {
+      return
+    }
+
+    data.onUpdateTextStyle?.(sanitizeGridTextStyle(updater(textStyle)))
+  }
+
+  const card = (
     <div
+      onMouseDown={() => data.onSelect()}
       onDoubleClick={() => {
         if (!isText) {
           data.onOpen()
@@ -619,7 +678,28 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         selected ? 'shadow-[0_0_0_1px_var(--accent)]' : ''
       }`}
     >
-      {isText ? null : (
+      {isText ? (
+        <>
+          <NodeResizeControl
+            position="right"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_TEXT_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ew-resize"
+            style={verticalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+          <NodeResizeControl
+            position="left"
+            variant={ResizeControlVariant.Line}
+            minWidth={GRID_MIN_TEXT_WIDTH}
+            minHeight={minHeight}
+            className="transition-opacity cursor-ew-resize"
+            style={verticalEdgeResizeStyle}
+            onResizeEnd={(_event, params) => data.onResizeEnd(params)}
+          />
+        </>
+      ) : (
         <>
           <NodeResizeControl
             position="top"
@@ -695,55 +775,78 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         className="relative flex h-full flex-col overflow-hidden rounded-[12px] px-4 py-4"
         style={{ borderRadius: GRID_CARD_RADIUS }}
       >
-        <div className="flex items-start justify-between gap-3">
-          {isNote ? (
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-semibold text-[var(--text)]">{data.title}</div>
-            </div>
-          ) : isText ? (
-            <div className="min-w-0 flex-1">
+        {isText ? (
+          <>
+            <button
+              type="button"
+              data-testid={`grid-remove:${data.kind}:${data.sourceId}`}
+              aria-label={`Remove text block ${data.title} from grid`}
+              onClick={(event) => {
+                event.stopPropagation()
+                data.onRemove()
+              }}
+              className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-[var(--muted)] transition hover:border-[var(--line)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+            >
+              <X size={15} />
+            </button>
+            <div className="flex min-h-0 flex-1 pr-12">
               <InlineEditableText
-                value={textDraft}
+                value={data.textContent ?? ''}
                 onCommit={(nextValue) => {
-                  setTextDraft(nextValue)
                   data.onUpdateText?.(nextValue)
                 }}
                 displayAs="div"
-                displayClassName="truncate text-lg font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-lg font-semibold text-[var(--text)] outline-none"
+                displayClassName={cn(
+                  'block w-full cursor-text whitespace-pre-wrap leading-6 [overflow-wrap:anywhere]',
+                  getGridTextClassName(textStyle)
+                )}
+                inputClassName={cn(
+                  'm-0 min-w-0 w-full border-0 bg-transparent p-0 outline-none',
+                  getGridTextClassName(textStyle)
+                )}
                 placeholder="Write anything..."
                 allowEmpty
-                title="Click to edit"
+                title="Click to edit. Right-click to style."
               />
             </div>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center text-[var(--accent)]">
-                {data.icon ? <NoteShapeIcon icon={data.icon} size={18} /> : <FolderKanban size={18} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-lg font-semibold text-[var(--text)]">
-                  {data.title}
-                </div>
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            data-testid={`grid-remove:${data.kind}:${data.sourceId}`}
-            aria-label={`Remove ${isText ? 'text block' : isNote ? 'note' : 'project'} ${data.title} from grid`}
-            onClick={(event) => {
-              event.stopPropagation()
-              data.onRemove()
-            }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-[var(--muted)] transition hover:border-[var(--line)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
-          >
-            <X size={15} />
-          </button>
-        </div>
-
-        {isText ? null : (
+          </>
+        ) : (
           <>
+            <div className="flex items-start justify-between gap-3">
+              {isNote ? (
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-lg font-semibold text-[var(--text)]">{data.title}</div>
+                </div>
+              ) : (
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center text-[var(--accent)]">
+                    {data.icon ? (
+                      <NoteShapeIcon icon={data.icon} size={18} />
+                    ) : (
+                      <FolderKanban size={18} />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-lg font-semibold text-[var(--text)]">
+                      {data.title}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                data-testid={`grid-remove:${data.kind}:${data.sourceId}`}
+                aria-label={`Remove ${isNote ? 'note' : 'project'} ${data.title} from grid`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  data.onRemove()
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-[var(--muted)] transition hover:border-[var(--line)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
             <div className="mb-4 mt-3 -mx-4 border-t border-[var(--line)]" />
 
             <div className="relative flex-1 overflow-hidden">
@@ -786,10 +889,181 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
       </div>
     </div>
   )
+
+  if (!isText) {
+    return card
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>Style</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuCheckboxItem
+              checked={textStyle.isBold}
+              onSelect={() => {
+                data.onSelect()
+                updateTextStyle((current) => ({ ...current, isBold: !current.isBold }))
+              }}
+            >
+              Bold
+            </ContextMenuCheckboxItem>
+            <ContextMenuCheckboxItem
+              checked={textStyle.isItalic}
+              onSelect={() => {
+                data.onSelect()
+                updateTextStyle((current) => ({ ...current, isItalic: !current.isItalic }))
+              }}
+            >
+              Italic
+            </ContextMenuCheckboxItem>
+            <ContextMenuCheckboxItem
+              checked={textStyle.isUnderline}
+              onSelect={() => {
+                data.onSelect()
+                updateTextStyle((current) => ({ ...current, isUnderline: !current.isUnderline }))
+              }}
+            >
+              Underline
+            </ContextMenuCheckboxItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>Align</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {(['left', 'center', 'right'] as const).map((textAlign) => (
+              <ContextMenuCheckboxItem
+                key={textAlign}
+                checked={textStyle.textAlign === textAlign}
+                onSelect={() => {
+                  data.onSelect()
+                  updateTextStyle((current) => ({ ...current, textAlign }))
+                }}
+              >
+                {capitalizeLabel(textAlign)}
+              </ContextMenuCheckboxItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>Size</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {([
+              ['sm', 'Small'],
+              ['md', 'Medium'],
+              ['lg', 'Large']
+            ] as const).map(([fontSize, label]) => (
+              <ContextMenuCheckboxItem
+                key={fontSize}
+                checked={textStyle.fontSize === fontSize}
+                onSelect={() => {
+                  data.onSelect()
+                  updateTextStyle((current) => ({ ...current, fontSize }))
+                }}
+              >
+                {label}
+              </ContextMenuCheckboxItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>Color</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {([
+              ['default', 'Default'],
+              ['accent', 'Accent'],
+              ['muted', 'Muted']
+            ] as const).map(([color, label]) => (
+              <ContextMenuCheckboxItem
+                key={color}
+                checked={textStyle.color === color}
+                onSelect={() => {
+                  data.onSelect()
+                  updateTextStyle((current) => ({ ...current, color }))
+                }}
+              >
+                {label}
+              </ContextMenuCheckboxItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={() => {
+            data.onSelect()
+            data.onUpdateTextStyle?.(undefined)
+          }}
+        >
+          Reset formatting
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
 function createGridTextId(): string {
   return `grid-text:${crypto.randomUUID()}`
+}
+
+function resolveGridTextStyle(style: GridTextStyle | undefined): Required<GridTextStyle> {
+  return {
+    fontSize: style?.fontSize ?? GRID_TEXT_STYLE_DEFAULTS.fontSize,
+    isBold: style?.isBold ?? GRID_TEXT_STYLE_DEFAULTS.isBold,
+    isItalic: style?.isItalic ?? GRID_TEXT_STYLE_DEFAULTS.isItalic,
+    isUnderline: style?.isUnderline ?? GRID_TEXT_STYLE_DEFAULTS.isUnderline,
+    textAlign: style?.textAlign ?? GRID_TEXT_STYLE_DEFAULTS.textAlign,
+    color: style?.color ?? GRID_TEXT_STYLE_DEFAULTS.color
+  }
+}
+
+function sanitizeGridTextStyle(style: Required<GridTextStyle>): GridTextStyle | undefined {
+  const nextStyle: GridTextStyle = {}
+
+  if (style.fontSize !== GRID_TEXT_STYLE_DEFAULTS.fontSize) {
+    nextStyle.fontSize = style.fontSize
+  }
+  if (style.isBold) {
+    nextStyle.isBold = true
+  }
+  if (style.isItalic) {
+    nextStyle.isItalic = true
+  }
+  if (style.isUnderline) {
+    nextStyle.isUnderline = true
+  }
+  if (style.textAlign !== GRID_TEXT_STYLE_DEFAULTS.textAlign) {
+    nextStyle.textAlign = style.textAlign
+  }
+  if (style.color !== GRID_TEXT_STYLE_DEFAULTS.color) {
+    nextStyle.color = style.color
+  }
+
+  return Object.keys(nextStyle).length > 0 ? nextStyle : undefined
+}
+
+function getGridTextClassName(style: Required<GridTextStyle>): string {
+  return cn(
+    style.fontSize === 'sm' ? 'text-sm' : style.fontSize === 'lg' ? 'text-xl' : 'text-lg',
+    style.isBold ? 'font-semibold' : 'font-normal',
+    style.isItalic ? 'italic' : 'not-italic',
+    style.isUnderline ? 'underline underline-offset-4' : 'no-underline',
+    style.textAlign === 'center'
+      ? 'text-center'
+      : style.textAlign === 'right'
+        ? 'text-right'
+        : 'text-left',
+    style.color === 'accent'
+      ? 'text-[var(--accent)]'
+      : style.color === 'muted'
+        ? 'text-[var(--muted)]'
+        : 'text-[var(--text)]'
+  )
+}
+
+function capitalizeLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function NoteCardPreview({ fallbackText }: { fallbackText?: string }): ReactElement {

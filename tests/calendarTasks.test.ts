@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { CalendarTask } from '../src/shared/types'
-import { buildCalendarEvents, normalizeCalendarTasks } from '../src/renderer/src/lib/calendarTasks'
+import { CalendarTask, Project } from '../src/shared/types'
+import {
+  buildCalendarEvents,
+  buildMilestoneCalendarEvents,
+  normalizeCalendarTasks
+} from '../src/renderer/src/lib/calendarTasks'
 
 function makeTask(overrides: Partial<CalendarTask> = {}): CalendarTask {
   return {
@@ -10,6 +14,24 @@ function makeTask(overrides: Partial<CalendarTask> = {}): CalendarTask {
     createdAt: '2026-03-17T00:00:00.000Z',
     priority: 'medium',
     reminders: [],
+    ...overrides
+  }
+}
+
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 'project-1',
+    name: 'Project',
+    summary: '',
+    status: 'on-track',
+    updatedAt: '2026-03-17T00:00:00.000Z',
+    progress: 0,
+    milestones: [],
+    icon: {
+      shape: 'circle',
+      variant: 'filled',
+      color: '#000000'
+    },
     ...overrides
   }
 }
@@ -65,6 +87,7 @@ describe('buildCalendarEvents', () => {
         end: undefined,
         allDay: true,
         extendedProps: {
+          source: 'task',
           taskId: 'task-a'
         }
       },
@@ -75,9 +98,81 @@ describe('buildCalendarEvents', () => {
         end: '2026-03-23',
         allDay: true,
         extendedProps: {
+          source: 'task',
           taskId: 'task-b'
         }
       }
     ])
+  })
+})
+
+describe('buildMilestoneCalendarEvents', () => {
+  it('builds read-only calendar events from milestone due dates', () => {
+    const events = buildMilestoneCalendarEvents([
+      makeProject({
+        id: 'project-alpha',
+        milestones: [
+          {
+            id: 'milestone-a',
+            title: 'Alpha launch',
+            dueDate: '2026-04-02',
+            description: '',
+            collapsed: false,
+            priority: 'medium',
+            status: 'pending',
+            subtasks: []
+          }
+        ]
+      })
+    ])
+
+    expect(events).toEqual([
+      {
+        id: 'calendar-milestone:project-alpha:milestone-a',
+        title: 'Alpha launch',
+        start: '2026-04-02',
+        allDay: true,
+        editable: true,
+        startEditable: true,
+        durationEditable: false,
+        extendedProps: {
+          source: 'milestone',
+          projectId: 'project-alpha',
+          projectName: 'Project',
+          milestoneId: 'milestone-a'
+          ,
+          completed: false
+        }
+      }
+    ])
+  })
+
+  it('uses a namespaced id distinct from normal task ids', () => {
+    const taskEvents = buildCalendarEvents([
+      makeTask({
+        id: 'task-a',
+        title: 'Normal task',
+        date: '2026-04-02'
+      })
+    ])
+    const milestoneEvents = buildMilestoneCalendarEvents([
+      makeProject({
+        id: 'project-alpha',
+        milestones: [
+          {
+            id: 'milestone-a',
+            title: 'Alpha launch',
+            dueDate: '2026-04-02',
+            description: '',
+            collapsed: false,
+            priority: 'medium',
+            status: 'pending',
+            subtasks: []
+          }
+        ]
+      })
+    ])
+
+    expect(taskEvents[0].id).not.toEqual(milestoneEvents[0].id)
   })
 })

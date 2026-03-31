@@ -11,6 +11,9 @@ import {
 declare global {
   interface Window {
     vaultApi: {
+      files: {
+        listTree: () => Promise<Array<{ id: string }>>
+      }
       vault: {
         restoreLast: () => Promise<unknown>
       }
@@ -58,8 +61,15 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('note-preview:alpha.xnote')).toBeVisible({ timeout: 20_000 })
+  const gridPageButton = page.getByTestId('sidebar-page:grid')
+  try {
+    await expect(gridPageButton).toBeVisible({ timeout: 5_000 })
+  } catch {
+    await page.evaluate(() => window.vaultApi.vault.restoreLast())
+    await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
+  }
+  await page.getByTestId('sidebar-page:notes').click()
+  await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -70,11 +80,13 @@ test.describe('notes tree view', () => {
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await page.getByTestId('note-panel-toggle:tree').click()
-      await expect(page.getByTestId('notes-tree-view')).toBeVisible()
+      await expect(page.getByTestId('note-panel-toggle:tree')).toHaveAttribute('data-state', 'on')
+      await expect
+        .poll(async () => page.evaluate(() => window.vaultApi.files.listTree().then((tree) => tree.length)))
+        .toBe(2)
 
       const alphaRow = page.getByTestId('note-tree-row:alpha.xnote')
-      await expect(alphaRow).toBeVisible()
+      await expect(alphaRow).toBeVisible({ timeout: 20_000 })
 
       await alphaRow.hover()
       await page.getByTestId('note-tree-rename:alpha.xnote').click()

@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -24,7 +24,11 @@ import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/ty
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
 import { Input } from './ui/input'
-import { buildCalendarEvents, normalizeCalendarTasks } from '../lib/calendarTasks'
+import {
+  buildCalendarEvents,
+  type CalendarEventInput,
+  normalizeCalendarTasks
+} from '../lib/calendarTasks'
 import { toIsoDate } from '../lib/calendarDate'
 import {
   Dialog,
@@ -41,6 +45,7 @@ interface CalendarMonthViewProps {
   onSelectDate: (date: string) => void
   onCreateTask?: (date: string) => Promise<CalendarTask>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
+  onRescheduleMilestone?: (projectId: string, milestoneId: string, newDate: string) => void
   onResizeTaskStart?: (taskId: string, newStartDate: string) => void
   onResizeTaskEnd?: (taskId: string, newEndDate: string) => void
   onToggleTask?: (taskId: string) => void
@@ -49,6 +54,8 @@ interface CalendarMonthViewProps {
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
   onUpdateTaskReminders?: (taskId: string, reminders: TaskReminder[]) => void
+  milestoneEvents?: CalendarEventInput[]
+  onOpenMilestone?: (projectId: string, milestoneId: string) => void
 }
 
 export function CalendarMonthView({
@@ -57,6 +64,7 @@ export function CalendarMonthView({
   onSelectDate,
   onCreateTask,
   onRescheduleTask,
+  onRescheduleMilestone,
   onResizeTaskStart,
   onResizeTaskEnd,
   onToggleTask,
@@ -64,7 +72,9 @@ export function CalendarMonthView({
   onRenameTask,
   onUpdateTaskType,
   onUpdateTaskTime,
-  onUpdateTaskReminders
+  onUpdateTaskReminders,
+  milestoneEvents = [],
+  onOpenMilestone
 }: CalendarMonthViewProps): ReactElement {
   const calendarRef = useRef<FullCalendar | null>(null)
   const mirrorParent = typeof document === 'undefined' ? undefined : document.body
@@ -150,8 +160,8 @@ export function CalendarMonthView({
   }, [calendarContextMenu])
 
   const calendarEvents = useMemo(() => {
-    return buildCalendarEvents(normalizedTasks)
-  }, [normalizedTasks])
+    return [...buildCalendarEvents(normalizedTasks), ...milestoneEvents]
+  }, [milestoneEvents, normalizedTasks])
 
   useEffect(() => {
     const api = calendarRef.current?.getApi()
@@ -163,7 +173,7 @@ export function CalendarMonthView({
 
     for (const event of calendarEvents) {
       activeEventIds.add(event.id)
-      const syncSignature = buildCalendarSyncSignature(tasksById[event.id])
+      const syncSignature = buildCalendarSyncSignature(event)
       const currentEvent = api.getEventById(event.id)
 
       if (!currentEvent) {
@@ -234,7 +244,18 @@ export function CalendarMonthView({
     if (!dropInfo.event.start) {
       return
     }
-    onRescheduleTask?.(dropInfo.event.id, toIsoDate(dropInfo.event.start))
+    const nextDate = toIsoDate(dropInfo.event.start)
+    const source = String(dropInfo.event.extendedProps.source ?? 'task')
+    if (source === 'milestone') {
+      const projectId = String(dropInfo.event.extendedProps.projectId ?? '')
+      const milestoneId = String(dropInfo.event.extendedProps.milestoneId ?? '')
+      if (projectId && milestoneId) {
+        onRescheduleMilestone?.(projectId, milestoneId, nextDate)
+        onSelectDate(nextDate)
+        return
+      }
+    }
+    onRescheduleTask?.(dropInfo.event.id, nextDate)
   }
 
   const handleEventResize = (resizeInfo: EventResizeDoneArg): void => {
@@ -266,6 +287,11 @@ export function CalendarMonthView({
 
   const handleEventDragStop = (dragInfo: EventDragStopArg): void => {
     setIsInteracting(false)
+
+    const source = String(dragInfo.event.extendedProps.source ?? 'task')
+    if (source !== 'task') {
+      return
+    }
 
     const unscheduledContainer = document.querySelector<HTMLElement>(
       '[data-unscheduled-task-list="true"]'
@@ -325,6 +351,11 @@ export function CalendarMonthView({
   }
 
   const handleEventDidMount = (mountInfo: EventMountArg): void => {
+    const source = String(mountInfo.event.extendedProps.source ?? 'task')
+    if (source !== 'task') {
+      return
+    }
+
     const taskId = mountInfo.event.id
     const onContextMenu = (event: MouseEvent): void => {
       event.preventDefault()
@@ -477,6 +508,15 @@ export function CalendarMonthView({
             }
             info.jsEvent.preventDefault()
             info.jsEvent.stopPropagation()
+            const source = String(info.event.extendedProps.source ?? 'task')
+            if (source === 'milestone') {
+              const projectId = String(info.event.extendedProps.projectId ?? '')
+              const milestoneId = String(info.event.extendedProps.milestoneId ?? '')
+              if (projectId && milestoneId) {
+                onOpenMilestone?.(projectId, milestoneId)
+              }
+              return
+            }
             const date = info.event.start ? toIsoDate(info.event.start) : selectedDate
             setHoveredTaskCard(null)
             setCalendarContextMenu(null)
@@ -484,6 +524,14 @@ export function CalendarMonthView({
             setEditingTaskId(info.event.id)
           }}
           eventClassNames={(arg) => {
+            const source = String(arg.event.extendedProps.source ?? 'task')
+            if (source === 'milestone') {
+              return [
+                'beacon-task-event',
+                'beacon-calendar-milestone',
+                arg.event.extendedProps.completed ? 'beacon-task-completed' : ''
+              ]
+            }
             const task = tasksById[arg.event.id]
             if (!task) {
               return ['beacon-task-event', 'beacon-task-assignment']
@@ -499,6 +547,40 @@ export function CalendarMonthView({
             return iso === selectedDate ? ['beacon-day-selected'] : []
           }}
           eventContent={(arg) => {
+            const source = String(arg.event.extendedProps.source ?? 'task')
+            if (source === 'milestone') {
+              const isCompleted = Boolean(arg.event.extendedProps.completed)
+              const projectName = String(arg.event.extendedProps.projectName ?? '')
+              return (
+                <div className="beacon-task-inner w-full rounded px-1.5 py-1">
+                  <div className="beacon-task-row flex items-center justify-between gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1">
+                      <span
+                        aria-hidden="true"
+                        className="inline-flex items-center"
+                        title={isCompleted ? 'Completed milestone' : 'Pending milestone'}
+                      >
+                        <span
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                            isCompleted
+                              ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                              : 'border-[var(--line-strong)] bg-[var(--panel)]'
+                          }`}
+                        >
+                          {isCompleted ? <Check size={8} strokeWidth={3} /> : null}
+                        </span>
+                      </span>
+                      <span className="min-w-0 truncate text-[10px] font-medium text-[var(--muted)]">
+                        {projectName}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] font-medium text-[var(--text)]">
+                    {arg.event.title}
+                  </div>
+                </div>
+              )
+            }
             const task = tasksById[arg.event.id]
             if (!task) {
               return <span className="truncate text-[var(--text)]">{arg.event.title}</span>
@@ -728,18 +810,20 @@ function addIsoDays(date: Date, days: number): Date {
   return next
 }
 
-function buildCalendarSyncSignature(task: CalendarTask | undefined): string {
-  if (!task) {
-    return ''
-  }
-
+function buildCalendarSyncSignature(event: CalendarEventInput): string {
   return JSON.stringify({
-    title: task.title,
-    date: task.date ?? '',
-    endDate: task.endDate ?? '',
-    completed: task.completed,
-    taskType: task.taskType ?? 'assignment',
-    time: task.time ?? ''
+    source: event.extendedProps.source,
+    title: event.title,
+    start: event.start,
+    end: event.end ?? '',
+    editable: event.editable ?? true,
+    startEditable: event.startEditable ?? true,
+    durationEditable: event.durationEditable ?? true,
+    taskId: event.extendedProps.taskId ?? '',
+    projectId: event.extendedProps.projectId ?? '',
+    projectName: event.extendedProps.projectName ?? '',
+    completed: event.extendedProps.completed ?? false,
+    milestoneId: event.extendedProps.milestoneId ?? ''
   })
 }
 

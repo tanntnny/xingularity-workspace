@@ -1,4 +1,4 @@
-import { Fragment, type ReactElement, useEffect, useMemo, useState } from 'react'
+import { Fragment, type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   CalendarDays,
@@ -47,6 +47,8 @@ import { cn } from '../lib/utils'
 interface ProjectDetailsPageProps {
   project: ProjectListItem
   notes: NoteListItem[]
+  focusedMilestoneId?: string | null
+  focusedMilestoneToken?: number
   onRename: (nextName: string) => void
   onUpdateSummary: (nextSummary: string) => void
   onAddMilestone: (title: string, dueDate: string) => void
@@ -92,6 +94,8 @@ const neutralChipClass =
 export function ProjectDetailsPage({
   project,
   notes,
+  focusedMilestoneId = null,
+  focusedMilestoneToken = 0,
   onRename,
   onUpdateSummary,
   onAddMilestone,
@@ -142,6 +146,8 @@ export function ProjectDetailsPage({
     direction: 'asc'
   })
   const [hideCompletedItems, setHideCompletedItems] = useState(false)
+  const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null)
+  const milestoneRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
   const projectTag = useMemo(() => generateProjectTag(project.name), [project.name])
 
@@ -183,6 +189,39 @@ export function ProjectDetailsPage({
       )
     })
   }, [project.milestones])
+
+  useEffect(() => {
+    if (!focusedMilestoneId) {
+      return
+    }
+
+    setHideCompletedItems(false)
+
+    if (activeTab !== 'milestones') {
+      setActiveTab('milestones')
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = milestoneRowRefs.current[focusedMilestoneId]
+      if (!target) {
+        return
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlightedMilestoneId(focusedMilestoneId)
+    })
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedMilestoneId((current) =>
+        current === focusedMilestoneId ? null : current
+      )
+    }, 2200)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timeout)
+    }
+  }, [activeTab, focusedMilestoneId, focusedMilestoneToken, project.id])
 
   const submitMilestone = (): void => {
     const nextTitle = newMilestoneTitle.trim()
@@ -633,7 +672,17 @@ export function ProjectDetailsPage({
 
                   return (
                     <Fragment key={milestone.id}>
-                      <TableRow className="bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))]">
+                      <TableRow
+                        ref={(node) => {
+                          milestoneRowRefs.current[milestone.id] = node
+                        }}
+                        className={cn(
+                          'bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))] transition-colors',
+                          highlightedMilestoneId === milestone.id
+                            ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
+                            : undefined
+                        )}
+                      >
                         <TableCell className="px-3 py-2 text-center">
                           <button
                             type="button"

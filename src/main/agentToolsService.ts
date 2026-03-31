@@ -849,6 +849,9 @@ function resolveCalendarTask(
 
 function deriveMilestoneStatus(milestone: ProjectMilestone): ProjectMilestone['status'] {
   const subtasks = milestone.subtasks
+  if (milestone.status === 'completed') {
+    return 'completed'
+  }
   if (subtasks.length === 0) {
     return milestone.status === 'blocked' ? 'blocked' : 'pending'
   }
