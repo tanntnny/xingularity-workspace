@@ -9,6 +9,7 @@ import {
 import {
   DragEvent,
   forwardRef,
+  MouseEvent as ReactMouseEvent,
   ReactElement,
   useCallback,
   useEffect,
@@ -19,7 +20,12 @@ import {
 } from 'react'
 import { noteBlocksToText, stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
-import { mentionTokenFromRelPath, normalizeMentionTarget } from '../../../shared/noteMentions'
+import {
+  mentionTokenFromRelPath,
+  normalizeMentionTarget,
+  noteMentionHref,
+  parseNoteMentionHref
+} from '../../../shared/noteMentions'
 import {
   cloneNoteEditorBlocks,
   type NoteEditorBlock,
@@ -35,6 +41,7 @@ interface EditorProps {
   onPasteImage: (imageBlob: Blob, fileExtension: string) => Promise<string | null>
   notes: NoteListItem[]
   currentNotePath?: string
+  onOpenNoteLink?: (target: string) => void
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
@@ -52,6 +59,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     onPasteImage,
     notes,
     currentNotePath,
+    onOpenNoteLink,
     onOutlineChange,
     onJumpToHeadingChange
   }: EditorProps,
@@ -65,6 +73,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const onPasteImageRef = useRef(onPasteImage)
   const onDropFileRef = useRef(onDropFile)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
+  const onOpenNoteLinkRef = useRef(onOpenNoteLink)
   const onOutlineChangeRef = useRef(onOutlineChange)
   const lastOutlineRef = useRef<NoteOutlineItem[]>([])
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
@@ -88,6 +97,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   useEffect(() => {
     onSnapshotChangeRef.current = onSnapshotChange
   }, [onSnapshotChange])
+
+  useEffect(() => {
+    onOpenNoteLinkRef.current = onOpenNoteLink
+  }, [onOpenNoteLink])
 
   useEffect(() => {
     onOutlineChangeRef.current = onOutlineChange
@@ -205,7 +218,15 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
           aliases: [note.relPath, note.name, mentionTarget],
           subtext: note.relPath,
           onItemClick: () => {
-            editor.insertInlineContent([token])
+            requestAnimationFrame(() => {
+              editor.insertInlineContent([
+                {
+                  type: 'link',
+                  href: noteMentionHref(mentionTarget),
+                  content: token
+                }
+              ])
+            })
           }
         } satisfies DefaultReactSuggestionItem
       })
@@ -338,11 +359,33 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     )
   }
 
+  const handleClick = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) {
+      return
+    }
+
+    const anchor = target.closest<HTMLAnchorElement>('a[href]')
+    if (!anchor) {
+      return
+    }
+
+    const mentionTarget = parseNoteMentionHref(anchor.href)
+    if (!mentionTarget) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    onOpenNoteLinkRef.current?.(mentionTarget)
+  }
+
   return (
     <div
       ref={editorContainerRef}
       data-testid="note-block-editor"
       className={blockNoteThemeClasses}
+      onClick={handleClick}
       onDrop={(event) => {
         void handleDrop(event)
       }}

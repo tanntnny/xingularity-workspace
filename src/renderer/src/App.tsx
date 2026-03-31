@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Search,
   Type,
+  Link2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -55,6 +56,7 @@ import {
   withNoteExtension
 } from '../../shared/noteDocument'
 import { normalizeTag, generateProjectTag } from '../../shared/noteTags'
+import { mentionTokenFromRelPath, normalizeMentionTarget } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
@@ -3224,6 +3226,30 @@ function App(): ReactElement {
     [vaultApi]
   )
 
+  const createNoteAtExactPathWithFallback = useCallback(
+    async (relPath: string): Promise<string> => {
+      if (!vaultApi) {
+        throw new Error('Vault API unavailable')
+      }
+
+      const normalizedPath = withNoteExtension(relPath.trim().replace(/^\/+/, ''))
+      if (!normalizedPath) {
+        throw new Error('Note path is required')
+      }
+
+      try {
+        return await vaultApi.files.createNoteAtPath(normalizedPath)
+      } catch (error) {
+        if (!String(error).includes('EEXIST')) {
+          throw error
+        }
+
+        return normalizedPath
+      }
+    },
+    [vaultApi]
+  )
+
   const createFolderWithFallback = useCallback(
     async (parentDir: string): Promise<string> => {
       if (!vaultApi) {
@@ -3307,6 +3333,94 @@ function App(): ReactElement {
     [
       createNoteAtPathWithFallback,
       getTreeTargetDirectory,
+      openNote,
+      pushToast,
+      refreshNotesAndTree,
+      setSearchQuery,
+      setSearchResults,
+      vault,
+      vaultApi
+    ]
+  )
+
+  const copyCurrentNoteBacklink = useCallback(async (): Promise<void> => {
+    if (!currentNotePath) {
+      return
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      pushToast('error', 'Clipboard is unavailable in this environment')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(mentionTokenFromRelPath(currentNotePath))
+      pushToast('success', 'Backlink copied')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [currentNotePath, pushToast])
+
+  const openOrCreateNoteMention = useCallback(
+    async (rawTarget: string): Promise<void> => {
+      if (!vaultApi) {
+        pushToast('error', 'Note links are only available inside the Electron app')
+        return
+      }
+
+      if (!vault) {
+        pushToast('error', 'Select a vault in Settings before following note links')
+        setActivePage('settings')
+        return
+      }
+
+      const target = stripNoteExtension(rawTarget.trim()).replace(/^\/+/, '').replace(/\/+$/, '')
+      if (!target) {
+        return
+      }
+
+      const normalizedTarget = normalizeMentionTarget(target)
+      const exactMatch = notes.find(
+        (note) => normalizeMentionTarget(note.relPath) === normalizedTarget
+      )
+      const byNameMatches = notes.filter(
+        (note) => normalizeMentionTarget(note.name) === normalizedTarget
+      )
+      const targetDir = target.includes('/')
+        ? target.split('/').slice(0, -1).join('/')
+        : currentNotePath
+          ? currentNotePath.split('/').slice(0, -1).join('/')
+          : ''
+      const preferredPath = target.includes('/')
+        ? target
+        : targetDir
+          ? `${targetDir}/${target}`
+          : target
+
+      try {
+        const relPath =
+          exactMatch?.relPath ??
+          (byNameMatches.length === 1 ? byNameMatches[0].relPath : null) ??
+          (await createNoteAtExactPathWithFallback(preferredPath))
+
+        await refreshNotesAndTree()
+        setSearchQuery('')
+        setSearchResults([])
+        setActivePage('notes')
+        setSelectedNoteTreeEntry({ kind: 'note', relPath })
+        await openNote(relPath)
+
+        if (!exactMatch && byNameMatches.length !== 1) {
+          pushToast('success', 'Note created')
+        }
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [
+      createNoteAtExactPathWithFallback,
+      currentNotePath,
+      notes,
       openNote,
       pushToast,
       refreshNotesAndTree,
@@ -3658,6 +3772,17 @@ function App(): ReactElement {
                   noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void copyCurrentNoteBacklink()
+                          }}
+                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                          title="Copy backlink"
+                          aria-label="Copy backlink"
+                        >
+                          <Link2 size={18} />
+                        </button>
                         {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -4257,6 +4382,9 @@ function App(): ReactElement {
                         onAddTag={addTagToCurrentNote}
                         onRemoveTag={removeTagFromCurrentNote}
                         onFindByTag={findByTag}
+                        onOpenNoteLink={(target) => {
+                          void openOrCreateNoteMention(target)
+                        }}
                         onRename={renameCurrentNote}
                         onOutlineChange={setCurrentNoteOutline}
                         onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}

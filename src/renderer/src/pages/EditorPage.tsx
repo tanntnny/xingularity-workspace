@@ -22,6 +22,7 @@ interface EditorPageProps {
   onAddTag: (rawTag: string) => Promise<void> | void
   onRemoveTag: (tag: string) => Promise<void> | void
   onFindByTag: (tag: string) => void
+  onOpenNoteLink?: (target: string) => void
   onRename: (newName: string) => Promise<void>
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
@@ -41,6 +42,7 @@ export function EditorPage({
   onAddTag,
   onRemoveTag,
   onFindByTag,
+  onOpenNoteLink,
   onRename,
   onOutlineChange,
   onJumpToHeadingChange
@@ -132,6 +134,7 @@ export function EditorPage({
           onPasteImage={onPasteImage}
           notes={notes}
           currentNotePath={notePath}
+          onOpenNoteLink={onOpenNoteLink}
           onOutlineChange={onOutlineChange}
           onJumpToHeadingChange={onJumpToHeadingChange}
         />

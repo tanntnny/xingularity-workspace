@@ -221,7 +221,8 @@ function TreeNode({
   onCancelEditing,
   onCommitRename,
   onStartEditing,
-  onDeletePath
+  onDeletePath,
+  useNativeMenus
 }: NodeRendererProps<NoteTreeNode> & {
   isEditing: boolean
   onCreateNote: (parentDir: string) => void

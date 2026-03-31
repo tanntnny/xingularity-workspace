@@ -23,6 +23,7 @@ import {
   GridBoardItem,
   GridBoardState,
   GridTextStyle,
+  NativeMenuItemDescriptor,
   NoteListItem,
   Project,
   ProjectIconStyle
@@ -41,6 +42,7 @@ import {
   ContextMenuTrigger
 } from '../components/ui/context-menu'
 import { cn } from '../lib/utils'
+import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 export interface GridWorkspaceActions {
   resetBoard: () => void
@@ -630,6 +632,7 @@ function GridCanvas({
 function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
   const isNote = data.kind === 'note'
   const isText = data.kind === 'text'
+  const useNativeMenus = isText && canUseNativeMenus()
   const textStyle = resolveGridTextStyle(data.textStyle)
   const minHeight = isText ? GRID_MIN_TEXT_HEIGHT : GRID_MIN_CARD_HEIGHT
   const verticalEdgeResizeStyle = {
@@ -665,8 +668,41 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
     data.onUpdateTextStyle?.(sanitizeGridTextStyle(updater(textStyle)))
   }
 
+  const handleTextStyleAction = (actionId: string): void => {
+    updateTextStyle((current) => applyGridTextStyleAction(current, actionId))
+  }
+
+  const handleNativeTextContextMenu = async (
+    event: React.MouseEvent<HTMLDivElement>
+  ): Promise<void> => {
+    if (!useNativeMenus) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    data.onSelect()
+
+    const actionId = await showNativeMenu(
+      buildGridTextNativeMenuItems(textStyle),
+      getMouseMenuPosition(event)
+    )
+
+    if (!actionId) {
+      return
+    }
+
+    if (actionId === 'style:reset') {
+      data.onUpdateTextStyle?.(undefined)
+      return
+    }
+
+    handleTextStyleAction(actionId)
+  }
+
   const card = (
     <div
+      onContextMenu={useNativeMenus ? (event) => void handleNativeTextContextMenu(event) : undefined}
       onMouseDown={() => data.onSelect()}
       onDoubleClick={() => {
         if (!isText) {
@@ -789,7 +825,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
             >
               <X size={15} />
             </button>
-            <div className="flex min-h-0 flex-1 pr-12">
+            <div className="flex min-h-0 flex-1 items-center overflow-hidden pr-12">
               <InlineEditableText
                 value={data.textContent ?? ''}
                 onCommit={(nextValue) => {
@@ -894,6 +930,10 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
     return card
   }
 
+  if (useNativeMenus) {
+    return card
+  }
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
@@ -905,7 +945,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
               checked={textStyle.isBold}
               onSelect={() => {
                 data.onSelect()
-                updateTextStyle((current) => ({ ...current, isBold: !current.isBold }))
+                handleTextStyleAction('style:toggle-bold')
               }}
             >
               Bold
@@ -914,7 +954,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
               checked={textStyle.isItalic}
               onSelect={() => {
                 data.onSelect()
-                updateTextStyle((current) => ({ ...current, isItalic: !current.isItalic }))
+                handleTextStyleAction('style:toggle-italic')
               }}
             >
               Italic
@@ -923,7 +963,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
               checked={textStyle.isUnderline}
               onSelect={() => {
                 data.onSelect()
-                updateTextStyle((current) => ({ ...current, isUnderline: !current.isUnderline }))
+                handleTextStyleAction('style:toggle-underline')
               }}
             >
               Underline
@@ -939,7 +979,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
                 checked={textStyle.textAlign === textAlign}
                 onSelect={() => {
                   data.onSelect()
-                  updateTextStyle((current) => ({ ...current, textAlign }))
+                  handleTextStyleAction(`align:${textAlign}`)
                 }}
               >
                 {capitalizeLabel(textAlign)}
@@ -960,7 +1000,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
                 checked={textStyle.fontSize === fontSize}
                 onSelect={() => {
                   data.onSelect()
-                  updateTextStyle((current) => ({ ...current, fontSize }))
+                  handleTextStyleAction(`font-size:${fontSize}`)
                 }}
               >
                 {label}
@@ -981,7 +1021,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
                 checked={textStyle.color === color}
                 onSelect={() => {
                   data.onSelect()
-                  updateTextStyle((current) => ({ ...current, color }))
+                  handleTextStyleAction(`color:${color}`)
                 }}
               >
                 {label}
@@ -991,7 +1031,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         </ContextMenuSub>
         <ContextMenuSeparator />
         <ContextMenuItem
-          onClick={() => {
+          onSelect={() => {
             data.onSelect()
             data.onUpdateTextStyle?.(undefined)
           }}
@@ -1041,6 +1081,141 @@ function sanitizeGridTextStyle(style: Required<GridTextStyle>): GridTextStyle | 
   }
 
   return Object.keys(nextStyle).length > 0 ? nextStyle : undefined
+}
+
+function buildGridTextNativeMenuItems(
+  style: Required<GridTextStyle>
+): NativeMenuItemDescriptor[] {
+  return [
+    {
+      type: 'submenu',
+      label: 'Style',
+      submenu: [
+        {
+          id: 'style:toggle-bold',
+          type: 'checkbox',
+          label: 'Bold',
+          checked: style.isBold
+        },
+        {
+          id: 'style:toggle-italic',
+          type: 'checkbox',
+          label: 'Italic',
+          checked: style.isItalic
+        },
+        {
+          id: 'style:toggle-underline',
+          type: 'checkbox',
+          label: 'Underline',
+          checked: style.isUnderline
+        }
+      ]
+    },
+    {
+      type: 'submenu',
+      label: 'Align',
+      submenu: (['left', 'center', 'right'] as const).map((textAlign) => ({
+        id: `align:${textAlign}`,
+        type: 'checkbox',
+        label: capitalizeLabel(textAlign),
+        checked: style.textAlign === textAlign
+      }))
+    },
+    {
+      type: 'submenu',
+      label: 'Size',
+      submenu: [
+        {
+          id: 'font-size:sm',
+          type: 'checkbox',
+          label: 'Small',
+          checked: style.fontSize === 'sm'
+        },
+        {
+          id: 'font-size:md',
+          type: 'checkbox',
+          label: 'Medium',
+          checked: style.fontSize === 'md'
+        },
+        {
+          id: 'font-size:lg',
+          type: 'checkbox',
+          label: 'Large',
+          checked: style.fontSize === 'lg'
+        }
+      ]
+    },
+    {
+      type: 'submenu',
+      label: 'Color',
+      submenu: [
+        {
+          id: 'color:default',
+          type: 'checkbox',
+          label: 'Default',
+          checked: style.color === 'default'
+        },
+        {
+          id: 'color:accent',
+          type: 'checkbox',
+          label: 'Accent',
+          checked: style.color === 'accent'
+        },
+        {
+          id: 'color:muted',
+          type: 'checkbox',
+          label: 'Muted',
+          checked: style.color === 'muted'
+        }
+      ]
+    },
+    { type: 'separator' },
+    { id: 'style:reset', label: 'Reset formatting' }
+  ]
+}
+
+function applyGridTextStyleAction(
+  current: Required<GridTextStyle>,
+  actionId: string
+): Required<GridTextStyle> {
+  if (actionId === 'style:toggle-bold') {
+    return {
+      ...current,
+      isBold: !current.isBold
+    }
+  }
+  if (actionId === 'style:toggle-italic') {
+    return {
+      ...current,
+      isItalic: !current.isItalic
+    }
+  }
+  if (actionId === 'style:toggle-underline') {
+    return {
+      ...current,
+      isUnderline: !current.isUnderline
+    }
+  }
+  if (actionId.startsWith('align:')) {
+    return {
+      ...current,
+      textAlign: actionId.slice('align:'.length) as Required<GridTextStyle>['textAlign']
+    }
+  }
+  if (actionId.startsWith('font-size:')) {
+    return {
+      ...current,
+      fontSize: actionId.slice('font-size:'.length) as Required<GridTextStyle>['fontSize']
+    }
+  }
+  if (actionId.startsWith('color:')) {
+    return {
+      ...current,
+      color: actionId.slice('color:'.length) as Required<GridTextStyle>['color']
+    }
+  }
+
+  return current
 }
 
 function getGridTextClassName(style: Required<GridTextStyle>): string {
