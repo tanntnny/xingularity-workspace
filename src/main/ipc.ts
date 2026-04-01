@@ -1,4 +1,6 @@
-import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { VaultRuntime } from './runtime'
@@ -92,6 +94,11 @@ const taskReminderSchema = z.object({
   type: z.enum(['minutes', 'hours', 'days']),
   value: z.number().int().min(1).max(365),
   enabled: z.boolean()
+})
+const noteTraceEntrySchema = z.object({
+  event: z.string().min(1).max(200),
+  timestamp: z.string().min(1).max(100),
+  details: z.record(z.string(), z.unknown())
 })
 
 const calendarTaskSchema = z.object({
@@ -252,6 +259,8 @@ const settingsUpdateSchema = z.object({
 })
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
+  const getNoteTraceLogPath = (): string => path.join(app.getPath('userData'), 'note-save-trace.jsonl')
+
   ipcMain.handle(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
     const parsed = nativeMenuRequestSchema.parse(request)
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -296,6 +305,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   ipcMain.handle(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
     await runtime.openPath(sourcePathSchema.parse(targetPath))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.debugGetNoteTraceLogPath, async () => {
+    return getNoteTraceLogPath()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.debugAppendNoteTrace, async (_event, entry: unknown) => {
+    const parsed = noteTraceEntrySchema.parse(entry)
+    const logPath = getNoteTraceLogPath()
+    await fs.mkdir(path.dirname(logPath), { recursive: true })
+    await fs.appendFile(logPath, `${JSON.stringify(parsed)}\n`, 'utf-8')
+    return logPath
   })
 
   ipcMain.handle(IPC_CHANNELS.listNotes, async () => {

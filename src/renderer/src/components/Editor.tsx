@@ -47,6 +47,8 @@ interface EditorProps {
 
 export interface NoteEditorHandle {
   captureSnapshot: () => Promise<NoteEditorSnapshot>
+  flushPendingChanges: () => Promise<NoteEditorSnapshot>
+  blur: () => void
 }
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
@@ -154,12 +156,51 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [createSnapshot]
   )
 
+  const waitForPendingChanges = useCallback(async (): Promise<void> => {
+    await Promise.resolve()
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 0)
+    })
+
+    await new Promise<void>((resolve) => {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve())
+        })
+        return
+      }
+
+      window.setTimeout(resolve, 0)
+    })
+  }, [])
+
+  const blur = useCallback((): void => {
+    const activeElement = document.activeElement
+    if (!(activeElement instanceof HTMLElement)) {
+      return
+    }
+
+    if (!editorContainerRef.current?.contains(activeElement)) {
+      return
+    }
+
+    activeElement.blur()
+  }, [])
+
+  const flushPendingChanges = useCallback(async (): Promise<NoteEditorSnapshot> => {
+    await waitForPendingChanges()
+    return createSnapshot()
+  }, [createSnapshot, waitForPendingChanges])
+
   useImperativeHandle(
     ref,
     () => ({
-      captureSnapshot
+      captureSnapshot,
+      flushPendingChanges,
+      blur
     }),
-    [captureSnapshot]
+    [blur, captureSnapshot, flushPendingChanges]
   )
 
   const jumpToHeading = useCallback(

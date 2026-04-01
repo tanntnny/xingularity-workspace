@@ -162,11 +162,79 @@ const PAGE_LABELS: Record<AppPage, string> = {
   agentHistory: 'Agent Chat'
 }
 
+type PageLeaveSaveDebug = {
+  requestedPage: AppPage | null
+  notePath: string | null
+  snapshotContent: string
+  fingerprint: string | null
+  attempted: boolean
+  writeCompleted: boolean
+  skippedReason: string | null
+  lastError: string | null
+}
+
+type NoteSaveTraceEntry = {
+  event: string
+  timestamp: string
+  details: Record<string, unknown>
+}
+
+const pageLeaveSaveDebugState: PageLeaveSaveDebug = {
+  requestedPage: null,
+  notePath: null,
+  snapshotContent: '',
+  fingerprint: null,
+  attempted: false,
+  writeCompleted: false,
+  skippedReason: null,
+  lastError: null
+}
+
+const noteSaveTraceLog: NoteSaveTraceEntry[] = []
+let noteSaveTraceLogPath: string | null = null
+
+function summarizeTraceContent(content: string | null | undefined): string {
+  if (!content) {
+    return ''
+  }
+
+  return content.replace(/\s+/g, ' ').trim().slice(0, 120)
+}
+
+function pushNoteSaveTrace(event: string, details: Record<string, unknown>): void {
+  const entry: NoteSaveTraceEntry = {
+    event,
+    timestamp: new Date().toISOString(),
+    details
+  }
+
+  noteSaveTraceLog.push(entry)
+  if (noteSaveTraceLog.length > 200) {
+    noteSaveTraceLog.shift()
+  }
+
+  console.info(`[note-trace] ${event}`, entry)
+
+  if (typeof window !== 'undefined' && window.vaultApi?.debug?.appendNoteTrace) {
+    void window.vaultApi.debug
+      .appendNoteTrace(entry)
+      .then((logPath) => {
+        noteSaveTraceLogPath = logPath
+      })
+      .catch((error: unknown) => {
+        console.warn('[note-trace] failed to append trace', error)
+      })
+  }
+}
+
 if (typeof window !== 'undefined') {
   ;(
     window as Window & {
       __XINGULARITY_E2E__?: {
         getCurrentNoteSnapshot: () => { path: string | null; content: string }
+        getLastPageLeaveSaveDebug: () => PageLeaveSaveDebug
+        getNoteSaveTrace: () => NoteSaveTraceEntry[]
+        getNoteSaveTraceLogPath: () => string | null
       }
     }
   ).__XINGULARITY_E2E__ = {
@@ -176,7 +244,10 @@ if (typeof window !== 'undefined') {
         path: state.currentNotePath,
         content: state.currentNoteContent
       }
-    }
+    },
+    getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState }),
+    getNoteSaveTrace: () => noteSaveTraceLog.map((entry) => ({ ...entry, details: { ...entry.details } })),
+    getNoteSaveTraceLogPath: () => noteSaveTraceLogPath
   }
 }
 
@@ -208,6 +279,8 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' }
 ] as const
+
+const NOTE_AUTOSAVE_DELAY_MS = 1200
 
 type NotePanelView = 'cards' | 'tree'
 
@@ -509,6 +582,10 @@ function App(): ReactElement {
   const noteEditorSessionsRef = useRef<Record<string, NoteEditorSessionSnapshot>>({})
   const pendingNoteSaveRef = useRef<{ relPath: string; content: string } | null>(null)
   const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const noteSaveInFlightRef = useRef<Promise<void> | null>(null)
+  const previousActivePageRef = useRef(activePage)
+  const activePageRef = useRef(activePage)
+  const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
   const shouldAnimateWorkspacePane =
     hasVault &&
@@ -528,6 +605,40 @@ function App(): ReactElement {
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
   }, [currentNotePath])
+
+  useEffect(() => {
+    activePageRef.current = activePage
+  }, [activePage])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const target = window as Window & {
+      __XINGULARITY_E2E__?: {
+        getCurrentNoteSnapshot?: () => { path: string | null; content: string }
+        getLastPageLeaveSaveDebug?: () => PageLeaveSaveDebug
+        getNoteSaveTrace?: () => NoteSaveTraceEntry[]
+        getNoteSaveTraceLogPath?: () => string | null
+      }
+    }
+
+    target.__XINGULARITY_E2E__ = {
+      ...target.__XINGULARITY_E2E__,
+      getCurrentNoteSnapshot: () => {
+        const state = useVaultStore.getState()
+        return {
+          path: state.currentNotePath,
+          content: state.currentNoteContent
+        }
+      },
+      getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState }),
+      getNoteSaveTrace: () =>
+        noteSaveTraceLog.map((entry) => ({ ...entry, details: { ...entry.details } })),
+      getNoteSaveTraceLogPath: () => noteSaveTraceLogPath
+    }
+  }, [currentNoteContent, currentNotePath])
 
   useEffect(() => {
     setGridBoardDraft(gridBoard)
@@ -772,14 +883,24 @@ function App(): ReactElement {
   const checkpointCurrentNote = useCallback(async (): Promise<NoteEditorSessionSnapshot | null> => {
     const relPath = currentNotePathRef.current
     if (!relPath) {
+      pushNoteSaveTrace('checkpoint:skip-no-path', {})
       return null
     }
 
     if (!currentNoteEditorRef.current) {
-      return noteEditorSessionsRef.current[relPath] ?? null
+      const existingSession = noteEditorSessionsRef.current[relPath] ?? null
+      if (existingSession) {
+        setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(existingSession.blocks))
+      }
+      pushNoteSaveTrace('checkpoint:reuse-session', {
+        relPath,
+        hasSession: Boolean(existingSession),
+        sessionContentPreview: summarizeTraceContent(existingSession?.content)
+      })
+      return existingSession
     }
 
-    const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.captureSnapshot()
+    const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.flushPendingChanges()
     const nextSession: NoteEditorSessionSnapshot = {
       blocks: cloneNoteEditorBlocks(snapshot.blocks),
       content: snapshot.content,
@@ -790,6 +911,13 @@ function App(): ReactElement {
     currentNoteContentRef.current = nextSession.content
     currentNoteEditorDirtyRef.current = false
     setCurrentNoteContent(nextSession.content)
+    setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(nextSession.blocks))
+    pushNoteSaveTrace('checkpoint:capture', {
+      relPath,
+      blockCount: nextSession.blocks.length,
+      contentPreview: summarizeTraceContent(nextSession.content),
+      tagCount: nextSession.tags.length
+    })
 
     return nextSession
   }, [setCurrentNoteContent])
@@ -830,6 +958,12 @@ function App(): ReactElement {
 
       currentNoteContentRef.current = nextSession.content
       setCurrentNoteContent(nextSession.content)
+      pushNoteSaveTrace('editor:snapshot-change', {
+        relPath,
+        blockCount: nextSession.blocks.length,
+        contentPreview: summarizeTraceContent(nextSession.content),
+        tagCount: nextSession.tags.length
+      })
     },
     [setCurrentNoteContent]
   )
@@ -1030,73 +1164,6 @@ function App(): ReactElement {
   }, [commandPaletteOpen, hasVault, setCommandPaletteOpen])
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!hasVault) {
-        return
-      }
-
-      const isModifierPressed = event.metaKey || event.ctrlKey
-      const isSearchPalette =
-        isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
-      if (isSearchPalette) {
-        event.preventDefault()
-        setCommandPaletteInitialQuery('')
-        setCommandPaletteOpen(true)
-        return
-      }
-
-      const isCommandPalette =
-        isModifierPressed && event.shiftKey && event.key.toLowerCase() === 'p'
-      if (isCommandPalette) {
-        event.preventDefault()
-        setCommandPaletteInitialQuery('>')
-        setCommandPaletteOpen(true)
-        return
-      }
-
-      if (!isModifierPressed) {
-        return
-      }
-
-      const target = event.target
-      const isTypingTarget =
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.getAttribute('role') === 'textbox')
-
-      if (isTypingTarget) {
-        return
-      }
-
-      const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
-      const pageByKey: Partial<Record<string, AppPage>> = {
-        d: 'dashboard',
-        k: 'knowledge',
-        ...(GRID_PAGE_ENABLED ? { g: 'grid' } : {}),
-        '1': 'notes',
-        '2': 'projects',
-        '3': 'calendar',
-        '4': 'weeklyPlan',
-        '5': 'schedules',
-        i: 'agentHistory',
-        ',': 'settings'
-      }
-      const nextPage = pageByKey[normalizedKey]
-      if (!nextPage) {
-        return
-      }
-
-      event.preventDefault()
-      setActivePage(nextPage)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hasVault, setCommandPaletteInitialQuery, setCommandPaletteOpen])
-
-  useEffect(() => {
     if (activePage !== 'projects' || !selectedProject) {
       setIsProjectIconPickerOpen(false)
     }
@@ -1141,55 +1208,173 @@ function App(): ReactElement {
 
     return createNoteSaveCoordinator({
       writeNote: async ({ relPath, document }) => {
+        pushNoteSaveTrace('coordinator:write-start', {
+          relPath,
+          blockCount: document.blocks.length,
+          tagCount: document.tags.length,
+          contentPreview: summarizeTraceContent(noteBlocksToText(document.blocks))
+        })
         await vaultApi.files.writeNoteDocument(relPath, document)
+        pushNoteSaveTrace('coordinator:write-done', {
+          relPath,
+          blockCount: document.blocks.length,
+          tagCount: document.tags.length
+        })
       },
       onPersisted: async ({ relPath, document }) => {
         lastPersistedNoteRef.current = {
           relPath,
           fingerprint: serializeStoredNoteDocument(document)
         }
+        pushNoteSaveTrace('coordinator:on-persisted', {
+          relPath,
+          blockCount: document.blocks.length,
+          tagCount: document.tags.length,
+          contentPreview: summarizeTraceContent(noteBlocksToText(document.blocks))
+        })
         const nextNotes = await vaultApi.files.listNotes()
         setNotes(nextNotes)
       }
     })
   }, [vaultApi, setNotes])
 
-  const flushCurrentNote = useCallback(async (): Promise<void> => {
-    if (noteSaveTimerRef.current) {
-      clearTimeout(noteSaveTimerRef.current)
-      noteSaveTimerRef.current = null
-    }
-
-    pendingNoteSaveRef.current = null
-
+  const hasPendingCurrentNoteSave = useCallback((): boolean => {
     const relPath = currentNotePathRef.current
-    if (!noteSaveCoordinator || !relPath) {
+    if (!relPath) {
+      return false
+    }
+
+    return currentNoteEditorDirtyRef.current || pendingNoteSaveRef.current?.relPath === relPath
+  }, [])
+
+  const settleCurrentNoteEditor = useCallback(async (): Promise<void> => {
+    if (!currentNoteEditorRef.current) {
       return
     }
 
-    const checkpoint = await checkpointCurrentNote()
-    const content = checkpoint?.content ?? currentNoteContentRef.current
-    const blocks = checkpoint?.blocks ?? currentNoteEditorBlocks ?? noteTextToBlocks(content)
-    const document = {
-      version: 1 as const,
-      tags: [...currentNoteTagsRef.current],
-      blocks
-    }
+    currentNoteEditorRef.current.blur()
+    await currentNoteEditorRef.current.flushPendingChanges()
+  }, [])
 
-    const lastPersisted = lastPersistedNoteRef.current
-    if (
-      lastPersisted?.relPath === relPath &&
-      lastPersisted.fingerprint === serializeStoredNoteDocument(document)
-    ) {
-      return
-    }
+  const flushCurrentNote = useCallback(
+    async ({
+      force = false,
+      settleEditor = false
+    }: {
+      force?: boolean
+      settleEditor?: boolean
+    } = {}): Promise<void> => {
+      const relPath = currentNotePathRef.current
+      if (!noteSaveCoordinator || !relPath) {
+        pushNoteSaveTrace('flush:skip-no-note', {
+          force,
+          settleEditor,
+          hasCoordinator: Boolean(noteSaveCoordinator),
+          relPath
+        })
+        return
+      }
 
-    await noteSaveCoordinator.enqueue({
-      relPath,
-      content,
-      document
-    })
-  }, [checkpointCurrentNote, currentNoteEditorBlocks, noteSaveCoordinator])
+      if (!force && !hasPendingCurrentNoteSave()) {
+        pushNoteSaveTrace('flush:skip-not-dirty', {
+          relPath,
+          force,
+          settleEditor
+        })
+        return
+      }
+
+      pushNoteSaveTrace('flush:start', {
+        relPath,
+        force,
+        settleEditor,
+        dirty: currentNoteEditorDirtyRef.current,
+        pendingSaveRelPath: pendingNoteSaveRef.current?.relPath ?? null,
+        currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+      })
+
+      if (settleEditor) {
+        await settleCurrentNoteEditor()
+      }
+
+      if (noteSaveInFlightRef.current) {
+        await noteSaveInFlightRef.current
+      }
+
+      if (settleEditor) {
+        await settleCurrentNoteEditor()
+      }
+
+      if (!force && !hasPendingCurrentNoteSave()) {
+        return
+      }
+
+      if (noteSaveTimerRef.current) {
+        clearTimeout(noteSaveTimerRef.current)
+        noteSaveTimerRef.current = null
+      }
+
+      pendingNoteSaveRef.current = null
+
+      const savePromise = (async (): Promise<void> => {
+        const checkpoint = await checkpointCurrentNote()
+        const content = checkpoint?.content ?? currentNoteContentRef.current
+        const blocks = checkpoint?.blocks ?? currentNoteEditorBlocks ?? noteTextToBlocks(content)
+        const document = {
+          version: 1 as const,
+          tags: [...currentNoteTagsRef.current],
+          blocks
+        }
+
+        const lastPersisted = lastPersistedNoteRef.current
+        if (
+          lastPersisted?.relPath === relPath &&
+          lastPersisted.fingerprint === serializeStoredNoteDocument(document)
+        ) {
+          pushNoteSaveTrace('flush:skip-unchanged', {
+            relPath,
+            contentPreview: summarizeTraceContent(content),
+            blockCount: blocks.length,
+            tagCount: document.tags.length
+          })
+          return
+        }
+
+        pushNoteSaveTrace('flush:enqueue', {
+          relPath,
+          contentPreview: summarizeTraceContent(content),
+          blockCount: blocks.length,
+          tagCount: document.tags.length
+        })
+        await noteSaveCoordinator.enqueue({
+          relPath,
+          content,
+          document
+        })
+      })()
+
+      noteSaveInFlightRef.current = savePromise
+
+      try {
+        await savePromise
+        pushNoteSaveTrace('flush:done', {
+          relPath,
+          currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        })
+      } finally {
+        if (noteSaveInFlightRef.current === savePromise) {
+          noteSaveInFlightRef.current = null
+        }
+      }
+    },
+    [
+      checkpointCurrentNote,
+      currentNoteEditorBlocks,
+      hasPendingCurrentNoteSave,
+      noteSaveCoordinator,
+      settleCurrentNoteEditor
+    ]
+  )
 
   const scheduleCurrentNoteAutosave = useCallback((): void => {
     if (!noteSaveCoordinator || !currentNotePathRef.current) {
@@ -1200,16 +1385,24 @@ function App(): ReactElement {
       relPath: currentNotePathRef.current,
       content: currentNoteContentRef.current
     }
+    pushNoteSaveTrace('autosave:scheduled', {
+      relPath: currentNotePathRef.current,
+      contentPreview: summarizeTraceContent(currentNoteContentRef.current)
+    })
     if (noteSaveTimerRef.current) {
       clearTimeout(noteSaveTimerRef.current)
     }
     noteSaveTimerRef.current = setTimeout(() => {
       pendingNoteSaveRef.current = null
       noteSaveTimerRef.current = null
+      pushNoteSaveTrace('autosave:timer-fired', {
+        relPath: currentNotePathRef.current,
+        contentPreview: summarizeTraceContent(currentNoteContentRef.current)
+      })
       void flushCurrentNote().catch((error: unknown) => {
         pushToast('error', String(error))
       })
-    }, 400)
+    }, NOTE_AUTOSAVE_DELAY_MS)
   }, [flushCurrentNote, noteSaveCoordinator, pushToast])
 
   const handleCurrentNoteEditorDirty = useCallback((): void => {
@@ -1217,9 +1410,256 @@ function App(): ReactElement {
     scheduleCurrentNoteAutosave()
   }, [scheduleCurrentNoteAutosave])
 
+  const persistCurrentNoteForPageLeave = useCallback(
+    async (page: AppPage): Promise<void> => {
+      const relPath = currentNotePathRef.current
+      pageLeaveSaveDebugState.requestedPage = page
+      pageLeaveSaveDebugState.notePath = relPath
+      pageLeaveSaveDebugState.snapshotContent = ''
+      pageLeaveSaveDebugState.fingerprint = null
+      pageLeaveSaveDebugState.attempted = false
+      pageLeaveSaveDebugState.writeCompleted = false
+      pageLeaveSaveDebugState.skippedReason = null
+      pageLeaveSaveDebugState.lastError = null
+
+      if (!relPath || !noteSaveCoordinator) {
+        pageLeaveSaveDebugState.skippedReason = 'no-open-note'
+        pushNoteSaveTrace('page-leave:skip-no-note', {
+          requestedPage: page,
+          relPath
+        })
+        return
+      }
+
+      try {
+        pushNoteSaveTrace('page-leave:start', {
+          requestedPage: page,
+          relPath,
+          dirty: currentNoteEditorDirtyRef.current,
+          pendingSaveRelPath: pendingNoteSaveRef.current?.relPath ?? null,
+          currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        })
+        if (noteSaveTimerRef.current) {
+          clearTimeout(noteSaveTimerRef.current)
+          noteSaveTimerRef.current = null
+        }
+
+        pendingNoteSaveRef.current = null
+
+        await settleCurrentNoteEditor()
+
+        const checkpoint = await checkpointCurrentNote()
+        const content = checkpoint?.content ?? currentNoteContentRef.current
+        const blocks = checkpoint?.blocks ?? currentNoteEditorBlocks ?? noteTextToBlocks(content)
+        const document = {
+          version: 1 as const,
+          tags: [...currentNoteTagsRef.current],
+          blocks
+        }
+        const fingerprint = serializeStoredNoteDocument(document)
+
+        pageLeaveSaveDebugState.attempted = true
+        pageLeaveSaveDebugState.snapshotContent = content
+        pageLeaveSaveDebugState.fingerprint = fingerprint
+
+        if (noteSaveInFlightRef.current) {
+          await noteSaveInFlightRef.current
+        }
+
+        const lastPersisted = lastPersistedNoteRef.current
+        if (lastPersisted?.relPath === relPath && lastPersisted.fingerprint === fingerprint) {
+          pageLeaveSaveDebugState.skippedReason = 'unchanged'
+          pageLeaveSaveDebugState.writeCompleted = true
+          pushNoteSaveTrace('page-leave:skip-unchanged', {
+            requestedPage: page,
+            relPath,
+            contentPreview: summarizeTraceContent(content)
+          })
+          return
+        }
+
+        pushNoteSaveTrace('page-leave:enqueue', {
+          requestedPage: page,
+          relPath,
+          contentPreview: summarizeTraceContent(content),
+          blockCount: blocks.length,
+          tagCount: document.tags.length
+        })
+        const savePromise = noteSaveCoordinator.enqueue({
+          relPath,
+          content,
+          document
+        })
+        noteSaveInFlightRef.current = savePromise
+
+        try {
+          await savePromise
+          pageLeaveSaveDebugState.writeCompleted = true
+          pushNoteSaveTrace('page-leave:done', {
+            requestedPage: page,
+            relPath,
+            contentPreview: summarizeTraceContent(currentNoteContentRef.current)
+          })
+        } finally {
+          if (noteSaveInFlightRef.current === savePromise) {
+            noteSaveInFlightRef.current = null
+          }
+        }
+      } catch (error) {
+        pageLeaveSaveDebugState.lastError = String(error)
+        pushNoteSaveTrace('page-leave:error', {
+          requestedPage: page,
+          relPath,
+          error: String(error)
+        })
+        throw error
+      }
+    },
+    [checkpointCurrentNote, currentNoteEditorBlocks, noteSaveCoordinator, settleCurrentNoteEditor]
+  )
+
+  const navigateToPage = useCallback(
+    async (page: AppPage): Promise<void> => {
+      const runNavigation = async (): Promise<void> => {
+        if (!hasVault) {
+          return
+        }
+
+        const currentPage = activePageRef.current
+        if (page === currentPage) {
+          return
+        }
+
+        pushNoteSaveTrace('navigate:start', {
+          from: currentPage,
+          to: page,
+          currentNotePath: currentNotePathRef.current,
+          currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        })
+
+        if (currentPage === 'notes' && currentNotePathRef.current) {
+          await persistCurrentNoteForPageLeave(page)
+        }
+
+        activePageRef.current = page
+        setActivePage(page)
+        pushNoteSaveTrace('navigate:done', {
+          from: currentPage,
+          to: page,
+          currentNotePath: currentNotePathRef.current
+        })
+      }
+
+      const queuedNavigation = pageNavigationQueueRef.current
+        .catch(() => undefined)
+        .then(runNavigation)
+
+      pageNavigationQueueRef.current = queuedNavigation
+      await queuedNavigation
+    },
+    [hasVault, persistCurrentNoteForPageLeave]
+  )
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!hasVault) {
+        return
+      }
+
+      const isModifierPressed = event.metaKey || event.ctrlKey
+      const isSearchPalette =
+        isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
+      if (isSearchPalette) {
+        event.preventDefault()
+        setCommandPaletteInitialQuery('')
+        setCommandPaletteOpen(true)
+        return
+      }
+
+      const isCommandPalette =
+        isModifierPressed && event.shiftKey && event.key.toLowerCase() === 'p'
+      if (isCommandPalette) {
+        event.preventDefault()
+        setCommandPaletteInitialQuery('>')
+        setCommandPaletteOpen(true)
+        return
+      }
+
+      if (!isModifierPressed) {
+        return
+      }
+
+      const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
+      const pageByCode: Partial<Record<string, AppPage>> = {
+        KeyD: 'dashboard',
+        KeyK: 'knowledge',
+        ...(GRID_PAGE_ENABLED ? { KeyG: 'grid' } : {}),
+        Digit1: 'notes',
+        Digit2: 'projects',
+        Digit3: 'calendar',
+        Digit4: 'weeklyPlan',
+        Digit5: 'schedules',
+        KeyI: 'agentHistory',
+        Comma: 'settings'
+      }
+      const pageByKey: Partial<Record<string, AppPage>> = {
+        d: 'dashboard',
+        k: 'knowledge',
+        ...(GRID_PAGE_ENABLED ? { g: 'grid' } : {}),
+        '1': 'notes',
+        '2': 'projects',
+        '3': 'calendar',
+        '4': 'weeklyPlan',
+        '5': 'schedules',
+        i: 'agentHistory',
+        ',': 'settings'
+      }
+      const nextPage = pageByKey[normalizedKey] ?? pageByCode[event.code]
+      if (nextPage) {
+        event.preventDefault()
+        void navigateToPage(nextPage)
+        return
+      }
+
+      const target = event.target
+      const isTypingTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.getAttribute('role') === 'textbox')
+
+      if (isTypingTarget) {
+        return
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [hasVault, navigateToPage, setCommandPaletteInitialQuery, setCommandPaletteOpen])
+
+  useEffect(() => {
+    const previousActivePage = previousActivePageRef.current
+    previousActivePageRef.current = activePage
+
+    if (
+      previousActivePage === activePage ||
+      previousActivePage !== 'notes' ||
+      !currentNotePathRef.current ||
+      !hasPendingCurrentNoteSave()
+    ) {
+      return
+    }
+
+    void flushCurrentNote({ force: true }).catch((error: unknown) => {
+      pushToast('error', String(error))
+    })
+  }, [activePage, flushCurrentNote, hasPendingCurrentNoteSave, pushToast])
+
   useEffect(() => {
     const flushPendingNote = (): void => {
-      void flushCurrentNote().catch(() => undefined)
+      void flushCurrentNote({ force: true }).catch(() => undefined)
     }
 
     const handleVisibilityChange = (): void => {
@@ -1583,9 +2023,9 @@ function App(): ReactElement {
         milestoneId,
         token: Date.now()
       })
-      setActivePage('projects')
+      void navigateToPage('projects')
     },
-    [selectProject]
+    [navigateToPage, selectProject]
   )
 
   const reassignCalendarTaskTypeForScope = async (
@@ -1655,12 +2095,23 @@ function App(): ReactElement {
       }
 
       try {
+        pushNoteSaveTrace('open-note:start', {
+          targetRelPath: relPath,
+          currentNotePath: currentNotePathRef.current,
+          currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        })
         if (currentNotePathRef.current && currentNotePathRef.current !== relPath) {
-          await flushCurrentNote()
+          await flushCurrentNote({ force: true, settleEditor: true })
         }
 
         const cachedSession = noteEditorSessionsRef.current[relPath]
         if (cachedSession) {
+          pushNoteSaveTrace('open-note:use-session', {
+            relPath,
+            blockCount: cachedSession.blocks.length,
+            tagCount: cachedSession.tags.length,
+            contentPreview: summarizeTraceContent(cachedSession.content)
+          })
           currentNotePathRef.current = relPath
           currentNoteContentRef.current = cachedSession.content
           currentNoteTagsRef.current = cachedSession.tags
@@ -1677,6 +2128,12 @@ function App(): ReactElement {
         const document = await vaultApi.files.readNoteDocument(relPath)
         const blocks = cloneNoteEditorBlocks(document.blocks as NoteEditorBlock[])
         const content = noteBlocksToText(blocks)
+        pushNoteSaveTrace('open-note:read-disk', {
+          relPath,
+          blockCount: blocks.length,
+          tagCount: document.tags.length,
+          contentPreview: summarizeTraceContent(content)
+        })
         noteEditorSessionsRef.current[relPath] = {
           blocks,
           content,
@@ -1810,7 +2267,7 @@ function App(): ReactElement {
 
     if (!vault) {
       pushToast('error', 'Select a vault in Settings before creating notes')
-      setActivePage('settings')
+      void navigateToPage('settings')
       return
     }
 
@@ -1820,7 +2277,7 @@ function App(): ReactElement {
       setNotes(nextNotes)
       setSearchQuery('')
       setSearchResults([])
-      setActivePage('notes')
+      await navigateToPage('notes')
       await openNote(relPath)
       pushToast('success', 'Note created')
     } catch (error) {
@@ -1836,7 +2293,7 @@ function App(): ReactElement {
 
     if (!vault) {
       pushToast('error', 'Select a vault in Settings before creating notes')
-      setActivePage('settings')
+      void navigateToPage('settings')
       return
     }
 
@@ -1845,7 +2302,7 @@ function App(): ReactElement {
       const relPath = await vaultApi.files.createNoteWithTags(buildDefaultNoteName(), [projectTag])
       const nextNotes = await vaultApi.files.listNotes()
       setNotes(nextNotes)
-      setActivePage('notes')
+      await navigateToPage('notes')
       await openNote(relPath)
       pushToast('success', 'Project note created')
     } catch (error) {
@@ -1861,7 +2318,7 @@ function App(): ReactElement {
 
     if (!vault) {
       pushToast('error', 'Select a vault in Settings before importing notes')
-      setActivePage('settings')
+      void navigateToPage('settings')
       return
     }
 
@@ -1875,7 +2332,7 @@ function App(): ReactElement {
       setNotes(nextNotes)
       setSearchQuery('')
       setSearchResults([])
-      setActivePage('notes')
+      await navigateToPage('notes')
 
       if (result.imported.length === 1) {
         await openNote(result.imported[0].relPath)
@@ -2231,27 +2688,50 @@ function App(): ReactElement {
     }
 
     try {
+      const oldPath = currentNotePath
       const dir = currentNotePath.includes('/')
         ? currentNotePath.slice(0, currentNotePath.lastIndexOf('/'))
         : ''
       const newFileName = withNoteExtension(newName.trim())
       const newPath = dir ? `${dir}/${newFileName}` : newFileName
+      const checkpoint = await checkpointCurrentNote()
+      const content = checkpoint?.content ?? currentNoteContentRef.current
+      const blocks =
+        checkpoint?.blocks ??
+        currentNoteEditorBlocks ??
+        (noteTextToBlocks(content) as NoteEditorBlock[])
+      const tags = [...currentNoteTagsRef.current]
+      const document = {
+        version: 1 as const,
+        tags,
+        blocks
+      }
 
-      await flushCurrentNote()
-      await vaultApi.files.rename(currentNotePath, newPath)
+      await flushCurrentNote({ force: true })
+      await vaultApi.files.rename(oldPath, newPath)
       const nextNotes = await vaultApi.files.listNotes()
       setNotes(nextNotes)
-      const existingSession = noteEditorSessionsRef.current[currentNotePath]
-      if (existingSession) {
-        noteEditorSessionsRef.current[newPath] = existingSession
-        delete noteEditorSessionsRef.current[currentNotePath]
+      noteEditorSessionsRef.current[newPath] = {
+        blocks: cloneNoteEditorBlocks(blocks),
+        content,
+        tags
+      }
+      delete noteEditorSessionsRef.current[oldPath]
+      lastPersistedNoteRef.current = {
+        relPath: newPath,
+        fingerprint: serializeStoredNoteDocument(document)
       }
       currentNotePathRef.current = newPath
+      currentNoteContentRef.current = content
+      currentNoteTagsRef.current = tags
       setCurrentNotePath(newPath)
+      setCurrentNoteContent(content)
+      setCurrentNoteTagsState(tags)
+      setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(blocks))
       void persistLastOpenedNotePath(newPath)
-      if (favoriteNotePaths.includes(currentNotePath)) {
+      if (favoriteNotePaths.includes(oldPath)) {
         void persistFavoriteNotePaths(
-          favoriteNotePaths.map((relPath) => (relPath === currentNotePath ? newPath : relPath))
+          favoriteNotePaths.map((relPath) => (relPath === oldPath ? newPath : relPath))
         )
       }
       pushToast('success', 'Note renamed')
@@ -2309,7 +2789,7 @@ function App(): ReactElement {
     }
 
     try {
-      await flushCurrentNote()
+      await flushCurrentNote({ force: true })
       const exportedPath = await vaultApi.files.exportNote(
         currentNotePath,
         currentNoteContentRef.current
@@ -3357,7 +3837,7 @@ function App(): ReactElement {
 
       if (!vault) {
         pushToast('error', 'Select a vault in Settings before creating notes')
-        setActivePage('settings')
+        void navigateToPage('settings')
         return
       }
 
@@ -3368,7 +3848,7 @@ function App(): ReactElement {
         setPendingNoteTreeEditId(`note:${relPath}`)
         setSearchQuery('')
         setSearchResults([])
-        setActivePage('notes')
+        await navigateToPage('notes')
         await openNote(relPath)
         pushToast('success', 'Note created')
       } catch (error) {
@@ -3378,6 +3858,7 @@ function App(): ReactElement {
     [
       createNoteAtPathWithFallback,
       getTreeTargetDirectory,
+      navigateToPage,
       openNote,
       pushToast,
       refreshNotesAndTree,
@@ -3397,7 +3878,7 @@ function App(): ReactElement {
 
       if (!vault) {
         pushToast('error', 'Select a vault in Settings before following note links')
-        setActivePage('settings')
+        void navigateToPage('settings')
         return
       }
 
@@ -3433,7 +3914,7 @@ function App(): ReactElement {
         await refreshNotesAndTree()
         setSearchQuery('')
         setSearchResults([])
-        setActivePage('notes')
+        await navigateToPage('notes')
         setSelectedNoteTreeEntry({ kind: 'note', relPath })
         await openNote(relPath)
 
@@ -3447,6 +3928,7 @@ function App(): ReactElement {
     [
       createNoteAtExactPathWithFallback,
       currentNotePath,
+      navigateToPage,
       notes,
       openNote,
       pushToast,
@@ -3467,7 +3949,7 @@ function App(): ReactElement {
 
       if (!vault) {
         pushToast('error', 'Select a vault in Settings before creating folders')
-        setActivePage('settings')
+        void navigateToPage('settings')
         return
       }
 
@@ -3484,6 +3966,7 @@ function App(): ReactElement {
     [
       createFolderWithFallback,
       getTreeTargetDirectory,
+      navigateToPage,
       pushToast,
       refreshNotesAndTree,
       vault,
@@ -3720,13 +4203,9 @@ function App(): ReactElement {
   const headerPageLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
-      if (!hasVault) {
-        return
-      }
-
-      setActivePage(page)
+      void navigateToPage(page)
     },
-    [hasVault]
+    [navigateToPage]
   )
   const handleOpenSearchPalette = useCallback((): void => {
     if (!hasVault) {
@@ -3737,6 +4216,12 @@ function App(): ReactElement {
     setCommandPaletteOpen(true)
   }, [hasVault, setCommandPaletteOpen])
 
+  const handleSidebarInteract = useCallback((): void => {
+    if (commandPaletteOpen) {
+      setCommandPaletteOpen(false)
+    }
+  }, [commandPaletteOpen, setCommandPaletteOpen])
+
   return (
     <div className="flex h-screen">
       <SidebarProvider className="h-full">
@@ -3744,11 +4229,7 @@ function App(): ReactElement {
           activePage={activePage}
           onChange={handleSidebarPageChange}
           onOpenSearchPalette={handleOpenSearchPalette}
-          onSidebarInteract={() => {
-            if (commandPaletteOpen) {
-              setCommandPaletteOpen(false)
-            }
-          }}
+          onSidebarInteract={handleSidebarInteract}
           notesCount={notes.length}
           projectsCount={projects.length}
           calendarUndoneCount={calendarUndoneCount}
@@ -4456,20 +4937,20 @@ function App(): ReactElement {
                       weeklyPlanReady={weeklyPlanReady}
                       onOpenProject={(projectId) => {
                         selectProject(projectId)
-                        setActivePage('projects')
+                        void navigateToPage('projects')
                       }}
                       onOpenProjects={() => {
-                        setActivePage('projects')
+                        void navigateToPage('projects')
                       }}
                       onOpenWeeklyPlan={() => {
-                        setActivePage('weeklyPlan')
+                        void navigateToPage('weeklyPlan')
                       }}
                     />
                   ) : activePage === 'knowledge' ? (
                     <KnowledgePage
                       notes={notes}
                       onOpenNote={(relPath) => {
-                        setActivePage('notes')
+                        void navigateToPage('notes')
                         setSearchQuery('')
                         setSearchResults([])
                         void openNote(relPath)
@@ -4576,7 +5057,7 @@ function App(): ReactElement {
                           void createProjectNote(selectedProject.name)
                         }}
                         onOpenNote={(relPath) => {
-                          setActivePage('notes')
+                          void navigateToPage('notes')
                           void openNote(relPath)
                         }}
                         onAddTagToNote={(relPath, tag) => {
@@ -4600,13 +5081,13 @@ function App(): ReactElement {
                         onActionsChange={setGridWorkspaceActions}
                         onBoardChange={handleGridBoardChange}
                         onOpenNote={(relPath) => {
-                          setActivePage('notes')
+                          void navigateToPage('notes')
                           setSearchQuery('')
                           setSearchResults([])
                           void openNote(relPath)
                         }}
                         onOpenProject={(projectId) => {
-                          setActivePage('projects')
+                          void navigateToPage('projects')
                           selectProject(projectId)
                         }}
                       />
@@ -5217,19 +5698,15 @@ function App(): ReactElement {
         onOpenNote={(relPath) => {
           setSearchQuery('')
           setSearchResults([])
-          setActivePage('notes')
+          void navigateToPage('notes')
           void openNote(relPath)
         }}
         onOpenProject={(projectId) => {
-          setActivePage('projects')
+          void navigateToPage('projects')
           selectProject(projectId)
         }}
         onOpenPage={(page) => {
-          if (!hasVault) {
-            return
-          }
-
-          setActivePage(page)
+          void navigateToPage(page)
         }}
       />
     </div>

@@ -4,6 +4,8 @@ export const IPC_CHANNELS = {
   vaultRestoreLast: 'vault:restore-last',
   desktopChooseDirectory: 'desktop:choose-directory',
   desktopOpenPath: 'desktop:open-path',
+  debugAppendNoteTrace: 'debug:append-note-trace',
+  debugGetNoteTraceLogPath: 'debug:get-note-trace-log-path',
   uiShowNativeMenu: 'ui:show-native-menu',
   listNotes: 'files:list-notes',
   listNoteTree: 'files:list-note-tree',

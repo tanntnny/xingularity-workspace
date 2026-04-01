@@ -640,6 +640,14 @@ export interface RendererVaultApi {
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
   }
+  debug: {
+    appendNoteTrace: (entry: {
+      event: string
+      timestamp: string
+      details: Record<string, unknown>
+    }) => Promise<string>
+    getNoteTraceLogPath: () => Promise<string>
+  }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>
     openPath: (targetPath: string) => Promise<void>

@@ -15,6 +15,17 @@ interface NoteSnapshot {
   content: string
 }
 
+interface PageLeaveSaveDebug {
+  requestedPage: string | null
+  notePath: string | null
+  snapshotContent: string
+  fingerprint: string | null
+  attempted: boolean
+  writeCompleted: boolean
+  skippedReason: string | null
+  lastError: string | null
+}
+
 interface VisibleNoteBlock {
   type: string
   text: string
@@ -65,12 +76,14 @@ declare global {
   interface Window {
     __XINGULARITY_E2E__?: {
       getCurrentNoteSnapshot: () => NoteSnapshot
+      getLastPageLeaveSaveDebug: () => PageLeaveSaveDebug
     }
     vaultApi: {
       files: {
         readNote: (relPath: string) => Promise<string>
         writeNote: (relPath: string, content: string) => Promise<void>
         readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
+        writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
       }
       vault: {
         restoreLast: () => Promise<unknown>
@@ -119,15 +132,35 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  const gridPageButton = page.getByTestId('sidebar-page:grid')
+  await page.waitForFunction(() => typeof window.vaultApi?.vault?.restoreLast === 'function')
+  await page.waitForFunction(
+    () => typeof window.__XINGULARITY_E2E__?.getLastPageLeaveSaveDebug === 'function'
+  )
+  const notesPageButton = page.getByTestId('sidebar-page:notes')
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          try {
+            await window.vaultApi.vault.restoreLast()
+          } catch {
+            // Retry until the temporary fixture vault is fully restorable.
+          }
 
-  try {
-    await expect(gridPageButton).toBeVisible({ timeout: 5_000 })
-  } catch {
-    await page.evaluate(() => window.vaultApi.vault.restoreLast())
-    await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
-  }
-  await page.getByTestId('sidebar-page:notes').click()
+          const notesButton = document.querySelector<HTMLButtonElement>(
+            '[data-testid="sidebar-page:notes"]'
+          )
+
+          if (!notesButton) {
+            return 'missing'
+          }
+
+          return notesButton.disabled ? 'disabled' : 'enabled'
+        }),
+      { timeout: 20_000 }
+    )
+    .toBe('enabled')
+  await notesPageButton.click()
   await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
@@ -135,6 +168,10 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
 async function getCurrentNoteSnapshot(page: Page): Promise<NoteSnapshot> {
   return page.evaluate(() => window.__XINGULARITY_E2E__!.getCurrentNoteSnapshot())
+}
+
+async function getLastPageLeaveSaveDebug(page: Page): Promise<PageLeaveSaveDebug> {
+  return page.evaluate(() => window.__XINGULARITY_E2E__!.getLastPageLeaveSaveDebug())
 }
 
 async function readNoteFromDisk(page: Page, relPath: string): Promise<string> {
@@ -182,6 +219,64 @@ async function replaceEditorContent(page: Page, lines: string[]): Promise<void> 
   }
 }
 
+async function renameCurrentOpenNote(page: Page, nextName: string): Promise<void> {
+  await page.getByRole('heading', { level: 1, name: 'alpha' }).click()
+  const nameInput = page.locator('input[type="text"]').first()
+  await expect(nameInput).toBeVisible({ timeout: 10_000 })
+  await nameInput.fill(nextName)
+  await nameInput.press('Enter')
+}
+
+function toShortcutCode(key: string): string {
+  if (/^[0-9]$/.test(key)) {
+    return `Digit${key}`
+  }
+
+  if (/^[a-z]$/i.test(key)) {
+    return `Key${key.toUpperCase()}`
+  }
+
+  if (key === ',') {
+    return 'Comma'
+  }
+
+  return key
+}
+
+async function pressAppShortcut(page: Page, key: string): Promise<void> {
+  const useMetaKey = process.platform === 'darwin'
+  const code = toShortcutCode(key)
+  await page.evaluate(
+    ({ shortcutKey, shortcutCode, shortcutUsesMetaKey }) => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: shortcutKey,
+          code: shortcutCode,
+          metaKey: shortcutUsesMetaKey,
+          ctrlKey: !shortcutUsesMetaKey,
+          bubbles: true,
+          cancelable: true
+        })
+      )
+    },
+    {
+      shortcutKey: key,
+      shortcutCode: code,
+      shortcutUsesMetaKey: useMetaKey
+    }
+  )
+}
+
+async function delayNoteDocumentWrites(page: Page, delayMs: number): Promise<void> {
+  await page.evaluate((nextDelayMs) => {
+    const original = window.vaultApi.files.writeNoteDocument.bind(window.vaultApi.files)
+    window.vaultApi.files.writeNoteDocument = async (relPath, document) => {
+      await new Promise((resolve) => window.setTimeout(resolve, nextDelayMs))
+      return original(relPath, document)
+    }
+  }, delayMs)
+}
+
 async function getVisibleNoteBlocks(page: Page): Promise<VisibleNoteBlock[]> {
   return page.evaluate(() => {
     const editorRoot = document.querySelector('[data-testid="note-block-editor"]')
@@ -206,6 +301,12 @@ async function getVisibleNoteBlocks(page: Page): Promise<VisibleNoteBlock[]> {
   })
 }
 
+async function dispatchPageHide(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('pagehide'))
+  })
+}
+
 async function getEditorTextGap(page: Page, upperText: string, lowerText: string): Promise<number> {
   const editor = page.locator('[data-testid="note-block-editor"]')
   const upper = editor.getByText(upperText, { exact: true }).first()
@@ -222,6 +323,319 @@ async function getEditorTextGap(page: Page, upperText: string, lowerText: string
 }
 
 test.describe('note page block editor switching', () => {
+  test('saves the current note when switching to another page after waiting', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Switch page save'])
+      await page.keyboard.type(' latest')
+      await page.waitForTimeout(2200)
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await expect
+        .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
+        .toMatchObject({
+          requestedPage: 'projects',
+          notePath: 'alpha.xnote',
+          attempted: true,
+          writeCompleted: true,
+          lastError: null
+        })
+      await expect
+        .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
+          timeout: 15_000
+        })
+        .toContain('Switch page save latest')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Switch page save latest')
+
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await openNote(page, 'alpha.xnote')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Switch page save latest')
+
+      await openNote(page, 'beta.xnote')
+      await openNote(page, 'alpha.xnote')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Switch page save latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps the latest editor blocks after switching to projects and back before a forced flush', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Projects return keeps body'])
+      await page.keyboard.type(' latest')
+      await page.waitForTimeout(2200)
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+
+      await expect
+        .poll(() => getVisibleNoteBlocks(page), { timeout: 15_000 })
+        .toEqual([
+          { type: 'paragraph', text: 'Projects return keeps body latest' }
+        ])
+
+      await dispatchPageHide(page)
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Projects return keeps body latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('saves the current note when switching pages with a shortcut from the editor', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Shortcut page save'])
+      await page.keyboard.type(' latest')
+      await page.waitForTimeout(2200)
+
+      await pressAppShortcut(page, '2')
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await expect
+        .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
+        .toMatchObject({
+          requestedPage: 'projects',
+          notePath: 'alpha.xnote',
+          attempted: true,
+          writeCompleted: true,
+          lastError: null
+        })
+      await expect
+        .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
+          timeout: 15_000
+        })
+        .toContain('Shortcut page save latest')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Shortcut page save latest')
+
+      await pressAppShortcut(page, '1')
+      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await openNote(page, 'alpha.xnote')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Shortcut page save latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('saves the latest edit when switching pages immediately after typing', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Immediate page save'])
+      await page.keyboard.type(' latest')
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await expect
+        .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
+        .toMatchObject({
+          requestedPage: 'projects',
+          notePath: 'alpha.xnote',
+          attempted: true,
+          writeCompleted: true,
+          lastError: null
+        })
+      await expect
+        .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
+          timeout: 15_000
+        })
+        .toContain('Immediate page save latest')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Immediate page save latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps latest edit when switching pages back and forth quickly', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Back and forth save'])
+      await page.keyboard.type(' latest')
+
+      await pressAppShortcut(page, '2')
+      await pressAppShortcut(page, '1')
+      await pressAppShortcut(page, '2')
+
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 20_000 })
+        .toContain('Back and forth save latest')
+
+      await pressAppShortcut(page, '1')
+      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await openNote(page, 'alpha.xnote')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Back and forth save latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('saves the current note when switching to dashboard after waiting', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Dashboard page save'])
+      await page.keyboard.type(' latest')
+      await page.waitForTimeout(2200)
+
+      await page.getByTestId('sidebar-page:dashboard').click()
+      await expect(page.getByTestId('sidebar-page:dashboard')).toHaveAttribute(
+        'data-active',
+        'true'
+      )
+
+      await expect
+        .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
+        .toMatchObject({
+          requestedPage: 'dashboard',
+          notePath: 'alpha.xnote',
+          attempted: true,
+          writeCompleted: true,
+          lastError: null
+        })
+      await expect
+        .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
+          timeout: 15_000
+        })
+        .toContain('Dashboard page save latest')
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Dashboard page save latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('saves the latest edit when switching pages during an in-flight autosave', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await delayNoteDocumentWrites(page, 800)
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Before autosave'])
+
+      await page.waitForTimeout(1300)
+      await page.keyboard.type(' latest')
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+
+      await expect
+        .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
+        .toMatchObject({
+          requestedPage: 'projects',
+          notePath: 'alpha.xnote',
+          attempted: true,
+          writeCompleted: true,
+          lastError: null
+        })
+      await expect
+        .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
+          timeout: 15_000
+        })
+        .toContain('Before autosave latest')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.xnote'), { timeout: 15_000 })
+        .toContain('Before autosave latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('preserves the current note body when renaming after unsaved edits', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Rename keeps body'])
+      await page.keyboard.type(' latest')
+
+      await renameCurrentOpenNote(page, 'alpha-renamed')
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe('alpha-renamed.xnote')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Rename keeps body latest')
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha-renamed.xnote'), { timeout: 15_000 })
+        .toContain('Rename keeps body latest')
+
+      await openNote(page, 'beta.xnote')
+      await openNote(page, 'alpha-renamed.xnote')
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Rename keeps body latest')
+      await expect
+        .poll(
+          async () =>
+            JSON.stringify(
+              getPersistedVisibleBlocks(await readNoteDocumentFromDisk(page, 'alpha-renamed.xnote'))
+            ),
+          { timeout: 15_000 }
+        )
+        .toContain('Rename keeps body latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('preserves heading and list markdown when switching notes', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
