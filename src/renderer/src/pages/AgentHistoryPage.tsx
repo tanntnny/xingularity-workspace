@@ -60,6 +60,7 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -664,8 +665,7 @@ export function AgentHistoryPage({
           actions={
             <WorkspaceHeaderActions>
               <WorkspaceHeaderActionGroup>
-                <button
-                  type="button"
+                <WorkspaceActionButton
                   onClick={() => {
                     if (!activeSession) {
                       return
@@ -674,23 +674,18 @@ export function AgentHistoryPage({
                     setIsRenaming(true)
                   }}
                   disabled={!activeSession}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Pencil size={14} />
-                  <span>Rename</span>
-                </button>
+                  icon={<Pencil size={14} />}
+                  label="Rename"
+                />
               </WorkspaceHeaderActionGroup>
               <WorkspaceHeaderActionDivider />
               <WorkspaceHeaderActionGroup>
-                <button
-                  type="button"
+                <WorkspaceActionButton
                   onClick={handleDeleteActiveSession}
                   disabled={!activeSession}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/5 px-3 text-xs font-medium text-rose-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Trash2 size={14} />
-                  <span>Delete chat</span>
-                </button>
+                  icon={<Trash2 size={14} />}
+                  label="Delete chat"
+                />
               </WorkspaceHeaderActionGroup>
             </WorkspaceHeaderActions>
           }
@@ -1009,16 +1004,13 @@ export function AgentHistoryPage({
           actions={
             <WorkspaceHeaderActions>
               <WorkspaceHeaderActionGroup>
-                <button
-                  type="button"
+                <WorkspaceActionButton
                   onClick={() => {
                     void createSession()
                   }}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  <MessageSquarePlus size={14} />
-                  <span>New chat</span>
-                </button>
+                  icon={<MessageSquarePlus size={14} />}
+                  label="New chat"
+                />
               </WorkspaceHeaderActionGroup>
             </WorkspaceHeaderActions>
           }

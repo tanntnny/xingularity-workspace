@@ -51,10 +51,10 @@ interface ProjectDetailsPageProps {
   focusedMilestoneToken?: number
   onRename: (nextName: string) => void
   onUpdateSummary: (nextSummary: string) => void
-  onAddMilestone: (title: string, dueDate: string) => void
+  onAddMilestone: (title: string, dueDate?: string) => void
   onRenameMilestone: (milestoneId: string, nextTitle: string) => void
   onUpdateMilestoneDescription: (milestoneId: string, nextDescription: string) => void
-  onUpdateMilestoneDueDate: (milestoneId: string, nextDueDate: string) => void
+  onUpdateMilestoneDueDate: (milestoneId: string, nextDueDate: string | undefined) => void
   onToggleMilestoneCollapsed: (milestoneId: string) => void
   onCycleMilestonePriority: (milestoneId: string) => void
   onRemoveMilestone: (milestoneId: string) => void
@@ -123,7 +123,7 @@ export function ProjectDetailsPage({
   const useNativeMenus = canUseNativeMenus()
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false)
   const [newMilestoneTitle, setNewMilestoneTitle] = useState('')
-  const [newMilestoneDueDate, setNewMilestoneDueDate] = useState(toIsoDate(new Date()))
+  const [newMilestoneDueDate, setNewMilestoneDueDate] = useState<string | undefined>(toIsoDate(new Date()))
   const [creatingSubtaskByMilestoneId, setCreatingSubtaskByMilestoneId] = useState<
     Record<string, boolean>
   >({})
@@ -202,8 +202,8 @@ export function ProjectDetailsPage({
 
   const submitMilestone = (): void => {
     const nextTitle = newMilestoneTitle.trim()
-    const nextDueDate = newMilestoneDueDate.trim()
-    if (!nextTitle || !nextDueDate) {
+    const nextDueDate = newMilestoneDueDate?.trim() || undefined
+    if (!nextTitle) {
       return
     }
 
@@ -673,6 +673,10 @@ export function ProjectDetailsPage({
                                       ...(onCopyMilestoneLink
                                         ? [{ id: 'copy-link', label: 'Copy link' }]
                                         : []),
+                                      {
+                                        id: 'unschedule',
+                                        label: 'Make unscheduled'
+                                      },
                                       { type: 'separator' as const },
                                       {
                                         id: 'delete',
@@ -690,6 +694,8 @@ export function ProjectDetailsPage({
                                     onDuplicateMilestone(milestone.id)
                                   } else if (actionId === 'copy-link' && onCopyMilestoneLink) {
                                     onCopyMilestoneLink(milestone.id)
+                                  } else if (actionId === 'unschedule') {
+                                    onUpdateMilestoneDueDate(milestone.id, undefined)
                                   } else if (actionId === 'delete') {
                                     _onRemoveMilestone(milestone.id)
                                   }
@@ -723,6 +729,13 @@ export function ProjectDetailsPage({
                                       Copy link
                                     </DropdownMenuItem>
                                   ) : null}
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      onUpdateMilestoneDueDate(milestone.id, undefined)
+                                    }
+                                  >
+                                    Make unscheduled
+                                  </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
                                     onClick={() => _onRemoveMilestone(milestone.id)}
@@ -1021,8 +1034,8 @@ function MilestoneCalendarPicker({
   className,
   'aria-label': ariaLabel
 }: {
-  value: string
-  onChange: (nextDate: string) => void
+  value?: string
+  onChange: (nextDate: string | undefined) => void
   className?: string
   'aria-label'?: string
 }): ReactElement {
@@ -1041,10 +1054,19 @@ function MilestoneCalendarPicker({
           )}
           aria-label={ariaLabel}
         >
-          {date ? format(date, 'MMM d, yyyy') : <span>Pick a date</span>}
+          {date ? format(date, 'MMM d, yyyy') : <span>Unscheduled</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
+        <div className="border-b border-[var(--line)] p-1">
+          <button
+            type="button"
+            className="flex w-full items-center justify-start rounded-sm px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+            onClick={() => onChange(undefined)}
+          >
+            Unscheduled milestone
+          </button>
+        </div>
         <Calendar
           mode="single"
           selected={date}
@@ -1150,13 +1172,13 @@ function compareMilestones(
       title: left.title,
       description: left.description,
       dueDate: left.dueDate,
-      createdAt: left.subtasks[0]?.createdAt ?? left.dueDate
+      createdAt: left.subtasks[0]?.createdAt ?? left.dueDate ?? ''
     },
     {
       title: right.title,
       description: right.description,
       dueDate: right.dueDate,
-      createdAt: right.subtasks[0]?.createdAt ?? right.dueDate
+      createdAt: right.subtasks[0]?.createdAt ?? right.dueDate ?? ''
     },
     sort
   )

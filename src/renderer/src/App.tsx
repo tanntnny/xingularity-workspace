@@ -17,7 +17,6 @@ import {
   Link2,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   CalendarDays,
   Target,
   FolderOpen,
@@ -101,6 +100,7 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -116,6 +116,10 @@ import { SearchPage } from './pages/SearchPage'
 import { FontOption, SettingsPage } from './pages/SettingsPage'
 import { AgentHistoryPage } from './pages/AgentHistoryPage'
 import { SchedulesPage } from './pages/SchedulesPage'
+import {
+  ScheduleDocumentationPage,
+  SCHEDULE_DOCUMENTATION_MARKDOWN
+} from './pages/ScheduleDocumentationPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GridPage, type GridWorkspaceActions } from './pages/GridPage'
@@ -163,6 +167,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   calendar: 'Calendar',
   settings: 'Settings',
   schedules: 'Schedules',
+  scheduleDocs: 'Schedule API Guide',
   agentHistory: 'Agent Chat'
 }
 
@@ -177,12 +182,6 @@ type PageLeaveSaveDebug = {
   lastError: string | null
 }
 
-type NoteSaveTraceEntry = {
-  event: string
-  timestamp: string
-  details: Record<string, unknown>
-}
-
 const pageLeaveSaveDebugState: PageLeaveSaveDebug = {
   requestedPage: null,
   notePath: null,
@@ -194,9 +193,6 @@ const pageLeaveSaveDebugState: PageLeaveSaveDebug = {
   lastError: null
 }
 
-const noteSaveTraceLog: NoteSaveTraceEntry[] = []
-let noteSaveTraceLogPath: string | null = null
-
 function summarizeTraceContent(content: string | null | undefined): string {
   if (!content) {
     return ''
@@ -206,29 +202,8 @@ function summarizeTraceContent(content: string | null | undefined): string {
 }
 
 function pushNoteSaveTrace(event: string, details: Record<string, unknown>): void {
-  const entry: NoteSaveTraceEntry = {
-    event,
-    timestamp: new Date().toISOString(),
-    details
-  }
-
-  noteSaveTraceLog.push(entry)
-  if (noteSaveTraceLog.length > 200) {
-    noteSaveTraceLog.shift()
-  }
-
-  console.info(`[note-trace] ${event}`, entry)
-
-  if (typeof window !== 'undefined' && window.vaultApi?.debug?.appendNoteTrace) {
-    void window.vaultApi.debug
-      .appendNoteTrace(entry)
-      .then((logPath) => {
-        noteSaveTraceLogPath = logPath
-      })
-      .catch((error: unknown) => {
-        console.warn('[note-trace] failed to append trace', error)
-      })
-  }
+  void event
+  void details
 }
 
 if (typeof window !== 'undefined') {
@@ -237,8 +212,6 @@ if (typeof window !== 'undefined') {
       __XINGULARITY_E2E__?: {
         getCurrentNoteSnapshot: () => { path: string | null; content: string }
         getLastPageLeaveSaveDebug: () => PageLeaveSaveDebug
-        getNoteSaveTrace: () => NoteSaveTraceEntry[]
-        getNoteSaveTraceLogPath: () => string | null
       }
     }
   ).__XINGULARITY_E2E__ = {
@@ -249,9 +222,7 @@ if (typeof window !== 'undefined') {
         content: state.currentNoteContent
       }
     },
-    getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState }),
-    getNoteSaveTrace: () => noteSaveTraceLog.map((entry) => ({ ...entry, details: { ...entry.details } })),
-    getNoteSaveTraceLogPath: () => noteSaveTraceLogPath
+    getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState })
   }
 }
 
@@ -292,168 +263,6 @@ type NoteTreeSelection = {
   kind: 'note' | 'folder'
   relPath: string
 } | null
-
-const panelIconButtonClass =
-  'flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]'
-
-const PROJECT_SEED: Project[] = [
-  {
-    id: 'project-client-portal',
-    name: 'Client Portal Refresh',
-    summary: 'Redesign the customer portal to improve onboarding and reduce support requests.',
-    status: 'on-track',
-    icon: createRandomProjectIcon('project-client-portal'),
-    updatedAt: '2026-02-27T16:14:00.000Z',
-    progress: 62,
-    milestones: [
-      {
-        id: 'milestone-discovery',
-        title: 'Discovery Interviews',
-        dueDate: '2026-02-14',
-        status: 'completed',
-        subtasks: [
-          {
-            id: 'subtask-discovery-1',
-            title: 'Interview 10 customers',
-            completed: true,
-            createdAt: '2026-02-02T09:00:00.000Z'
-          },
-          {
-            id: 'subtask-discovery-2',
-            title: 'Summarize key pain points',
-            completed: true,
-            createdAt: '2026-02-03T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-wireframes',
-        title: 'Approved Wireframes',
-        dueDate: '2026-03-08',
-        status: 'in-progress',
-        subtasks: [
-          {
-            id: 'subtask-wireframes-1',
-            title: 'Draft core page wireframes',
-            completed: true,
-            createdAt: '2026-02-20T09:00:00.000Z'
-          },
-          {
-            id: 'subtask-wireframes-2',
-            title: 'Run design review',
-            completed: false,
-            createdAt: '2026-02-24T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-beta',
-        title: 'Internal Beta Release',
-        dueDate: '2026-03-26',
-        status: 'pending',
-        subtasks: []
-      }
-    ]
-  },
-  {
-    id: 'project-mobile-sync',
-    name: 'Mobile Sync Rollout',
-    summary: 'Ship reliable offline sync for iOS and Android with conflict resolution.',
-    status: 'at-risk',
-    icon: createRandomProjectIcon('project-mobile-sync'),
-    updatedAt: '2026-02-25T09:30:00.000Z',
-    progress: 44,
-    milestones: [
-      {
-        id: 'milestone-protocol',
-        title: 'Finalize Sync Protocol',
-        dueDate: '2026-02-20',
-        status: 'completed',
-        subtasks: [
-          {
-            id: 'subtask-protocol-1',
-            title: 'Approve merge strategy',
-            completed: true,
-            createdAt: '2026-02-11T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-load-tests',
-        title: 'Conflict Load Tests',
-        dueDate: '2026-03-05',
-        status: 'blocked',
-        subtasks: [
-          {
-            id: 'subtask-load-1',
-            title: 'Prepare production-like dataset',
-            completed: false,
-            createdAt: '2026-02-22T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-rollout',
-        title: 'Public Rollout',
-        dueDate: '2026-04-01',
-        status: 'pending',
-        subtasks: []
-      }
-    ]
-  },
-  {
-    id: 'project-knowledge-base',
-    name: 'Knowledge Base Revamp',
-    summary: 'Migrate top support topics into guided help docs and in-app walkthroughs.',
-    status: 'on-track',
-    icon: createRandomProjectIcon('project-knowledge-base'),
-    updatedAt: '2026-02-23T11:02:00.000Z',
-    progress: 71,
-    milestones: [
-      {
-        id: 'milestone-topic-map',
-        title: 'Topic Prioritization Map',
-        dueDate: '2026-02-18',
-        status: 'completed',
-        subtasks: [
-          {
-            id: 'subtask-topic-1',
-            title: 'Rank top 20 support intents',
-            completed: true,
-            createdAt: '2026-02-10T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-guides',
-        title: 'Draft Guided Articles',
-        dueDate: '2026-03-02',
-        status: 'in-progress',
-        subtasks: [
-          {
-            id: 'subtask-guides-1',
-            title: 'Draft account setup guide',
-            completed: true,
-            createdAt: '2026-02-19T09:00:00.000Z'
-          },
-          {
-            id: 'subtask-guides-2',
-            title: 'Draft billing troubleshooting',
-            completed: false,
-            createdAt: '2026-02-21T09:00:00.000Z'
-          }
-        ]
-      },
-      {
-        id: 'milestone-walkthroughs',
-        title: 'Publish In-App Walkthroughs',
-        dueDate: '2026-03-19',
-        status: 'pending',
-        subtasks: []
-      }
-    ]
-  }
-]
 
 function App(): ReactElement {
   const vaultApi = (window as unknown as { vaultApi?: RendererVaultApi }).vaultApi
@@ -514,8 +323,7 @@ function App(): ReactElement {
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntry, setSelectedNoteTreeEntry] = useState<NoteTreeSelection>(null)
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
-  // Projects are now derived from settings for persistence
-  const projects = settingsProjects.length > 0 ? settingsProjects : PROJECT_SEED
+  const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const gridBoard = useMemo(
     () => sanitizeGridBoardState(gridBoardSettings, notes, projects),
@@ -528,9 +336,7 @@ function App(): ReactElement {
   const [isGridAddPopoverOpen, setIsGridAddPopoverOpen] = useState(false)
   const [gridAddMode, setGridAddMode] = useState<'note' | 'project'>('note')
   const [gridAddQuery, setGridAddQuery] = useState('')
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    PROJECT_SEED[0]?.id ?? null
-  )
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectFilterMode>('all')
   const [projectSortField, setProjectSortField] = useState<ProjectSortField>('name')
   const [projectSortDirection, setProjectSortDirection] = useState<ProjectSortDirection>('asc')
@@ -626,8 +432,6 @@ function App(): ReactElement {
       __XINGULARITY_E2E__?: {
         getCurrentNoteSnapshot?: () => { path: string | null; content: string }
         getLastPageLeaveSaveDebug?: () => PageLeaveSaveDebug
-        getNoteSaveTrace?: () => NoteSaveTraceEntry[]
-        getNoteSaveTraceLogPath?: () => string | null
       }
     }
 
@@ -640,10 +444,7 @@ function App(): ReactElement {
           content: state.currentNoteContent
         }
       },
-      getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState }),
-      getNoteSaveTrace: () =>
-        noteSaveTraceLog.map((entry) => ({ ...entry, details: { ...entry.details } })),
-      getNoteSaveTraceLogPath: () => noteSaveTraceLogPath
+      getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState })
     }
   }, [currentNoteContent, currentNotePath])
 
@@ -2778,6 +2579,26 @@ function App(): ReactElement {
     }
   }
 
+  const downloadScheduleDocumentation = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Documentation export is only available inside the Electron app')
+      return
+    }
+
+    try {
+      const exportedPath = await vaultApi.files.exportNote(
+        'Schedule API Guide.xnote',
+        SCHEDULE_DOCUMENTATION_MARKDOWN
+      )
+      if (!exportedPath) {
+        return
+      }
+      pushToast('success', `Guide exported to ${exportedPath}`)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
   const exportProject = async (project: Project): Promise<void> => {
     if (!vaultApi) {
       pushToast('error', 'Project export is only available inside the Electron app')
@@ -2938,29 +2759,6 @@ function App(): ReactElement {
     }
   }
 
-  const relinkProjectFolder = async (project: Project): Promise<void> => {
-    const selectedFolderPath = await chooseProjectFolder(project)
-    if (!selectedFolderPath) {
-      return
-    }
-
-    const saved = await setProjectFolderPath(project.id, selectedFolderPath)
-    if (!saved) {
-      return
-    }
-
-    pushToast('success', 'Project folder updated')
-  }
-
-  const clearProjectFolder = async (project: Project): Promise<void> => {
-    const cleared = await setProjectFolderPath(project.id)
-    if (!cleared) {
-      return
-    }
-
-    pushToast('success', 'Project folder link cleared')
-  }
-
   const toggleCurrentNoteFavorite = (): void => {
     if (!currentNotePath) {
       return
@@ -3099,10 +2897,10 @@ function App(): ReactElement {
     pushToast('success', nextStatus === 'completed' ? 'Project marked done' : 'Project reopened')
   }
 
-  const addMilestoneToProject = (projectId: string, title: string, dueDate: string): void => {
+  const addMilestoneToProject = (projectId: string, title: string, dueDate?: string): void => {
     const normalizedTitle = title.trim()
-    const normalizedDueDate = dueDate.trim()
-    if (!normalizedTitle || !normalizedDueDate) {
+    const normalizedDueDate = dueDate?.trim() || undefined
+    if (!normalizedTitle) {
       return
     }
 
@@ -3162,12 +2960,9 @@ function App(): ReactElement {
   const updateProjectMilestoneDueDate = (
     projectId: string,
     milestoneId: string,
-    nextDueDate: string
+    nextDueDate: string | undefined
   ): void => {
-    const normalizedDueDate = nextDueDate.trim()
-    if (!normalizedDueDate) {
-      return
-    }
+    const normalizedDueDate = nextDueDate?.trim() || undefined
 
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
@@ -4220,7 +4015,8 @@ function App(): ReactElement {
     )
   }
 
-  const isStandalonePage = activePage === 'schedules' || activePage === 'agentHistory'
+  const isStandalonePage =
+    activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
   const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
   const headerPageLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
@@ -4268,6 +4064,19 @@ function App(): ReactElement {
                 vaultApi={vaultApi}
                 pushToast={pushToast}
                 isRightPanelCollapsed={isRightPanelCollapsed}
+                onOpenDocumentation={() => {
+                  void navigateToPage('scheduleDocs')
+                }}
+              />
+            ) : null}
+            {hasVault && activePage === 'scheduleDocs' ? (
+              <ScheduleDocumentationPage
+                onBack={() => {
+                  void navigateToPage('schedules')
+                }}
+                onDownload={() => {
+                  void downloadScheduleDocumentation()
+                }}
               />
             ) : null}
             {hasVault && activePage === 'agentHistory' ? (
@@ -4310,14 +4119,11 @@ function App(): ReactElement {
                       <WorkspaceHeaderActionGroup>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                            <WorkspaceActionButton
                               title="Show backlinks"
                               aria-label="Show backlinks"
-                            >
-                              <Link2 size={18} />
-                            </button>
+                              icon={<Link2 size={18} />}
+                            />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-72">
                             {currentNoteBacklinks.length > 0 ? (
@@ -4345,14 +4151,11 @@ function App(): ReactElement {
                         {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                              <WorkspaceActionButton
                                 title="Navigate headings"
                                 aria-label="Navigate headings"
-                              >
-                                <List size={18} />
-                              </button>
+                                icon={<List size={18} />}
+                              />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                               align="end"
@@ -4376,139 +4179,77 @@ function App(): ReactElement {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ) : null}
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void exportCurrentNote()
                           }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Export Note"
-                        >
-                          <Download size={18} />
-                        </button>
+                          aria-label="Export Note"
+                          icon={<Download size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={toggleCurrentNoteFavorite}
-                          className={`flex items-center justify-center rounded border p-1.5 ${
-                            currentNoteIsFavorite
-                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                          }`}
                           title={
                             currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
                           }
-                        >
-                          <Heart
-                            size={18}
-                            className={currentNoteIsFavorite ? 'fill-current' : ''}
-                          />
-                        </button>
+                          active={currentNoteIsFavorite}
+                          icon={
+                            <Heart
+                              size={18}
+                              className={currentNoteIsFavorite ? 'fill-current' : ''}
+                            />
+                          }
+                        />
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void deleteCurrentNote()
                           }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Delete Note"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                          icon={<Trash2 size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   ) : activePage === 'projects' && selectedProject ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
-                        <div className="flex overflow-hidden rounded border border-[var(--line)] bg-[var(--panel-2)]">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openProjectFolder(selectedProject)
-                            }}
-                            className="flex items-center justify-center px-2 py-1.5 hover:bg-[var(--accent-soft)]"
-                            title={
-                              selectedProject.folderPath?.trim()
-                                ? `Open linked folder\n${selectedProject.folderPath}`
-                                : 'Link project folder'
-                            }
-                            aria-label={
-                              selectedProject.folderPath?.trim()
-                                ? 'Open linked project folder'
-                                : 'Link project folder'
-                            }
-                          >
-                            <FolderOpen size={18} />
-                          </button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className="flex items-center justify-center border-l border-[var(--line)] px-1.5 py-1.5 hover:bg-[var(--accent-soft)]"
-                                title="Project folder options"
-                                aria-label="Project folder options"
-                              >
-                                <ChevronDown size={14} />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {selectedProject.folderPath?.trim() ? (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void openProjectFolder(selectedProject)
-                                    }}
-                                  >
-                                    Open folder
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void relinkProjectFolder(selectedProject)
-                                    }}
-                                  >
-                                    Change folder
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void clearProjectFolder(selectedProject)
-                                    }}
-                                  >
-                                    Clear link
-                                  </DropdownMenuItem>
-                                </>
-                              ) : (
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    void linkProjectFolder(selectedProject)
-                                  }}
-                                >
-                                  Link folder
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                        <WorkspaceActionButton
+                          onClick={() => {
+                            void openProjectFolder(selectedProject)
+                          }}
+                          title={
+                            selectedProject.folderPath?.trim()
+                              ? `Open linked folder\n${selectedProject.folderPath}`
+                              : 'Link project folder'
+                          }
+                          aria-label={
+                            selectedProject.folderPath?.trim()
+                              ? 'Open linked project folder'
+                              : 'Link project folder'
+                          }
+                          icon={<FolderOpen size={18} />}
+                        />
                         <Popover
                           open={isProjectIconPickerOpen}
                           onOpenChange={setIsProjectIconPickerOpen}
                         >
                           <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
+                            <WorkspaceActionButton
                               title="Customize project icon"
-                            >
-                              <NoteShapeIcon
-                                icon={selectedProject.icon}
-                                size={18}
-                                className="shrink-0"
-                              />
-                            </button>
+                              aria-label="Customize project icon"
+                              icon={
+                                <NoteShapeIcon
+                                  icon={selectedProject.icon}
+                                  size={18}
+                                  className="shrink-0"
+                                />
+                              }
+                            />
                           </PopoverTrigger>
                           <PopoverContent
                             align="end"
@@ -4608,24 +4349,15 @@ function App(): ReactElement {
                             </button>
                           </PopoverContent>
                         </Popover>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void exportProject(selectedProject)
                           }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Export Project"
-                        >
-                          <Download size={18} />
-                        </button>
-                        <button
-                          type="button"
+                          icon={<Download size={18} />}
+                        />
+                        <WorkspaceActionButton
                           onClick={() => toggleProjectDone(selectedProject.id)}
-                          className={`flex items-center justify-center rounded border p-1.5 ${
-                            selectedProject.status === 'completed'
-                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                          }`}
                           title={
                             selectedProject.status === 'completed'
                               ? 'Reopen Project'
@@ -4636,48 +4368,43 @@ function App(): ReactElement {
                               ? 'Reopen project'
                               : 'Mark project done'
                           }
-                        >
-                          {selectedProject.status === 'completed' ? (
+                          active={selectedProject.status === 'completed'}
+                          icon={
+                            selectedProject.status === 'completed' ? (
                             <RotateCcw size={18} />
                           ) : (
                             <Check size={18} />
-                          )}
-                        </button>
+                          )
+                          }
+                        />
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={toggleCurrentProjectFavorite}
-                          className={`flex items-center justify-center rounded border p-1.5 ${
-                            currentProjectIsFavorite
-                              ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                              : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                          }`}
                           title={
                             currentProjectIsFavorite
                               ? 'Remove Project from Favorites'
                               : 'Add Project to Favorites'
                           }
-                        >
-                          <Heart
-                            size={18}
-                            className={currentProjectIsFavorite ? 'fill-current' : ''}
-                          />
-                        </button>
+                          active={currentProjectIsFavorite}
+                          icon={
+                            <Heart
+                              size={18}
+                              className={currentProjectIsFavorite ? 'fill-current' : ''}
+                            />
+                          }
+                        />
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void removeSelectedProject()
                           }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Remove Project"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                          icon={<Trash2 size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   ) : activePage === 'grid' ? (
@@ -4693,15 +4420,12 @@ function App(): ReactElement {
                           }}
                         >
                           <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
+                            <WorkspaceActionButton
                               title="Add to canvas"
                               aria-label="Add to canvas"
                               disabled={!gridWorkspaceActions}
-                            >
-                              <Plus size={18} />
-                            </button>
+                              icon={<Plus size={18} />}
+                            />
                           </PopoverTrigger>
                           <PopoverContent
                             align="end"
@@ -4825,70 +4549,52 @@ function App(): ReactElement {
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => gridWorkspaceActions?.fitAllCards()}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
                           title="Fit all cards"
                           aria-label="Fit all cards"
                           disabled={!gridWorkspaceActions}
-                        >
-                          <Target size={18} />
-                        </button>
-                        <button
-                          type="button"
+                          icon={<Target size={18} />}
+                        />
+                        <WorkspaceActionButton
                           onClick={() => gridWorkspaceActions?.resetBoard()}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50"
                           title="Reset board"
                           aria-label="Reset board"
                           disabled={!gridWorkspaceActions}
-                        >
-                          <RotateCcw size={18} />
-                        </button>
+                          icon={<RotateCcw size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   ) : activePage === 'calendar' ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={goToPrevMonth}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Previous month"
-                        >
-                          <ChevronLeft size={18} />
-                        </button>
-                        <button
-                          type="button"
+                          icon={<ChevronLeft size={18} />}
+                        />
+                        <WorkspaceActionButton
                           onClick={goToToday}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Go to today"
-                        >
-                          <CalendarDays size={18} />
-                        </button>
-                        <button
-                          type="button"
+                          icon={<CalendarDays size={18} />}
+                        />
+                        <WorkspaceActionButton
                           onClick={goToNextMonth}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Next month"
-                        >
-                          <ChevronRight size={18} />
-                        </button>
+                          icon={<ChevronRight size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
                     <WorkspaceHeaderActions>
                       <WorkspaceHeaderActionGroup>
-                        <button
-                          type="button"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void handleDeleteSelectedWeeklyPlanWeek()
                           }}
-                          className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)]"
                           title="Delete week"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                          icon={<Trash2 size={18} />}
+                        />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   ) : null
@@ -5235,14 +4941,11 @@ function App(): ReactElement {
                           <WorkspaceHeaderActionGroup>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={panelIconButtonClass}
+                                <WorkspaceActionButton
                                   aria-label="Note actions"
                                   title="Note actions"
-                                >
-                                  <Plus size={18} aria-hidden="true" />
-                                </button>
+                                  icon={<Plus size={18} aria-hidden="true" />}
+                                />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
                                 <DropdownMenuItem
@@ -5279,14 +4982,11 @@ function App(): ReactElement {
                               <WorkspaceHeaderActionGroup>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className={panelIconButtonClass}
+                                    <WorkspaceActionButton
                                       aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
                                       title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                    >
-                                      <Funnel size={18} aria-hidden="true" />
-                                    </button>
+                                      icon={<Funnel size={18} aria-hidden="true" />}
+                                    />
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="start">
                                     <DropdownMenuRadioGroup
@@ -5307,14 +5007,11 @@ function App(): ReactElement {
                                 </DropdownMenu>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className={panelIconButtonClass}
+                                    <WorkspaceActionButton
                                       aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
                                       title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                    >
-                                      <ArrowUpDown size={18} aria-hidden="true" />
-                                    </button>
+                                      icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                    />
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="start">
                                     <DropdownMenuRadioGroup
@@ -5389,28 +5086,22 @@ function App(): ReactElement {
                       ) : activePage === 'projects' ? (
                         <WorkspaceHeaderActions>
                           <WorkspaceHeaderActionGroup>
-                            <button
-                              type="button"
-                              className={panelIconButtonClass}
+                            <WorkspaceActionButton
                               onClick={createProject}
                               aria-label="Add new project"
                               title="Add new project"
-                            >
-                              <Plus size={18} aria-hidden="true" />
-                            </button>
+                              icon={<Plus size={18} aria-hidden="true" />}
+                            />
                           </WorkspaceHeaderActionGroup>
                           <WorkspaceHeaderActionDivider />
                           <WorkspaceHeaderActionGroup>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={panelIconButtonClass}
+                                <WorkspaceActionButton
                                   aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
                                   title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                >
-                                  <Funnel size={18} aria-hidden="true" />
-                                </button>
+                                  icon={<Funnel size={18} aria-hidden="true" />}
+                                />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
                                 <DropdownMenuRadioGroup
@@ -5434,14 +5125,11 @@ function App(): ReactElement {
                             </DropdownMenu>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={panelIconButtonClass}
+                                <WorkspaceActionButton
                                   aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
                                   title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                >
-                                  <ArrowUpDown size={18} aria-hidden="true" />
-                                </button>
+                                  icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start">
                                 <DropdownMenuRadioGroup
@@ -5485,9 +5173,11 @@ function App(): ReactElement {
                               onOpenChange={setIsCalendarBulkActionOpen}
                             >
                               <PopoverTrigger asChild>
-                                <button type="button" className={panelIconButtonClass}>
-                                  <Target size={18} className="inline-block" />
-                                </button>
+                                <WorkspaceActionButton
+                                  title="Calendar bulk actions"
+                                  aria-label="Calendar bulk actions"
+                                  icon={<Target size={18} className="inline-block" />}
+                                />
                               </PopoverTrigger>
                               <PopoverContent
                                 align="start"
@@ -5553,15 +5243,13 @@ function App(): ReactElement {
                           </WorkspaceHeaderActionGroup>
                         </WorkspaceHeaderActions>
                       ) : activePage === 'settings' ? (
-                        <button
-                          type="button"
-                          className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 hover:border-[var(--accent)]"
+                        <WorkspaceActionButton
                           onClick={() => {
                             void updateFontFamily(FONT_OPTIONS[0].value)
                           }}
-                        >
-                          Reset Font
-                        </button>
+                          icon={<Type size={14} />}
+                          label="Reset Font"
+                        />
                       ) : null
                     }
                   />

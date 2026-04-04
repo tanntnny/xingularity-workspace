@@ -28,6 +28,7 @@ import { InlineEditableText } from '../components/InlineEditableText'
 import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -79,8 +80,6 @@ interface WeeklyPlanSidebarProps {
   onCreateWeek: (input: CreateWeeklyPlanWeekInput) => Promise<void>
 }
 
-const flatSidebarButtonClass =
-  'flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 hover:border-[var(--accent)] disabled:opacity-50'
 const metaPillClass =
   'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-[var(--muted)]'
 const neutralChipClass =
@@ -460,31 +459,25 @@ export function WeeklyPlanSidebar({
         actions={
           <WorkspaceHeaderActions>
             <WorkspaceHeaderActionGroup>
-              <button
-                type="button"
+              <WorkspaceActionButton
                 onClick={() => {
                   void handleQuickCreateWeek()
                 }}
                 disabled={!isReady}
-                className={flatSidebarButtonClass}
                 aria-label="New week"
                 title="New week"
-              >
-                <Plus size={16} />
-              </button>
+                icon={<Plus size={16} />}
+              />
             </WorkspaceHeaderActionGroup>
             <WorkspaceHeaderActionDivider />
             <WorkspaceHeaderActionGroup>
-              <button
-                type="button"
+              <WorkspaceActionButton
                 onClick={() => handleJumpToCurrent()}
                 disabled={!currentWeekId || !isReady}
-                className={flatSidebarButtonClass}
                 aria-label="Current week"
                 title="Current week"
-              >
-                <CalendarDays size={18} className="text-current" />
-              </button>
+                icon={<CalendarDays size={18} className="text-current" />}
+              />
             </WorkspaceHeaderActionGroup>
           </WorkspaceHeaderActions>
         }

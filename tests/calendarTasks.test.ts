@@ -175,4 +175,25 @@ describe('buildMilestoneCalendarEvents', () => {
 
     expect(taskEvents[0].id).not.toEqual(milestoneEvents[0].id)
   })
+
+  it('skips milestones without a due date', () => {
+    const events = buildMilestoneCalendarEvents([
+      makeProject({
+        id: 'project-alpha',
+        milestones: [
+          {
+            id: 'milestone-a',
+            title: 'Alpha launch',
+            description: '',
+            collapsed: false,
+            priority: 'medium',
+            status: 'pending',
+            subtasks: []
+          }
+        ]
+      })
+    ])
+
+    expect(events).toEqual([])
+  })
 })

@@ -308,7 +308,6 @@ function TreeNode({
           useNativeMenus && !isEditing ? (event) => void handleNativeContextMenu(event) : undefined
         }
       >
-        {renderTreeConnectorGuides(node)}
         <button
           type="button"
           className={`relative z-10 flex h-4 w-4 items-center justify-center rounded-sm text-[var(--muted)] ${
@@ -499,66 +498,4 @@ function buildNotesTreeMenuItems(
   }
 
   return items
-}
-
-function renderTreeConnectorGuides(
-  node: NodeRendererProps<NoteTreeNode>['node']
-): ReactElement | null {
-  if (node.level <= 0) {
-    return null
-  }
-
-  const ancestorColumns = getTreeConnectorColumns(node)
-  const connectorLeft = node.level * TREE_INDENT - TREE_INDENT / 2
-  const isLastChild = isLastTreeChild(node)
-
-  return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0">
-      {ancestorColumns.map((showLine, index) =>
-        showLine ? (
-          <span
-            key={`tree-guide-${node.id}-${index}`}
-            className="absolute inset-y-0 w-px bg-[var(--line)]"
-            style={{ left: index * TREE_INDENT + TREE_INDENT / 2 }}
-          />
-        ) : null
-      )}
-      <span
-        className="absolute w-px bg-[var(--line)]"
-        style={{
-          left: connectorLeft,
-          top: 0,
-          bottom: isLastChild ? '50%' : 0
-        }}
-      />
-      <span
-        className="absolute top-1/2 h-px -translate-y-1/2 bg-[var(--line)]"
-        style={{
-          left: connectorLeft,
-          width: TREE_INDENT / 2
-        }}
-      />
-    </div>
-  )
-}
-
-function getTreeConnectorColumns(node: NodeRendererProps<NoteTreeNode>['node']): boolean[] {
-  const columns: boolean[] = []
-  let current = node.parent
-
-  while (current && !current.isRoot) {
-    columns.unshift(!isLastTreeChild(current))
-    current = current.parent
-  }
-
-  return columns
-}
-
-function isLastTreeChild(node: NodeRendererProps<NoteTreeNode>['node']): boolean {
-  const siblings = node.parent?.children
-  if (!siblings?.length) {
-    return true
-  }
-
-  return node.childIndex === siblings.length - 1
 }

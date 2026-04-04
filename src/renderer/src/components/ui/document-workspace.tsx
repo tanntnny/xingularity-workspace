@@ -111,6 +111,37 @@ const WorkspaceHeaderActionDivider = React.forwardRef<
 ))
 WorkspaceHeaderActionDivider.displayName = 'WorkspaceHeaderActionDivider'
 
+interface WorkspaceActionButtonProps
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  icon: React.ReactNode
+  label?: string
+  active?: boolean
+}
+
+const WorkspaceActionButton = React.forwardRef<HTMLButtonElement, WorkspaceActionButtonProps>(
+  ({ className, icon, label, active = false, type = 'button', ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        label
+          ? 'h-9 gap-2 rounded-full px-3 text-xs font-medium'
+          : 'h-8 w-8 rounded-lg',
+        active
+          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+          : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
+        className
+      )}
+      {...props}
+    >
+      {icon}
+      {label ? <span>{label}</span> : null}
+    </button>
+  )
+)
+WorkspaceActionButton.displayName = 'WorkspaceActionButton'
+
 const DocumentWorkspaceMainContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -137,5 +168,6 @@ export {
   DocumentWorkspacePanelContent,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
-  WorkspaceHeaderActionDivider
+  WorkspaceHeaderActionDivider,
+  WorkspaceActionButton
 }

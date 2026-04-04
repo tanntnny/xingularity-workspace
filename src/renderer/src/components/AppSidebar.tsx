@@ -41,6 +41,7 @@ export type AppPage =
   | 'calendar'
   | 'settings'
   | 'schedules'
+  | 'scheduleDocs'
   | 'agentHistory'
 
 interface AppSidebarProps {

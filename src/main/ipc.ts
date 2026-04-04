@@ -1,6 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
-import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { VaultRuntime } from './runtime'
@@ -95,12 +93,6 @@ const taskReminderSchema = z.object({
   value: z.number().int().min(1).max(365),
   enabled: z.boolean()
 })
-const noteTraceEntrySchema = z.object({
-  event: z.string().min(1).max(200),
-  timestamp: z.string().min(1).max(100),
-  details: z.record(z.string(), z.unknown())
-})
-
 const calendarTaskSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
@@ -177,7 +169,10 @@ const projectMilestoneSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   collapsed: z.boolean().optional(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   status: z.enum(['pending', 'in-progress', 'completed', 'blocked']),
   subtasks: z.array(projectSubtaskSchema).max(100)
@@ -259,8 +254,6 @@ const settingsUpdateSchema = z.object({
 })
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
-  const getNoteTraceLogPath = (): string => path.join(app.getPath('userData'), 'note-save-trace.jsonl')
-
   ipcMain.handle(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
     const parsed = nativeMenuRequestSchema.parse(request)
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -305,18 +298,6 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   ipcMain.handle(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
     await runtime.openPath(sourcePathSchema.parse(targetPath))
-  })
-
-  ipcMain.handle(IPC_CHANNELS.debugGetNoteTraceLogPath, async () => {
-    return getNoteTraceLogPath()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.debugAppendNoteTrace, async (_event, entry: unknown) => {
-    const parsed = noteTraceEntrySchema.parse(entry)
-    const logPath = getNoteTraceLogPath()
-    await fs.mkdir(path.dirname(logPath), { recursive: true })
-    await fs.appendFile(logPath, `${JSON.stringify(parsed)}\n`, 'utf-8')
-    return logPath
   })
 
   ipcMain.handle(IPC_CHANNELS.listNotes, async () => {

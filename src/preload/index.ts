@@ -18,10 +18,6 @@ const api: RendererVaultApi = {
     create: () => ipcRenderer.invoke(IPC_CHANNELS.vaultCreate),
     restoreLast: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRestoreLast)
   },
-  debug: {
-    appendNoteTrace: (entry) => ipcRenderer.invoke(IPC_CHANNELS.debugAppendNoteTrace, entry),
-    getNoteTraceLogPath: () => ipcRenderer.invoke(IPC_CHANNELS.debugGetNoteTraceLogPath)
-  },
   desktop: {
     chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),
     openPath: (targetPath) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenPath, targetPath)

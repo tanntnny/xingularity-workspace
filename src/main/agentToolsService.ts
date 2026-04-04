@@ -85,7 +85,7 @@ const milestoneCreateSchema = z
     projectName: z.string().trim().min(1).max(200).optional(),
     title: z.string().trim().min(1).max(200),
     description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema,
+    dueDate: isoDateSchema.optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     collapsed: z.boolean().optional()
   })
@@ -101,7 +101,7 @@ const milestoneUpdateSchema = z
     milestoneTitle: z.string().trim().min(1).max(200).optional(),
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema.optional(),
+    dueDate: isoDateSchema.nullable().optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     collapsed: z.boolean().optional(),
     status: z.enum(['pending', 'in-progress', 'completed', 'blocked']).optional()
@@ -475,7 +475,12 @@ export class AgentToolsService {
           title: input.title?.trim() || item.title,
           description:
             input.description !== undefined ? input.description.trim() : item.description,
-          dueDate: input.dueDate ?? item.dueDate,
+          dueDate:
+            input.dueDate === undefined
+              ? item.dueDate
+              : input.dueDate === null
+                ? undefined
+                : input.dueDate,
           priority: input.priority ?? item.priority,
           collapsed: input.collapsed ?? item.collapsed,
           status: input.status ?? item.status

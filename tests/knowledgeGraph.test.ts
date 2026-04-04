@@ -6,6 +6,7 @@ function createNote(
   overrides: Partial<NoteListItem> & Pick<NoteListItem, 'relPath' | 'name'>
 ): NoteListItem {
   return {
+    ...overrides,
     relPath: overrides.relPath,
     name: overrides.name,
     dir: '',
@@ -13,8 +14,7 @@ function createNote(
     updatedAt: '2026-01-01T00:00:00.000Z',
     tags: [],
     bodyPreview: '',
-    mentionTargets: [],
-    ...overrides
+    mentionTargets: overrides.mentionTargets ?? []
   }
 }
 

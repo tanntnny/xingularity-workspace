@@ -1547,7 +1547,7 @@ function formatProjectContext(project: Project): string {
 
 function formatMilestoneContext(milestone: ProjectMilestone, index: number): string {
   return [
-    `- ${index}. ${milestone.title} | due ${milestone.dueDate} | status ${milestone.status}`,
+    `- ${index}. ${milestone.title} | due ${milestone.dueDate ?? 'unscheduled'} | status ${milestone.status}`,
     milestone.description ? `  Description: ${milestone.description}` : '',
     milestone.subtasks.length > 0
       ? `  Subtasks: ${milestone.subtasks

@@ -176,7 +176,8 @@ export {
   DocumentWorkspacePanelContent,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
-  WorkspaceHeaderActionDivider
+  WorkspaceHeaderActionDivider,
+  WorkspaceActionButton
 } from './document-workspace'
 
 export { Kbd } from './kbd'

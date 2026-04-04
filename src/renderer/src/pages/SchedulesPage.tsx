@@ -1,9 +1,9 @@
 import { ReactElement, useCallback, useEffect, useId, useRef, useState } from 'react'
 import {
+  BookOpen,
   CalendarClock,
   CheckCircle2,
   Circle,
-  Clock,
   Loader2,
   Play,
   Plus,
@@ -41,15 +41,27 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
-import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator
+} from '../components/ui/breadcrumb'
+import {
+  WorkspacePanelSection,
+  WorkspacePanelSectionHeader
+} from '../components/ui/workspace-panel-section'
 
 interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
   isRightPanelCollapsed?: boolean
+  onOpenDocumentation: () => void
 }
 
 const PERMISSION_LABELS: Record<SchedulePermission, string> = {
@@ -213,7 +225,8 @@ function describeAction(action: ScriptAction): string {
 export function SchedulesPage({
   vaultApi,
   pushToast,
-  isRightPanelCollapsed = false
+  isRightPanelCollapsed = false,
+  onOpenDocumentation
 }: SchedulesPageProps): ReactElement {
   const [jobs, setJobs] = useState<ScheduleJob[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -505,15 +518,45 @@ export function SchedulesPage({
         <DocumentWorkspaceMain>
           <DocumentWorkspaceMainHeader
             breadcrumb={
-              <span className="text-sm font-semibold text-[var(--muted)]">Run History</span>
+              <Breadcrumb>
+                <BreadcrumbList className="text-[var(--muted)]">
+                  <BreadcrumbItem>
+                    <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                      Schedules
+                    </BreadcrumbPage>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                      {selectedJob?.name ?? 'Run History'}
+                    </BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
             }
             actions={
-              selectedJob ? (
-                <div className="flex items-center gap-1 text-xs text-[var(--muted)]">
-                  <Clock size={12} />
-                  {selectedJob.nextRunAt ? formatNextRun(selectedJob.nextRunAt) : '—'}
-                </div>
-              ) : null
+              <WorkspaceHeaderActions>
+                <WorkspaceHeaderActionGroup>
+                  <WorkspaceActionButton
+                    onClick={onOpenDocumentation}
+                    title="Schedule guide"
+                    aria-label="Schedule guide"
+                    icon={<BookOpen size={18} />}
+                  />
+                  <WorkspaceActionButton
+                    onClick={() => void handleRunNow()}
+                    disabled={!canRunNow}
+                    title="Run now"
+                    aria-label="Run now"
+                    icon={
+                      isRunning ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <Play size={18} />
+                    )}
+                  />
+                </WorkspaceHeaderActionGroup>
+              </WorkspaceHeaderActions>
             }
           />
           {/* <div className="border-b border-[var(--line)] px-3 py-3">
@@ -704,18 +747,15 @@ export function SchedulesPage({
           className={`${isRightPanelCollapsed ? 'hidden' : 'flex'} border-l border-[var(--line)]`}
         >
           <DocumentWorkspacePanelHeader
-            leading={<span className="text-sm font-semibold text-[var(--text)]">Schedules</span>}
             actions={
               <WorkspaceHeaderActions>
                 <WorkspaceHeaderActionGroup>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]"
+                  <WorkspaceActionButton
                     onClick={handleNewJob}
                     title="New schedule"
-                  >
-                    <Plus size={16} />
-                  </button>
+                    aria-label="New schedule"
+                    icon={<Plus size={16} />}
+                  />
                 </WorkspaceHeaderActionGroup>
               </WorkspaceHeaderActions>
             }

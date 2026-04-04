@@ -5,6 +5,7 @@ import { createRandomProjectIcon } from '../shared/projectIcons'
 import {
   AppSettings,
   AppSettingsUpdate,
+  CalendarTask,
   Project,
   ProjectMilestone,
   ProjectSubtask
@@ -13,6 +14,22 @@ import { ensureVaultAppDir } from './vaultData'
 
 interface GlobalSettings {
   lastVaultPath: string | null
+}
+
+interface VaultCoreSettings
+  extends Omit<AppSettings, 'projects' | 'projectIcons' | 'calendarTasks'> {
+  projects?: Project[]
+  projectIcons?: Record<string, AppSettings['projectIcons'][string]>
+  calendarTasks?: CalendarTask[]
+}
+
+interface VaultProjectsData {
+  projects: Project[]
+  projectIcons: AppSettings['projectIcons']
+}
+
+interface VaultTasksData {
+  calendarTasks: CalendarTask[]
 }
 
 export function createDefaultAppSettings(): AppSettings {
@@ -174,9 +191,10 @@ function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
 
   const candidate = input as Partial<ProjectMilestone>
   const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
-  const dueDate = typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : null
+  const dueDate =
+    typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : undefined
 
-  if (!title || !dueDate || typeof candidate.id !== 'string' || !candidate.id.trim()) {
+  if (!title || typeof candidate.id !== 'string' || !candidate.id.trim()) {
     return null
   }
 
@@ -198,7 +216,9 @@ function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
         ? candidate.status
         : 'pending',
     subtasks: Array.isArray(candidate.subtasks)
-      ? candidate.subtasks.flatMap((subtask) => normalizeProjectSubtask(subtask))
+      ? candidate.subtasks
+          .map((subtask) => normalizeProjectSubtask(subtask))
+          .filter((subtask): subtask is ProjectSubtask => subtask !== null)
       : []
   }
 }
@@ -215,7 +235,9 @@ function normalizeProject(input: unknown): Project[] {
   }
 
   const milestones = Array.isArray(candidate.milestones)
-    ? candidate.milestones.flatMap((milestone) => normalizeProjectMilestone(milestone))
+    ? candidate.milestones
+        .map((milestone) => normalizeProjectMilestone(milestone))
+        .filter((milestone): milestone is ProjectMilestone => milestone !== null)
     : []
   const completedMilestones = milestones.filter((milestone) => milestone.status === 'completed').length
   const progress =
@@ -264,6 +286,9 @@ function isLegacyAppSettings(value: unknown): value is AppSettings {
 
 export class SettingsStore {
   private readonly globalSettingsPath: string
+  private static readonly CORE_SETTINGS_FILE = 'settings.json'
+  private static readonly PROJECTS_FILE = 'projects.json'
+  private static readonly TASKS_FILE = 'tasks.json'
 
   constructor() {
     this.globalSettingsPath = path.join(app.getPath('userData'), 'settings.json')
@@ -296,12 +321,36 @@ export class SettingsStore {
   // ── Vault-specific settings ───────────────────────────────────────────────
 
   async readVault(vaultRoot: string): Promise<AppSettings> {
-    const settingsPath = await this.ensureVaultSettingsPath(vaultRoot)
+    const settingsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.CORE_SETTINGS_FILE)
+    const projectsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.PROJECTS_FILE)
+    const tasksPath = await this.getVaultDataPath(vaultRoot, SettingsStore.TASKS_FILE)
 
     try {
-      const raw = await fs.readFile(settingsPath, 'utf-8')
-      const parsed = JSON.parse(raw) as Partial<AppSettings>
-      return normalizeSettings({ ...parsed, lastVaultPath: vaultRoot })
+      const [coreParsed, projectsData, tasksData] = await Promise.all([
+        this.readJsonFile<VaultCoreSettings>(settingsPath),
+        this.readJsonFile<VaultProjectsData>(projectsPath),
+        this.readJsonFile<VaultTasksData>(tasksPath)
+      ])
+
+      const needsSplitMigration =
+        projectsData === null ||
+        tasksData === null ||
+        Boolean(coreParsed?.projects) ||
+        Boolean(coreParsed?.projectIcons) ||
+        Boolean(coreParsed?.calendarTasks)
+
+      const merged = normalizeSettings({
+        ...(coreParsed ?? {}),
+        projects: projectsData?.projects ?? coreParsed?.projects,
+        projectIcons: projectsData?.projectIcons ?? coreParsed?.projectIcons,
+        calendarTasks: tasksData?.calendarTasks ?? coreParsed?.calendarTasks,
+        lastVaultPath: vaultRoot
+      })
+
+      if (needsSplitMigration) {
+        await this.persistVaultFiles(vaultRoot, merged)
+      }
+      return merged
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('Failed to read vault settings:', error)
@@ -311,13 +360,13 @@ export class SettingsStore {
       const legacy = await this.readLegacyAppSettings()
       if (legacy) {
         const migrated = normalizeSettings({ ...legacy, lastVaultPath: vaultRoot })
-        await this.writeJsonFile(settingsPath, migrated)
+        await this.persistVaultFiles(vaultRoot, migrated)
         await this.writeGlobal({ lastVaultPath: legacy.lastVaultPath ?? vaultRoot })
         return migrated
       }
 
       const defaults = normalizeSettings({ lastVaultPath: vaultRoot })
-      await this.writeJsonFile(settingsPath, defaults)
+      await this.persistVaultFiles(vaultRoot, defaults)
       return defaults
     }
   }
@@ -325,8 +374,7 @@ export class SettingsStore {
   async updateVault(vaultRoot: string, next: AppSettingsUpdate): Promise<AppSettings> {
     const current = await this.readVault(vaultRoot)
     const merged = normalizeSettings({ ...current, ...next, lastVaultPath: vaultRoot })
-    const settingsPath = await this.ensureVaultSettingsPath(vaultRoot)
-    await this.writeJsonFile(settingsPath, merged)
+    await this.persistVaultFiles(vaultRoot, merged)
     return merged
   }
 
@@ -348,16 +396,77 @@ export class SettingsStore {
     }
   }
 
-  private async ensureVaultSettingsPath(vaultRoot: string): Promise<string> {
+  private async getVaultDataPath(vaultRoot: string, fileName: string): Promise<string> {
     const dir = await ensureVaultAppDir(vaultRoot)
-    return path.join(dir, 'settings.json')
+    return path.join(dir, fileName)
+  }
+
+  private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
+    const corePath = await this.getVaultDataPath(vaultRoot, SettingsStore.CORE_SETTINGS_FILE)
+    const projectsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.PROJECTS_FILE)
+    const tasksPath = await this.getVaultDataPath(vaultRoot, SettingsStore.TASKS_FILE)
+
+    const coreSettings: VaultCoreSettings = {
+      isSidebarCollapsed: settings.isSidebarCollapsed,
+      lastVaultPath: settings.lastVaultPath,
+      lastOpenedNotePath: settings.lastOpenedNotePath,
+      lastOpenedProjectId: settings.lastOpenedProjectId,
+      favoriteNotePaths: settings.favoriteNotePaths,
+      favoriteProjectIds: settings.favoriteProjectIds,
+      profile: settings.profile,
+      ai: settings.ai,
+      fontFamily: settings.fontFamily,
+      gridBoard: settings.gridBoard
+    }
+
+    const projectsData: VaultProjectsData = {
+      projects: settings.projects,
+      projectIcons: settings.projectIcons
+    }
+
+    const tasksData: VaultTasksData = {
+      calendarTasks: settings.calendarTasks
+    }
+
+    await Promise.all([
+      this.writeJsonFile(corePath, coreSettings),
+      this.writeJsonFile(projectsPath, projectsData),
+      this.writeJsonFile(tasksPath, tasksData)
+    ])
+  }
+
+  private async readJsonFile<T>(filePath: string): Promise<T | null> {
+    try {
+      const raw = await fs.readFile(filePath, 'utf-8')
+      return JSON.parse(raw) as T
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null
+      }
+      throw error
+    }
   }
 
   private async writeJsonFile(filePath: string, data: unknown): Promise<void> {
     const dir = path.dirname(filePath)
     const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`
     await fs.mkdir(dir, { recursive: true })
+    await this.backupExistingFile(filePath)
     await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')
     await fs.rename(tempPath, filePath)
+  }
+
+  private async backupExistingFile(filePath: string): Promise<void> {
+    try {
+      await fs.access(filePath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return
+      }
+      throw error
+    }
+
+    const backupPath = filePath.replace(/\.json$/i, '.bak.json')
+    await fs.copyFile(filePath, backupPath)
   }
 }

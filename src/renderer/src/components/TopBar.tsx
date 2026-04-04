@@ -28,6 +28,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   calendar: 'Calendar',
   settings: 'Settings',
   schedules: 'Schedules',
+  scheduleDocs: 'Schedule API Guide',
   agentHistory: 'Agent Chat'
 }
 

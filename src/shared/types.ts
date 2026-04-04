@@ -81,6 +81,13 @@ export interface SearchResult {
   snippet: string
 }
 
+export interface AppErrorEvent {
+  source: 'ipc' | 'main' | 'renderer'
+  message: string
+  stack?: string
+  channel?: string
+}
+
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type CalendarTaskType = 'meeting' | 'assignment' | 'review' | 'personal' | 'other'
 
@@ -141,7 +148,7 @@ export interface ProjectMilestone {
   title: string
   description?: string
   collapsed?: boolean
-  dueDate: string
+  dueDate?: string
   priority?: TaskPriority
   status: 'pending' | 'in-progress' | 'completed' | 'blocked'
   subtasks: ProjectSubtask[]
@@ -388,7 +395,7 @@ export interface RendererAgentToolsApi {
       projectName?: string
       title: string
       description?: string
-      dueDate: string
+      dueDate?: string
       collapsed?: boolean
     }) => Promise<ProjectMilestone>
     update: (input: {
@@ -398,7 +405,7 @@ export interface RendererAgentToolsApi {
       milestoneTitle?: string
       title?: string
       description?: string
-      dueDate?: string
+      dueDate?: string | null
       collapsed?: boolean
       status?: ProjectMilestone['status']
     }) => Promise<ProjectMilestone>
@@ -642,14 +649,6 @@ export interface RendererVaultApi {
     open: () => Promise<Maybe<VaultOpenResult>>
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
-  }
-  debug: {
-    appendNoteTrace: (entry: {
-      event: string
-      timestamp: string
-      details: Record<string, unknown>
-    }) => Promise<string>
-    getNoteTraceLogPath: () => Promise<string>
   }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>

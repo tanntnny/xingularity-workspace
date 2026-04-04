@@ -60,24 +60,30 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[]
 
 export function buildMilestoneCalendarEvents(projects: Project[]): CalendarEventInput[] {
   return projects.flatMap((project) =>
-    project.milestones
-      .filter((milestone) => Boolean(milestone.dueDate))
-      .map((milestone) => ({
-        id: getMilestoneCalendarEventId(project.id, milestone.id),
-        title: milestone.title,
-        start: milestone.dueDate,
-        allDay: true as const,
-        editable: true,
-        startEditable: true,
-        durationEditable: false,
-        extendedProps: {
-          source: 'milestone',
-          projectId: project.id,
-          projectName: project.name,
-          milestoneId: milestone.id,
-          completed: milestone.status === 'completed'
+    project.milestones.flatMap((milestone) => {
+      if (!milestone.dueDate) {
+        return []
+      }
+
+      return [
+        {
+          id: getMilestoneCalendarEventId(project.id, milestone.id),
+          title: milestone.title,
+          start: milestone.dueDate,
+          allDay: true as const,
+          editable: true,
+          startEditable: true,
+          durationEditable: false,
+          extendedProps: {
+            source: 'milestone',
+            projectId: project.id,
+            projectName: project.name,
+            milestoneId: milestone.id,
+            completed: milestone.status === 'completed'
+          }
         }
-      }))
+      ]
+    })
   )
 }
 

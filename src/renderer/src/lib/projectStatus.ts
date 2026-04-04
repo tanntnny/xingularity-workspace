@@ -185,5 +185,9 @@ function isOverdueOpenMilestone(milestone: ProjectMilestone, todayIso: string): 
     return false
   }
 
+  if (!milestone.dueDate) {
+    return false
+  }
+
   return milestone.dueDate < todayIso
 }
