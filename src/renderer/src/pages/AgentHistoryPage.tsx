@@ -72,6 +72,7 @@ interface AgentHistoryPageProps {
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
   notes: NoteListItem[]
   projects: Project[]
+  isRightPanelCollapsed?: boolean
 }
 
 interface MentionSuggestion {
@@ -212,7 +213,8 @@ export function AgentHistoryPage({
   vaultApi,
   pushToast,
   notes,
-  projects
+  projects,
+  isRightPanelCollapsed = false
 }: AgentHistoryPageProps): ReactElement {
   const [sessions, setSessions] = useState<AgentChatSession[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
@@ -993,7 +995,10 @@ export function AgentHistoryPage({
         </DocumentWorkspaceMainContent>
       </DocumentWorkspaceMain>
 
-      <DocumentWorkspacePanel style={{ ['--workspace-pane-width' as string]: '340px' }}>
+      <DocumentWorkspacePanel
+        className={isRightPanelCollapsed ? 'hidden' : 'flex'}
+        style={{ ['--workspace-pane-width' as string]: '340px' }}
+      >
         <DocumentWorkspacePanelHeader
           leading={
             <div>

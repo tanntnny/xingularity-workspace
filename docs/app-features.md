@@ -1,97 +1,173 @@
 # Xingularity App Features
 
-This document summarizes the current user-facing behavior in the desktop app.
+This document summarizes the current user-facing feature set of Xingularity based on the app code in `src/main/`, `src/shared/`, and `src/renderer/src/`.
 
-## Product Overview
+## Product Summary
 
-Xingularity is a local-first desktop workspace that combines note-taking, lightweight project management, task planning, scripted automations, and agent-assisted workflows.
+Xingularity is a local-first Electron workspace for:
 
-- Notes and attachments live in a local vault folder.
-- Search runs locally against a SQLite full-text index.
-- Projects, tasks, weekly plans, schedules, and agent state are managed by the desktop app.
-- The UI is organized around a persistent sidebar, a central workspace, and a contextual right panel.
+- Markdown notes stored in a user-selected vault
+- project planning with milestones and subtasks
+- calendar task management
+- weekly planning
+- automation schedules
+- agent chat and run history
+- visual knowledge and board-style views over workspace content
 
-## Navigation
+The app is split between:
 
-The current sidebar exposes these pages:
+- vault-backed content such as notes and attachments
+- app-managed structured state such as projects, tasks, weekly plans, schedules, and agent history
 
+## Navigation Model
+
+The sidebar currently exposes these pages:
+
+- Dashboard
+- Knowledge
 - Notes
 - Projects
+- Grid
 - Calendar
 - Weekly Plan
 - Schedules
 - Agent Chat
 - Settings
 
-The sidebar also includes:
+It also includes:
 
 - profile greeting
-- search palette entry point
-- keyboard shortcut hints
-- count badges for notes, projects, and incomplete calendar items
+- command palette entry point
+- count badges for notes, projects, and incomplete calendar tasks
+- keyboard shortcuts for page switching
 
-## Notes
+## Vault And Notes
 
-- Create, open, rename, and delete Markdown notes
-- Auto-save note edits
-- Edit and preview modes
-- Add and remove tags
-- Full-text search over title, body, and tags
-- `[[note]]` mention linking and mention navigation
-- Export note action
-- Favorites support
-- Attachment import and image paste support into the vault
+Core note features:
+
+- create, open, rename, move, and delete notes
+- create nested folders in the notes tree
+- edit notes as structured documents backed by Markdown-compatible storage
+- auto-save note edits
+- import notes into the vault
+- export individual notes
+- favorite notes
+- full-text search over indexed note content
+- `[[note]]` mention linking between notes
+- note preview and outline support
+- attachment import from files or pasted buffers
+
+Notes are shown in two ways:
+
+- flat list and preview flows
+- tree view with folders and protected system folders
+
+## Project-Backed Notes Tree
+
+The notes tree contains a managed `Projects/` root folder.
+
+Current behavior:
+
+- `Projects/` is system-managed and cannot be renamed or removed
+- each first-level folder inside `Projects/` mirrors one app project
+- direct project folders under `Projects/` cannot be renamed or removed from the tree
+- notes created inside a project folder automatically belong to that project
+- dragging a note into a project folder makes it part of that project
+- dragging a note between project folders reassigns it to the destination project
+- dragging a note out of a project folder removes the folder-based assignment
+- the project page note table and the notes tree stay in sync through folder membership
 
 ## Projects
 
-- Project list with search and favorites
-- Create and delete projects
-- Editable project name and summary
-- Health status tracking: `on-track`, `at-risk`, `blocked`, `completed`
-- Progress display
-- Milestone creation, editing, reordering state, and deletion
-- Subtask creation, completion, editing, and deletion
-- Project icon customization using shape, variant, and color
-- Related-note workflows through generated project tags
+Project management features include:
+
+- create, open, favorite, rename, and delete projects
+- editable project summary
+- project status tracking: `on-track`, `at-risk`, `blocked`, `completed`
+- automatic progress calculation from milestone and subtask state
+- milestone creation, editing, collapse state, and status tracking
+- subtask creation, editing, due dates, completion, and deletion
+- project icon customization using shape, variant, and color
+- export project summaries
+- project notes shown from the matching `Projects/<project>/...` folder subtree
+
+## Dashboard
+
+The dashboard acts as a workspace summary page.
+
+It currently surfaces:
+
+- active project health counts
+- recent active projects
+- current weekly-plan priorities
+- today-focus style overview for the current week
+
+## Knowledge View
+
+The knowledge page provides a graph view of note relationships.
+
+Features include:
+
+- graph generated from notes and note mentions
+- force-directed visual layout
+- zoom and pan support
+- click-through from graph nodes to notes
+
+## Grid View
+
+The grid page provides a spatial board for arranging workspace items.
+
+Supported board content:
+
+- notes
+- projects
+- freeform text cards
+
+Board capabilities include:
+
+- draggable positioned items
+- viewport pan and zoom persistence
+- per-item size, z-index, and text style state
 
 ## Calendar
 
-- Month view calendar workspace
-- Scheduled and unscheduled task management
-- Task completion, rename, delete, and reschedule flows
-- Priority and task-type metadata
-- Optional multi-day ranges and time values
-- Reminder support on tasks
-- Unified rendering for tasks, milestones, and subtasks
+Calendar and task features include:
+
+- month-based calendar workspace
+- scheduled and unscheduled task lists
+- create, rename, delete, reschedule, and complete tasks
+- optional task time and multi-day ranges
+- task priority and task type metadata
+- reminder support on tasks
+- unified calendar rendering of tasks, project milestones, and subtasks
 
 ## Weekly Plan
 
-- Create week plans from the sidebar
-- Select and browse prior weeks
-- Edit week focus and date range
-- Add ordered weekly priorities
-- Link priorities to projects, milestones, subtasks, or tasks
-- Track priority state: `planned`, `in_progress`, `done`
-- Capture end-of-week review notes for wins, misses, blockers, and next week
+Weekly planning features include:
 
-## Schedules
+- create and browse weekly plan records
+- define week focus and date range
+- add ordered weekly priorities
+- mark priorities as `planned`, `in_progress`, or `done`
+- link priorities to projects, milestones, subtasks, or calendar tasks
+- capture week review fields for wins, misses, blockers, and next week
 
-- Create automation jobs from the Schedules page
-- Supported triggers:
-  - manual
-  - daily
-  - every N minutes
-  - cron
-  - on app start
-- Supported runtimes:
-  - JavaScript
-  - Python
-- Review and assign explicit permissions per job
-- Run jobs immediately
-- Inspect run history, status, logs, and proposed actions
-- Apply or dismiss review-mode outputs
+## Schedules And Automations
 
-Supported automation action types currently include:
+The schedules page supports local automations.
+
+Current capabilities:
+
+- create and edit jobs
+- enable or disable jobs
+- run jobs manually
+- inspect run history, logs, status, and proposed actions
+- apply or dismiss review-mode actions
+- use JavaScript or Python runtimes
+- configure triggers: manual, daily, every N minutes, cron, on app start
+- assign permissions for notes, tasks, projects, calendar actions, network, and secrets
+
+Currently modeled script actions include:
 
 - create task
 - update task
@@ -99,40 +175,51 @@ Supported automation action types currently include:
 - append to note
 - create calendar event
 
-## Agent Chat
+## Agent Chat And History
 
-- Persistent chat sessions
-- `@` mention suggestions for notes and projects
-- Workspace context attached to prompts
-- Inline rendering for tool steps during a run
-- Session list and recent run history
-- Copy and refresh affordances in the chat UI
+Agent features are split across an interactive chat page and a run-history view.
 
-## Settings
+Agent chat supports:
 
-- Update profile name
-- Review and change vault location
-- Choose app font family
-- Save Mistral API key for assistant workflows
+- persistent chat sessions
+- note and project mentions in prompts
+- resolved context summaries attached to prompts
+- streamed assistant responses
+- tool-step rendering, including approval-required steps
+- explicit tool approval flows
 
-## Search And Command Access
+Agent history supports:
 
-- Global search palette entry point in the sidebar
-- Command palette shortcut: `Cmd/Ctrl + P`
-- Note and project discovery from the contextual side panels
+- persisted run records
+- run input, output, status, timing, model, and context inspection
 
-## Storage Summary
+## Settings And Workspace Setup
 
-- Vault-backed content:
-  - `notes/**/*.md`
-  - `attachments/**`
-  - `.appmeta/vault.json`
-  - `.appmeta/filemap.json`
-  - `.appmeta/index.sqlite`
-- App-managed state:
-  - settings
-  - projects
-  - calendar tasks
-  - weekly plans
-  - schedules
-  - agent sessions and history
+Settings currently support:
+
+- profile name
+- vault location management
+- app font family selection
+- Mistral API key storage
+- persisted UI state such as favorites and last-opened entities
+
+## Local-First Storage Model
+
+Current storage split:
+
+Vault-backed content:
+
+- `notes/**/*.md`
+- `attachments/**`
+- `.appmeta/vault.json`
+- `.appmeta/filemap.json`
+- `.appmeta/index.sqlite`
+
+App-managed state:
+
+- app settings
+- projects
+- calendar tasks
+- weekly plans
+- schedules and run records
+- agent chat sessions and run history

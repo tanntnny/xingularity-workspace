@@ -1,3 +1,4 @@
+import { createExtension } from '@blocknote/core'
 import { filterSuggestionItems } from '@blocknote/core/extensions'
 import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
@@ -6,6 +7,7 @@ import {
   SuggestionMenuController,
   useCreateBlockNote
 } from '@blocknote/react'
+import { Extension as TiptapExtension, InputRule } from '@tiptap/core'
 import {
   DragEvent,
   forwardRef,
@@ -30,6 +32,7 @@ import {
   type NoteEditorBlock,
   type NoteEditorSnapshot
 } from '../lib/noteEditorSession'
+import { NOTE_ARROW_REPLACEMENTS } from '../lib/noteArrowInputRules'
 import { extractNoteOutline, NoteOutlineItem } from '../lib/noteOutline'
 
 interface EditorProps {
@@ -50,6 +53,26 @@ export interface NoteEditorHandle {
   flushPendingChanges: () => Promise<NoteEditorSnapshot>
   blur: () => void
 }
+
+const noteArrowInputExtension = createExtension({
+  key: 'note-arrow-input',
+  tiptapExtensions: [
+    TiptapExtension.create({
+      name: 'note-arrow-input-rules',
+      addInputRules() {
+        return NOTE_ARROW_REPLACEMENTS.map(
+          ({ sequence, replacement }) =>
+            new InputRule({
+              find: new RegExp(`${sequence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+              handler: ({ state, range }) => {
+                state.tr.insertText(replacement, range.from, range.to)
+              }
+            })
+        )
+      }
+    })
+  ]
+})
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   {
@@ -113,6 +136,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         initialBlocks && initialBlocks.length > 0
           ? cloneNoteEditorBlocks(initialBlocks)
           : [{ type: 'paragraph' }],
+      extensions: [noteArrowInputExtension],
       uploadFile: async (file: File) => {
         const extension = file.name.includes('.') ? `.${file.name.split('.').pop()}` : '.png'
         return (await onPasteImageRef.current(file, extension)) || ''

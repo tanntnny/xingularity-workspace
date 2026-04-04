@@ -49,6 +49,7 @@ import { WorkspacePanelSection, WorkspacePanelSectionHeader } from '../component
 interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
+  isRightPanelCollapsed?: boolean
 }
 
 const PERMISSION_LABELS: Record<SchedulePermission, string> = {
@@ -209,7 +210,11 @@ function describeAction(action: ScriptAction): string {
   }
 }
 
-export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): ReactElement {
+export function SchedulesPage({
+  vaultApi,
+  pushToast,
+  isRightPanelCollapsed = false
+}: SchedulesPageProps): ReactElement {
   const [jobs, setJobs] = useState<ScheduleJob[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Partial<ScheduleJob> & { id?: string }>(emptyJob())
@@ -695,7 +700,9 @@ export function SchedulesPage({ vaultApi, pushToast }: SchedulesPageProps): Reac
         </DocumentWorkspaceMain>
 
         {/* ── Right: Schedule cards ───────────────────────────────────── */}
-        <DocumentWorkspacePanel className="border-l border-[var(--line)]">
+        <DocumentWorkspacePanel
+          className={`${isRightPanelCollapsed ? 'hidden' : 'flex'} border-l border-[var(--line)]`}
+        >
           <DocumentWorkspacePanelHeader
             leading={<span className="text-sm font-semibold text-[var(--text)]">Schedules</span>}
             actions={

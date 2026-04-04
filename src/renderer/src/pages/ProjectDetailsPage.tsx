@@ -8,13 +8,13 @@ import {
   FileText,
   Flag,
   Funnel,
-  Link,
   MoreHorizontal,
   Plus,
   Tag
 } from 'lucide-react'
 import { type NoteListItem } from '../../../shared/types'
-import { generateProjectTag } from '../../../shared/noteTags'
+import { isProjectTag } from '../../../shared/noteTags'
+import { getProjectFolderPath } from '../../../shared/projectFolders'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
@@ -78,8 +78,6 @@ interface ProjectDetailsPageProps {
   onCopySubtaskLink?: (milestoneId: string, subtaskId: string) => void
   onCreateProjectNote: () => void
   onOpenNote: (relPath: string) => void
-  onAddTagToNote?: (relPath: string, tag: string) => void
-  onRemoveTagFromNote?: (relPath: string, tag: string) => void
 }
 
 type ProjectNoteRow = {
@@ -120,9 +118,7 @@ export function ProjectDetailsPage({
   onCopyMilestoneLink,
   onCopySubtaskLink,
   onCreateProjectNote,
-  onOpenNote,
-  onAddTagToNote,
-  onRemoveTagFromNote
+  onOpenNote
 }: ProjectDetailsPageProps): ReactElement {
   const useNativeMenus = canUseNativeMenus()
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false)
@@ -134,8 +130,6 @@ export function ProjectDetailsPage({
   const [newSubtaskTitleByMilestoneId, setNewSubtaskTitleByMilestoneId] = useState<
     Record<string, string>
   >({})
-  const [isNotePickerOpen, setIsNotePickerOpen] = useState(false)
-  const [notePickerSearchQuery, setNotePickerSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'milestones' | 'notes'>('milestones')
   const [noteSort, setNoteSort] = useState<ProjectNoteSortState>({
     key: 'name',
@@ -149,30 +143,13 @@ export function ProjectDetailsPage({
   const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null)
   const milestoneRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
-  const projectTag = useMemo(() => generateProjectTag(project.name), [project.name])
+  const projectFolderPath = useMemo(() => getProjectFolderPath(project), [project])
 
-  const { projectNotes, availableNotesForAssociation } = useMemo(() => {
-    const linkedNotes: NoteListItem[] = []
-    const availableNotes: NoteListItem[] = []
-
-    for (const note of notes) {
-      if (note.tags.includes(projectTag)) {
-        linkedNotes.push(note)
-      } else {
-        availableNotes.push(note)
-      }
-    }
-
-    const query = notePickerSearchQuery.trim().toLowerCase()
-    const filteredAvailableNotes = query
-      ? availableNotes.filter((note) => note.name.toLowerCase().includes(query))
-      : availableNotes
-
-    return {
-      projectNotes: linkedNotes,
-      availableNotesForAssociation: filteredAvailableNotes.slice(0, 10)
-    }
-  }, [notes, notePickerSearchQuery, projectTag])
+  const projectNotes = useMemo(() => {
+    return notes.filter(
+      (note) => note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
+    )
+  }, [notes, projectFolderPath])
 
   useEffect(() => {
     const validIds = new Set(project.milestones.map((milestone) => milestone.id))
@@ -259,8 +236,8 @@ export function ProjectDetailsPage({
   const projectNoteRows = useMemo<ProjectNoteRow[]>(() => {
     return [...projectNotes]
       .map((note) => ({ relPath: note.relPath, name: note.name, tags: note.tags }))
-      .sort((left, right) => compareProjectNoteRows(left, right, projectTag, noteSort))
-  }, [noteSort, projectNotes, projectTag])
+      .sort((left, right) => compareProjectNoteRows(left, right, noteSort))
+  }, [noteSort, projectNotes])
 
   const visibleMilestones = useMemo(() => {
     return [...project.milestones]
@@ -287,25 +264,13 @@ export function ProjectDetailsPage({
   const healthSummary = useMemo(() => getProjectHealthSummary(project), [project])
 
   const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
-    const actionId = await showNativeMenu(
-      [
-        { id: 'open', label: 'Open note' },
-        ...(onRemoveTagFromNote
-          ? [{ type: 'separator' as const }, { id: 'unlink', label: 'Unlink' }]
-          : [])
-      ],
-      getElementMenuPosition(button)
-    )
+    const actionId = await showNativeMenu([{ id: 'open', label: 'Open note' }], getElementMenuPosition(button))
 
     if (!actionId) {
       return
     }
     if (actionId === 'open') {
       onOpenNote(relPath)
-      return
-    }
-    if (actionId === 'unlink' && onRemoveTagFromNote) {
-      onRemoveTagFromNote(relPath, projectTag)
     }
   }
 
@@ -459,7 +424,7 @@ export function ProjectDetailsPage({
                   <TableRow>
                     <TableCell colSpan={3}>
                       <div className="py-2 text-sm text-[var(--muted)]">
-                        No notes linked to this project yet. Use the rows below to create or link.
+                        No notes in this project folder yet.
                       </div>
                     </TableCell>
                   </TableRow>
@@ -478,7 +443,7 @@ export function ProjectDetailsPage({
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {row.tags
-                          .filter((tag) => tag !== projectTag)
+                          .filter((tag) => !isProjectTag(tag))
                           .slice(0, 3)
                           .map((tag) => (
                             <TagChip key={tag} tag={tag} />
@@ -512,78 +477,12 @@ export function ProjectDetailsPage({
                             <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
                               Open note
                             </DropdownMenuItem>
-                            {onRemoveTagFromNote ? (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => onRemoveTagFromNote(row.relPath, projectTag)}
-                                >
-                                  <Tag size={12} className="mr-2" />
-                                  Unlink
-                                </DropdownMenuItem>
-                              </>
-                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
                     </TableCell>
                   </TableRow>
                 ))}
-                {onAddTagToNote ? (
-                  <TableRow className="hover:bg-[var(--accent-soft)]/60">
-                    <TableCell colSpan={3} className="p-0">
-                      <Popover open={isNotePickerOpen} onOpenChange={setIsNotePickerOpen}>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="flex h-full w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                          >
-                            <Link size={14} className="shrink-0" />
-                            <span>Link existing note</span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          className="w-72 border border-[var(--line)] bg-[var(--panel)] p-2 text-[var(--text)] shadow-xl"
-                        >
-                          <input
-                            type="text"
-                            placeholder="Search notes..."
-                            value={notePickerSearchQuery}
-                            onChange={(event) => setNotePickerSearchQuery(event.target.value)}
-                            className="mb-2 w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                            autoFocus
-                          />
-                          {availableNotesForAssociation.length === 0 ? (
-                            <p className="px-2 py-3 text-center text-xs text-[var(--muted)]">
-                              {notePickerSearchQuery.trim()
-                                ? 'No matching notes found'
-                                : 'All notes are already linked'}
-                            </p>
-                          ) : (
-                            <div className="max-h-48 overflow-y-auto">
-                              {availableNotesForAssociation.map((note) => (
-                                <button
-                                  key={note.relPath}
-                                  type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--accent-soft)]"
-                                  onClick={() => {
-                                    onAddTagToNote(note.relPath, projectTag)
-                                    setIsNotePickerOpen(false)
-                                    setNotePickerSearchQuery('')
-                                  }}
-                                >
-                                  <FileText size={14} className="shrink-0 text-[var(--muted)]" />
-                                  <span className="truncate">{note.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </PopoverContent>
-                      </Popover>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">
                   <TableCell colSpan={3} className="p-0">
                     <button
@@ -1222,15 +1121,12 @@ interface ProjectMilestoneSortState {
 function compareProjectNoteRows(
   left: ProjectNoteRow,
   right: ProjectNoteRow,
-  projectTag: string,
   sort: ProjectNoteSortState
 ): number {
   const factor = sort.direction === 'asc' ? 1 : -1
 
   if (sort.key === 'tags') {
-    const tagLabelResult = buildTagSortLabel(left.tags, projectTag).localeCompare(
-      buildTagSortLabel(right.tags, projectTag)
-    )
+    const tagLabelResult = buildTagSortLabel(left.tags).localeCompare(buildTagSortLabel(right.tags))
     if (tagLabelResult !== 0) {
       return tagLabelResult * factor
     }
@@ -1319,9 +1215,9 @@ function compareNullableText(left?: string, right?: string): number {
   return 0
 }
 
-function buildTagSortLabel(tags: string[], projectTag: string): string {
+function buildTagSortLabel(tags: string[]): string {
   return tags
-    .filter((tag) => tag !== projectTag)
+    .filter((tag) => !isProjectTag(tag))
     .sort((left, right) => left.localeCompare(right))
     .join('|')
 }

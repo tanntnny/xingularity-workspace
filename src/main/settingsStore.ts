@@ -1,7 +1,14 @@
 import { app } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { AppSettings, AppSettingsUpdate } from '../shared/types'
+import { createRandomProjectIcon } from '../shared/projectIcons'
+import {
+  AppSettings,
+  AppSettingsUpdate,
+  Project,
+  ProjectMilestone,
+  ProjectSubtask
+} from '../shared/types'
 import { ensureVaultAppDir } from './vaultData'
 
 interface GlobalSettings {
@@ -59,7 +66,9 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       ? parsed.calendarTasks
       : defaults.calendarTasks,
     projectIcons: parsed.projectIcons ?? defaults.projectIcons,
-    projects: Array.isArray(parsed.projects) ? parsed.projects : defaults.projects,
+    projects: Array.isArray(parsed.projects)
+      ? parsed.projects.flatMap((project) => normalizeProject(project))
+      : defaults.projects,
     gridBoard:
       parsedGridBoard &&
       typeof parsedGridBoard === 'object' &&
@@ -126,6 +135,125 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       ? parsed.favoriteProjectIds.filter((item): item is string => typeof item === 'string')
       : defaults.favoriteProjectIds
   }
+}
+
+function normalizeProjectSubtask(input: unknown): ProjectSubtask | null {
+  if (typeof input !== 'object' || input === null) {
+    return null
+  }
+
+  const candidate = input as Partial<ProjectSubtask>
+  const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
+  const createdAt =
+    typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
+      ? candidate.createdAt
+      : new Date().toISOString()
+
+  if (!title || typeof candidate.id !== 'string' || !candidate.id.trim()) {
+    return null
+  }
+
+  return {
+    id: candidate.id,
+    title,
+    description: typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
+    completed: Boolean(candidate.completed),
+    priority:
+      candidate.priority === 'low' || candidate.priority === 'medium' || candidate.priority === 'high'
+        ? candidate.priority
+        : undefined,
+    createdAt,
+    dueDate: typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : undefined
+  }
+}
+
+function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
+  if (typeof input !== 'object' || input === null) {
+    return null
+  }
+
+  const candidate = input as Partial<ProjectMilestone>
+  const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
+  const dueDate = typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : null
+
+  if (!title || !dueDate || typeof candidate.id !== 'string' || !candidate.id.trim()) {
+    return null
+  }
+
+  return {
+    id: candidate.id,
+    title,
+    description: typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
+    collapsed: typeof candidate.collapsed === 'boolean' ? candidate.collapsed : undefined,
+    dueDate,
+    priority:
+      candidate.priority === 'low' || candidate.priority === 'medium' || candidate.priority === 'high'
+        ? candidate.priority
+        : undefined,
+    status:
+      candidate.status === 'pending' ||
+      candidate.status === 'in-progress' ||
+      candidate.status === 'completed' ||
+      candidate.status === 'blocked'
+        ? candidate.status
+        : 'pending',
+    subtasks: Array.isArray(candidate.subtasks)
+      ? candidate.subtasks.flatMap((subtask) => normalizeProjectSubtask(subtask))
+      : []
+  }
+}
+
+function normalizeProject(input: unknown): Project[] {
+  if (typeof input !== 'object' || input === null) {
+    return []
+  }
+
+  const candidate = input as Partial<Project>
+  const name = typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : null
+  if (!name || typeof candidate.id !== 'string' || !candidate.id.trim()) {
+    return []
+  }
+
+  const milestones = Array.isArray(candidate.milestones)
+    ? candidate.milestones.flatMap((milestone) => normalizeProjectMilestone(milestone))
+    : []
+  const completedMilestones = milestones.filter((milestone) => milestone.status === 'completed').length
+  const progress =
+    typeof candidate.progress === 'number' && Number.isFinite(candidate.progress)
+      ? Math.max(0, Math.min(100, candidate.progress))
+      : milestones.length > 0
+        ? Math.round((completedMilestones / milestones.length) * 100)
+        : 0
+
+  return [
+    {
+      id: candidate.id,
+      name,
+      summary: typeof candidate.summary === 'string' ? candidate.summary.trim() : '',
+      folderPath: typeof candidate.folderPath === 'string' && candidate.folderPath.trim() ? candidate.folderPath : undefined,
+      status:
+        candidate.status === 'on-track' ||
+        candidate.status === 'at-risk' ||
+        candidate.status === 'blocked' ||
+        candidate.status === 'completed'
+          ? candidate.status
+          : 'on-track',
+      updatedAt:
+        typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+          ? candidate.updatedAt
+          : new Date().toISOString(),
+      progress,
+      milestones,
+      icon:
+        candidate.icon &&
+        typeof candidate.icon === 'object' &&
+        (candidate.icon as Project['icon']).shape &&
+        (candidate.icon as Project['icon']).variant &&
+        typeof (candidate.icon as Project['icon']).color === 'string'
+          ? (candidate.icon as Project['icon'])
+          : createRandomProjectIcon(name)
+    }
+  ]
 }
 
 function isLegacyAppSettings(value: unknown): value is AppSettings {

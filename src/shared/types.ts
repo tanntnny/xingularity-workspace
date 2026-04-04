@@ -55,6 +55,9 @@ interface NoteTreeEntryBase {
   id: string
   relPath: string
   name: string
+  isProtected?: boolean
+  protectionKind?: import('./projectFolders').ProjectTreeProtectionKind | null
+  projectId?: string
 }
 
 export interface NoteTreeFolder extends NoteTreeEntryBase {

@@ -323,6 +323,27 @@ async function getEditorTextGap(page: Page, upperText: string, lowerText: string
 }
 
 test.describe('note page block editor switching', () => {
+  test('converts typed ASCII arrows into connected arrow characters', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.xnote')
+      await replaceEditorContent(page, ['Flow -> <- => <= <-> <=> != >= === !=='])
+
+      await expect
+        .poll(() => getVisibleNoteBlocks(page), { timeout: 15_000 })
+        .toEqual([{ type: 'paragraph', text: 'Flow → ← ⇒ ⇐ ↔ ⇔ ≠ ≥ ≡ ≢' }])
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Flow → ← ⇒ ⇐ ↔ ⇔ ≠ ≥ ≡ ≢')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('saves the current note when switching to another page after waiting', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)

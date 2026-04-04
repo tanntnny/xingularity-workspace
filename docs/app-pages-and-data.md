@@ -1,213 +1,684 @@
-# Xingularity Pages And Data Model
+# Xingularity Pages And Data Models
 
-This reference maps the current pages to the main data they read and mutate.
+This document describes the main product domains, page responsibilities, and shared data structures used by the app.
 
-## App Map
+## Architecture Summary
 
-The sidebar page ids are defined in [`src/renderer/src/components/AppSidebar.tsx`](/Users/tanny/Documents/Projects/Beacon/Xingularity/src/renderer/src/components/AppSidebar.tsx):
+Xingularity is organized into three layers:
 
-- `notes`
-- `projects`
-- `calendar`
-- `weeklyPlan`
-- `schedules`
-- `agentHistory`
-- `settings`
+- `src/main/`: Electron main-process services, vault access, indexing, schedules, reminders, persistence, and IPC handlers
+- `src/preload/`: secure renderer bridge that exposes the allowed API surface to the UI
+- `src/renderer/src/`: React application pages, components, local UI state, and page workflows
 
-Most pages use the shared document workspace layout:
+Cross-process contracts live in `src/shared/`, especially:
 
-- sidebar for app navigation
-- main workspace for page content
-- right panel for related lists and actions
+- `src/shared/types.ts`
+- `src/shared/scheduleTypes.ts`
+- `src/shared/ipc.ts`
+- `src/shared/projectFolders.ts`
 
-## Shared State
+## Storage Boundaries
 
-The renderer centers most persistent UI state around `AppSettings` in [`src/shared/types.ts`](/Users/tanny/Documents/Projects/Beacon/Xingularity/src/shared/types.ts).
+The app uses two persistence models.
+
+### Vault-backed content
+
+User workspace content lives in a selected local vault:
+
+- `notes/**/*.md`
+- `attachments/**`
+- `.appmeta/vault.json`
+- `.appmeta/filemap.json`
+- `.appmeta/index.sqlite`
+
+This layer is responsible for:
+
+- note files
+- folder structure
+- attachments
+- note indexing and search metadata
+
+### App-managed structured state
+
+Application state is persisted outside the note bodies and exposed through settings, weekly plan, schedules, and agent APIs.
+
+Main app-managed domains:
+
+- app settings
+- projects
+- calendar tasks
+- grid board state
+- weekly plans
+- schedule jobs and run records
+- agent chat sessions
+- agent run history
+
+## Top-Level App Settings
+
+The renderer anchors most persistent state on `AppSettings`.
 
 ### `AppSettings`
 
+Defined in `src/shared/types.ts`.
+
+Key fields:
+
 - `isSidebarCollapsed`: sidebar collapse state
 - `lastVaultPath`: last opened vault root
-- `lastOpenedNotePath`: last active note
-- `lastOpenedProjectId`: last active project
+- `lastOpenedNotePath`: last selected note path
+- `lastOpenedProjectId`: last selected project
 - `favoriteNotePaths`: pinned notes
 - `favoriteProjectIds`: pinned projects
-- `profile.name`: display name used across the app
-- `ai.mistralApiKey`: provider key for assistant workflows
-- `fontFamily`: active app font stack
-- `calendarTasks`: task and reminder data
-- `projectIcons`: icon overrides by project id
-- `projects`: stored project collection
+- `profile.name`: display name shown in the app shell
+- `ai.mistralApiKey`: model provider key
+- `fontFamily`: active UI font family
+- `calendarTasks`: persisted task collection
+- `projectIcons`: icon overrides keyed by project id
+- `projects`: persisted project collection
+- `gridBoard`: saved spatial board state
 
-Related shared entities include:
+### `AppSettingsUpdate`
 
-- `VaultInfo`
-- `NoteListItem`
-- `NoteRecord`
-- `SearchResult`
-- `Project`
-- `CalendarTask`
+Partial update payload used by the renderer to patch settings without resending the full object.
+
+## Vault Domain Models
+
+### `VaultInfo`
+
+Paths that define the active vault:
+
+- `rootPath`
+- `notesPath`
+- `attachmentsPath`
+
+### `VaultOpenResult`
+
+Returned when opening or creating a vault:
+
+- `info: VaultInfo`
+- `notes: NoteListItem[]`
+
+### `NoteMetadata`
+
+Per-note metadata:
+
+- `title`
+- `tags`
+- `created`
+- `updated`
+
+### `StoredNoteDocument`
+
+Structured note body persisted through the editor:
+
+- `version`
+- `tags`
+- `blocks`
+
+### `NoteRecord`
+
+Full note payload:
+
+- `id`
+- `relPath`
+- `metadata`
+- `body`
+
+### `NoteListItem`
+
+Primary note list/tree/search source item:
+
+- `relPath`
+- `name`
+- `dir`
+- `createdAt`
+- `updatedAt`
+- `tags`
+- `bodyPreview`
+- `mentionTargets`
+
+### `NoteTreeNode`
+
+Recursive folder and note tree model used by the notes tree view.
+
+Shared base fields:
+
+- `id`
+- `relPath`
+- `name`
+- `isProtected`
+- `protectionKind`
+- `projectId`
+
+Variants:
+
+- `NoteTreeFolder`
+- `NoteTreeFile`
+
+Protected tree behavior is driven by `src/shared/projectFolders.ts`.
+
+## Project Domain Models
+
+Projects are stored in app settings and synchronized into the notes tree through the managed `Projects/` folder.
+
+### `Project`
+
+Main project record:
+
+- `id`
+- `name`
+- `summary`
+- `folderPath`
+- `status`
+- `updatedAt`
+- `progress`
+- `milestones`
+- `icon`
+
+Project status values:
+
+- `on-track`
+- `at-risk`
+- `blocked`
+- `completed`
+
+### `ProjectMilestone`
+
+- `id`
+- `title`
+- `description`
+- `collapsed`
+- `dueDate`
+- `priority`
+- `status`
+- `subtasks`
+
+Milestone status values:
+
+- `pending`
+- `in-progress`
+- `completed`
+- `blocked`
+
+### `ProjectSubtask`
+
+- `id`
+- `title`
+- `description`
+- `completed`
+- `priority`
+- `createdAt`
+- `dueDate`
+
+### `ProjectIconStyle`
+
+- `shape`
+- `variant`
+- `color`
+
+Supported icon fields are defined by:
+
+- `ProjectIconShape`
+- `ProjectIconVariant`
+
+### Project folder synchronization
+
+Project note membership is currently folder-based, not tag-assignment-based in the project page.
+
+Shared helpers in `src/shared/projectFolders.ts` define:
+
+- `PROJECTS_ROOT_FOLDER_NAME`
+- `getProjectsRootPath()`
+- `getProjectFolderPath(project)`
+- `isProtectedProjectTreePath(relPath, projects)`
+- `resolveProjectByFolderPath(relPath, projects)`
+
+Current rule:
+
+- notes under `Projects/<project>/...` belong to that project in the UI
+
+## Calendar Domain Models
+
+### `CalendarTask`
+
+Task record used by the calendar and unscheduled list:
+
+- `id`
+- `title`
+- `date`
+- `endDate`
+- `completed`
+- `createdAt`
+- `priority`
+- `taskType`
+- `reminders`
+- `time`
+- `automationSource`
+- `automationSourceKey`
+
+### `TaskReminder`
+
+- `id`
+- `type`
+- `value`
+- `enabled`
+
+Reminder types:
+
+- `minutes`
+- `hours`
+- `days`
+
+### `CalendarItem`
+
+Unified render model for calendar views:
+
+- `id`
+- `type`
+- `title`
+- `date`
+- `completed`
+- `priority`
+- `projectId`
+- `projectName`
+- `milestoneId`
+- `milestoneName`
+
+Item types:
+
+- `task`
+- `milestone`
+- `subtask`
+
+## Weekly Plan Domain Models
+
+### `WeeklyPlanState`
+
+Root weekly-plan store:
+
+- `weeks`
+- `priorities`
+- `reviews`
+
+### `WeeklyPlanWeek`
+
+- `id`
+- `startDate`
+- `endDate`
+- `focus`
+- `createdAt`
+- `updatedAt`
+
+### `WeeklyPlanPriority`
+
+- `id`
+- `weekId`
+- `title`
+- `status`
+- `order`
+- `linkedProjectId`
+- `linkedMilestoneId`
+- `linkedSubtaskId`
+- `linkedTaskId`
+- `createdAt`
+- `updatedAt`
+
+Priority status values:
+
+- `planned`
+- `in_progress`
+- `done`
+
+### `WeeklyPlanReview`
+
+- `id`
+- `weekId`
+- `wins`
+- `misses`
+- `blockers`
+- `nextWeek`
+- `createdAt`
+- `updatedAt`
+
+## Grid Domain Models
+
+### `GridBoardState`
+
+- `viewport`
+- `items`
+
+### `GridBoardViewport`
+
+- `x`
+- `y`
+- `zoom`
+
+### `GridBoardItem`
+
+- `id`
+- `kind`
+- `noteRelPath`
+- `projectId`
+- `textContent`
+- `textStyle`
+- `position`
+- `size`
+- `zIndex`
+
+Board item kinds:
+
+- `note`
+- `project`
+- `text`
+
+### `GridTextStyle`
+
+- `fontSize`
+- `isBold`
+- `isItalic`
+- `isUnderline`
+- `textAlign`
+- `color`
+
+## Search And Knowledge Models
+
+### `SearchResult`
+
+Returned by local search:
+
+- `id`
+- `relPath`
+- `title`
+- `tags`
+- `updated`
+- `snippet`
+
+### Note mention graph inputs
+
+The knowledge page uses `NoteListItem[]`, especially:
+
+- `relPath`
+- `name`
+- `mentionTargets`
+
+Those mention relationships are transformed into graph nodes and links in renderer code.
+
+## Schedule Domain Models
+
+Schedules are defined in `src/shared/scheduleTypes.ts`.
+
+### `ScheduleJob`
+
+- `id`
+- `name`
+- `enabled`
+- `trigger`
+- `runtime`
+- `code`
+- `permissions`
+- `outputMode`
+- `createdAt`
+- `updatedAt`
+- `lastRunAt`
+- `nextRunAt`
+- `lastStatus`
+
+### `TriggerConfig`
+
+Shared trigger shape with fields based on trigger type:
+
+- `type`
+- `time`
+- `timezone`
+- `intervalMinutes`
+- `expression`
+
+Trigger types:
+
+- `manual`
+- `daily`
+- `every`
+- `cron`
+- `on_app_start`
+
+### `ScheduleRunRecord`
+
+- `id`
+- `jobId`
+- `startedAt`
+- `endedAt`
+- `status`
+- `stdout`
+- `stderr`
+- `errorMessage`
+- `proposedActions`
+- `appliedActions`
+
+Run status values:
+
+- `idle`
+- `running`
+- `success`
+- `error`
+- `review`
+- `cancelled`
+
+### `ScriptAction`
+
+Supported automation outputs:
+
+- `task.create`
+- `task.update`
+- `note.create`
+- `note.append`
+- `calendar.event.create`
+
+### `SchedulePermission`
+
+Permission scopes available to jobs:
+
+- `network`
+- `readNotes`
+- `createNotes`
+- `updateNotes`
+- `createTasks`
+- `updateTasks`
+- `createCalendarItems`
+- `updateProjects`
+- `useSecrets`
+
+## Agent Domain Models
+
+### `AgentChatSession`
+
+- `id`
+- `title`
+- `titleMode`
+- `createdAt`
+- `updatedAt`
+- `messages`
+
+### `AgentChatMessageRecord`
+
+- `id`
+- `role`
+- `content`
+- `createdAt`
+- `mentions`
+- `contexts`
+- `toolSteps`
+- `model`
+
+### `AgentChatMentionRef`
+
+- `id`
+- `kind`
+- `label`
+- `notePath`
+- `projectId`
+
+Mention kinds:
+
+- `note`
+- `project`
+
+### `AgentChatContextSummary`
+
+Resolved context attached to prompts:
+
+- `id`
+- `kind`
+- `label`
+- `detail`
+
+### `AgentChatToolStep`
+
+- `id`
+- `toolName`
+- `status`
+- `inputSummary`
+- `outputSummary`
+- `approvalRequest`
+
+Tool step status values:
+
+- `completed`
+- `error`
+- `approval-required`
+- `rejected`
+
+### `AgentRunRecord`
+
+- `id`
+- `agentName`
+- `source`
+- `startedAt`
+- `endedAt`
+- `status`
+- `input`
+- `output`
+- `errorMessage`
+- `model`
+- `context`
+
+## Import And Export Models
+
+### `ImportedNoteResult`
+
+- `sourceName`
+- `relPath`
+- `renamed`
+
+### `FailedNoteImportResult`
+
+- `sourceName`
+- `error`
+
+### `NoteImportResult`
+
+- `imported`
+- `failed`
+
+## Page Responsibilities
+
+### Dashboard
+
+Reads primarily:
+
+- `Project[]`
+- current `WeeklyPlanWeek`
+- current `WeeklyPlanPriority[]`
+- `CalendarTask[]`
+
+### Knowledge
+
+Reads:
+
+- `NoteListItem[]`
+
+Outputs:
+
+- graph visualization over note mention relationships
+
+### Notes
+
+Reads and mutates:
+
+- note list and tree
+- note documents
+- search results
+- favorites
+- attachments
+
+### Projects
+
+Reads and mutates:
+
+- `Project[]`
+- `ProjectMilestone[]`
+- `ProjectSubtask[]`
+- project notes inferred from `Projects/<project>/...`
+
+### Grid
+
+Reads and mutates:
+
+- `GridBoardState`
+- note and project references used by board items
+
+### Calendar
+
+Reads and mutates:
+
+- `CalendarTask[]`
+- milestone-derived and subtask-derived calendar items
+
+### Weekly Plan
+
+Reads and mutates:
+
 - `WeeklyPlanState`
+- links to projects, milestones, subtasks, and tasks
 
-## Notes Page
+### Schedules
 
-Primary responsibilities:
+Reads and mutates:
 
-- browse notes
-- search notes
-- edit and preview the active note
-- favorite, export, and delete notes
+- `ScheduleJob[]`
+- `ScheduleRunRecord[]`
 
-Main data types:
+### Agent Chat
 
-- `NoteListItem`: list/sidebar item metadata
-- `NoteMetadata`: title, tags, and optional timestamps
-- `NoteRecord`: full note payload
-- `SearchResult`: full-text search result rows
+Reads and mutates:
 
-Key behaviors:
+- `AgentChatSession[]`
+- `AgentRunRecord[]`
 
-- notes persist as Markdown files under `notes/`
-- tags come from frontmatter and inline `#tags`
-- note mentions use normalized `[[note]]` linking
+### Settings
 
-## Projects Page
+Reads and mutates:
 
-Primary responsibilities:
-
-- browse and search projects
-- edit project details
-- manage milestones and subtasks
-- favorite or delete the active project
-
-Main data types:
-
-- `Project`
-- `ProjectMilestone`
-- `ProjectSubtask`
-- `ProjectIconStyle`
-
-Key behaviors:
-
-- projects are stored in app settings, not as vault files
-- related notes are inferred using generated project tags
-- milestones and subtasks feed the calendar and weekly plan linking flows
-
-## Calendar Page
-
-Primary responsibilities:
-
-- browse month view
-- add and edit tasks
-- manage unscheduled tasks
-- review work coming from projects and milestones
-
-Main data types:
-
-- `CalendarTask`
-- `TaskReminder`
-- `CalendarItem`
-
-Key behaviors:
-
-- tasks support optional date, end date, time, type, and reminders
-- unified calendar items combine tasks, milestones, and subtasks for rendering
-- tasks are persisted through app settings
-
-## Weekly Plan Page
-
-Primary responsibilities:
-
-- create and select week plans
-- define weekly focus
-- manage ordered priorities
-- link priorities to existing projects, milestones, subtasks, or tasks
-- capture review notes
-
-Main data types:
-
-- `WeeklyPlanWeek`
-- `WeeklyPlanPriority`
-- `WeeklyPlanReview`
-- `WeeklyPlanState`
-
-Key behaviors:
-
-- week records are managed through dedicated weekly-plan IPC handlers
-- priorities can point at one linked entity at a time
-- review content is stored separately from the week header metadata
-
-## Schedules Page
-
-Primary responsibilities:
-
-- create and edit automation jobs
-- configure runtime, trigger, permissions, and output mode
-- run jobs and inspect results
-- apply or dismiss reviewed actions
-
-Main data types from [`src/shared/scheduleTypes.ts`](/Users/tanny/Documents/Projects/Beacon/Xingularity/src/shared/scheduleTypes.ts):
-
-- `ScheduleJob`
-- `ScheduleJobInput`
-- `ScheduleRunRecord`
-- `TriggerConfig`
-- `ScriptAction`
-
-Key behaviors:
-
-- job triggers support manual, daily, interval, cron, and app-start execution
-- runtimes support JavaScript and Python
-- permission scopes gate access to network, notes, tasks, calendar items, projects, and secrets
-- run records store stdout, stderr, errors, proposed actions, and applied actions
-
-## Agent Chat Page
-
-Primary responsibilities:
-
-- manage chat sessions
-- send messages with workspace mentions
-- render live tool activity
-- inspect recent agent runs
-
-Main data types:
-
-- `AgentChatSession`
-- `AgentChatMessageRecord`
-- `AgentChatMentionRef`
-- `AgentRunRecord`
-
-Key behaviors:
-
-- mentions are resolved from notes and projects
-- chat sessions persist separately from run telemetry
-- live responses may include structured tool-step output
-
-## Settings Page
-
-Primary responsibilities:
-
-- edit profile name
-- review and change vault location
-- select app font
-- save the Mistral API key
-
-Main data sources:
-
-- `AppSettings.profile`
-- `AppSettings.fontFamily`
-- `AppSettings.ai.mistralApiKey`
+- `AppSettings`
 - `VaultInfo`
 
 ## IPC Surface
 
-Primary renderer entry points are defined in [`src/shared/ipc.ts`](/Users/tanny/Documents/Projects/Beacon/Xingularity/src/shared/ipc.ts):
+IPC constants are defined in `src/shared/ipc.ts`.
+
+Main groups:
 
 - vault lifecycle
-- note CRUD and export
+- desktop helpers
+- debug helpers
+- file CRUD and export
 - search
 - attachments
+- AI note completion
+- agent chat
+- agent history
 - settings
 - schedules
 - weekly plan
-- agent tools and agent chat flows
+- agent tools
+
+The preload layer exposes these capabilities to the renderer through `RendererVaultApi`.

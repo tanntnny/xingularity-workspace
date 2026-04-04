@@ -56,8 +56,12 @@ import {
   stripNoteExtension,
   withNoteExtension
 } from '../../shared/noteDocument'
-import { normalizeTag, generateProjectTag } from '../../shared/noteTags'
+import { normalizeTag } from '../../shared/noteTags'
 import { normalizeMentionTarget } from '../../shared/noteMentions'
+import {
+  getProjectFolderPath,
+  isProtectedProjectTreePath
+} from '../../shared/projectFolders'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
@@ -571,6 +575,7 @@ function App(): ReactElement {
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState('')
   const [commandPaletteLoading, setCommandPaletteLoading] = useState(false)
   const [commandPaletteAiLoading, setCommandPaletteAiLoading] = useState(false)
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
   const lastPersistedNoteRef = useRef<{ relPath: string; fingerprint: string } | null>(null)
@@ -601,6 +606,8 @@ function App(): ReactElement {
       activePage === 'projects' ||
       activePage === 'calendar' ||
       activePage === 'weeklyPlan')
+  const hasRightPanel =
+    showWorkspacePanel || activePage === 'schedules' || activePage === 'agentHistory'
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
@@ -1585,6 +1592,16 @@ function App(): ReactElement {
         return
       }
 
+      const isRightPanelShortcut = event.altKey && event.key.toLowerCase() === 'b'
+      if (isRightPanelShortcut) {
+        if (!hasRightPanel) {
+          return
+        }
+        event.preventDefault()
+        setIsRightPanelCollapsed((current) => !current)
+        return
+      }
+
       if (!isModifierPressed) {
         return
       }
@@ -1637,7 +1654,13 @@ function App(): ReactElement {
 
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [hasVault, navigateToPage, setCommandPaletteInitialQuery, setCommandPaletteOpen])
+  }, [
+    hasRightPanel,
+    hasVault,
+    navigateToPage,
+    setCommandPaletteInitialQuery,
+    setCommandPaletteOpen
+  ])
 
   useEffect(() => {
     const previousActivePage = previousActivePageRef.current
@@ -2249,7 +2272,7 @@ function App(): ReactElement {
     }
 
     void loadNoteTree()
-  }, [loadNoteTree, notes, vault, vaultApi])
+  }, [loadNoteTree, notes, projects, vault, vaultApi])
 
   useEffect(() => {
     if (!currentNotePath) {
@@ -2298,10 +2321,10 @@ function App(): ReactElement {
     }
 
     try {
-      const projectTag = generateProjectTag(projectName)
-      const relPath = await vaultApi.files.createNoteWithTags(buildDefaultNoteName(), [projectTag])
-      const nextNotes = await vaultApi.files.listNotes()
-      setNotes(nextNotes)
+      const relPath = await createNoteAtPathWithFallback(
+        getProjectFolderPath({ name: projectName })
+      )
+      await refreshNotesAndTree()
       await navigateToPage('notes')
       await openNote(relPath)
       pushToast('success', 'Project note created')
@@ -2611,54 +2634,6 @@ function App(): ReactElement {
     scheduleCurrentNoteAutosave()
   }
 
-  const addTagToNote = async (relPath: string, rawTag: string): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    const normalized = normalizeTag(rawTag)
-    if (!normalized) {
-      pushToast('error', 'Tag can use letters, numbers, dash, underscore, and colons')
-      return
-    }
-
-    try {
-      const document = await vaultApi.files.readNoteDocument(relPath)
-      if (document.tags.includes(normalized)) {
-        pushToast('info', `Tag #${normalized} already exists on this note`)
-        return
-      }
-      await vaultApi.files.writeNoteDocument(relPath, {
-        ...document,
-        tags: [...document.tags, normalized]
-      })
-      const nextNotes = await vaultApi.files.listNotes()
-      setNotes(nextNotes)
-      pushToast('success', `Added tag #${normalized}`)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
-  const removeTagFromNote = async (relPath: string, tag: string): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    try {
-      const document = await vaultApi.files.readNoteDocument(relPath)
-      await vaultApi.files.writeNoteDocument(relPath, {
-        ...document,
-        tags: document.tags.filter((t) => t !== tag)
-      })
-      const nextNotes = await vaultApi.files.listNotes()
-      setNotes(nextNotes)
-      pushToast('success', `Removed tag #${tag}`)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
   const findByTag = (tag: string): void => {
     void runSearch(tag)
   }
@@ -2809,8 +2784,12 @@ function App(): ReactElement {
       return
     }
 
+    const projectFolderPath = getProjectFolderPath(project)
     const projectNotes = notes
-      .filter((note) => note.tags.includes(generateProjectTag(project.name)))
+      .filter(
+        (note) =>
+          note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
+      )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 
     try {
@@ -2852,7 +2831,7 @@ function App(): ReactElement {
       const projectNotesSection =
         noteSections.length > 0
           ? noteSections.join('\n\n---\n\n')
-          : '_No project note linked to this project yet._'
+          : '_No project note in this project folder yet._'
 
       const exportContent = [
         `# ${project.name}`,
@@ -3668,8 +3647,15 @@ function App(): ReactElement {
       return
     }
 
+    const projectFolderPath = getProjectFolderPath(project)
+    const syncedNoteCount = notes.filter(
+      (note) => note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
+    ).length
+
     const confirmed = window.confirm(
-      `Remove project "${project.name}" from this workspace? This cannot be undone.`
+      syncedNoteCount > 0
+        ? `Remove project "${project.name}"? This will also delete ${syncedNoteCount} synced note${syncedNoteCount === 1 ? '' : 's'} in ${projectFolderPath}. This cannot be undone.`
+        : `Remove project "${project.name}" from this workspace? This cannot be undone.`
     )
     if (!confirmed) {
       return
@@ -3812,8 +3798,34 @@ function App(): ReactElement {
 
     setNotes(nextNotes)
     setNoteTree(nextTree)
+    if (currentNotePathRef.current && !nextNotes.some((note) => note.relPath === currentNotePathRef.current)) {
+      currentNotePathRef.current = null
+      currentNoteContentRef.current = ''
+      currentNoteTagsRef.current = []
+      setCurrentNotePath(null)
+      resetCurrentNoteEditorSession()
+      setCurrentNoteTagsState([])
+      setCurrentNoteContent('')
+      void persistLastOpenedNotePath(null)
+    }
     return nextTree
-  }, [setNotes, setNoteTree, vaultApi])
+  }, [
+    persistLastOpenedNotePath,
+    resetCurrentNoteEditorSession,
+    setCurrentNoteContent,
+    setCurrentNotePath,
+    setNotes,
+    setNoteTree,
+    vaultApi
+  ])
+
+  useEffect(() => {
+    if (!vaultApi || !vault) {
+      return
+    }
+
+    void refreshNotesAndTree()
+  }, [projects, refreshNotesAndTree, vault, vaultApi])
 
   const getTreeTargetDirectory = useCallback((): string => {
     if (!selectedNoteTreeEntry) {
@@ -3980,6 +3992,11 @@ function App(): ReactElement {
         return
       }
 
+      if (kind === 'folder' && isProtectedProjectTreePath(relPath, projects)) {
+        pushToast('error', 'Project folders are managed automatically')
+        return
+      }
+
       const trimmed = nextName.trim()
       if (!trimmed) {
         return
@@ -4054,6 +4071,11 @@ function App(): ReactElement {
         return
       }
 
+      if (kind === 'folder' && isProtectedProjectTreePath(relPath, projects)) {
+        pushToast('error', 'Project folders are managed automatically')
+        return
+      }
+
       const itemName = relPath.split('/').pop() ?? relPath
       const confirmed = window.confirm(
         kind === 'folder'
@@ -4111,6 +4133,7 @@ function App(): ReactElement {
       resetCurrentNoteEditorSession,
       setCurrentNoteContent,
       setCurrentNotePath,
+      projects,
       vaultApi
     ]
   )
@@ -4241,7 +4264,11 @@ function App(): ReactElement {
         <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
           <div className="flex h-full min-w-0">
             {hasVault && activePage === 'schedules' ? (
-              <SchedulesPage vaultApi={vaultApi} pushToast={pushToast} />
+              <SchedulesPage
+                vaultApi={vaultApi}
+                pushToast={pushToast}
+                isRightPanelCollapsed={isRightPanelCollapsed}
+              />
             ) : null}
             {hasVault && activePage === 'agentHistory' ? (
               <AgentHistoryPage
@@ -4249,6 +4276,7 @@ function App(): ReactElement {
                 pushToast={pushToast}
                 notes={notes}
                 projects={projects}
+                isRightPanelCollapsed={isRightPanelCollapsed}
               />
             ) : null}
             <DocumentWorkspaceMain
@@ -5060,12 +5088,6 @@ function App(): ReactElement {
                           void navigateToPage('notes')
                           void openNote(relPath)
                         }}
-                        onAddTagToNote={(relPath, tag) => {
-                          void addTagToNote(relPath, tag)
-                        }}
-                        onRemoveTagFromNote={(relPath, tag) => {
-                          void removeTagFromNote(relPath, tag)
-                        }}
                       />
                     ) : (
                       <div className="p-5 text-sm text-[var(--muted)]">
@@ -5187,7 +5209,7 @@ function App(): ReactElement {
             </DocumentWorkspaceMain>
 
             <DocumentWorkspacePanel
-              className={`${!showWorkspacePanel || isStandalonePage ? 'hidden' : 'flex'} ${paletteSurfaceClass}${paletteBlurClass}`}
+              className={`${!showWorkspacePanel || isStandalonePage || isRightPanelCollapsed ? 'hidden' : 'flex'} ${paletteSurfaceClass}${paletteBlurClass}`}
             >
               {activePage === 'weeklyPlan' ? (
                 <WeeklyPlanSidebar

@@ -235,15 +235,26 @@ function TreeNode({
 }): ReactElement {
   const parentDir = node.data.kind === 'folder' ? node.data.relPath : node.data.note.dir
   const isFolder = node.data.kind === 'folder'
+  const isProtected = Boolean(node.data.isProtected)
+  const canCreateChildren = !isProtected || node.data.protectionKind === 'project-folder'
   const handleRenameRequest = (): void => {
+    if (isProtected) {
+      return
+    }
     onStartEditing()
   }
   const handleMenuAction = (actionId: string): void => {
     if (actionId === 'create-note') {
+      if (!canCreateChildren) {
+        return
+      }
       onCreateNote(parentDir)
       return
     }
     if (actionId === 'create-folder') {
+      if (!canCreateChildren) {
+        return
+      }
       onCreateFolder(parentDir)
       return
     }
@@ -252,6 +263,9 @@ function TreeNode({
       return
     }
     if (actionId === 'delete') {
+      if (isProtected) {
+        return
+      }
       onDeletePath(node.data.relPath, node.data.kind)
     }
   }
@@ -261,7 +275,7 @@ function TreeNode({
   ): Promise<void> => {
     event.preventDefault()
     const actionId = await showNativeMenu(
-      buildNotesTreeMenuItems(),
+      buildNotesTreeMenuItems(isProtected, canCreateChildren),
       getMouseMenuPosition(event)
     )
     if (actionId) {
@@ -272,7 +286,7 @@ function TreeNode({
   const treeNodeRow = (
     <div style={style as CSSProperties} className="group">
       <div
-        ref={dragHandle}
+        ref={isProtected ? undefined : dragHandle}
         data-testid={`note-tree-row:${node.data.relPath}`}
         className={`relative flex h-[30px] items-center gap-2 rounded-md px-2 text-sm ${
           node.isSelected
@@ -334,7 +348,7 @@ function TreeNode({
             {isFolder ? node.data.name : stripNoteExtension(node.data.name)}
           </span>
         )}
-        {!isEditing ? (
+        {!isEditing && !isProtected ? (
           <button
             type="button"
             data-testid={`note-tree-rename:${node.data.relPath}`}
@@ -361,27 +375,35 @@ function TreeNode({
     <ContextMenu>
       <ContextMenuTrigger asChild>{treeNodeRow}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => handleMenuAction('create-note')}>
-          <FileText className="mr-2 h-4 w-4" />
-          New note
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => handleMenuAction('create-folder')}>
-          <FolderPlus className="mr-2 h-4 w-4" />
-          New folder
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={handleRenameRequest}
-          onSelect={() => handleMenuAction('rename')}
-        >
-          <Pencil className="mr-2 h-4 w-4" />
-          Rename
-        </ContextMenuItem>
-        <ContextMenuDestructiveItem
-          onSelect={() => handleMenuAction('delete')}
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </ContextMenuDestructiveItem>
+        {canCreateChildren ? (
+          <>
+            <ContextMenuItem onSelect={() => handleMenuAction('create-note')}>
+              <FileText className="mr-2 h-4 w-4" />
+              New note
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => handleMenuAction('create-folder')}>
+              <FolderPlus className="mr-2 h-4 w-4" />
+              New folder
+            </ContextMenuItem>
+          </>
+        ) : null}
+        {!isProtected ? (
+          <>
+            <ContextMenuItem
+              onClick={handleRenameRequest}
+              onSelect={() => handleMenuAction('rename')}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Rename
+            </ContextMenuItem>
+            <ContextMenuDestructiveItem
+              onSelect={() => handleMenuAction('delete')}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </ContextMenuDestructiveItem>
+          </>
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -455,14 +477,28 @@ function toTreeId(kind: 'note' | 'folder', relPath: string): string {
   return `${kind}:${relPath}`
 }
 
-function buildNotesTreeMenuItems(): NativeMenuItemDescriptor[] {
-  return [
-    { id: 'create-note', label: 'New note' },
-    { id: 'create-folder', label: 'New folder' },
-    { id: 'rename', label: 'Rename' },
-    { type: 'separator' },
-    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
-  ]
+function buildNotesTreeMenuItems(
+  isProtected: boolean,
+  canCreateChildren: boolean
+): NativeMenuItemDescriptor[] {
+  const items: NativeMenuItemDescriptor[] = []
+
+  if (canCreateChildren) {
+    items.push({ id: 'create-note', label: 'New note' }, { id: 'create-folder', label: 'New folder' })
+  }
+
+  if (!isProtected) {
+    if (items.length > 0) {
+      items.push({ type: 'separator' })
+    }
+    items.push(
+      { id: 'rename', label: 'Rename' },
+      { type: 'separator' },
+      { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+    )
+  }
+
+  return items
 }
 
 function renderTreeConnectorGuides(
