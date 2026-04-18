@@ -6,6 +6,8 @@ import { VaultRuntime } from './runtime'
 import { ScheduleService } from './scheduleService'
 import { registerWeeklyPlanIpcHandlers } from './planning/weeklyPlanIpc'
 import { WeeklyPlanService } from './planning/weeklyPlanService'
+import { registerSubscriptionsIpcHandlers } from './subscriptionsIpc'
+import { SubscriptionsService } from './subscriptionsService'
 import { registerAgentToolIpcHandlers } from './agentToolsIpc'
 import { AgentToolsService } from './agentToolsService'
 import { createMainWindow } from './window'
@@ -16,11 +18,13 @@ import * as path from 'path'
 const runtime = new VaultRuntime()
 const scheduleService = new ScheduleService(runtime)
 const weeklyPlanService = new WeeklyPlanService()
+const subscriptionsService = new SubscriptionsService()
 const agentToolsService = new AgentToolsService(runtime, weeklyPlanService)
 runtime.setAgentToolInvoker((name, input) => agentToolsService.invoke(name as never, input))
 runtime.onVaultChange((paths) => {
   void scheduleService.handleVaultChange(paths ? paths.rootPath : null)
   weeklyPlanService.handleVaultChange(paths ? paths.rootPath : null)
+  subscriptionsService.handleVaultChange(paths ? paths.rootPath : null)
 })
 runtime.onAgentChatEvent((event) => {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -34,10 +38,13 @@ runtime.onAgentChatEvent((event) => {
 app.whenReady().then(() => {
   // Register vault-file:// protocol to serve images from vault
   protocol.handle('vault-file', async (request) => {
-    const url = request.url.replace('vault-file://', '')
-    const decodedPath = decodeURIComponent(url)
-
     try {
+      const parsedUrl = new URL(request.url)
+      const rawPath = parsedUrl.host
+        ? `/${parsedUrl.host}${parsedUrl.pathname}`
+        : parsedUrl.pathname
+      const decodedPath = decodeURIComponent(rawPath)
+
       // Security: only allow access to files within vault directories
       const absolutePath = path.normalize(decodedPath)
 
@@ -75,6 +82,7 @@ app.whenReady().then(() => {
   registerIpcHandlers(runtime)
   registerScheduleIpcHandlers(scheduleService)
   registerWeeklyPlanIpcHandlers(weeklyPlanService)
+  registerSubscriptionsIpcHandlers(subscriptionsService)
   registerAgentToolIpcHandlers(agentToolsService)
   void scheduleService.init()
   createMainWindow()

@@ -3,6 +3,7 @@ import {
   listPreviewTagsFromMarkdown,
   listTagsFromMarkdown,
   normalizeTag,
+  generateProjectTag,
   upsertTagsInMarkdown
 } from '../src/shared/noteTags'
 
@@ -11,6 +12,11 @@ describe('note tag helpers', () => {
     expect(normalizeTag('  #Product Roadmap  ')).toBe('product-roadmap')
     expect(normalizeTag('ok_tag-1')).toBe('ok_tag-1')
     expect(normalizeTag('bad*tag')).toBeNull()
+  })
+
+  it('generates stable project tags from project ids', () => {
+    expect(generateProjectTag('project-1')).toBe('project:project-1')
+    expect(generateProjectTag('Project 123')).toBe('project:project-123')
   })
 
   it('reads tags from frontmatter', () => {

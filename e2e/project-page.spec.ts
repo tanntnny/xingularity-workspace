@@ -15,12 +15,12 @@ async function createFixtureVault(): Promise<string> {
   await fs.mkdir(path.join(rootPath, '.xingularity'), { recursive: true })
 
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'Projects', 'Alpha Project', 'in-folder.xnote'),
+    path.join(rootPath, 'notes', 'Projects', 'Alpha Project', 'in-folder.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Inside folder\n')),
     'utf-8'
   )
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'outside-note.xnote'),
+    path.join(rootPath, 'notes', 'outside-note.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Outside note\n')),
     'utf-8'
   )
@@ -93,8 +93,8 @@ test.describe('project page notes tab', () => {
       await expect(page.getByText('Alpha Project').first()).toBeVisible()
       await page.getByText('Project Notes').click()
 
-      await expect(page.getByText('in-folder.xnote')).toBeVisible()
-      await expect(page.getByText('outside-note.xnote')).toHaveCount(0)
+      await expect(page.getByText('in-folder.md')).toBeVisible()
+      await expect(page.getByText('outside-note.md')).toHaveCount(0)
       await expect(page.getByText('Link existing note')).toHaveCount(0)
       await expect(page.getByText('Unlink')).toHaveCount(0)
     } finally {

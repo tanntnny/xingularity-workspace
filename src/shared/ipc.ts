@@ -16,6 +16,8 @@ export const IPC_CHANNELS = {
   createNoteWithTags: 'files:create-note-with-tags',
   createFolder: 'files:create-folder',
   importNotes: 'files:import-notes',
+  migrateBlockNoteNotes: 'files:migrate-blocknote-notes',
+  migrateTaggedNoteBodyFrontmatter: 'files:migrate-tagged-note-body-frontmatter',
   renameNote: 'files:rename-note',
   renamePath: 'files:rename-path',
   deleteNote: 'files:delete-note',
@@ -58,6 +60,16 @@ export const WEEKLY_PLAN_CHANNELS = {
   deletePriority: 'weeklyPlan:delete-priority',
   reorderPriorities: 'weeklyPlan:reorder-priorities',
   upsertReview: 'weeklyPlan:upsert-review'
+} as const
+
+export const SUBSCRIPTION_CHANNELS = {
+  list: 'subscriptions:list',
+  get: 'subscriptions:get',
+  create: 'subscriptions:create',
+  update: 'subscriptions:update',
+  delete: 'subscriptions:delete',
+  archive: 'subscriptions:archive',
+  getAnalytics: 'subscriptions:get-analytics'
 } as const
 
 export const AGENT_TOOL_CHANNELS = {

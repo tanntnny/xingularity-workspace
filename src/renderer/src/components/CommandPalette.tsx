@@ -1,5 +1,22 @@
-import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, FileText, FolderKanban, GitBranch, LayoutDashboard, LayoutGrid, Plus } from 'lucide-react'
+import {
+  ReactElement,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
+import {
+  CreditCard,
+  Clock,
+  FileText,
+  FolderKanban,
+  GitBranch,
+  LayoutDashboard,
+  LayoutGrid,
+  Plus
+} from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import {
@@ -13,6 +30,7 @@ import {
   CommandShortcut
 } from './ui/command'
 import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export interface CommandPaletteSearchResult {
   id: string
@@ -30,6 +48,7 @@ type CommandPalettePage =
   | 'knowledge'
   | 'notes'
   | 'projects'
+  | 'subscriptions'
   | 'grid'
   | 'calendar'
   | 'weeklyPlan'
@@ -75,15 +94,30 @@ export function CommandPalette({
   const [hoveredResult, setHoveredResult] = useState<CommandPaletteSearchResult | null>(null)
   const [isWaitingForSearch, setIsWaitingForSearch] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const deferredQuery = useDeferredValue(query)
   const trimmedQuery = query.trim()
+  const deferredTrimmedQuery = deferredQuery.trim()
   const mode = trimmedQuery.startsWith('>')
     ? 'command'
     : trimmedQuery.startsWith('?')
       ? 'ai'
       : 'search'
+  const deferredMode = deferredTrimmedQuery.startsWith('>')
+    ? 'command'
+    : deferredTrimmedQuery.startsWith('?')
+      ? 'ai'
+      : 'search'
   const isCommandMode = mode === 'command'
   const isAiMode = mode === 'ai'
   const searchQuery = mode === 'search' ? trimmedQuery : trimmedQuery.slice(1).trim()
+  const deferredSearchQuery =
+    deferredMode === 'search' ? deferredTrimmedQuery : deferredTrimmedQuery.slice(1).trim()
+  const isBodySearch = mode === 'search' && searchQuery.startsWith('@')
+  const isDeferredBodySearch = deferredMode === 'search' && deferredSearchQuery.startsWith('@')
+  const searchableQuery = isBodySearch ? searchQuery.slice(1).trim() : searchQuery
+  const deferredSearchableQuery = isDeferredBodySearch
+    ? deferredSearchQuery.slice(1).trim()
+    : deferredSearchQuery
   const aiActionValue = `?${searchQuery || 'ai'}`
   const aiNoteLabel = activeNotePath?.split('/').pop()
     ? stripNoteExtension(activeNotePath.split('/').pop()!)
@@ -92,10 +126,16 @@ export function CommandPalette({
   // Reset state when closing
   useEffect(() => {
     if (!open) {
-      setQuery('')
-      setHoveredResult(null)
-      setIsWaitingForSearch(false)
+      const frameId = window.requestAnimationFrame(() => {
+        setQuery('')
+        setHoveredResult(null)
+        setIsWaitingForSearch(false)
+      })
+
+      return () => window.cancelAnimationFrame(frameId)
     }
+
+    return
   }, [open])
 
   useEffect(() => {
@@ -103,7 +143,11 @@ export function CommandPalette({
       return
     }
 
-    setQuery(initialQuery)
+    const frameId = window.requestAnimationFrame(() => {
+      setQuery(initialQuery)
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
   }, [open, initialQuery])
 
   useEffect(() => {
@@ -124,25 +168,46 @@ export function CommandPalette({
     }
 
     if (isCommandMode || isAiMode) {
-      setIsWaitingForSearch(false)
+      const frameId = window.requestAnimationFrame(() => {
+        setIsWaitingForSearch(false)
+      })
       onQueryChange('')
-      return
+      return () => window.cancelAnimationFrame(frameId)
     }
 
-    if (!searchQuery) {
-      setIsWaitingForSearch(false)
+    if (!searchableQuery) {
+      const frameId = window.requestAnimationFrame(() => {
+        setIsWaitingForSearch(false)
+      })
       onQueryChange('')
-      return
+      return () => window.cancelAnimationFrame(frameId)
     }
 
-    setIsWaitingForSearch(true)
+    if (searchableQuery.length < 2) {
+      const frameId = window.requestAnimationFrame(() => {
+        setIsWaitingForSearch(false)
+      })
+      onQueryChange('')
+      return () => window.cancelAnimationFrame(frameId)
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setIsWaitingForSearch(true)
+    })
+    let searchFrameId = 0
     const timeoutId = window.setTimeout(() => {
-      setIsWaitingForSearch(false)
-      onQueryChange(searchQuery)
+      searchFrameId = window.requestAnimationFrame(() => {
+        setIsWaitingForSearch(false)
+        onQueryChange(searchQuery)
+      })
     }, 300)
 
-    return () => window.clearTimeout(timeoutId)
-  }, [open, isAiMode, isCommandMode, searchQuery, onQueryChange])
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.cancelAnimationFrame(searchFrameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [open, isAiMode, isCommandMode, searchQuery, searchableQuery, onQueryChange])
 
   // Handle escape key
   useEffect(() => {
@@ -157,29 +222,38 @@ export function CommandPalette({
 
   // Get recent notes
   const recentNotes = useMemo(() => {
-    if (recentNotePaths.length === 0) return []
-    return recentNotePaths
+    const explicitlyRecentNotes = recentNotePaths
       .map((path) => notes.find((note) => note.relPath === path))
       .filter((note): note is NoteListItem => note !== undefined)
-      .slice(0, 5)
+
+    if (explicitlyRecentNotes.length > 0) {
+      return explicitlyRecentNotes.slice(0, 5)
+    }
+
+    return [...notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5)
   }, [notes, recentNotePaths])
 
   // Filter notes based on query
   const filteredNotes = useMemo(() => {
-    const q = mode === 'search' ? query.trim().toLowerCase() : ''
+    const q = deferredMode === 'search' ? deferredSearchableQuery.toLowerCase() : ''
     if (!q) {
       return notes.slice(0, 15)
     }
     return notes
       .filter((note) => {
+        if (isDeferredBodySearch) {
+          return (note.bodyPreview ?? '').toLowerCase().includes(q)
+        }
+
+        const aliases = note.mentionTargets ?? []
         return (
           note.relPath.toLowerCase().includes(q) ||
           note.name.toLowerCase().includes(q) ||
-          note.tags.some((tag) => tag.toLowerCase().includes(q))
+          aliases.some((alias) => alias.toLowerCase().includes(q))
         )
       })
       .slice(0, 15)
-  }, [mode, notes, query])
+  }, [deferredMode, deferredSearchableQuery, isDeferredBodySearch, notes])
 
   const noteResults = useMemo(
     () => searchResults.filter((result) => result.kind === 'note'),
@@ -190,6 +264,13 @@ export function CommandPalette({
     () => searchResults.filter((result) => result.kind === 'project'),
     [searchResults]
   )
+  const fallbackSearchNotes = useMemo(() => {
+    if (!searchableQuery || noteResults.length > 0) {
+      return []
+    }
+
+    return filteredNotes
+  }, [filteredNotes, noteResults.length, searchableQuery])
 
   const commandItems = useMemo(
     () => [
@@ -224,6 +305,12 @@ export function CommandPalette({
         label: 'Go to Projects',
         onSelect: () => onOpenPage('projects'),
         icon: FolderKanban
+      },
+      {
+        value: '>go subscriptions',
+        label: 'Go to Subscriptions',
+        onSelect: () => onOpenPage('subscriptions'),
+        icon: CreditCard
       },
       ...(GRID_PAGE_ENABLED
         ? [
@@ -263,10 +350,62 @@ export function CommandPalette({
     [onCreate, onOpenPage]
   )
 
+  const revealItemIds = useMemo(() => {
+    if (isCommandMode) {
+      return commandItems.map((item) => `command:${item.value}`)
+    }
+
+    if (isAiMode) {
+      return ['ai-action']
+    }
+
+    const ids = ['quick:new-note']
+
+    if (recentNotes.length > 0 && !trimmedQuery) {
+      ids.push(...recentNotes.map((note) => `recent:${note.relPath}`))
+    }
+
+    if (searchableQuery) {
+      ids.push(...noteResults.map((result) => `search:${result.id}`))
+      ids.push(...projectResults.map((result) => `search:${result.id}`))
+      ids.push(...fallbackSearchNotes.map((note) => `fallback:${note.relPath}`))
+      return ids
+    }
+
+    ids.push(...filteredNotes.map((note) => `note:${note.relPath}`))
+    return ids
+  }, [
+    commandItems,
+    filteredNotes,
+    isAiMode,
+    isCommandMode,
+    noteResults,
+    fallbackSearchNotes,
+    projectResults,
+    recentNotes,
+    searchableQuery,
+    trimmedQuery
+  ])
+
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds, {
+    resetKey: open
+  })
+
   const allSelectableResults = useMemo(() => {
     const noteItems = filteredNotes.map((note) => ({
       id: `note:${note.relPath}`,
       value: `note:${note.relPath}`,
+      title: stripNoteExtension(note.name),
+      subtitle: note.relPath,
+      keywords: [note.name, note.relPath, ...note.tags],
+      tags: note.tags,
+      updatedAt: note.updatedAt,
+      kind: 'note' as const
+    }))
+
+    const recentNoteItems = recentNotes.map((note) => ({
+      id: `recent:${note.relPath}`,
+      value: `recent:${note.relPath}`,
       title: stripNoteExtension(note.name),
       subtitle: note.relPath,
       keywords: [note.name, note.relPath, ...note.tags],
@@ -283,8 +422,8 @@ export function CommandPalette({
       value: item.value
     }))
 
-    return [...searchResults, ...noteItems, ...commandResults]
-  }, [commandItems, filteredNotes, searchResults])
+    return [...searchResults, ...recentNoteItems, ...noteItems, ...commandResults]
+  }, [commandItems, filteredNotes, recentNotes, searchResults])
 
   const handleSelect = useCallback(
     (value: string) => {
@@ -302,8 +441,8 @@ export function CommandPalette({
             onClose()
           }
         })()
-      } else if (value.startsWith('note:')) {
-        const relPath = value.replace('note:', '')
+      } else if (value.startsWith('note:') || value.startsWith('recent:')) {
+        const relPath = value.replace(/^note:|^recent:/, '')
         onOpenNote(relPath)
         onClose()
       } else if (value.startsWith('project:')) {
@@ -314,6 +453,8 @@ export function CommandPalette({
     },
     [commandItems, onCreate, onOpenNote, onOpenProject, onClose, onRunAiPrompt, searchQuery]
   )
+
+  const passthroughCommandFilter = useCallback(() => 1, [])
 
   if (!open) {
     return null
@@ -329,6 +470,8 @@ export function CommandPalette({
         onClick={(event) => event.stopPropagation()}
       >
         <Command
+          shouldFilter={false}
+          filter={passthroughCommandFilter}
           className="flex-1"
           onValueChange={(value) => {
             const result = allSelectableResults.find((item) => item.value === value) ?? null
@@ -342,12 +485,12 @@ export function CommandPalette({
                 ? 'Type a command...'
                 : isAiMode
                   ? 'Ask AI to continue the current note...'
-                  : 'Search notes and projects...'
+                  : 'Search names, aliases, paths... use @ for body'
             }
             value={query}
             onValueChange={setQuery}
           />
-          <CommandList className="max-h-[360px]">
+          <CommandList ref={containerRef} className="max-h-[360px]">
             <CommandEmpty>
               {isCommandMode
                 ? 'No commands found.'
@@ -355,17 +498,27 @@ export function CommandPalette({
                   ? activeNotePath
                     ? 'Type an instruction after ? to complete the current note.'
                     : 'Open a note before using AI note completion.'
-                  : isWaitingForSearch || searchLoading
-                    ? 'Searching...'
-                    : 'No results found.'}
+                  : isBodySearch && !searchableQuery
+                    ? 'Type after @ to search note bodies.'
+                    : isWaitingForSearch || searchLoading
+                      ? 'Searching...'
+                      : 'No results found.'}
             </CommandEmpty>
 
             {isCommandMode ? (
               <CommandGroup heading="Commands">
                 {commandItems.map((item) => {
                   const Icon = item.icon
+                  const revealProps = getRevealItemProps(`command:${item.value}`)
                   return (
-                    <CommandItem key={item.value} value={item.value} onSelect={handleSelect}>
+                    <CommandItem
+                      key={item.value}
+                      ref={revealProps.ref}
+                      className={revealProps.className}
+                      style={revealProps.style}
+                      value={item.value}
+                      onSelect={handleSelect}
+                    >
                       <Icon className="mr-2 h-4 w-4" />
                       <span>{item.label}</span>
                       {item.shortcut ? <CommandShortcut>{item.shortcut}</CommandShortcut> : null}
@@ -375,36 +528,55 @@ export function CommandPalette({
               </CommandGroup>
             ) : isAiMode ? (
               <CommandGroup heading="AI Note Completion">
-                <CommandItem
-                  value={aiActionValue}
-                  onSelect={handleSelect}
-                  disabled={!activeNotePath || !searchQuery || aiLoading}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">
-                      {aiLoading
-                        ? 'Completing note with Mistral...'
-                        : searchQuery
-                          ? `Continue ${aiNoteLabel}`
-                          : `Complete ${aiNoteLabel}`}
-                    </div>
-                    <div className="truncate text-xs text-[var(--muted)]">
-                      {activeNotePath
-                        ? searchQuery || 'Describe how AI should continue the note.'
-                        : 'Open a note first to send its content to Mistral.'}
-                    </div>
-                  </div>
-                  <CommandShortcut>{aiLoading ? '...' : 'Enter'}</CommandShortcut>
-                </CommandItem>
+                {(() => {
+                  const revealProps = getRevealItemProps('ai-action')
+                  return (
+                    <CommandItem
+                      ref={revealProps.ref}
+                      className={revealProps.className}
+                      style={revealProps.style}
+                      value={aiActionValue}
+                      onSelect={handleSelect}
+                      disabled={!activeNotePath || !searchQuery || aiLoading}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">
+                          {aiLoading
+                            ? 'Completing note with Mistral...'
+                            : searchQuery
+                              ? `Continue ${aiNoteLabel}`
+                              : `Complete ${aiNoteLabel}`}
+                        </div>
+                        <div className="truncate text-xs text-[var(--muted)]">
+                          {activeNotePath
+                            ? searchQuery || 'Describe how AI should continue the note.'
+                            : 'Open a note first to send its content to Mistral.'}
+                        </div>
+                      </div>
+                      <CommandShortcut>{aiLoading ? '...' : 'Enter'}</CommandShortcut>
+                    </CommandItem>
+                  )
+                })()}
               </CommandGroup>
             ) : (
               <CommandGroup heading="Quick Actions">
-                <CommandItem value="new-note" onSelect={handleSelect}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  <span>New Note</span>
-                  <CommandShortcut>⌘N</CommandShortcut>
-                </CommandItem>
+                {(() => {
+                  const revealProps = getRevealItemProps('quick:new-note')
+                  return (
+                    <CommandItem
+                      ref={revealProps.ref}
+                      className={revealProps.className}
+                      style={revealProps.style}
+                      value="new-note"
+                      onSelect={handleSelect}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      <span>New Note</span>
+                      <CommandShortcut>⌘N</CommandShortcut>
+                    </CommandItem>
+                  )
+                })()}
               </CommandGroup>
             )}
 
@@ -412,79 +584,130 @@ export function CommandPalette({
               <>
                 <CommandSeparator />
                 <CommandGroup heading="Recent Notes">
-                  {recentNotes.map((note) => (
-                    <CommandItem
-                      key={`recent:${note.relPath}`}
-                      value={`note:${note.relPath}`}
-                      keywords={[note.name, note.relPath, ...note.tags]}
-                      onSelect={handleSelect}
-                    >
-                      <Clock className="mr-2 h-4 w-4 text-[var(--muted)]" />
-                      <span className="truncate">{stripNoteExtension(note.name)}</span>
-                    </CommandItem>
-                  ))}
+                  {recentNotes.map((note) => {
+                    const revealProps = getRevealItemProps(`recent:${note.relPath}`)
+                    return (
+                      <CommandItem
+                        key={`recent:${note.relPath}`}
+                        ref={revealProps.ref}
+                        className={revealProps.className}
+                        style={revealProps.style}
+                        value={`recent:${note.relPath}`}
+                        keywords={[note.name, note.relPath, ...note.tags]}
+                        onSelect={handleSelect}
+                      >
+                        <Clock className="mr-2 h-4 w-4" />
+                        <span className="truncate">{note.relPath}</span>
+                      </CommandItem>
+                    )
+                  })}
                 </CommandGroup>
               </>
             )}
 
             {!isCommandMode && !isAiMode ? <CommandSeparator /> : null}
-            {!isCommandMode && !isAiMode && searchQuery ? (
+            {!isCommandMode && !isAiMode && searchableQuery ? (
               <>
-                {!isWaitingForSearch ? (
+                {!isWaitingForSearch || fallbackSearchNotes.length > 0 ? (
                   <>
                     <CommandGroup heading="Notes">
-                      {noteResults.map((result) => (
-                        <CommandItem
-                          key={result.id}
-                          value={result.value}
-                          keywords={result.keywords}
-                          onSelect={handleSelect}
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate">{result.title}</div>
-                            <div className="truncate text-xs text-[var(--muted)]">
-                              {result.subtitle}
+                      {noteResults.map((result) => {
+                        const revealProps = getRevealItemProps(`search:${result.id}`)
+                        return (
+                          <CommandItem
+                            key={result.id}
+                            ref={revealProps.ref}
+                            className={revealProps.className}
+                            style={revealProps.style}
+                            value={result.value}
+                            keywords={result.keywords}
+                            onSelect={handleSelect}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{result.title}</div>
+                              <div className="truncate text-xs text-[var(--muted)]">
+                                {result.subtitle}
+                              </div>
                             </div>
-                          </div>
-                        </CommandItem>
-                      ))}
+                          </CommandItem>
+                        )
+                      })}
+                      {fallbackSearchNotes.map((note) => {
+                        const revealProps = getRevealItemProps(`fallback:${note.relPath}`)
+                        return (
+                          <CommandItem
+                            key={`fallback:${note.relPath}`}
+                            ref={revealProps.ref}
+                            className={revealProps.className}
+                            style={revealProps.style}
+                            value={`note:${note.relPath}`}
+                            keywords={[
+                              note.name,
+                              note.relPath,
+                              note.bodyPreview ?? '',
+                              ...note.tags
+                            ]}
+                            onSelect={handleSelect}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{stripNoteExtension(note.name)}</div>
+                              <div className="truncate text-xs text-[var(--muted)]">
+                                {note.relPath}
+                              </div>
+                            </div>
+                          </CommandItem>
+                        )
+                      })}
                     </CommandGroup>
 
                     <CommandGroup heading="Projects">
-                      {projectResults.map((result) => (
-                        <CommandItem
-                          key={result.id}
-                          value={result.value}
-                          keywords={result.keywords}
-                          onSelect={handleSelect}
-                        >
-                          <FolderKanban className="mr-2 h-4 w-4" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate">{result.title}</div>
-                            <div className="truncate text-xs text-[var(--muted)]">
-                              {result.subtitle}
+                      {projectResults.map((result) => {
+                        const revealProps = getRevealItemProps(`search:${result.id}`)
+                        return (
+                          <CommandItem
+                            key={result.id}
+                            ref={revealProps.ref}
+                            className={revealProps.className}
+                            style={revealProps.style}
+                            value={result.value}
+                            keywords={result.keywords}
+                            onSelect={handleSelect}
+                          >
+                            <FolderKanban className="mr-2 h-4 w-4" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{result.title}</div>
+                              <div className="truncate text-xs text-[var(--muted)]">
+                                {result.subtitle}
+                              </div>
                             </div>
-                          </div>
-                        </CommandItem>
-                      ))}
+                          </CommandItem>
+                        )
+                      })}
                     </CommandGroup>
                   </>
                 ) : null}
               </>
-            ) : !isCommandMode && !isAiMode ? (
+            ) : !isCommandMode && !isAiMode && !searchQuery ? (
               <CommandGroup heading="All Notes">
-                {filteredNotes.map((note) => (
-                  <CommandItem
-                    key={note.relPath}
-                    value={`note:${note.relPath}`}
-                    keywords={[note.name, note.relPath, ...note.tags]}
-                    onSelect={handleSelect}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span className="truncate">{note.relPath}</span>
-                  </CommandItem>
-                ))}
+                {filteredNotes.map((note) => {
+                  const revealProps = getRevealItemProps(`note:${note.relPath}`)
+                  return (
+                    <CommandItem
+                      key={note.relPath}
+                      ref={revealProps.ref}
+                      className={revealProps.className}
+                      style={revealProps.style}
+                      value={`note:${note.relPath}`}
+                      keywords={[note.name, note.relPath, ...note.tags]}
+                      onSelect={handleSelect}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      <span className="truncate">{note.relPath}</span>
+                    </CommandItem>
+                  )
+                })}
               </CommandGroup>
             ) : null}
           </CommandList>

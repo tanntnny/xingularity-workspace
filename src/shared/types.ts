@@ -21,7 +21,7 @@ export interface NoteMetadata {
 export interface StoredNoteDocument {
   version: 1
   tags: string[]
-  blocks: unknown[]
+  markdown: string
 }
 
 export interface NoteRecord {
@@ -357,6 +357,100 @@ export interface RendererWeeklyPlanApi {
   upsertReview: (input: UpsertWeeklyPlanReviewInput) => Promise<WeeklyPlanState>
 }
 
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'archived'
+export type SubscriptionBillingCycle = 'monthly' | 'quarterly' | 'yearly' | 'custom'
+export type SubscriptionReviewFlag = 'none' | 'review' | 'unused' | 'duplicate' | 'expensive'
+
+export interface SubscriptionRecord {
+  id: string
+  name: string
+  provider?: string
+  category: string
+  amount: number
+  currency: string
+  billingCycle: SubscriptionBillingCycle
+  billingIntervalMonths: number
+  normalizedMonthlyAmount: number
+  nextRenewalAt?: string
+  status: SubscriptionStatus
+  reviewFlag?: SubscriptionReviewFlag
+  lastUsedAt?: string
+  tags?: string[]
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSubscriptionInput {
+  name: string
+  provider?: string
+  category: string
+  amount: number
+  currency: string
+  billingCycle: SubscriptionBillingCycle
+  billingIntervalMonths?: number
+  nextRenewalAt?: string
+  status: SubscriptionStatus
+  reviewFlag?: SubscriptionReviewFlag
+  lastUsedAt?: string
+  tags?: string[]
+  notes?: string
+}
+
+export interface UpdateSubscriptionInput {
+  id: string
+  name?: string
+  provider?: string | null
+  category?: string
+  amount?: number
+  currency?: string
+  billingCycle?: SubscriptionBillingCycle
+  billingIntervalMonths?: number | null
+  nextRenewalAt?: string | null
+  status?: SubscriptionStatus
+  reviewFlag?: SubscriptionReviewFlag
+  lastUsedAt?: string | null
+  tags?: string[]
+  notes?: string | null
+}
+
+export interface SubscriptionAnalyticsFilters {
+  search?: string
+  categories?: string[]
+  statuses?: SubscriptionStatus[]
+  includeArchived?: boolean
+}
+
+export interface SubscriptionTreemapNode {
+  id: string
+  name: string
+  value: number
+  category: string
+  status: SubscriptionStatus
+  reviewFlag: SubscriptionReviewFlag
+  renewalBucket?: 'soon' | 'later'
+}
+
+export interface SubscriptionAnalytics {
+  totalMonthlyRecurring: number
+  totalYearlyRecurring: number
+  renewingSoonCount: number
+  renewingSoonAmount: number
+  reviewCount: number
+  potentialSavingsMonthly: number
+  treemapNodes: SubscriptionTreemapNode[]
+}
+
+export interface RendererSubscriptionsApi {
+  list: () => Promise<SubscriptionRecord[]>
+  get: (id: string) => Promise<Maybe<SubscriptionRecord>>
+  create: (input: CreateSubscriptionInput) => Promise<SubscriptionRecord>
+  update: (input: UpdateSubscriptionInput) => Promise<SubscriptionRecord>
+  delete: (id: string) => Promise<void>
+  archive: (id: string) => Promise<SubscriptionRecord>
+  getAnalytics: (filters?: SubscriptionAnalyticsFilters) => Promise<SubscriptionAnalytics>
+}
+
 export interface RendererAgentToolsApi {
   note: {
     search: (input: { query: string }) => Promise<SearchResult[]>
@@ -637,6 +731,24 @@ export interface NoteImportResult {
   failed: FailedNoteImportResult[]
 }
 
+export interface BlockNoteMigrationResult {
+  converted: number
+  skipped: number
+  failed: Array<{
+    relPath: string
+    error: string
+  }>
+}
+
+export interface NoteBodyFrontmatterMigrationResult {
+  converted: number
+  skipped: number
+  failed: Array<{
+    relPath: string
+    error: string
+  }>
+}
+
 export interface RendererVaultApi {
   ui: {
     platform: string
@@ -666,6 +778,8 @@ export interface RendererVaultApi {
     createNoteWithTags: (name: string, tags: string[]) => Promise<string>
     createFolder: (relPath: string) => Promise<string>
     importNotes: () => Promise<NoteImportResult>
+    migrateBlockNoteNotes: () => Promise<BlockNoteMigrationResult>
+    migrateTaggedNoteBodyFrontmatter: () => Promise<NoteBodyFrontmatterMigrationResult>
     rename: (fromRelPath: string, toRelPath: string) => Promise<void>
     renamePath: (fromRelPath: string, toRelPath: string) => Promise<void>
     delete: (relPath: string) => Promise<void>
@@ -701,6 +815,7 @@ export interface RendererVaultApi {
     update: (next: AppSettingsUpdate) => Promise<AppSettings>
   }
   schedules: import('./scheduleTypes').RendererScheduleApi
+  subscriptions: RendererSubscriptionsApi
   weeklyPlan: RendererWeeklyPlanApi
   agentTools: RendererAgentToolsApi
 }

@@ -29,7 +29,10 @@
 - Unit coverage uses Vitest in `tests/`; end-to-end coverage uses Playwright in `e2e/`.
 - Name unit tests `*.test.ts` and e2e specs `*.spec.ts`.
 - When changing a page or workflow, add or update the nearest targeted test instead of relying only on broad manual checks.
-- Before opening a PR, run the most relevant commands for your change, for example: `npm run lint`, `npm run test:run`, `npm run test:e2e -- e2e/grid-page.spec.ts`.
+- Prefer `npm run lint` and `npm run test:run` for routine verification.
+- Only run Playwright or other heavy e2e coverage when the user explicitly asks for it, or when the change cannot be validated another way.
+- When Playwright is needed, run the smallest relevant spec or file scope instead of the full e2e suite.
+- Before opening a PR, run the most relevant commands for your change, for example: `npm run lint`, `npm run test:run`, or a targeted Playwright spec such as `npm run test:e2e -- e2e/grid-page.spec.ts` when explicitly needed.
 
 ## Commit & Pull Request Guidelines
 - Recent history uses very short subjects (`Update`, `update`). Keep commits short and imperative, but make them more specific when possible, for example: `renderer: move grid controls into sidebar`.

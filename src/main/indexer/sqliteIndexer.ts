@@ -108,7 +108,8 @@ export class SqliteIndexer {
   }
 
   query(queryText: string, limit = 50): SearchResult[] {
-    const safeQuery = toFtsQuery(queryText)
+    const searchInput = parseSearchInput(queryText)
+    const safeQuery = toFtsQuery(searchInput.query, searchInput.scope)
     if (!safeQuery) {
       return []
     }
@@ -281,13 +282,31 @@ async function removeSqliteArtifacts(dbPath: string): Promise<void> {
   }
 }
 
-function toFtsQuery(input: string): string {
+function parseSearchInput(input: string): {
+  scope: 'all' | 'body'
+  query: string
+} {
+  const trimmedInput = input.trim()
+  if (trimmedInput.startsWith('@')) {
+    return {
+      scope: 'body',
+      query: trimmedInput.slice(1).trim()
+    }
+  }
+
+  return {
+    scope: 'all',
+    query: trimmedInput
+  }
+}
+
+function toFtsQuery(input: string, scope: 'all' | 'body'): string {
   const terms = input
     .trim()
     .split(/\s+/)
     .map((term) => term.replace(/[^a-zA-Z0-9_-]/g, ''))
     .filter((term) => term.length > 1)
-    .map((term) => `${term}*`)
+    .map((term) => (scope === 'body' ? `body_text:${term}*` : `${term}*`))
 
   return terms.join(' AND ')
 }

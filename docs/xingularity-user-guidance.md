@@ -32,6 +32,7 @@ The sidebar currently includes:
 
 - `Notes`
 - `Projects`
+- `Subscriptions`
 - `Calendar`
 - `Weekly Plan`
 - `Schedules`
@@ -89,6 +90,49 @@ Project status values are:
 - `completed`
 
 Projects can connect back to notes through generated project tags, and their milestones and subtasks also appear in planning surfaces.
+
+## Subscriptions Workflow
+
+Use Subscriptions to track recurring spend across tools, vendors, and services.
+
+Available actions:
+
+- add a subscription
+- edit subscription details
+- archive a subscription
+- delete a subscription
+- filter by status or category
+- sort the list by subscription, category, monthly amount, next renewal, or status
+- inspect recurring spend by category in the treemap
+
+Each subscription can store:
+
+- name and provider
+- category
+- amount and billing cycle
+- next renewal date
+- status
+- review flag
+- last-used date
+- tags
+- notes
+
+Billing cycles can be monthly, quarterly, yearly, or custom. Xingularity normalizes each record into monthly recurring spend so totals, renewal summaries, and the spend treemap are comparable.
+
+Subscription status values are:
+
+- `active`
+- `paused`
+- `cancelled`
+- `archived`
+
+Review flags are:
+
+- `none`
+- `review`
+- `unused`
+- `duplicate`
+- `expensive`
 
 ## Calendar Workflow
 
@@ -181,6 +225,9 @@ Settings is split into four tabs:
 - `Cmd + 3`: Calendar
 - `Cmd + 4`: Weekly Plan
 - `Cmd + 5`: Schedules
+- `Cmd + D`: Dashboard
+- `Cmd + K`: Knowledge
+- `Cmd + G`: Grid, when enabled
 - `Cmd + I`: Agent Chat
 - `Cmd + ,`: Settings
 
@@ -198,6 +245,7 @@ App-managed state:
 - project data
 - calendar tasks
 - weekly plan records
+- subscription records in `.xingularity/subscriptions.json`
 - schedules and run history
 - agent chat sessions and run history
 

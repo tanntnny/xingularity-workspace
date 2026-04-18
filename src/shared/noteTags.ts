@@ -18,11 +18,11 @@ export function normalizeTag(input: string): string | null {
 }
 
 /**
- * Generate a project tag in format "project:slug" from project name.
- * Example: "Client Portal Refresh" -> "project:client-portal-refresh"
+ * Generate a stable project tag in format "project:<project-id>".
+ * Example: "project-1" -> "project:project-1"
  */
-export function generateProjectTag(projectName: string): string {
-  const slug = projectName
+export function generateProjectTag(projectId: string): string {
+  const slug = projectId
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -115,6 +115,10 @@ export function upsertTagsInMarkdown(markdown: string, nextTags: string[]): stri
   const { frontmatter, body, lineEnding } = splitFrontmatter(markdown)
   const tagsLine = `tags: [${normalized.join(', ')}]`
 
+  if (normalized.length === 0 && !frontmatter) {
+    return body
+  }
+
   if (!frontmatter) {
     return ['---', tagsLine, '---', '', body].join(lineEnding)
   }
@@ -135,7 +139,13 @@ export function upsertTagsInMarkdown(markdown: string, nextTags: string[]): stri
 
   const titleIndex = cleaned.findIndex((line) => /^\s*title\s*:/.test(line))
   const insertAt = titleIndex >= 0 ? titleIndex + 1 : 0
-  cleaned.splice(insertAt, 0, tagsLine)
+  if (normalized.length > 0) {
+    cleaned.splice(insertAt, 0, tagsLine)
+  }
+
+  if (cleaned.every((line) => line.trim().length === 0)) {
+    return body
+  }
 
   return ['---', ...cleaned, '---', '', body].join(lineEnding)
 }

@@ -16,6 +16,7 @@ Cross-process contracts live in `src/shared/`, especially:
 - `src/shared/scheduleTypes.ts`
 - `src/shared/ipc.ts`
 - `src/shared/projectFolders.ts`
+- `src/shared/subscriptions.ts`
 
 ## Storage Boundaries
 
@@ -49,9 +50,15 @@ Main app-managed domains:
 - calendar tasks
 - grid board state
 - weekly plans
+- subscriptions
 - schedule jobs and run records
 - agent chat sessions
 - agent run history
+
+Vault-scoped JSON stores currently include:
+
+- `.xingularity/weekly-plan.json`
+- `.xingularity/subscriptions.json`
 
 ## Top-Level App Settings
 
@@ -109,11 +116,11 @@ Per-note metadata:
 
 ### `StoredNoteDocument`
 
-Structured note body persisted through the editor:
+Markdown note payload read from and written back to the vault:
 
 - `version`
 - `tags`
-- `blocks`
+- `markdown`
 
 ### `NoteRecord`
 
@@ -339,6 +346,114 @@ Priority status values:
 - `nextWeek`
 - `createdAt`
 - `updatedAt`
+
+## Subscription Domain Models
+
+Subscription records are stored per vault and exposed through the subscriptions preload API. Shared helpers in `src/shared/subscriptions.ts` normalize billing intervals, derive monthly spend, filter records, bucket renewals, and compute analytics.
+
+### `SubscriptionRecord`
+
+- `id`
+- `name`
+- `provider`
+- `category`
+- `amount`
+- `currency`
+- `billingCycle`
+- `billingIntervalMonths`
+- `normalizedMonthlyAmount`
+- `nextRenewalAt`
+- `status`
+- `reviewFlag`
+- `lastUsedAt`
+- `tags`
+- `notes`
+- `createdAt`
+- `updatedAt`
+
+Subscription status values:
+
+- `active`
+- `paused`
+- `cancelled`
+- `archived`
+
+Billing cycle values:
+
+- `monthly`
+- `quarterly`
+- `yearly`
+- `custom`
+
+Review flag values:
+
+- `none`
+- `review`
+- `unused`
+- `duplicate`
+- `expensive`
+
+### `CreateSubscriptionInput`
+
+- `name`
+- `provider`
+- `category`
+- `amount`
+- `currency`
+- `billingCycle`
+- `billingIntervalMonths`
+- `nextRenewalAt`
+- `status`
+- `reviewFlag`
+- `lastUsedAt`
+- `tags`
+- `notes`
+
+### `UpdateSubscriptionInput`
+
+Patch payload for subscription updates. It includes `id` plus optional versions of the mutable record fields. Nullable fields such as `provider`, `nextRenewalAt`, `lastUsedAt`, and `notes` clear the stored value.
+
+### `SubscriptionAnalyticsFilters`
+
+- `search`
+- `categories`
+- `statuses`
+- `includeArchived`
+
+### `SubscriptionAnalytics`
+
+- `totalMonthlyRecurring`
+- `totalYearlyRecurring`
+- `renewingSoonCount`
+- `renewingSoonAmount`
+- `reviewCount`
+- `potentialSavingsMonthly`
+- `treemapNodes`
+
+### `SubscriptionTreemapNode`
+
+- `id`
+- `name`
+- `value`
+- `category`
+- `status`
+- `reviewFlag`
+- `renewalBucket`
+
+Renewal buckets:
+
+- `soon`
+- `later`
+
+### `RendererSubscriptionsApi`
+
+- `list()`
+- `get(id)`
+- `create(input)`
+- `update(input)`
+- `delete(id)`
+- `archive(id)`
+- `getAnalytics(filters)`
 
 ## Grid Domain Models
 

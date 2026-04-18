@@ -13,8 +13,7 @@ import {
   Tag
 } from 'lucide-react'
 import { type NoteListItem } from '../../../shared/types'
-import { isProjectTag } from '../../../shared/noteTags'
-import { getProjectFolderPath } from '../../../shared/projectFolders'
+import { generateProjectTag, isProjectTag } from '../../../shared/noteTags'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
@@ -49,6 +48,7 @@ interface ProjectDetailsPageProps {
   notes: NoteListItem[]
   focusedMilestoneId?: string | null
   focusedMilestoneToken?: number
+  nameEditToken?: number
   onRename: (nextName: string) => void
   onUpdateSummary: (nextSummary: string) => void
   onAddMilestone: (title: string, dueDate?: string) => void
@@ -94,6 +94,7 @@ export function ProjectDetailsPage({
   notes,
   focusedMilestoneId = null,
   focusedMilestoneToken = 0,
+  nameEditToken = 0,
   onRename,
   onUpdateSummary,
   onAddMilestone,
@@ -143,13 +144,11 @@ export function ProjectDetailsPage({
   const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null)
   const milestoneRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
-  const projectFolderPath = useMemo(() => getProjectFolderPath(project), [project])
+  const projectTag = useMemo(() => generateProjectTag(project.id), [project.id])
 
   const projectNotes = useMemo(() => {
-    return notes.filter(
-      (note) => note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
-    )
-  }, [notes, projectFolderPath])
+    return notes.filter((note) => note.tags.includes(projectTag))
+  }, [notes, projectTag])
 
   useEffect(() => {
     const validIds = new Set(project.milestones.map((milestone) => milestone.id))
@@ -298,6 +297,7 @@ export function ProjectDetailsPage({
           <InlineEditableText
             value={project.name}
             onCommit={onRename}
+            editToken={nameEditToken}
             displayAs="h2"
             displayClassName="m-0 min-w-0 cursor-text truncate text-4xl font-bold text-[var(--text)] hover:text-[var(--accent)]"
             inputClassName="m-0 min-w-0 flex-1 border-0 bg-transparent text-4xl font-bold text-[var(--text)] outline-none"
@@ -366,16 +366,17 @@ export function ProjectDetailsPage({
 
       <div className="flex shrink-0 flex-col gap-2 bg-[var(--panel)] px-8 py-2">
         <TabMenu
+          className="project-tab-menu"
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
         >
-          <TabMenuItem value="milestones">
+          <TabMenuItem className="project-tab-menu-item" value="milestones">
             <span className="inline-flex items-center gap-1.5">
               <Flag size={14} aria-hidden="true" />
               Milestones
             </span>
           </TabMenuItem>
-          <TabMenuItem value="notes">
+          <TabMenuItem className="project-tab-menu-item" value="notes">
             <span className="inline-flex items-center gap-1.5">
               <FileText size={14} aria-hidden="true" />
               Project Notes
@@ -424,7 +425,7 @@ export function ProjectDetailsPage({
                   <TableRow>
                     <TableCell colSpan={3}>
                       <div className="py-2 text-sm text-[var(--muted)]">
-                        No notes in this project folder yet.
+                        No notes tagged for this project yet.
                       </div>
                     </TableCell>
                   </TableRow>
@@ -576,7 +577,7 @@ export function ProjectDetailsPage({
                           milestoneRowRefs.current[milestone.id] = node
                         }}
                         className={cn(
-                          'bg-[color-mix(in_srgb,var(--accent-soft)_30%,var(--panel))] transition-colors',
+                          'bg-[var(--accent-soft)] transition-colors',
                           highlightedMilestoneId === milestone.id
                             ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
                             : undefined

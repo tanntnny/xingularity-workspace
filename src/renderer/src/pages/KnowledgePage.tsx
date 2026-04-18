@@ -23,10 +23,13 @@ interface GraphNodeDatum extends SimulationNodeDatum {
   relPath: string
   label: string
   degree: number
+  isOrphan: boolean
   x?: number
   y?: number
   fx?: number | null
   fy?: number | null
+  targetX?: number
+  targetY?: number
 }
 
 interface GraphLinkDatum extends SimulationLinkDatum<GraphNodeDatum> {
@@ -79,24 +82,32 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    if (
-      size.width === 0 ||
-      size.height === 0 ||
-      graph.nodes.length === 0 ||
-      graph.links.length === 0
-    ) {
+    if (size.width === 0 || size.height === 0 || graph.nodes.length === 0) {
       return
     }
 
     const root = svg.attr('viewBox', `0 0 ${size.width} ${size.height}`).append('g')
+    const centerX = size.width / 2
+    const centerY = size.height / 2
+    const outerRadius = Math.max(72, Math.min(size.width, size.height) / 2 - 72)
+    const orphanNodes = graph.nodes.filter((node) => node.isOrphan)
 
     const simulationNodes: GraphNodeDatum[] = graph.nodes.map((node, index) => {
       const angle = (index / Math.max(graph.nodes.length, 1)) * Math.PI * 2
-      const radius = 48 + (index % 7) * 18
+      const orphanIndex = orphanNodes.findIndex((orphanNode) => orphanNode.id === node.id)
+      const isOrphan = orphanIndex >= 0
+      const radius = isOrphan ? outerRadius : 48 + (index % 7) * 18
+      const positionedAngle = isOrphan
+        ? (orphanIndex / Math.max(orphanNodes.length, 1)) * Math.PI * 2 - Math.PI / 2
+        : angle
+      const x = centerX + Math.cos(positionedAngle) * radius
+      const y = centerY + Math.sin(positionedAngle) * radius
       return {
         ...node,
-        x: size.width / 2 + Math.cos(angle) * radius,
-        y: size.height / 2 + Math.sin(angle) * radius
+        x,
+        y,
+        targetX: isOrphan ? x : centerX,
+        targetY: isOrphan ? y : centerY
       }
     })
 
@@ -122,8 +133,8 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
       .data(simulationNodes)
       .join('circle')
       .attr('r', (node) => 5 + Math.min(node.degree, 6))
-      .attr('fill', 'var(--accent)')
-      .attr('fill-opacity', 0.92)
+      .attr('fill', (node) => (node.isOrphan ? 'var(--muted)' : 'var(--accent)'))
+      .attr('fill-opacity', (node) => (node.isOrphan ? 0.72 : 0.92))
       .style('cursor', 'pointer')
       .style('pointer-events', 'all')
       .on('click', (_event, node) => {
@@ -159,11 +170,23 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
           .strength(0.6)
       )
       .force('charge', d3.forceManyBody<GraphNodeDatum>().strength(-220))
-      .force('x', d3.forceX<GraphNodeDatum>(size.width / 2).strength(0.035))
-      .force('y', d3.forceY<GraphNodeDatum>(size.height / 2).strength(0.035))
+      .force(
+        'x',
+        d3
+          .forceX<GraphNodeDatum>((node) => node.targetX ?? centerX)
+          .strength((node) => (node.isOrphan ? 0.42 : 0.035))
+      )
+      .force(
+        'y',
+        d3
+          .forceY<GraphNodeDatum>((node) => node.targetY ?? centerY)
+          .strength((node) => (node.isOrphan ? 0.42 : 0.035))
+      )
       .force(
         'collision',
-        d3.forceCollide<GraphNodeDatum>().radius((node) => 16 + node.degree * 2)
+        d3
+          .forceCollide<GraphNodeDatum>()
+          .radius((node) => (node.isOrphan ? 24 : 16 + node.degree * 2))
       )
       .on('tick', () => {
         linkSelection
@@ -213,13 +236,10 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
 
     d3.select(svgRef.current)
       .select('g')
-      .attr(
-        'transform',
-        `translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`
-      )
+      .attr('transform', `translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`)
   }, [viewport.x, viewport.y, viewport.zoom])
 
-  const hasConnections = graph.nodes.length > 0 && graph.links.length > 0
+  const hasGraphNodes = graph.nodes.length > 0
 
   return (
     <div
@@ -250,7 +270,7 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
           variant={BackgroundVariant.Dots}
         />
       </ReactFlow>
-      {hasConnections ? (
+      {hasGraphNodes ? (
         <svg
           ref={svgRef}
           className="pointer-events-none absolute inset-0 h-full w-full"

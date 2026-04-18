@@ -24,7 +24,7 @@ async function createFixtureVault(): Promise<string> {
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'alpha.xnote'),
+    path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(
       createStoredNoteDocumentFromText(
         'A distinctive note body for canvas preview.\nSecond line for preview coverage.\n'
@@ -159,10 +159,10 @@ test.describe('grid page', () => {
 
       const initialNoteItem = await waitForBoardItem(
         vaultRoot,
-        (item) => item.id === 'grid-note:alpha.xnote'
+        (item) => item.id === 'grid-note:alpha.md'
       )
 
-      const noteCard = page.getByTestId('grid-card:note:alpha.xnote')
+      const noteCard = page.getByTestId('grid-card:note:alpha.md')
       await expect(noteCard).toBeVisible()
       await expect(noteCard).toContainText('alpha')
       await expect(noteCard).toContainText('A distinctive note body for canvas preview.')
@@ -186,7 +186,7 @@ test.describe('grid page', () => {
 
       const noteItemAfterDrag = await waitForBoardItem(
         vaultRoot,
-        (item) => item.id === 'grid-note:alpha.xnote'
+        (item) => item.id === 'grid-note:alpha.md'
       )
       expect(noteItemAfterDrag.position.x).not.toBe(initialNoteItem.position.x)
       expect(noteItemAfterDrag.position.y).not.toBe(initialNoteItem.position.y)
@@ -247,7 +247,7 @@ test.describe('grid page', () => {
 
       const noteItemAfterResize = await waitForBoardItem(
         vaultRoot,
-        (item) => item.id === 'grid-note:alpha.xnote'
+        (item) => item.id === 'grid-note:alpha.md'
       )
       expect(noteItemAfterResize.size?.width).toBeDefined()
       expect(noteItemAfterResize.size?.height).toBeDefined()
@@ -328,13 +328,13 @@ test.describe('grid page', () => {
       const relaunchedPage = await electronApp.firstWindow()
       await openGridPage(relaunchedPage)
 
-      await expect(relaunchedPage.getByTestId('grid-card:note:alpha.xnote')).toBeVisible()
+      await expect(relaunchedPage.getByTestId('grid-card:note:alpha.md')).toBeVisible()
       await expect(relaunchedPage.locator('[data-testid^="grid-card:text:"]').first()).toBeVisible()
 
       const persistedSettings = await readVaultSettings(vaultRoot)
       const persistedNote = findBoardItem(
         persistedSettings.gridBoard.items,
-        (item) => item.id === 'grid-note:alpha.xnote'
+        (item) => item.id === 'grid-note:alpha.md'
       )
       const persistedText = findBoardItem(
         persistedSettings.gridBoard.items,

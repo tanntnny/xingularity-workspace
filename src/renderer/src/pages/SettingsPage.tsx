@@ -16,6 +16,8 @@ interface SettingsPageProps {
   onSaveMistralApiKey: (apiKey: string) => void
   onSelectFont: (fontFamily: string) => void
   onChangeVaultLocation: () => void
+  onMigrateBlockNoteNotes: () => void
+  onMigrateTaggedNoteBodyFrontmatter: () => void
 }
 
 export function SettingsPage({
@@ -27,7 +29,9 @@ export function SettingsPage({
   onSaveProfile,
   onSaveMistralApiKey,
   onSelectFont,
-  onChangeVaultLocation
+  onChangeVaultLocation,
+  onMigrateBlockNoteNotes,
+  onMigrateTaggedNoteBodyFrontmatter
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
@@ -80,11 +84,23 @@ export function SettingsPage({
         Manage your identity, workspace storage, appearance, and AI connection settings.
       </p>
 
-      <TabMenu value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-        <TabMenuItem value="profile">Profile</TabMenuItem>
-        <TabMenuItem value="workspace">Workspace</TabMenuItem>
-        <TabMenuItem value="appearance">Appearance</TabMenuItem>
-        <TabMenuItem value="agent">Agent</TabMenuItem>
+      <TabMenu
+        className="settings-tab-menu"
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as typeof activeTab)}
+      >
+        <TabMenuItem className="settings-tab-menu-item" value="profile">
+          Profile
+        </TabMenuItem>
+        <TabMenuItem className="settings-tab-menu-item" value="workspace">
+          Workspace
+        </TabMenuItem>
+        <TabMenuItem className="settings-tab-menu-item" value="appearance">
+          Appearance
+        </TabMenuItem>
+        <TabMenuItem className="settings-tab-menu-item" value="agent">
+          Agent
+        </TabMenuItem>
       </TabMenu>
 
       {activeTab === 'profile' ? (
@@ -134,6 +150,27 @@ export function SettingsPage({
               onClick={onChangeVaultLocation}
             >
               Change Vault Location
+            </button>
+          </div>
+
+          <div className="grid max-w-[520px] gap-1.5" aria-label="Note migration">
+            <span className="text-sm text-[var(--muted)]">Old Note Conversion</span>
+            <p className="text-sm leading-6 text-[var(--muted)]">
+              Convert old BlockNote JSON note files into normal markdown in your vault.
+            </p>
+            <button
+              type="button"
+              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              onClick={onMigrateBlockNoteNotes}
+            >
+              Convert old BlockNote notes
+            </button>
+            <button
+              type="button"
+              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              onClick={onMigrateTaggedNoteBodyFrontmatter}
+            >
+              Normalize tagged note bodies
             </button>
           </div>
         </div>

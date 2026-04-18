@@ -1,5 +1,4 @@
 import { Project } from './types'
-import { generateProjectTag } from './noteTags'
 
 export const PROJECTS_ROOT_FOLDER_NAME = 'Projects'
 
@@ -70,34 +69,35 @@ export function resolveProjectByFolderPath(
 }
 
 export function getProjectTagForPath(relPath: string, projects: Project[]): string | null {
-  const project = resolveProjectByFolderPath(relPath, projects)
-  return project ? generateProjectTag(project.name) : null
+  void relPath
+  void projects
+  return null
 }
 
 export function isProtectedProjectTreePath(relPath: string, projects: Project[]): boolean {
-  if (isProjectsRootPath(relPath)) {
-    return true
-  }
-
-  return projects.some((project) => getProjectFolderPath(project) === normalizePathSeparators(relPath))
+  void relPath
+  void projects
+  return false
 }
 
 export function getProjectProtectionKind(
   relPath: string,
   projects: Project[]
 ): ProjectTreeProtectionKind | null {
-  if (isProjectsRootPath(relPath)) {
-    return 'projects-root'
-  }
-
-  return projects.some((project) => getProjectFolderPath(project) === normalizePathSeparators(relPath))
-    ? 'project-folder'
-    : null
+  void relPath
+  void projects
+  return null
 }
 
 export function isManagedProjectsRootChild(relPath: string): boolean {
   const segments = getProjectFolderSegments(relPath)
   return segments.length === 2 && segments[0] === PROJECTS_ROOT_FOLDER_NAME
+}
+
+export function isManagedProjectFolderPath(relPath: string, projects: Project[]): boolean {
+  void relPath
+  void projects
+  return false
 }
 
 export function getProjectFolderRelativeChildPath(relPath: string): string {

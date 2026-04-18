@@ -19,6 +19,7 @@ import {
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export type NoteFilterMode = 'all' | 'tagged' | 'untagged'
 export type NoteSortField = 'name' | 'created' | 'updated'
@@ -107,9 +108,17 @@ export function NotePreviewList({
     () => filtered.filter((note) => !favoritePathSet.has(note.relPath)),
     [filtered, favoritePathSet]
   )
+  const revealItemIds = useMemo(
+    () => [
+      ...favoriteNotes.map((note) => `favorite:${note.relPath}`),
+      ...allNotes.map((note) => `all:${note.relPath}`)
+    ],
+    [allNotes, favoriteNotes]
+  )
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds)
 
   return (
-    <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
+    <div ref={containerRef} className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       {filtered.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
       ) : (
@@ -129,6 +138,8 @@ export function NotePreviewList({
             onCopyLink={onCopyLink}
             folders={folders}
             useNativeMenus={useNativeMenus}
+            getRevealItemProps={getRevealItemProps}
+            revealKeyPrefix="favorite"
           />
           <NoteSection
             title="All Notes"
@@ -145,6 +156,8 @@ export function NotePreviewList({
             onCopyLink={onCopyLink}
             folders={folders}
             useNativeMenus={useNativeMenus}
+            getRevealItemProps={getRevealItemProps}
+            revealKeyPrefix="all"
           />
         </>
       )}
@@ -166,7 +179,9 @@ function NoteSection({
   onMoveTo,
   onCopyLink,
   folders,
-  useNativeMenus
+  useNativeMenus,
+  getRevealItemProps,
+  revealKeyPrefix
 }: {
   title: string
   icon: ReactElement
@@ -182,6 +197,12 @@ function NoteSection({
   onCopyLink?: (relPath: string) => void
   folders: string[]
   useNativeMenus: boolean
+  getRevealItemProps: (itemId: string) => {
+    ref: (node: HTMLElement | null) => void
+    className: string
+    style: React.CSSProperties
+  }
+  revealKeyPrefix: string
 }): ReactElement {
   return (
     <WorkspacePanelSection>
@@ -190,6 +211,7 @@ function NoteSection({
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
         notes.map((note) => {
+          const revealProps = getRevealItemProps(`${revealKeyPrefix}:${note.relPath}`)
           const isSelected = selectedPath === note.relPath
           const noteTags = Array.isArray(note.tags) ? note.tags : []
           const visibleTags = noteTags.slice(0, 2)
@@ -235,14 +257,18 @@ function NoteSection({
           const noteButton = (
             <button
               type="button"
+              ref={revealProps.ref}
               data-testid={`note-preview:${note.relPath}`}
-              className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+              className={`${revealProps.className} flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                 isSelected
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                   : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
               }`}
+              style={revealProps.style}
               onClick={() => onOpen(note.relPath)}
-              onContextMenu={useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined}
+              onContextMenu={
+                useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
+              }
               onKeyDown={(event) => {
                 if (!isDeleteShortcut(event)) {
                   return
@@ -251,18 +277,24 @@ function NoteSection({
                 onDelete(note.relPath)
               }}
             >
-              <div className="truncate text-lg font-bold">{stripNoteExtension(note.name)}</div>
-              <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                <Badge variant="neutral">
-                  <Pencil size={12} aria-hidden="true" />
-                  {updatedLabel}
-                </Badge>
-                <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-                  {visibleTags.map((tag) => (
-                    <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
-                  ))}
-                  {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
-                </span>
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold">
+                  {stripNoteExtension(note.name)}
+                </div>
+                <div className="truncate text-xs text-[var(--muted)]">{note.relPath}</div>
+                <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                  <Badge variant="neutral">
+                    <Pencil size={12} aria-hidden="true" />
+                    {updatedLabel}
+                  </Badge>
+                  <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                    {visibleTags.map((tag) => (
+                      <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
+                    ))}
+                    {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
+                  </span>
+                </div>
               </div>
             </button>
           )
@@ -293,7 +325,10 @@ function NoteSection({
                     </ContextMenuSubTrigger>
                     <ContextMenuSubContent>
                       {folders.map((folder) => (
-                        <ContextMenuItem key={folder} onClick={() => onMoveTo(note.relPath, folder)}>
+                        <ContextMenuItem
+                          key={folder}
+                          onClick={() => onMoveTo(note.relPath, folder)}
+                        >
                           {folder}
                         </ContextMenuItem>
                       ))}

@@ -6,17 +6,33 @@ import {
   createStoredNoteDocumentFromMarkdown,
   createStoredNoteDocumentFromText,
   getNoteDisplayName,
+  isLegacyNotePath,
   isNotePath,
+  LEGACY_NOTE_FILE_EXTENSION,
   NOTE_FILE_EXTENSION,
-  noteBlocksToPreviewText,
-  noteBlocksToText,
   parseStoredNoteDocument,
+  parseBlockNoteJsonMarkdown,
+  parseLegacyStoredNoteDocument,
   serializeStoredNoteDocument,
+  stripNoteExtension,
   withNoteExtension
 } from '../shared/noteDocument'
-import { extractMentionTargets } from '../shared/noteMentions'
+import {
+  extractMentionTargetsFromMarkdown,
+  rewriteNoteMentionTargets
+} from '../shared/noteMentions'
+import { splitNoteContent } from '../shared/noteContent'
+import { listTagsFromMarkdown, upsertTagsInMarkdown } from '../shared/noteTags'
 import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shared/pathSafety'
-import { ImportedNoteResult, NoteListItem, NoteTreeFile, NoteTreeFolder, NoteTreeNode, StoredNoteDocument } from '../shared/types'
+import {
+  ImportedNoteResult,
+  BlockNoteMigrationResult,
+  NoteListItem,
+  NoteTreeFile,
+  NoteTreeFolder,
+  NoteTreeNode,
+  StoredNoteDocument
+} from '../shared/types'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -42,7 +58,7 @@ export class FileService {
 
   async readNote(relPathInput: string): Promise<string> {
     const document = await this.readNoteDocument(relPathInput)
-    return noteBlocksToText(document.blocks)
+    return document.markdown
   }
 
   async readNoteDocument(relPathInput: string): Promise<StoredNoteDocument> {
@@ -125,12 +141,12 @@ export class FileService {
   }
 
   async migrateLegacyMarkdownNotes(): Promise<Record<string, string>> {
-    const legacyFiles = await listLegacyMarkdownPaths(this.notesRoot)
+    const legacyFiles = await listLegacyNoteDocumentPaths(this.notesRoot)
     const migrated: Record<string, string> = {}
 
     for (const legacyAbsolutePath of legacyFiles) {
       const legacyRelPath = normalizeRelativePath(path.relative(this.notesRoot, legacyAbsolutePath))
-      const preferredRelPath = `${stripLegacyMarkdownExtension(legacyRelPath)}${NOTE_FILE_EXTENSION}`
+      const preferredRelPath = `${stripLegacyNoteExtension(legacyRelPath)}${NOTE_FILE_EXTENSION}`
       const nextRelPath = await findAvailableNoteRelPath(this.notesRoot, preferredRelPath)
       const nextAbsolutePath = joinSafe(this.notesRoot, nextRelPath)
       const raw = await fs.readFile(legacyAbsolutePath, 'utf-8')
@@ -138,7 +154,7 @@ export class FileService {
       await fs.mkdir(path.dirname(nextAbsolutePath), { recursive: true })
       await fs.writeFile(
         nextAbsolutePath,
-        serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(raw)),
+        serializeStoredNoteDocument(parseLegacyStoredNoteDocument(raw)),
         { flag: 'wx' }
       )
       await fs.rm(legacyAbsolutePath)
@@ -148,6 +164,80 @@ export class FileService {
     }
 
     return migrated
+  }
+
+  async migrateBlockNoteMarkdownNotes(): Promise<BlockNoteMigrationResult> {
+    const noteFiles = await listNotePaths(this.notesRoot)
+    const result: BlockNoteMigrationResult = {
+      converted: 0,
+      skipped: 0,
+      failed: []
+    }
+
+    for (const absolutePath of noteFiles) {
+      const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+      try {
+        const raw = await fs.readFile(absolutePath, 'utf-8')
+        const converted = parseBlockNoteJsonMarkdown(raw)
+        if (!converted) {
+          result.skipped += 1
+          continue
+        }
+
+        await fs.writeFile(absolutePath, serializeStoredNoteDocument(converted), 'utf-8')
+        this.onInternalWrite(relPath)
+        result.converted += 1
+      } catch (error) {
+        result.failed.push({
+          relPath,
+          error: String(error)
+        })
+      }
+    }
+
+    return result
+  }
+
+  async migrateTaggedNoteBodyFrontmatter(): Promise<{
+    converted: number
+    skipped: number
+    failed: Array<{
+      relPath: string
+      error: string
+    }>
+  }> {
+    const noteFiles = await listNotePaths(this.notesRoot)
+    const result = {
+      converted: 0,
+      skipped: 0,
+      failed: [] as Array<{
+        relPath: string
+        error: string
+      }>
+    }
+
+    for (const absolutePath of noteFiles) {
+      const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+      try {
+        const raw = await fs.readFile(absolutePath, 'utf-8')
+        const normalized = normalizeTaggedNoteBodyFrontmatter(raw)
+        if (normalized === raw) {
+          result.skipped += 1
+          continue
+        }
+
+        await fs.writeFile(absolutePath, normalized, 'utf-8')
+        this.onInternalWrite(relPath)
+        result.converted += 1
+      } catch (error) {
+        result.failed.push({
+          relPath,
+          error: String(error)
+        })
+      }
+    }
+
+    return result
   }
 
   async rename(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
@@ -165,6 +255,12 @@ export class FileService {
     assertMoveTargetIsValid(oldRelPath, newRelPath, fromStats.isDirectory())
     await fs.mkdir(path.dirname(to), { recursive: true })
     await fs.rename(from, to)
+    await rewriteNoteMentionTargetsForRename(
+      this.notesRoot,
+      oldRelPath,
+      newRelPath,
+      fromStats.isDirectory()
+    )
     this.onInternalWrite(oldRelPath)
     this.onInternalWrite(newRelPath)
   }
@@ -254,6 +350,7 @@ export class FileService {
     const raw = await fs.readFile(absolutePath, 'utf-8')
     const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
     const document = parseStoredNoteDocument(raw)
+    const { body } = splitNoteContent(document.markdown)
 
     return {
       relPath,
@@ -262,8 +359,8 @@ export class FileService {
       createdAt: stats.birthtime.toISOString(),
       updatedAt: stats.mtime.toISOString(),
       tags: document.tags,
-      bodyPreview: noteBlocksToPreviewText(document.blocks),
-      mentionTargets: extractMentionTargets(document.blocks)
+      bodyPreview: body.replace(/\s+/g, ' ').trim(),
+      mentionTargets: extractMentionTargetsFromMarkdown(document.markdown)
     }
   }
 }
@@ -284,15 +381,69 @@ export function sanitizeEntryPath(input: string): string {
 
 function sanitizeNoteName(input: string): string {
   const parsed = noteNameSchema.parse(input)
-  return stripLegacyMarkdownExtension(withNoteExtension(parsed).replace(new RegExp(`${NOTE_FILE_EXTENSION.replace('.', '\\.')}$`, 'i'), ''))
+  return stripLegacyNoteExtension(
+    withNoteExtension(parsed).replace(
+      new RegExp(`${NOTE_FILE_EXTENSION.replace('.', '\\.')}$`, 'i'),
+      ''
+    )
+  )
     .trim()
     .replace(/[^a-zA-Z0-9-_ ]/g, '')
     .replace(/\s+/g, '-')
     .toLowerCase()
 }
 
-function stripLegacyMarkdownExtension(input: string): string {
-  return input.replace(/\.md$/i, '')
+function stripLegacyNoteExtension(input: string): string {
+  return input
+    .replace(new RegExp(`${LEGACY_NOTE_FILE_EXTENSION.replace('.', '\\.')}$`, 'i'), '')
+    .replace(/\.md$/i, '')
+}
+
+async function rewriteNoteMentionTargetsForRename(
+  notesRoot: string,
+  oldRelPath: string,
+  newRelPath: string,
+  isDirectory: boolean
+): Promise<void> {
+  const noteFiles = await listNotePaths(notesRoot)
+  const oldTarget = stripNoteExtension(oldRelPath)
+  const newTarget = stripNoteExtension(newRelPath)
+
+  const rewriteTarget = (target: string): string | null => {
+    if (isDirectory) {
+      if (target === oldTarget) {
+        return newTarget
+      }
+
+      if (target.startsWith(`${oldTarget}/`)) {
+        return `${newTarget}${target.slice(oldTarget.length)}`
+      }
+
+      return null
+    }
+
+    return target === oldTarget ? newTarget : null
+  }
+
+  await Promise.all(
+    noteFiles.map(async (absolutePath) => {
+      const raw = await fs.readFile(absolutePath, 'utf-8')
+      const document = parseStoredNoteDocument(raw)
+      const nextMarkdown = rewriteNoteMentionTargets(document.markdown, rewriteTarget)
+      if (nextMarkdown === document.markdown) {
+        return
+      }
+
+      await fs.writeFile(
+        absolutePath,
+        serializeStoredNoteDocument({
+          ...document,
+          markdown: nextMarkdown
+        }),
+        'utf-8'
+      )
+    })
+  )
 }
 
 async function listNotePaths(root: string): Promise<string[]> {
@@ -311,16 +462,16 @@ async function listNotePaths(root: string): Promise<string[]> {
   return results.sort((left, right) => left.localeCompare(right))
 }
 
-async function listLegacyMarkdownPaths(root: string): Promise<string[]> {
+async function listLegacyNoteDocumentPaths(root: string): Promise<string[]> {
   const entries = await fs.readdir(root, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
     if (entry.isDirectory()) {
-      results.push(...(await listLegacyMarkdownPaths(absolutePath)))
+      results.push(...(await listLegacyNoteDocumentPaths(absolutePath)))
       continue
     }
-    if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+    if (entry.isFile() && isLegacyNotePath(entry.name)) {
       results.push(absolutePath)
     }
   }
@@ -369,6 +520,7 @@ async function readNoteTreeFile(root: string, absolutePath: string): Promise<Not
   const raw = await fs.readFile(absolutePath, 'utf-8')
   const relPath = normalizeRelativePath(path.relative(root, absolutePath))
   const document = parseStoredNoteDocument(raw)
+  const { body } = splitNoteContent(document.markdown)
   return {
     relPath,
     name: path.basename(relPath),
@@ -376,7 +528,7 @@ async function readNoteTreeFile(root: string, absolutePath: string): Promise<Not
     createdAt: stats.birthtime.toISOString(),
     updatedAt: stats.mtime.toISOString(),
     tags: document.tags,
-    bodyPreview: noteBlocksToPreviewText(document.blocks)
+    bodyPreview: body.replace(/\s+/g, ' ').trim()
   }
 }
 
@@ -396,6 +548,29 @@ async function findAvailableNoteRelPath(root: string, preferredRelPath: string):
   }
 
   return nextRelPath
+}
+
+function normalizeTaggedNoteBodyFrontmatter(raw: string): string {
+  const outer = splitNoteContent(raw)
+  const bodyParts = splitNoteContent(outer.body)
+
+  if (!bodyParts.frontmatter) {
+    return raw
+  }
+
+  const liftedTags = listTagsFromMarkdown(`---\n${bodyParts.frontmatter}\n---\n`)
+  if (liftedTags.length === 0) {
+    return raw
+  }
+
+  const body = bodyParts.body.replace(/^(?:\r?\n)+/, '')
+  const candidateMarkdown = outer.frontmatter
+    ? ['---', outer.frontmatter, '---', '', body].join(outer.lineEnding)
+    : body
+  const existingTags = listTagsFromMarkdown(raw)
+  const mergedTags = Array.from(new Set([...existingTags, ...liftedTags]))
+
+  return upsertTagsInMarkdown(candidateMarkdown, mergedTags)
 }
 
 function assertMoveTargetIsValid(

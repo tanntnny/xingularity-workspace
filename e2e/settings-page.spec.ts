@@ -23,7 +23,7 @@ async function createFixtureVault(): Promise<string> {
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'alpha.xnote'),
+    path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha note\n')),
     'utf-8'
   )

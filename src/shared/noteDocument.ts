@@ -1,8 +1,9 @@
 import { StoredNoteDocument } from './types'
-import { listTagsFromMarkdown, normalizeTag } from './noteTags'
+import { listTagsFromMarkdown, normalizeTag, upsertTagsInMarkdown } from './noteTags'
 import { splitNoteContent } from './noteContent'
 
-export const NOTE_FILE_EXTENSION = '.xnote'
+export const NOTE_FILE_EXTENSION = '.md'
+export const LEGACY_NOTE_FILE_EXTENSION = '.xnote'
 const NOTE_FILE_VERSION = 1
 
 type JsonRecord = Record<string, unknown>
@@ -17,63 +18,10 @@ function normalizeTags(tags: unknown): string[] {
   }
 
   return Array.from(
-    new Set(tags.map((tag) => normalizeTag(String(tag))).filter((tag): tag is string => Boolean(tag)))
+    new Set(
+      tags.map((tag) => normalizeTag(String(tag))).filter((tag): tag is string => Boolean(tag))
+    )
   )
-}
-
-function normalizeBlocks(blocks: unknown): unknown[] {
-  return Array.isArray(blocks) && blocks.length > 0 ? blocks : [{ type: 'paragraph' }]
-}
-
-export function isNotePath(relPath: string): boolean {
-  return relPath.toLowerCase().endsWith(NOTE_FILE_EXTENSION)
-}
-
-export function stripNoteExtension(relPath: string): string {
-  return relPath.replace(new RegExp(`${NOTE_FILE_EXTENSION.replace('.', '\\.')}$`, 'i'), '')
-}
-
-export function withNoteExtension(relPath: string): string {
-  return isNotePath(relPath) ? relPath : `${stripNoteExtension(relPath)}${NOTE_FILE_EXTENSION}`
-}
-
-export function getNoteDisplayName(relPath: string): string {
-  const normalized = stripNoteExtension(relPath).replace(/\/+$/, '')
-  const segments = normalized.split('/')
-  return segments[segments.length - 1] || normalized
-}
-
-export function createEmptyNoteDocument(tags: string[] = []): StoredNoteDocument {
-  return {
-    version: NOTE_FILE_VERSION,
-    tags: normalizeTags(tags),
-    blocks: [{ type: 'paragraph' }]
-  }
-}
-
-export function normalizeStoredNoteDocument(document: StoredNoteDocument): StoredNoteDocument {
-  return {
-    version: NOTE_FILE_VERSION,
-    tags: normalizeTags(document.tags),
-    blocks: normalizeBlocks(document.blocks)
-  }
-}
-
-export function parseStoredNoteDocument(raw: string): StoredNoteDocument {
-  const parsed = JSON.parse(raw) as unknown
-  if (!isRecord(parsed)) {
-    throw new Error('Invalid note document')
-  }
-
-  return normalizeStoredNoteDocument({
-    version: NOTE_FILE_VERSION,
-    tags: parsed.tags,
-    blocks: parsed.blocks
-  } as StoredNoteDocument)
-}
-
-export function serializeStoredNoteDocument(document: StoredNoteDocument): string {
-  return JSON.stringify(normalizeStoredNoteDocument(document), null, 2)
 }
 
 function extractInlineText(content: unknown): string {
@@ -136,7 +84,9 @@ function blockToLines(block: unknown, depth = 0): string[] {
 
   if (block.type === 'image') {
     const url =
-      typeof block.props === 'object' && block.props ? String((block.props as JsonRecord).url ?? '') : ''
+      typeof block.props === 'object' && block.props
+        ? String((block.props as JsonRecord).url ?? '')
+        : ''
     return [url ? `![image](${url})` : '']
   }
 
@@ -155,8 +105,22 @@ function blockToLines(block: unknown, depth = 0): string[] {
   return lines
 }
 
+function looksLikeBlockNoteBlocks(value: unknown): value is unknown[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return false
+  }
+
+  return value.every((block) => {
+    if (!isRecord(block) || typeof block.type !== 'string') {
+      return false
+    }
+
+    return 'content' in block || 'children' in block || 'props' in block
+  })
+}
+
 export function noteBlocksToText(blocks: unknown[]): string {
-  return normalizeBlocks(blocks)
+  return (Array.isArray(blocks) ? blocks : [{ type: 'paragraph' }])
     .flatMap((block) => blockToLines(block))
     .join('\n')
 }
@@ -165,104 +129,143 @@ export function noteBlocksToPreviewText(blocks: unknown[]): string {
   return noteBlocksToText(blocks).replace(/\s+/g, ' ').trim()
 }
 
-function createBlockFromLine(line: string): JsonRecord {
-  if (/^#{1,6}\s+/.test(line)) {
-    const [, hashes = '', text = ''] = line.match(/^(#{1,6})\s+(.*)$/) ?? []
-    return {
-      type: 'heading',
-      props: { level: hashes.length },
-      content: text
-    }
-  }
-
-  if (/^- \[(x| )\]\s+/i.test(line)) {
-    const [, checked = '', text = ''] = line.match(/^- \[(x| )\]\s+(.*)$/i) ?? []
-    return {
-      type: 'checkListItem',
-      props: { checked: checked.toLowerCase() === 'x' },
-      content: text
-    }
-  }
-
-  if (/^[-*]\s+/.test(line)) {
-    return {
-      type: 'bulletListItem',
-      content: line.replace(/^[-*]\s+/, '')
-    }
-  }
-
-  if (/^\d+\.\s+/.test(line)) {
-    return {
-      type: 'numberedListItem',
-      content: line.replace(/^\d+\.\s+/, '')
-    }
-  }
-
-  if (/^>\s+/.test(line)) {
-    return {
-      type: 'quote',
-      content: line.replace(/^>\s+/, '')
-    }
-  }
-
-  const imageMatch = line.match(/^!\[[^\]]*\]\(([^)]+)\)$/)
-  if (imageMatch) {
-    return {
-      type: 'image',
-      props: {
-        url: imageMatch[1],
-        caption: '',
-        previewWidth: 512
-      }
-    }
-  }
-
-  return {
-    type: 'paragraph',
-    content: line
-  }
+export function isNotePath(relPath: string): boolean {
+  return relPath.toLowerCase().endsWith(NOTE_FILE_EXTENSION)
 }
 
-export function noteTextToBlocks(text: string): unknown[] {
-  const normalized = text.replace(/\r\n/g, '\n')
-  const lines = normalized.length > 0 ? normalized.split('\n') : ['']
-  return lines.map((line) => createBlockFromLine(line))
+export function isLegacyNotePath(relPath: string): boolean {
+  return relPath.toLowerCase().endsWith(LEGACY_NOTE_FILE_EXTENSION)
 }
 
-export function appendTextToNoteBlocks(blocks: unknown[], text: string): unknown[] {
-  const appendedText = text.trim()
-  if (!appendedText) {
-    return normalizeBlocks(blocks)
-  }
-
-  const nextBlocks = normalizeBlocks(blocks)
-  const needsSpacer =
-    nextBlocks.length > 0 &&
-    blockToLines(nextBlocks[nextBlocks.length - 1]).join('').trim().length > 0
-
-  return [
-    ...nextBlocks,
-    ...(needsSpacer ? [{ type: 'paragraph', content: '' }] : []),
-    ...noteTextToBlocks(appendedText)
-  ]
+export function stripNoteExtension(relPath: string): string {
+  return relPath.replace(/\.(md|xnote)$/i, '')
 }
 
-export function createStoredNoteDocumentFromText(text: string, tags: string[] = []): StoredNoteDocument {
+export function withNoteExtension(relPath: string): string {
+  return isNotePath(relPath) ? relPath : `${stripNoteExtension(relPath)}${NOTE_FILE_EXTENSION}`
+}
+
+export function getNoteDisplayName(relPath: string): string {
+  const normalized = stripNoteExtension(relPath).replace(/\/+$/, '')
+  const segments = normalized.split('/')
+  return segments[segments.length - 1] || normalized
+}
+
+export function createEmptyNoteDocument(tags: string[] = []): StoredNoteDocument {
+  return createStoredNoteDocumentFromMarkdown(upsertTagsInMarkdown('', tags))
+}
+
+export function normalizeStoredNoteDocument(document: StoredNoteDocument): StoredNoteDocument {
+  const markdown = typeof document.markdown === 'string' ? document.markdown : ''
+  const frontmatterTags = listTagsFromMarkdown(markdown)
+  const tags =
+    normalizeTags(document.tags).length > 0 ? normalizeTags(document.tags) : frontmatterTags
+
   return {
     version: NOTE_FILE_VERSION,
-    tags: normalizeTags(tags),
-    blocks: noteTextToBlocks(text)
+    tags,
+    markdown
   }
+}
+
+export function parseStoredNoteDocument(raw: string): StoredNoteDocument {
+  return createStoredNoteDocumentFromMarkdown(raw)
+}
+
+export function serializeStoredNoteDocument(document: StoredNoteDocument): string {
+  const normalized = normalizeStoredNoteDocument(document)
+  return upsertTagsInMarkdown(normalized.markdown, normalized.tags)
+}
+
+export function createStoredNoteDocumentFromText(
+  text: string,
+  tags: string[] = []
+): StoredNoteDocument {
+  return createStoredNoteDocumentFromMarkdown(upsertTagsInMarkdown(text, tags))
 }
 
 export function createStoredNoteDocumentFromMarkdown(markdown: string): StoredNoteDocument {
-  const parts = splitNoteContent(markdown)
-  const tags = listTagsFromMarkdown(markdown)
-  return createStoredNoteDocumentFromText(parts.body, tags)
+  return {
+    version: NOTE_FILE_VERSION,
+    tags: normalizeTags(listTagsFromMarkdown(markdown)),
+    markdown
+  }
 }
 
-export function extractNoteTitle(blocks: unknown[], relPath: string): string {
-  for (const block of normalizeBlocks(blocks)) {
+export function parseLegacyStoredNoteDocument(raw: string): StoredNoteDocument {
+  const parsed = JSON.parse(raw) as unknown
+  if (!isRecord(parsed)) {
+    throw new Error('Invalid legacy note document')
+  }
+
+  const tags = normalizeTags(parsed.tags)
+  const blocks = Array.isArray(parsed.blocks) && parsed.blocks.length > 0 ? parsed.blocks : []
+  return createStoredNoteDocumentFromText(noteBlocksToText(blocks), tags)
+}
+
+export function parseBlockNoteJsonMarkdown(raw: string): StoredNoteDocument | null {
+  const trimmed = raw.trim()
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+    return null
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed) as unknown
+  } catch {
+    return null
+  }
+
+  if (looksLikeBlockNoteBlocks(parsed)) {
+    return createStoredNoteDocumentFromText(noteBlocksToText(parsed))
+  }
+
+  if (!isRecord(parsed)) {
+    return null
+  }
+
+  const blocks = parsed.blocks
+  if (!looksLikeBlockNoteBlocks(blocks)) {
+    return null
+  }
+
+  return createStoredNoteDocumentFromText(noteBlocksToText(blocks), normalizeTags(parsed.tags))
+}
+
+export function appendTextToNoteMarkdown(markdown: string, text: string): string {
+  const appendedText = text.trim()
+  if (!appendedText) {
+    return markdown
+  }
+
+  const { frontmatter, body, lineEnding } = splitNoteContent(markdown)
+  const separator = body.trim().length > 0 ? `${lineEnding}${lineEnding}` : ''
+  const nextBody = `${body}${separator}${appendedText}`
+
+  if (!frontmatter) {
+    return nextBody
+  }
+
+  return ['---', frontmatter, '---', '', nextBody].join(lineEnding)
+}
+
+export function extractNoteTitleFromMarkdown(markdown: string, relPath: string): string {
+  const { body } = splitNoteContent(markdown)
+  const heading = body
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.match(/^#{1,6}\s+(.+)$/)?.[1]?.trim() ?? '')
+    .find((line) => line.length > 0)
+
+  return heading ?? getNoteDisplayName(relPath)
+}
+
+export function extractNoteTitle(blocksOrMarkdown: unknown[] | string, relPath: string): string {
+  if (typeof blocksOrMarkdown === 'string') {
+    return extractNoteTitleFromMarkdown(blocksOrMarkdown, relPath)
+  }
+
+  for (const block of Array.isArray(blocksOrMarkdown) ? blocksOrMarkdown : []) {
     if (!isRecord(block) || block.type !== 'heading') {
       continue
     }

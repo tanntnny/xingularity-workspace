@@ -1,42 +1,37 @@
-import { createExtension } from '@blocknote/core'
-import { filterSuggestionItems } from '@blocknote/core/extensions'
-import { BlockNoteView } from '@blocknote/mantine'
-import '@blocknote/mantine/style.css'
 import {
-  DefaultReactSuggestionItem,
-  SuggestionMenuController,
-  useCreateBlockNote
-} from '@blocknote/react'
-import { Extension as TiptapExtension, InputRule } from '@tiptap/core'
-import {
-  DragEvent,
   forwardRef,
-  MouseEvent as ReactMouseEvent,
   ReactElement,
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState
 } from 'react'
-import { noteBlocksToText, stripNoteExtension } from '../../../shared/noteDocument'
-import { NoteListItem } from '../../../shared/types'
+import { editorViewCtx, prosePluginsCtx } from '@milkdown/kit/core'
+import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
+import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
+import { linkSchema } from '@milkdown/kit/preset/commonmark'
+import { Crepe, CrepeFeature } from '@milkdown/crepe'
+import { insert } from '@milkdown/kit/utils'
+import '@milkdown/crepe/theme/common/style.css'
+import '@milkdown/crepe/theme/nord.css'
+import katex from 'katex'
+import { Check, Link2 } from 'lucide-react'
+import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
+import type { NoteListItem } from '../../../shared/types'
 import {
-  normalizeMentionTarget,
+  createNoteMentionResolver,
+  normalizeNoteMentionMarkdown,
   noteMentionHref,
   parseNoteMentionHref
 } from '../../../shared/noteMentions'
-import {
-  cloneNoteEditorBlocks,
-  type NoteEditorBlock,
-  type NoteEditorSnapshot
-} from '../lib/noteEditorSession'
-import { NOTE_ARROW_REPLACEMENTS } from '../lib/noteArrowInputRules'
-import { extractNoteOutline, NoteOutlineItem } from '../lib/noteOutline'
+import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
+import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
+import { extractNoteOutlineFromMarkdown, type NoteOutlineItem } from '../lib/noteOutline'
+import { cn } from '../lib/utils'
 
 interface EditorProps {
-  initialBlocks?: NoteEditorBlock[] | null
+  initialContent?: string | null
   onDirty: () => void
   onSnapshotChange?: (snapshot: NoteEditorSnapshot) => void
   onDropFile: (sourcePath: string) => Promise<string | null>
@@ -51,35 +46,194 @@ interface EditorProps {
 export interface NoteEditorHandle {
   captureSnapshot: () => Promise<NoteEditorSnapshot>
   flushPendingChanges: () => Promise<NoteEditorSnapshot>
+  focus: () => void
+  hasFocusIntent: () => boolean
   blur: () => void
+  insertNoteLink: (targetRelPath: string) => void
 }
 
-const noteArrowInputExtension = createExtension({
-  key: 'note-arrow-input',
-  tiptapExtensions: [
-    TiptapExtension.create({
-      name: 'note-arrow-input-rules',
-      addInputRules() {
-        return NOTE_ARROW_REPLACEMENTS.map(
-          ({ sequence, replacement }) =>
-            new InputRule({
-              find: new RegExp(`${sequence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
-              handler: ({ state, range }) => {
-                state.tr.insertText(replacement, range.from, range.to)
-              }
-            })
-        )
+interface MentionPickerState {
+  open: boolean
+  query: string
+  from: number
+  to: number
+  top: number
+  left: number
+}
+
+function buildMentionSuggestions(
+  notes: NoteListItem[],
+  currentNotePath: string | undefined,
+  mentionPicker: MentionPickerState | null
+): NoteListItem[] {
+  if (!mentionPicker?.open) {
+    return []
+  }
+
+  const query = mentionPicker.query.trim().toLowerCase()
+  return notes
+    .filter((note) => {
+      if (currentNotePath && note.relPath === currentNotePath) {
+        return false
       }
+
+      if (!query) {
+        return true
+      }
+
+      const displayName = getNoteDisplayName(note.relPath).toLowerCase()
+      const relPath = stripNoteExtension(note.relPath).toLowerCase()
+      return displayName.includes(query) || relPath.includes(query)
     })
-  ]
-})
+    .slice()
+    .sort((left, right) => left.relPath.localeCompare(right.relPath))
+    .slice(0, 8)
+}
+
+function createInlineLatexPreview(value: string, displayMode: boolean): HTMLElement {
+  const preview = document.createElement('span')
+  preview.className = cn(
+    'note-latex-preview',
+    displayMode ? 'note-latex-preview-display' : 'note-latex-preview-inline'
+  )
+  preview.dataset.latex = value
+  preview.dataset.latexMode = displayMode ? 'display' : 'inline'
+  preview.contentEditable = 'false'
+
+  try {
+    katex.render(value, preview, {
+      displayMode,
+      throwOnError: true
+    })
+  } catch {
+    const delimiter = displayMode ? '$$' : '$'
+    preview.textContent = `${delimiter}${value}${delimiter}`
+  }
+
+  return preview
+}
+
+function selectionTouchesTextblock(
+  selectionFrom: number,
+  selectionTo: number,
+  blockStart: number,
+  blockEnd: number
+): boolean {
+  if (selectionFrom === selectionTo) {
+    return selectionFrom >= blockStart && selectionFrom <= blockEnd
+  }
+
+  return selectionFrom <= blockEnd && selectionTo >= blockStart
+}
+
+const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
+
+function inlineLatexPreviewPlugin(): Plugin {
+  return new Plugin({
+    key: inlineLatexPreviewPluginKey,
+    state: {
+      init: () => false,
+      apply(transaction, isFocused: boolean) {
+        const nextFocusState = transaction.getMeta(inlineLatexPreviewPluginKey)
+        return typeof nextFocusState === 'boolean' ? nextFocusState : isFocused
+      }
+    },
+    props: {
+      handleDOMEvents: {
+        focus(view) {
+          view.dispatch(view.state.tr.setMeta(inlineLatexPreviewPluginKey, true))
+          return false
+        },
+        blur(view) {
+          view.dispatch(view.state.tr.setMeta(inlineLatexPreviewPluginKey, false))
+          return false
+        }
+      },
+      decorations(state) {
+        const decorations: Decoration[] = []
+        const { from: selectionFrom, to: selectionTo } = state.selection
+        const isFocused = inlineLatexPreviewPluginKey.getState(state) === true
+
+        state.doc.descendants((node, pos) => {
+          if (!node.isBlock || !node.inlineContent) {
+            return true
+          }
+
+          const blockStart = pos + 1
+          const blockEnd = pos + node.content.size + 1
+          const isActiveTextblock =
+            isFocused && selectionTouchesTextblock(selectionFrom, selectionTo, blockStart, blockEnd)
+          const blockText = node.textBetween(0, node.content.size, '\n', '\0')
+
+          for (const match of findLatexTextMatches(blockText)) {
+            const from = blockStart + match.from
+            const to = blockStart + match.to
+
+            if (!match.valid) {
+              decorations.push(Decoration.inline(from, to, { class: 'note-inline-latex-error' }))
+              continue
+            }
+
+            if (isActiveTextblock) {
+              decorations.push(
+                Decoration.inline(from, to, {
+                  class: cn(
+                    'note-inline-latex-source',
+                    match.displayMode && 'note-display-latex-source'
+                  )
+                })
+              )
+              continue
+            }
+
+            decorations.push(
+              Decoration.inline(from, to, {
+                class: cn(
+                  'note-inline-latex-source-hidden',
+                  match.displayMode && 'note-display-latex-source-hidden'
+                ),
+                'data-latex-source': 'true'
+              })
+            )
+            decorations.push(
+              Decoration.widget(
+                from,
+                (view) => {
+                  const preview = createInlineLatexPreview(match.value, match.displayMode)
+                  preview.addEventListener('mousedown', (event) => {
+                    event.preventDefault()
+                    view.dispatch(
+                      view.state.tr.setSelection(
+                        TextSelection.create(view.state.doc, from + match.delimiter.length)
+                      )
+                    )
+                    view.focus()
+                  })
+                  return preview
+                },
+                {
+                  key: `inline-latex-${from}-${to}-${match.value}`,
+                  side: -1,
+                  ignoreSelection: true
+                }
+              )
+            )
+          }
+
+          return true
+        })
+
+        return DecorationSet.create(state.doc, decorations)
+      }
+    }
+  })
+}
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   {
-    initialBlocks,
+    initialContent,
     onDirty,
     onSnapshotChange,
-    onDropFile,
     onPasteImage,
     notes,
     currentNotePath,
@@ -89,38 +243,49 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   }: EditorProps,
   ref
 ): ReactElement {
-  const blockNoteThemeClasses =
-    '[&_.bn-container]:bg-[var(--panel)] [&_.bn-container]:text-[var(--text)] [&_.bn-container]:[font-family:var(--app-font-family)] [&_.bn-editor]:bg-[var(--panel)] [&_.bn-editor]:text-[var(--text)] [&_.bn-block-content]:text-[var(--text)] [&_.bn-side-menu]:border-[var(--line)] [&_.bn-side-menu]:bg-[var(--panel-2)] [&_.bn-side-menu_button]:text-[var(--text)] [&_.bn-side-menu_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar]:border [&_.bn-formatting-toolbar]:border-[var(--line)] [&_.bn-formatting-toolbar]:bg-[var(--panel-2)] [&_.bn-formatting-toolbar]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-formatting-toolbar_button]:text-[var(--text)] [&_.bn-formatting-toolbar_button:hover]:bg-[var(--panel-3)] [&_.bn-formatting-toolbar_button[data-active="true"]]:bg-[var(--accent-soft)] [&_.bn-formatting-toolbar_button[data-active="true"]]:text-[var(--accent)] [&_.bn-slash-menu]:border [&_.bn-slash-menu]:border-[var(--line)] [&_.bn-slash-menu]:bg-[var(--panel-2)] [&_.bn-slash-menu]:shadow-[0_4px_12px_rgba(0,0,0,0.15)] [&_.bn-slash-menu-item]:text-[var(--text)] [&_.bn-slash-menu-item:hover]:bg-[var(--panel-3)] [&_.bn-slash-menu-item[data-active="true"]]:bg-[var(--panel-3)] [&_.bn-drag-handle]:text-[var(--muted)] [&_.bn-drag-handle:hover]:bg-[var(--panel-3)] [&_.bn-link-toolbar]:border [&_.bn-link-toolbar]:border-[var(--line)] [&_.bn-link-toolbar]:bg-[var(--panel-2)] [&_.bn-link-toolbar_input]:border-[var(--line)] [&_.bn-link-toolbar_input]:bg-[var(--panel)] [&_.bn-link-toolbar_input]:text-[var(--text)] [&_.bn-block-content[data-placeholder]::before]:text-[var(--muted)] [&_.bn-editor_h1]:text-[var(--text)] [&_.bn-editor_h2]:text-[var(--text)] [&_.bn-editor_h3]:text-[var(--text)] [&_.bn-editor_a]:text-[var(--accent)] [&_.bn-editor_code]:border [&_.bn-editor_code]:border-[var(--line)] [&_.bn-editor_code]:bg-[var(--panel-3)] [&_.bn-editor_code]:text-[var(--text)] [&_.bn-editor_pre]:border [&_.bn-editor_pre]:border-[var(--line)] [&_.bn-editor_pre]:bg-[var(--panel-3)] [&_.bn-editor_ul]:text-[var(--text)] [&_.bn-editor_ol]:text-[var(--text)] [&_.bn-editor_blockquote]:border-l-[var(--accent-line)] [&_.bn-editor_blockquote]:text-[var(--muted)]'
-
-  const editorContainerRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef(initialContent ?? '')
+  const initialContentRef = useRef(initialContent ?? '')
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const editorRef = useRef<Crepe | null>(null)
+  const editorReadyRef = useRef(false)
+  const notesRef = useRef(notes)
+  const currentNotePathRef = useRef(currentNotePath)
+  const [isEditorVisible, setIsEditorVisible] = useState(false)
+  const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
+  const hasFocusIntentRef = useRef(false)
   const onDirtyRef = useRef(onDirty)
-  const onPasteImageRef = useRef(onPasteImage)
-  const onDropFileRef = useRef(onDropFile)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
+  const onPasteImageRef = useRef(onPasteImage)
   const onOpenNoteLinkRef = useRef(onOpenNoteLink)
   const onOutlineChangeRef = useRef(onOutlineChange)
-  const lastOutlineRef = useRef<NoteOutlineItem[]>([])
-  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light'
-  )
+
+  const resolveNoteMentionTarget = createNoteMentionResolver(notes)
+  const mentionSuggestions = buildMentionSuggestions(notes, currentNotePath, mentionPicker)
+  const highlightedMentionIndex =
+    mentionSuggestions.length === 0
+      ? 0
+      : Math.min(activeMentionIndex, mentionSuggestions.length - 1)
 
   useEffect(() => {
     onDirtyRef.current = onDirty
   }, [onDirty])
 
   useEffect(() => {
+    onSnapshotChangeRef.current = onSnapshotChange
+  }, [onSnapshotChange])
+
+  useEffect(() => {
     onPasteImageRef.current = onPasteImage
   }, [onPasteImage])
 
   useEffect(() => {
-    onDropFileRef.current = onDropFile
-  }, [onDropFile])
+    notesRef.current = notes
+  }, [notes])
 
   useEffect(() => {
-    onSnapshotChangeRef.current = onSnapshotChange
-  }, [onSnapshotChange])
+    currentNotePathRef.current = currentNotePath
+  }, [currentNotePath])
 
   useEffect(() => {
     onOpenNoteLinkRef.current = onOpenNoteLink
@@ -130,348 +295,502 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     onOutlineChangeRef.current = onOutlineChange
   }, [onOutlineChange])
 
-  const editor = useCreateBlockNote(
-    {
-      initialContent:
-        initialBlocks && initialBlocks.length > 0
-          ? cloneNoteEditorBlocks(initialBlocks)
-          : [{ type: 'paragraph' }],
-      extensions: [noteArrowInputExtension],
-      uploadFile: async (file: File) => {
-        const extension = file.name.includes('.') ? `.${file.name.split('.').pop()}` : '.png'
-        return (await onPasteImageRef.current(file, extension)) || ''
-      }
-    },
-    []
-  )
+  useEffect(() => {
+    onJumpToHeadingChange?.(null)
+  }, [onJumpToHeadingChange])
 
-  const syncOutline = useCallback((): void => {
-    const nextOutline = extractNoteOutline(editor.document)
-    const didChange =
-      nextOutline.length !== lastOutlineRef.current.length ||
-      nextOutline.some((item, index) => {
-        const previous = lastOutlineRef.current[index]
-        return (
-          !previous ||
-          previous.id !== item.id ||
-          previous.label !== item.label ||
-          previous.level !== item.level
-        )
-      })
-
-    if (!didChange) {
+  const syncContent = useCallback((nextContent: string, dirty: boolean): void => {
+    if (contentRef.current === nextContent) {
       return
     }
 
-    lastOutlineRef.current = nextOutline
-    onOutlineChangeRef.current?.(nextOutline)
-  }, [editor])
+    contentRef.current = nextContent
+    onSnapshotChangeRef.current?.({ content: nextContent })
+    onOutlineChangeRef.current?.(extractNoteOutlineFromMarkdown(nextContent))
+    if (dirty) {
+      onDirtyRef.current()
+    }
+  }, [])
+
+  const editorHasFocus = useCallback((): boolean => {
+    const root = rootRef.current
+    return Boolean(root && document.activeElement && root.contains(document.activeElement))
+  }, [])
+
+  const focus = useCallback((): void => {
+    hasFocusIntentRef.current = true
+    const editor = editorRef.current
+    if (editor && editorReadyRef.current) {
+      editor.editor.action((ctx) => {
+        ctx.get(editorViewCtx).focus()
+      })
+      return
+    }
+
+    rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()
+  }, [])
+
+  const blur = useCallback((): void => {
+    hasFocusIntentRef.current = false
+    rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.blur()
+  }, [])
 
   const createSnapshot = useCallback((): NoteEditorSnapshot => {
-    const blocks = cloneNoteEditorBlocks(editor.document as NoteEditorBlock[])
-    return {
-      blocks,
-      content: noteBlocksToText(blocks)
-    }
-  }, [editor])
+    const content =
+      editorRef.current && editorReadyRef.current
+        ? editorRef.current.getMarkdown()
+        : contentRef.current
+
+    const normalizedContent = normalizeNoteMentionMarkdown(normalizeLatexEscapes(content))
+    syncContent(normalizedContent, false)
+    return { content: normalizedContent }
+  }, [syncContent])
 
   const captureSnapshot = useCallback(
     async (): Promise<NoteEditorSnapshot> => createSnapshot(),
     [createSnapshot]
   )
 
-  const waitForPendingChanges = useCallback(async (): Promise<void> => {
-    await Promise.resolve()
+  const flushPendingChanges = useCallback(
+    async (): Promise<NoteEditorSnapshot> => createSnapshot(),
+    [createSnapshot]
+  )
 
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 0)
-    })
+  const hasFocusIntent = useCallback(
+    (): boolean => editorHasFocus() || hasFocusIntentRef.current,
+    [editorHasFocus]
+  )
 
-    await new Promise<void>((resolve) => {
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => resolve())
-        })
+  const closeMentionPicker = useCallback((): void => {
+    setMentionPicker(null)
+    setActiveMentionIndex(0)
+  }, [])
+
+  const insertNoteLink = useCallback(
+    (targetRelPath: string): void => {
+      const editor = editorRef.current
+      if (!editor || !editorReadyRef.current) {
         return
       }
 
-      window.setTimeout(resolve, 0)
+      const replacementRange = mentionPicker?.open
+        ? { from: mentionPicker.from, to: mentionPicker.to }
+        : null
+      const fallbackLabel = getNoteDisplayName(targetRelPath)
+      const href = noteMentionHref(fallbackLabel)
+
+      editor.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const { state } = view
+        const from = replacementRange?.from ?? state.selection.from
+        const to = replacementRange?.to ?? state.selection.to
+        const empty = from === to
+        const label = mentionPicker?.open
+          ? fallbackLabel
+          : empty
+            ? fallbackLabel
+            : state.doc.textBetween(from, to) || fallbackLabel
+        const markType = linkSchema.type(ctx)
+        const linkMark = markType.create({ href })
+        let tr = state.tr
+
+        if (mentionPicker?.open) {
+          tr = tr.insertText(label, from, to)
+          tr = tr.addMark(from, from + label.length, linkMark)
+          tr = tr.setSelection(TextSelection.create(tr.doc, from + label.length))
+        } else if (empty) {
+          tr = tr.insertText(label, from, to)
+          tr = tr.addMark(from, from + label.length, linkMark)
+          tr = tr.setSelection(TextSelection.create(tr.doc, from + label.length))
+        } else {
+          tr = tr.removeMark(from, to, markType)
+          tr = tr.addMark(from, to, linkMark)
+          tr = tr.setSelection(TextSelection.create(tr.doc, to))
+        }
+
+        view.dispatch(tr.scrollIntoView())
+        view.focus()
+      })
+      closeMentionPicker()
+    },
+    [closeMentionPicker, mentionPicker]
+  )
+
+  const syncMentionPicker = useCallback((): void => {
+    const editor = editorRef.current
+    const root = rootRef.current
+    if (!editor || !editorReadyRef.current || !root) {
+      closeMentionPicker()
+      return
+    }
+
+    editor.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const { state } = view
+      const { from, empty } = state.selection
+
+      if (!empty) {
+        closeMentionPicker()
+        return
+      }
+
+      const lookBehindStart = Math.max(0, from - 100)
+      const textBefore = state.doc.textBetween(lookBehindStart, from, '\n', '\0')
+      const match = textBefore.match(/\[\[([^\]\n]*)$/)
+      if (!match) {
+        closeMentionPicker()
+        return
+      }
+
+      const query = match[1] ?? ''
+      const triggerStart = from - query.length - 2
+      const caretRect = view.coordsAtPos(from)
+      const rootRect = root.getBoundingClientRect()
+
+      setMentionPicker((previous) => {
+        if (previous?.query !== query) {
+          setActiveMentionIndex(0)
+        }
+
+        return {
+          open: true,
+          query,
+          from: triggerStart,
+          to: from,
+          top: caretRect.bottom - rootRect.top + 8,
+          left: Math.max(0, caretRect.left - rootRect.left)
+        }
+      })
     })
-  }, [])
-
-  const blur = useCallback((): void => {
-    const activeElement = document.activeElement
-    if (!(activeElement instanceof HTMLElement)) {
-      return
-    }
-
-    if (!editorContainerRef.current?.contains(activeElement)) {
-      return
-    }
-
-    activeElement.blur()
-  }, [])
-
-  const flushPendingChanges = useCallback(async (): Promise<NoteEditorSnapshot> => {
-    await waitForPendingChanges()
-    return createSnapshot()
-  }, [createSnapshot, waitForPendingChanges])
+  }, [closeMentionPicker])
 
   useImperativeHandle(
     ref,
     () => ({
       captureSnapshot,
       flushPendingChanges,
-      blur
+      focus,
+      hasFocusIntent,
+      blur,
+      insertNoteLink
     }),
-    [blur, captureSnapshot, flushPendingChanges]
-  )
-
-  const jumpToHeading = useCallback(
-    (blockId: string): void => {
-      editor.focus()
-      editor.setTextCursorPosition(blockId, 'start')
-
-      requestAnimationFrame(() => {
-        const selector = `[data-id="${CSS.escape(blockId)}"]`
-        const target = editorContainerRef.current?.querySelector<HTMLElement>(selector)
-        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      })
-    },
-    [editor]
-  )
-
-  const duplicateNameCounts = useMemo(
-    () =>
-      notes.reduce<Record<string, number>>((acc, note) => {
-        const normalizedName = normalizeMentionTarget(note.name)
-        acc[normalizedName] = (acc[normalizedName] ?? 0) + 1
-        return acc
-      }, {}),
-    [notes]
-  )
-
-  const getMentionItems = useCallback(
-    (query: string): DefaultReactSuggestionItem[] => {
-      const mentionQuery = query.startsWith('[') ? query.slice(1) : query
-      const search = normalizeMentionTarget(mentionQuery)
-      const options = notes
-        .filter((note) => note.relPath !== currentNotePath)
-        .filter((note) => {
-          if (!search) {
-            return true
-          }
-
-          return (
-            normalizeMentionTarget(note.relPath).includes(search) ||
-            normalizeMentionTarget(note.name).includes(search)
-          )
-        })
-        .slice(0, 12)
-
-      const suggestionItems = options.map((note) => {
-        const normalizedName = normalizeMentionTarget(note.name)
-        const hasNameCollision = (duplicateNameCounts[normalizedName] ?? 0) > 1
-        const mentionTarget = hasNameCollision
-          ? stripNoteExtension(note.relPath)
-          : stripNoteExtension(note.name)
-        const visibleLabel = mentionTarget
-
-        return {
-          title: visibleLabel,
-          aliases: [note.relPath, note.name, mentionTarget],
-          subtext: note.relPath,
-          onItemClick: () => {
-            requestAnimationFrame(() => {
-              editor.insertInlineContent([
-                {
-                  type: 'link',
-                  href: noteMentionHref(mentionTarget),
-                  content: visibleLabel
-                }
-              ])
-            })
-          }
-        } satisfies DefaultReactSuggestionItem
-      })
-
-      return filterSuggestionItems(suggestionItems, search)
-    },
-    [currentNotePath, duplicateNameCounts, editor, notes]
+    [blur, captureSnapshot, flushPendingChanges, focus, hasFocusIntent, insertNoteLink]
   )
 
   useEffect(() => {
-    const handlePaste = async (event: Event): Promise<void> => {
-      if (!(event instanceof ClipboardEvent)) {
-        return
-      }
-
-      const items = event.clipboardData?.items
-      if (!items) {
-        return
-      }
-
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index]
-        if (!item.type.startsWith('image/')) {
-          continue
-        }
-
-        event.preventDefault()
-        event.stopPropagation()
-
-        const blob = item.getAsFile()
-        if (!blob) {
-          continue
-        }
-
-        let extension = '.png'
-        if (item.type === 'image/jpeg' || item.type === 'image/jpg') {
-          extension = '.jpg'
-        } else if (item.type === 'image/gif') {
-          extension = '.gif'
-        } else if (item.type === 'image/webp') {
-          extension = '.webp'
-        } else if (item.type === 'image/svg+xml') {
-          extension = '.svg'
-        }
-
-        const imageUrl = await onPasteImageRef.current(blob, extension)
-        if (imageUrl) {
-          const cursorPosition = editor.getTextCursorPosition()
-          editor.insertBlocks(
-            [
-              {
-                type: 'image',
-                props: {
-                  url: imageUrl,
-                  caption: '',
-                  previewWidth: 512
-                }
-              }
-            ],
-            cursorPosition.block,
-            'after'
-          )
-        }
-
-        break
-      }
-    }
-
-    const container = editorContainerRef.current
-    if (!container) {
+    const root = rootRef.current
+    if (!root) {
       return
     }
 
-    container.addEventListener('paste', handlePaste, { capture: true })
+    let cancelled = false
+    root.replaceChildren()
+    const initialValue = normalizeLatexEscapes(initialContentRef.current)
+    const editor = new Crepe({
+      root,
+      defaultValue: initialValue,
+      features: {
+        [CrepeFeature.CodeMirror]: true,
+        [CrepeFeature.LinkTooltip]: true,
+        [CrepeFeature.Latex]: false
+      },
+      featureConfigs: {
+        [CrepeFeature.LinkTooltip]: {
+          inputPlaceholder: 'Paste link or select a note link'
+        }
+      }
+    })
+
+    editor.editor.config((ctx) => {
+      ctx.update(prosePluginsCtx, (plugins) => [...plugins, inlineLatexPreviewPlugin()])
+    })
+
+    editor.on((api) => {
+      api.markdownUpdated((_ctx, markdown) => {
+        syncContent(normalizeLatexEscapes(markdown), editorReadyRef.current)
+        syncMentionPicker()
+      })
+    })
+
+    editorRef.current = editor
+    editorReadyRef.current = false
+    contentRef.current = initialValue
+    onSnapshotChangeRef.current?.({ content: initialValue })
+    onOutlineChangeRef.current?.(extractNoteOutlineFromMarkdown(initialValue))
+
+    void editor
+      .create()
+      .then(() => {
+        if (cancelled) {
+          return
+        }
+        editorReadyRef.current = true
+        syncContent(normalizeLatexEscapes(editor.getMarkdown()), false)
+        setIsEditorVisible(true)
+        console.log('Editor created')
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to create Milkdown editor:', error)
+      })
+
     return () => {
-      container.removeEventListener('paste', handlePaste, { capture: true })
+      cancelled = true
+      editorReadyRef.current = false
+      root.replaceChildren()
+      if (editorRef.current === editor) {
+        editorRef.current = null
+      }
+      void editor.destroy().catch((error: unknown) => {
+        console.error('Failed to destroy Milkdown editor:', error)
+      })
     }
-  }, [editor])
+  }, [syncContent, syncMentionPicker])
 
   useEffect(() => {
-    const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-
-    const listener = (event: MediaQueryListEvent): void => {
-      setTheme(event.matches ? 'dark' : 'light')
+    const root = rootRef.current
+    if (!root) {
+      return
     }
 
-    darkModeQuery.addEventListener('change', listener)
-    return () => darkModeQuery.removeEventListener('change', listener)
+    const handlePaste = (event: ClipboardEvent): void => {
+      const clipboardItems = Array.from(event.clipboardData?.items ?? [])
+      const imageItem = clipboardItems.find((item) => item.type.startsWith('image/'))
+      if (!imageItem) {
+        return
+      }
+
+      const imageFile = imageItem.getAsFile()
+      const fileExtension = imageFile ? getImageFileExtension(imageFile) : null
+      if (!imageFile || !fileExtension) {
+        return
+      }
+
+      event.preventDefault()
+
+      void (async () => {
+        const imageUrl = await onPasteImageRef.current(imageFile, fileExtension)
+        if (!imageUrl || !editorRef.current || !editorReadyRef.current) {
+          return
+        }
+
+        editorRef.current.editor.action(insert(`\n![Pasted image](${imageUrl})\n`))
+        root.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()
+      })()
+    }
+
+    root.addEventListener('paste', handlePaste, true)
+    return () => {
+      root.removeEventListener('paste', handlePaste, true)
+    }
   }, [])
 
   useEffect(() => {
-    syncOutline()
-  }, [editor, syncOutline])
+    const root = rootRef.current
+    if (!root) {
+      return
+    }
+
+    const handleClick = (event: MouseEvent): void => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) {
+        return
+      }
+
+      const link = target.closest<HTMLAnchorElement>('a[href]')
+      if (!link) {
+        return
+      }
+
+      const noteTarget = parseNoteMentionHref(link.getAttribute('href') ?? '')
+      if (!noteTarget) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      onOpenNoteLinkRef.current?.(noteTarget)
+    }
+
+    root.addEventListener('click', handleClick, true)
+    return () => {
+      root.removeEventListener('click', handleClick, true)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!onJumpToHeadingChange) {
+    const root = rootRef.current
+    if (!root) {
       return
     }
 
-    onJumpToHeadingChange(jumpToHeading)
-    return () => onJumpToHeadingChange(null)
-  }, [jumpToHeading, onJumpToHeadingChange])
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (!mentionPicker?.open) {
+        return
+      }
 
-  const handleDrop = async (event: DragEvent<HTMLDivElement>): Promise<void> => {
-    event.preventDefault()
-    const file = event.dataTransfer.files?.[0] as (File & { path?: string }) | undefined
-    if (!file?.path) {
-      return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeMentionPicker()
+        return
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        const suggestions = buildMentionSuggestions(
+          notesRef.current,
+          currentNotePathRef.current,
+          mentionPicker
+        )
+        setActiveMentionIndex((current) =>
+          suggestions.length === 0 ? 0 : (current + 1) % suggestions.length
+        )
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        const suggestions = buildMentionSuggestions(
+          notesRef.current,
+          currentNotePathRef.current,
+          mentionPicker
+        )
+        setActiveMentionIndex((current) =>
+          suggestions.length === 0 ? 0 : (current - 1 + suggestions.length) % suggestions.length
+        )
+        return
+      }
+
+      if (
+        (event.key === 'Enter' || event.key === 'Tab') &&
+        buildMentionSuggestions(notesRef.current, currentNotePathRef.current, mentionPicker)
+          .length > 0
+      ) {
+        event.preventDefault()
+        const suggestions = buildMentionSuggestions(
+          notesRef.current,
+          currentNotePathRef.current,
+          mentionPicker
+        )
+        const index =
+          suggestions.length === 0 ? 0 : Math.min(activeMentionIndex, suggestions.length - 1)
+        insertNoteLink(suggestions[index]?.relPath ?? suggestions[0].relPath)
+      }
     }
 
-    const imageUrl = await onDropFileRef.current(file.path)
-    if (!imageUrl) {
-      return
+    const handleSelectionChange = (): void => {
+      syncMentionPicker()
     }
 
-    const cursorPosition = editor.getTextCursorPosition()
-    editor.insertBlocks(
-      [
-        {
-          type: 'image',
-          props: {
-            url: imageUrl,
-            caption: '',
-            previewWidth: 512
-          }
-        }
-      ],
-      cursorPosition.block,
-      'after'
-    )
-  }
-
-  const handleClick = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    const target = event.target
-    if (!(target instanceof HTMLElement)) {
-      return
+    root.addEventListener('keydown', handleKeyDown, true)
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => {
+      root.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('selectionchange', handleSelectionChange)
     }
-
-    const anchor = target.closest<HTMLAnchorElement>('a[href]')
-    if (!anchor) {
-      return
-    }
-
-    const mentionTarget = parseNoteMentionHref(anchor.href)
-    if (!mentionTarget) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    onOpenNoteLinkRef.current?.(mentionTarget)
-  }
+  }, [
+    activeMentionIndex,
+    closeMentionPicker,
+    insertNoteLink,
+    mentionPicker,
+    mentionPicker?.open,
+    syncMentionPicker
+  ])
 
   return (
     <div
-      ref={editorContainerRef}
       data-testid="note-block-editor"
-      className={blockNoteThemeClasses}
-      onClick={handleClick}
-      onDrop={(event) => {
-        void handleDrop(event)
+      className="note-milkdown-editor relative h-full min-h-[60vh]"
+      style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
+      onFocusCapture={() => {
+        hasFocusIntentRef.current = true
       }}
-      onDragOver={(event) => event.preventDefault()}
+      onPointerDownCapture={() => {
+        hasFocusIntentRef.current = true
+      }}
     >
-      <BlockNoteView
-        editor={editor}
-        theme={theme}
-        formattingToolbar
-        slashMenu
-        sideMenu
-        onChange={() => {
-          onSnapshotChangeRef.current?.(createSnapshot())
-          syncOutline()
-          onDirtyRef.current()
-        }}
-      >
-        <SuggestionMenuController
-          triggerCharacter="["
-          getItems={async (query) => getMentionItems(query)}
-        />
-      </BlockNoteView>
+      <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
+      {mentionPicker?.open ? (
+        <div
+          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--popover)] shadow-lg"
+          style={{
+            top: mentionPicker.top,
+            left: mentionPicker.left
+          }}
+          data-testid="note-link-completion"
+        >
+          <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
+            <Link2 size={14} />
+            Link note
+            {mentionPicker.query ? (
+              <span className="truncate">for &quot;{mentionPicker.query}&quot;</span>
+            ) : null}
+          </div>
+          <div className="max-h-72 overflow-y-auto p-1">
+            {mentionSuggestions.length > 0 ? (
+              mentionSuggestions.map((note, index) => {
+                const isActive = index === highlightedMentionIndex
+                const alreadyLinked =
+                  mentionPicker.query.trim().length > 0 &&
+                  resolveNoteMentionTarget(mentionPicker.query) === note.relPath
+
+                return (
+                  <button
+                    key={note.relPath}
+                    type="button"
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm',
+                      isActive
+                        ? 'bg-[var(--accent-color)] text-[var(--accent-foreground)]'
+                        : 'text-[var(--text)] hover:bg-[var(--accent-color)] hover:text-[var(--accent-foreground)]'
+                    )}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      insertNoteLink(note.relPath)
+                    }}
+                    onMouseEnter={() => setActiveMentionIndex(index)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{getNoteDisplayName(note.relPath)}</div>
+                      <div className="truncate text-xs opacity-75">
+                        {stripNoteExtension(note.relPath)}
+                      </div>
+                    </div>
+                    {alreadyLinked ? <Check size={14} /> : null}
+                  </button>
+                )
+              })
+            ) : (
+              <div className="px-3 py-3 text-sm text-[var(--muted)]">No matching notes</div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 })
+
+const IMAGE_MIME_EXTENSION_MAP: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/svg+xml': 'svg',
+  'image/bmp': 'bmp'
+}
+
+function getImageFileExtension(file: File): string | null {
+  const mimeType = file.type.trim().toLowerCase()
+  const extensionFromMime = IMAGE_MIME_EXTENSION_MAP[mimeType]
+  if (extensionFromMime) {
+    return extensionFromMime
+  }
+
+  const fileName = file.name.trim()
+  const dotIndex = fileName.lastIndexOf('.')
+  if (dotIndex < 0 || dotIndex === fileName.length - 1) {
+    return null
+  }
+
+  return fileName.slice(dotIndex + 1).toLowerCase()
+}

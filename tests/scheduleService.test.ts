@@ -172,7 +172,7 @@ describe('ScheduleService action application', () => {
 
     expect(run.status).toBe('success')
     expect(notes).toHaveLength(1)
-    expect(notes[0]?.name).toBe('schedule-test-note.xnote')
+    expect(notes[0]?.name).toBe('schedule-test-note.md')
 
     const content = await runtime.readNote(notes[0]!.relPath)
     expect(content).toContain('This note was created by a schedule run.')

@@ -1,7 +1,7 @@
 import { ReactElement, ReactNode, useMemo } from 'react'
 import { Copy, FolderInput, Link, Pencil, Trash2 } from 'lucide-react'
 import { isNotePath, stripNoteExtension } from '../../../shared/noteDocument'
-import { NoteListItem } from '../../../shared/types'
+import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -15,6 +15,7 @@ import {
   ContextMenuTrigger,
   isDeleteShortcut
 } from './ui/context-menu'
+import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 interface FileTreeProps {
   notes: NoteListItem[]
@@ -42,6 +43,7 @@ export function FileTree({
   onMoveTo,
   onCopyLink
 }: FileTreeProps): ReactElement {
+  const useNativeMenus = canUseNativeMenus()
   const sorted = useMemo(
     () => [...notes].sort((a, b) => a.relPath.localeCompare(b.relPath)),
     [notes]
@@ -126,70 +128,115 @@ export function FileTree({
         {sorted.length === 0 ? (
           <div className="empty">No notes yet</div>
         ) : (
-          sorted.map((note) => (
-            <ContextMenu key={note.relPath}>
-              <ContextMenuTrigger asChild>
-                <div className={`note-row ${selectedPath === note.relPath ? 'selected' : ''}`}>
-                  <button
-                    className="note-button"
-                    onClick={() => onSelect(note.relPath)}
-                    onKeyDown={(event) => {
-                      if (!isDeleteShortcut(event)) {
-                        return
-                      }
-                      event.preventDefault()
-                      onDelete(note.relPath)
-                    }}
-                    title={note.relPath}
-                  >
-                    {note.relPath}
-                  </button>
-                </div>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => onRename(note.relPath)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Rename
-                </ContextMenuItem>
-                {onDuplicate && (
-                  <ContextMenuItem onClick={() => onDuplicate(note.relPath)}>
-                    <Copy className="mr-2 h-4 w-4" />
-                    Duplicate
+          sorted.map((note) => {
+            const menuItems = buildNoteMenuItems({
+              canDuplicate: Boolean(onDuplicate),
+              canCopyLink: Boolean(onCopyLink),
+              moveFolders: onMoveTo ? folderNames : []
+            })
+
+            const handleNativeContextMenu = async (
+              event: React.MouseEvent<HTMLButtonElement>
+            ): Promise<void> => {
+              event.preventDefault()
+              const actionId = await showNativeMenu(menuItems, getMouseMenuPosition(event))
+
+              if (!actionId) {
+                return
+              }
+              if (actionId === 'rename') {
+                onRename(note.relPath)
+                return
+              }
+              if (actionId === 'duplicate' && onDuplicate) {
+                onDuplicate(note.relPath)
+                return
+              }
+              if (actionId.startsWith('move:') && onMoveTo) {
+                onMoveTo(note.relPath, actionId.slice('move:'.length))
+                return
+              }
+              if (actionId === 'copy-link' && onCopyLink) {
+                onCopyLink(note.relPath)
+                return
+              }
+              if (actionId === 'delete') {
+                onDelete(note.relPath)
+              }
+            }
+
+            const noteRow = (
+              <div className={`note-row ${selectedPath === note.relPath ? 'selected' : ''}`}>
+                <button
+                  className="note-button"
+                  onClick={() => onSelect(note.relPath)}
+                  onContextMenu={
+                    useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
+                  }
+                  onKeyDown={(event) => {
+                    if (!isDeleteShortcut(event)) {
+                      return
+                    }
+                    event.preventDefault()
+                    onDelete(note.relPath)
+                  }}
+                  title={note.relPath}
+                >
+                  {note.relPath}
+                </button>
+              </div>
+            )
+
+            return useNativeMenus ? (
+              <div key={note.relPath}>{noteRow}</div>
+            ) : (
+              <ContextMenu key={note.relPath}>
+                <ContextMenuTrigger asChild>{noteRow}</ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={() => onRename(note.relPath)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Rename
                   </ContextMenuItem>
-                )}
-                {onMoveTo && folderNames.length > 0 && (
-                  <ContextMenuSub>
-                    <ContextMenuSubTrigger>
-                      <FolderInput className="mr-2 h-4 w-4" />
-                      Move to...
-                    </ContextMenuSubTrigger>
-                    <ContextMenuSubContent>
-                      {folderNames.map((folder) => (
-                        <ContextMenuItem
-                          key={folder}
-                          onClick={() => onMoveTo(note.relPath, folder)}
-                        >
-                          {folder}
-                        </ContextMenuItem>
-                      ))}
-                    </ContextMenuSubContent>
-                  </ContextMenuSub>
-                )}
-                {onCopyLink && (
-                  <ContextMenuItem onClick={() => onCopyLink(note.relPath)}>
-                    <Link className="mr-2 h-4 w-4" />
-                    Copy link
-                  </ContextMenuItem>
-                )}
-                <ContextMenuSeparator />
-                <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                  <ContextMenuShortcut keys={['cmd', 'backspace']} />
-                </ContextMenuDestructiveItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          ))
+                  {onDuplicate && (
+                    <ContextMenuItem onClick={() => onDuplicate(note.relPath)}>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Duplicate
+                    </ContextMenuItem>
+                  )}
+                  {onMoveTo && folderNames.length > 0 && (
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <FolderInput className="mr-2 h-4 w-4" />
+                        Move to...
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        {folderNames.map((folder) => (
+                          <ContextMenuItem
+                            key={folder}
+                            onClick={() => onMoveTo(note.relPath, folder)}
+                          >
+                            {folder}
+                          </ContextMenuItem>
+                        ))}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                  )}
+                  {onCopyLink && (
+                    <ContextMenuItem onClick={() => onCopyLink(note.relPath)}>
+                      <Link className="mr-2 h-4 w-4" />
+                      Copy link
+                    </ContextMenuItem>
+                  )}
+                  <ContextMenuSeparator />
+                  <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                    <ContextMenuShortcut keys={['cmd', 'backspace']} />
+                  </ContextMenuDestructiveItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            )
+          })
         )}
       </Section>
     </div>
@@ -203,4 +250,30 @@ function Section({ title, children }: { title: string; children: ReactNode }): R
       <div className="tree-section-body">{children}</div>
     </section>
   )
+}
+
+function buildNoteMenuItems(options: {
+  canDuplicate: boolean
+  canCopyLink: boolean
+  moveFolders: string[]
+}): NativeMenuItemDescriptor[] {
+  return [
+    { id: 'rename', label: 'Rename' },
+    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+    ...(options.moveFolders.length > 0
+      ? [
+          {
+            id: 'move',
+            label: 'Move to...',
+            submenu: options.moveFolders.map((folder) => ({
+              id: `move:${folder}`,
+              label: folder
+            }))
+          }
+        ]
+      : []),
+    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
+    { type: 'separator' },
+    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+  ]
 }

@@ -22,80 +22,146 @@ describe('buildKnowledgeGraph', () => {
   it('resolves links by exact relative path mention', () => {
     const graph = buildKnowledgeGraph([
       createNote({
-        relPath: 'alpha.xnote',
-        name: 'alpha.xnote',
+        relPath: 'alpha.md',
+        name: 'alpha.md',
         mentionTargets: ['nested/beta']
       }),
       createNote({
-        relPath: 'nested/beta.xnote',
-        name: 'beta.xnote'
+        relPath: 'nested/beta.md',
+        name: 'beta.md'
       })
     ])
 
-    expect(graph.links).toEqual([{ source: 'alpha.xnote', target: 'nested/beta.xnote' }])
-    expect(graph.nodes.map((node) => node.relPath)).toEqual(['alpha.xnote', 'nested/beta.xnote'])
+    expect(graph.links).toEqual([{ source: 'alpha.md', target: 'nested/beta.md' }])
+    expect(graph.nodes.map((node) => node.relPath)).toEqual(['alpha.md', 'nested/beta.md'])
   })
 
   it('resolves links by unique note name mention', () => {
     const graph = buildKnowledgeGraph([
       createNote({
-        relPath: 'alpha.xnote',
-        name: 'alpha.xnote',
+        relPath: 'alpha.md',
+        name: 'alpha.md',
         mentionTargets: ['beta']
       }),
       createNote({
-        relPath: 'notes/beta.xnote',
-        name: 'beta.xnote'
+        relPath: 'notes/beta.md',
+        name: 'beta.md'
       })
     ])
 
-    expect(graph.links).toEqual([{ source: 'alpha.xnote', target: 'notes/beta.xnote' }])
+    expect(graph.links).toEqual([{ source: 'alpha.md', target: 'notes/beta.md' }])
   })
 
   it('ignores ambiguous note name mentions', () => {
     const graph = buildKnowledgeGraph([
       createNote({
-        relPath: 'alpha.xnote',
-        name: 'alpha.xnote',
+        relPath: 'alpha.md',
+        name: 'alpha.md',
         mentionTargets: ['shared']
       }),
       createNote({
-        relPath: 'one/shared.xnote',
-        name: 'shared.xnote'
+        relPath: 'one/shared.md',
+        name: 'shared.md'
       }),
       createNote({
-        relPath: 'two/shared.xnote',
-        name: 'shared.xnote'
+        relPath: 'two/shared.md',
+        name: 'shared.md'
       })
     ])
 
     expect(graph.links).toEqual([])
-    expect(graph.nodes).toEqual([])
+    expect(
+      graph.nodes.map((node) => ({
+        relPath: node.relPath,
+        degree: node.degree,
+        isOrphan: node.isOrphan
+      }))
+    ).toEqual([
+      { relPath: 'alpha.md', degree: 0, isOrphan: true },
+      { relPath: 'one/shared.md', degree: 0, isOrphan: true },
+      { relPath: 'two/shared.md', degree: 0, isOrphan: true }
+    ])
   })
 
   it('ignores self-links and deduplicates mirrored links', () => {
     const graph = buildKnowledgeGraph([
       createNote({
-        relPath: 'alpha.xnote',
-        name: 'alpha.xnote',
+        relPath: 'alpha.md',
+        name: 'alpha.md',
         mentionTargets: ['alpha', 'beta']
       }),
       createNote({
-        relPath: 'beta.xnote',
-        name: 'beta.xnote',
+        relPath: 'beta.md',
+        name: 'beta.md',
         mentionTargets: ['alpha']
       })
     ])
 
-    expect(graph.links).toEqual([{ source: 'alpha.xnote', target: 'beta.xnote' }])
+    expect(graph.links).toEqual([{ source: 'alpha.md', target: 'beta.md' }])
     expect(
       graph.nodes.map((node) => ({
         relPath: node.relPath,
         degree: node.degree
       }))
     ).toEqual([
-      { relPath: 'alpha.xnote', degree: 1 },
-      { relPath: 'beta.xnote', degree: 1 }
+      { relPath: 'alpha.md', degree: 1 },
+      { relPath: 'beta.md', degree: 1 }
+    ])
+  })
+
+  it('includes notes without links as orphan nodes', () => {
+    const graph = buildKnowledgeGraph([
+      createNote({
+        relPath: 'alpha.md',
+        name: 'alpha.md'
+      }),
+      createNote({
+        relPath: 'beta.md',
+        name: 'beta.md'
+      })
+    ])
+
+    expect(graph.links).toEqual([])
+    expect(
+      graph.nodes.map((node) => ({
+        relPath: node.relPath,
+        degree: node.degree,
+        isOrphan: node.isOrphan
+      }))
+    ).toEqual([
+      { relPath: 'alpha.md', degree: 0, isOrphan: true },
+      { relPath: 'beta.md', degree: 0, isOrphan: true }
+    ])
+  })
+
+  it('includes connected and orphan notes together', () => {
+    const graph = buildKnowledgeGraph([
+      createNote({
+        relPath: 'alpha.md',
+        name: 'alpha.md',
+        mentionTargets: ['beta']
+      }),
+      createNote({
+        relPath: 'beta.md',
+        name: 'beta.md'
+      }),
+      createNote({
+        relPath: 'orphan.md',
+        name: 'orphan.md'
+      })
+    ])
+
+    expect(graph.links).toEqual([{ source: 'alpha.md', target: 'beta.md' }])
+    expect(
+      graph.nodes.map((node) => ({
+        relPath: node.relPath,
+        degree: node.degree,
+        isOrphan: node.isOrphan
+      }))
+    ).toEqual([
+      { relPath: 'alpha.md', degree: 1, isOrphan: false },
+      { relPath: 'beta.md', degree: 1, isOrphan: false },
+      { relPath: 'orphan.md', degree: 0, isOrphan: true }
     ])
   })
 })

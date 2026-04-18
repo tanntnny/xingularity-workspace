@@ -1,4 +1,6 @@
-import { extractNoteTitle, noteBlocksToPreviewText, parseStoredNoteDocument } from '../../shared/noteDocument'
+import { extractNoteTitleFromMarkdown } from '../../shared/noteDocument'
+import { listTagsFromMarkdown, listPreviewTagsFromMarkdown } from '../../shared/noteTags'
+import { splitNoteContent } from '../../shared/noteContent'
 import { NoteMetadata } from '../../shared/types'
 
 export interface ParsedNote {
@@ -7,13 +9,13 @@ export interface ParsedNote {
 }
 
 export function parseNoteContent(content: string, relPath: string): ParsedNote {
-  const document = parseStoredNoteDocument(content)
+  const { body } = splitNoteContent(content)
 
   return {
     metadata: {
-      title: extractNoteTitle(document.blocks, relPath),
-      tags: document.tags
+      title: extractNoteTitleFromMarkdown(content, relPath),
+      tags: listTagsFromMarkdown(content)
     },
-    bodyText: noteBlocksToPreviewText(document.blocks)
+    bodyText: body.replace(/\s+/g, ' ').trim() || listPreviewTagsFromMarkdown(content).join(' ')
   }
 }

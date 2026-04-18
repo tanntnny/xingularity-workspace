@@ -26,7 +26,7 @@ describe('sqlite index incremental updates', () => {
     const dbPath = path.join(metaRoot, 'index.sqlite')
     const fileMapPath = path.join(metaRoot, 'filemap.json')
 
-    const firstNotePath = path.join(notesRoot, 'first.xnote')
+    const firstNotePath = path.join(notesRoot, 'first.md')
     await fs.writeFile(
       firstNotePath,
       serializeStoredNoteDocument(
@@ -50,11 +50,17 @@ describe('sqlite index incremental updates', () => {
     await indexer.rebuild(notesRoot)
 
     const initialResults = indexer.query('alpha')
-    expect(initialResults.some((r) => r.relPath === 'first.xnote')).toBe(true)
+    expect(initialResults.some((r) => r.relPath === 'first.md')).toBe(true)
+
+    const bodyResults = indexer.query('@Body')
+    expect(bodyResults.some((r) => r.relPath === 'first.md')).toBe(true)
+
+    const tagOnlyBodyResults = indexer.query('@alpha')
+    expect(tagOnlyBodyResults.some((r) => r.relPath === 'first.md')).toBe(false)
 
     await indexer.upsertFromRaw({
       id: 'note:first',
-      relPath: 'first.xnote',
+      relPath: 'first.md',
       content: serializeStoredNoteDocument(
         createStoredNoteDocumentFromText('# First updated\nNew body text', ['gamma'])
       ),
@@ -64,7 +70,10 @@ describe('sqlite index incremental updates', () => {
     const updatedResults = indexer.query('gamma')
     expect(updatedResults[0]?.title).toContain('First updated')
 
-    await indexer.deleteByRelPath('first.xnote')
+    const updatedBodyResults = indexer.query('@gamma')
+    expect(updatedBodyResults.some((r) => r.relPath === 'first.md')).toBe(false)
+
+    await indexer.deleteByRelPath('first.md')
     const afterDelete = indexer.query('first')
     expect(afterDelete.length).toBe(0)
 

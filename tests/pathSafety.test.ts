@@ -4,7 +4,7 @@ import { assertSafeRelativePath, ensureWithinBase, joinSafe } from '../src/share
 
 describe('path safety', () => {
   it('accepts note document path in vault', () => {
-    expect(assertSafeRelativePath('folder/my-note.xnote')).toBe('folder/my-note.xnote')
+    expect(assertSafeRelativePath('folder/my-note.md')).toBe('folder/my-note.md')
   })
 
   it('rejects traversal paths', () => {
@@ -14,12 +14,12 @@ describe('path safety', () => {
 
   it('joins safe path inside base', () => {
     const base = path.resolve('/tmp/vault/notes')
-    const target = joinSafe(base, 'hello.xnote')
+    const target = joinSafe(base, 'hello.md')
     expect(target.startsWith(base)).toBe(true)
   })
 
   it('denies absolute target outside base', () => {
     const base = path.resolve('/tmp/vault/notes')
-    expect(() => ensureWithinBase(base, '/tmp/other/place.xnote')).toThrowError()
+    expect(() => ensureWithinBase(base, '/tmp/other/place.md')).toThrowError()
   })
 })

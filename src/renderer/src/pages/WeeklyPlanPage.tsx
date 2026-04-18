@@ -54,6 +54,7 @@ import {
   getWeekPriorities,
   getWeekReview
 } from '../lib/weeklyPlan'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface WeeklyPlanWorkspaceProps {
   state: WeeklyPlanState | null
@@ -439,6 +440,8 @@ export function WeeklyPlanSidebar({
   onCreateWeek
 }: WeeklyPlanSidebarProps): ReactElement {
   const weeks = getSortedWeeks(state)
+  const revealItemIds = useMemo(() => weeks.map((week) => week.id), [weeks])
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds)
 
   const handleQuickCreateWeek = async (): Promise<void> => {
     if (!isReady) {
@@ -482,7 +485,7 @@ export function WeeklyPlanSidebar({
           </WorkspaceHeaderActions>
         }
       />
-      <DocumentWorkspacePanelContent className="p-3">
+      <DocumentWorkspacePanelContent ref={containerRef} className="p-3">
         <div className="flex flex-col gap-2">
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
@@ -497,6 +500,7 @@ export function WeeklyPlanSidebar({
                 </div>
               ) : (
                 weeks.map((week) => {
+                  const revealProps = getRevealItemProps(week.id)
                   const weekPriorities = getWeekPriorities(state, week.id)
                   const doneCount = weekPriorities.filter(
                     (priority) => priority.status === 'done'
@@ -507,8 +511,11 @@ export function WeeklyPlanSidebar({
                     <button
                       key={week.id}
                       type="button"
+                      ref={revealProps.ref}
                       onClick={() => onSelectWeek(week.id)}
+                      style={revealProps.style}
                       className={cn(
+                        revealProps.className,
                         'flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
                         selectedWeekId === week.id
                           ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'

@@ -26,24 +26,27 @@ const project: Project = {
 }
 
 describe('project folder helpers', () => {
-  it('builds protected project paths from project names', () => {
+  it('builds legacy project paths from project names', () => {
     expect(getProjectsRootPath()).toBe('Projects')
     expect(getProjectFolderPath(project)).toBe('Projects/Alpha Project')
     expect(isDirectProjectFolderPath('Projects/Alpha Project')).toBe(true)
     expect(isDirectProjectFolderPath('Projects/Alpha Project/docs')).toBe(false)
   })
 
-  it('resolves protected paths and project tags from note locations', () => {
-    expect(isProtectedProjectTreePath('Projects', [project])).toBe(true)
-    expect(isProtectedProjectTreePath('Projects/Alpha Project', [project])).toBe(true)
+  it('does not protect or tag project paths from note locations', () => {
+    expect(isProtectedProjectTreePath('Projects', [project])).toBe(false)
+    expect(isProtectedProjectTreePath('Projects/Alpha Project', [project])).toBe(false)
     expect(isProtectedProjectTreePath('Projects/Alpha Project/docs', [project])).toBe(false)
-    expect(getProjectProtectionKind('Projects', [project])).toBe('projects-root')
-    expect(getProjectProtectionKind('Projects/Alpha Project', [project])).toBe('project-folder')
-    expect(resolveProjectByFolderPath('Projects/Alpha Project/specs/plan.xnote', [project])?.id).toBe(
+    expect(getProjectProtectionKind('Projects', [project])).toBeNull()
+    expect(getProjectProtectionKind('Projects/Alpha Project', [project])).toBeNull()
+    expect(resolveProjectByFolderPath('Projects/Alpha Project/specs/plan.md', [project])?.id).toBe(
       project.id
     )
-    expect(getProjectTagForPath('Projects/Alpha Project/specs/plan.xnote', [project])).toBe(
-      'project:alpha-project'
-    )
+    expect(getProjectTagForPath('Projects/Alpha Project/specs/plan.md', [project])).toBeNull()
+  })
+
+  it('does not reserve Projects when there are no managed projects', () => {
+    expect(isProtectedProjectTreePath('Projects', [])).toBe(false)
+    expect(getProjectProtectionKind('Projects', [])).toBeNull()
   })
 })

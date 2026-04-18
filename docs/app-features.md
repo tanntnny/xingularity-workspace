@@ -10,6 +10,7 @@ Xingularity is a local-first Electron workspace for:
 - project planning with milestones and subtasks
 - calendar task management
 - weekly planning
+- subscription spend tracking
 - automation schedules
 - agent chat and run history
 - visual knowledge and board-style views over workspace content
@@ -27,6 +28,7 @@ The sidebar currently exposes these pages:
 - Knowledge
 - Notes
 - Projects
+- Subscriptions
 - Grid
 - Calendar
 - Weekly Plan
@@ -152,6 +154,24 @@ Weekly planning features include:
 - link priorities to projects, milestones, subtasks, or calendar tasks
 - capture week review fields for wins, misses, blockers, and next week
 
+## Subscriptions
+
+The subscriptions page tracks recurring spend for tools, vendors, and services.
+
+Current capabilities:
+
+- create, edit, archive, and delete subscriptions
+- store provider, category, amount, billing cycle, renewal date, status, review flag, last-used date, tags, and notes
+- support monthly, quarterly, yearly, and custom billing intervals
+- normalize subscription amounts into monthly recurring spend
+- show monthly and yearly recurring totals
+- highlight subscriptions renewing within 30 days
+- calculate potential monthly savings from subscriptions flagged for review, unused, duplicate, or expensive
+- filter by category and status
+- sort the subscriptions table by name, category, amount, next renewal, or status
+- visualize active recurring spend in a category treemap
+- persist subscription records per vault
+
 ## Schedules And Automations
 
 The schedules page supports local automations.
@@ -221,5 +241,11 @@ App-managed state:
 - projects
 - calendar tasks
 - weekly plans
+- subscriptions
 - schedules and run records
 - agent chat sessions and run history
+
+Vault app data:
+
+- `.xingularity/weekly-plan.json`
+- `.xingularity/subscriptions.json`

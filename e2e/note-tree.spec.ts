@@ -7,6 +7,7 @@ import {
   createStoredNoteDocumentFromText,
   serializeStoredNoteDocument
 } from '../src/shared/noteDocument'
+import { StoredNoteDocument } from '../src/shared/types'
 
 declare global {
   interface Window {
@@ -15,10 +16,16 @@ declare global {
         listTree: () => Promise<Array<{ id: string }>>
         renamePath: (fromRelPath: string, toRelPath: string) => Promise<void>
         readNoteDocument: (relPath: string) => Promise<{ tags: string[] }>
+        writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
       }
       vault: {
         restoreLast: () => Promise<unknown>
       }
+    }
+    __XINGULARITY_E2E__?: {
+      getCurrentNoteSnapshot: () =>
+        | { path: string | null; content: string }
+        | Promise<{ path: string | null; content: string }>
     }
   }
 }
@@ -26,15 +33,16 @@ declare global {
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-note-tree-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'notes', 'archive'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   await fs.mkdir(path.join(rootPath, '.xingularity'), { recursive: true })
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'alpha.xnote'),
+    path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha note\n')),
     'utf-8'
   )
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'beta.xnote'),
+    path.join(rootPath, 'notes', 'beta.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Beta note\n')),
     'utf-8'
   )
@@ -103,6 +111,19 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   return { electronApp, page }
 }
 
+async function openNote(page: Page, relPath: string): Promise<void> {
+  const row = page.getByTestId(`note-tree-row:${relPath}`)
+  await expect(row).toBeVisible({ timeout: 20_000 })
+  await row.click()
+  await expect(page.getByTestId('note-block-editor')).toBeVisible({ timeout: 20_000 })
+}
+
+async function getCurrentNoteSnapshot(
+  page: Page
+): Promise<{ path: string | null; content: string }> {
+  return page.evaluate(() => window.__XINGULARITY_E2E__!.getCurrentNoteSnapshot())
+}
+
 test.describe('notes tree view', () => {
   test('renames a note from the tree view', async () => {
     const vaultRoot = await createFixtureVault()
@@ -111,16 +132,18 @@ test.describe('notes tree view', () => {
     try {
       await expect(page.getByTestId('note-panel-toggle:tree')).toHaveAttribute('data-state', 'on')
       await expect
-        .poll(async () => page.evaluate(() => window.vaultApi.files.listTree().then((tree) => tree.length)))
-        .toBe(3)
+        .poll(async () =>
+          page.evaluate(() => window.vaultApi.files.listTree().then((tree) => tree.length))
+        )
+        .toBe(4)
 
-      const alphaRow = page.getByTestId('note-tree-row:alpha.xnote')
+      const alphaRow = page.getByTestId('note-tree-row:alpha.md')
       await expect(alphaRow).toBeVisible({ timeout: 20_000 })
 
       await alphaRow.hover()
-      await page.getByTestId('note-tree-rename:alpha.xnote').click()
+      await page.getByTestId('note-tree-rename:alpha.md').click()
 
-      const renameInput = page.getByTestId('note-tree-input:alpha.xnote')
+      const renameInput = page.getByTestId('note-tree-input:alpha.md')
       await expect(renameInput).toBeVisible()
       await renameInput.fill('alpha-renamed')
       await renameInput.press('Enter')
@@ -128,7 +151,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha-renamed.xnote'))
+            await fs.access(path.join(vaultRoot, 'notes', 'alpha-renamed.md'))
             return true
           } catch {
             return false
@@ -139,7 +162,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha.xnote'))
+            await fs.access(path.join(vaultRoot, 'notes', 'alpha.md'))
             return true
           } catch {
             return false
@@ -147,26 +170,101 @@ test.describe('notes tree view', () => {
         })
         .toBe(false)
 
-      await expect(page.getByTestId('note-tree-row:alpha-renamed.xnote')).toBeVisible()
+      await expect(page.getByTestId('note-tree-row:alpha-renamed.md')).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
     }
   })
 
-  test('shows protected project folders and syncs note tags when moving into them', async () => {
+  test('expands and collapses a folder when clicking the folder card', async () => {
+    const vaultRoot = await createFixtureVault()
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'archive', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const archiveRow = page.getByTestId('note-tree-row:archive')
+      const nestedRow = page.getByTestId('note-tree-row:archive/nested.md')
+      await expect(archiveRow).toBeVisible({ timeout: 20_000 })
+      await expect(nestedRow).toHaveCount(0)
+
+      await archiveRow.click()
+      await expect(nestedRow).toBeVisible({ timeout: 20_000 })
+
+      await archiveRow.click()
+      await expect(nestedRow).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('opens note and folder action menus and focuses new folder rename input', async () => {
+    const vaultRoot = await createFixtureVault()
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'archive', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const alphaRow = page.getByTestId('note-tree-row:alpha.md')
+      await expect(alphaRow).toBeVisible({ timeout: 20_000 })
+      await alphaRow.hover()
+      await page.getByTestId('note-tree-menu:alpha.md').click()
+      await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible()
+      await page.keyboard.press('Escape')
+
+      const archiveRow = page.getByTestId('note-tree-row:archive')
+      const nestedRow = page.getByTestId('note-tree-row:archive/nested.md')
+      await expect(archiveRow).toBeVisible({ timeout: 20_000 })
+      await expect(nestedRow).toHaveCount(0)
+
+      await archiveRow.hover()
+      await page.getByTestId('note-tree-menu:archive').click()
+      await expect(page.getByRole('menuitem', { name: 'New folder' })).toBeVisible()
+      await expect(nestedRow).toHaveCount(0)
+
+      await page.getByTestId('note-tree-create-folder:archive').click()
+      await expect
+        .poll(async () =>
+          page.evaluate(() =>
+            window.vaultApi.files
+              .listTree()
+              .then((tree) => JSON.stringify(tree.map((entry) => entry.id)))
+          )
+        )
+        .toContain('folder:archive/untitled-folder')
+      const renameInput = page.getByTestId('note-tree-input:archive/untitled-folder')
+      await expect(renameInput).toBeVisible({ timeout: 20_000 })
+      await expect(renameInput).toBeFocused()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('hides protected project folders from the explorer and syncs note tags when moving into them', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       const projectsRow = page.getByTestId('note-tree-row:Projects')
-      await expect(projectsRow).toBeVisible({ timeout: 20_000 })
+      await expect(projectsRow).toHaveCount(0)
       await expect
         .poll(async () =>
           page.evaluate(() =>
             window.vaultApi.files.listTree().then((tree) => {
               const projects = tree.find((entry) => entry.id === 'folder:Projects') as
-                | { isProtected?: boolean; children?: Array<{ relPath: string; isProtected?: boolean }> }
+                | {
+                    isProtected?: boolean
+                    children?: Array<{ relPath: string; isProtected?: boolean }>
+                  }
                 | undefined
               return {
                 isProtected: projects?.isProtected ?? false,
@@ -181,16 +279,14 @@ test.describe('notes tree view', () => {
           childPaths: ['Projects/Alpha Project'],
           childProtected: [true]
         })
-      await expect(page.getByTestId('note-tree-rename:Projects')).toHaveCount(0)
-
       await page.evaluate(() =>
-        window.vaultApi.files.renamePath('alpha.xnote', 'Projects/Alpha Project/alpha.xnote')
+        window.vaultApi.files.renamePath('alpha.md', 'Projects/Alpha Project/alpha.md')
       )
 
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'Projects', 'Alpha Project', 'alpha.xnote'))
+            await fs.access(path.join(vaultRoot, 'notes', 'Projects', 'Alpha Project', 'alpha.md'))
             return true
           } catch {
             return false
@@ -201,11 +297,48 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           const document = await page.evaluate(() =>
-            window.vaultApi.files.readNoteDocument('Projects/Alpha Project/alpha.xnote')
+            window.vaultApi.files.readNoteDocument('Projects/Alpha Project/alpha.md')
           )
           return document.tags
         })
         .toContain('project:alpha-project')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps the open note body and tags visible after moving the note into a different folder', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.evaluate(() =>
+        window.vaultApi.files.writeNoteDocument('alpha.md', {
+          version: 1,
+          tags: ['alpha'],
+          markdown: 'Alpha note survives move'
+        })
+      )
+
+      const archiveRow = page.getByTestId('note-tree-row:archive')
+      await expect(archiveRow).toBeVisible({ timeout: 20_000 })
+
+      await openNote(page, 'alpha.md')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain('Alpha note survives move')
+      await expect(page.getByLabel('Search tag alpha')).toBeVisible()
+
+      await page.getByTestId('note-tree-row:alpha.md').dragTo(archiveRow)
+
+      await expect(page.getByTestId('note-tree-row:archive/alpha.md')).toBeVisible({
+        timeout: 20_000
+      })
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain('Alpha note survives move')
+      await expect(page.getByLabel('Search tag alpha')).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

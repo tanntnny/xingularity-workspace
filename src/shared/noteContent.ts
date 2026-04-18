@@ -18,11 +18,7 @@ export function splitNoteContent(markdown: string): NoteContentParts {
   }
 
   const rawBody = markdown.slice(match[0].length)
-  const body = rawBody.startsWith('\r\n')
-    ? rawBody.slice(2)
-    : rawBody.startsWith('\n')
-      ? rawBody.slice(1)
-      : rawBody
+  const body = rawBody.replace(/^(?:\r?\n)+/, '')
 
   return {
     frontmatter: match[1],

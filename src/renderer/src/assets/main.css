@@ -222,6 +222,63 @@
 }
 
 @layer utilities {
+  .tab-menu-shell {
+    min-width: 0;
+  }
+
+  .tab-menu-group {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .tab-menu-item {
+    flex: 0 0 auto;
+  }
+
+  .tab-menu-item + .tab-menu-item {
+    position: relative;
+  }
+
+  .tab-menu-item + .tab-menu-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 1rem;
+    width: 1px;
+    transform: translateY(-50%);
+    background: var(--line);
+  }
+
+  .tab-menu-item[data-active='true']::before,
+  .tab-menu-item[data-active='true'] + .tab-menu-item::before {
+    opacity: 0;
+  }
+
+  .tab-menu-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .settings-tab-menu {
+    max-width: 100%;
+  }
+
+  .settings-tab-menu-item {
+    min-width: 7.5rem;
+  }
+
+  .project-tab-menu {
+    max-width: 100%;
+  }
+
+  .project-tab-menu-item {
+    min-width: 8.5rem;
+  }
+
   .note-editor-shell {
     --note-heading-1-size: 2.25rem;
     --note-heading-2-size: 1.5rem;
@@ -277,7 +334,10 @@
       transform 200ms ease-out;
   }
 
-  .note-editor-shell .bn-block-outer[data-prev-type='paragraph'] > .bn-block > .bn-block-content[data-content-type='heading'] {
+  .note-editor-shell
+    .bn-block-outer[data-prev-type='paragraph']
+    > .bn-block
+    > .bn-block-content[data-content-type='heading'] {
     font-size: 1rem;
     font-weight: 400;
     letter-spacing: 0;
@@ -293,6 +353,21 @@
   .animate-workspace-pane {
     animation: workspace-pane-slide-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: opacity, transform;
+  }
+
+  .scroll-reveal-item {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    transition:
+      opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--scroll-reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .scroll-reveal-item[data-revealed='true'] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 
   .workspace-divider {
@@ -642,6 +717,13 @@
     transform: none !important;
     filter: none !important;
   }
+
+  .scroll-reveal-item,
+  .scroll-reveal-item[data-revealed='true'] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
 }
 
 .calendar-full .fc .fc-daygrid-event-dot {
@@ -683,4 +765,497 @@
 
 .beacon-task-surface:hover {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.note-milkdown-editor,
+.note-milkdown-editor .milkdown {
+  min-height: 60vh;
+  height: 100%;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--app-font-family);
+}
+
+.note-milkdown-editor .milkdown {
+  --crepe-color-background: var(--panel);
+  --crepe-color-on-background: var(--text);
+  --crepe-color-surface: var(--panel-2);
+  --crepe-color-surface-low: var(--panel-3);
+  --crepe-color-on-surface: var(--text);
+  --crepe-color-on-surface-variant: var(--muted);
+  --crepe-color-outline: var(--line-strong);
+  --crepe-color-primary: var(--accent);
+  --crepe-color-secondary: var(--accent-soft);
+  --crepe-color-on-secondary: var(--accent);
+  --crepe-color-inline-code: #b91c1c;
+  --crepe-color-error: var(--danger);
+  --crepe-color-hover: var(--panel-3);
+  --crepe-color-selected: color-mix(in srgb, var(--accent) 18%, transparent);
+  --crepe-color-inline-area: var(--panel-2);
+  --crepe-font-title: var(--app-font-family);
+  --crepe-font-default: var(--app-font-family);
+  --crepe-font-code:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --crepe-shadow-1: 0 6px 20px rgba(0, 0, 0, 0.1);
+  --crepe-shadow-2: 0 12px 36px rgba(0, 0, 0, 0.14);
+}
+
+.note-milkdown-editor .ProseMirror {
+  min-height: 60vh;
+  background: var(--panel);
+  color: var(--text);
+  caret-color: var(--accent) !important;
+  outline: none;
+  font-size: 0.9375rem;
+  line-height: 1.3;
+  padding: 0 2rem 50vh 2rem !important;
+}
+
+.note-milkdown-editor .ProseMirror-focused {
+  --prosemirror-virtual-cursor-color: var(--accent) !important;
+}
+
+.note-milkdown-editor .ProseMirror p {
+  margin: 0.35rem 0;
+}
+
+.note-milkdown-editor .ProseMirror ul,
+.note-milkdown-editor .ProseMirror ol,
+.note-milkdown-editor .ProseMirror blockquote,
+.note-milkdown-editor .ProseMirror pre,
+.note-milkdown-editor .ProseMirror table {
+  margin: 0;
+}
+
+.note-milkdown-editor .ProseMirror h1,
+.note-milkdown-editor .ProseMirror h2,
+.note-milkdown-editor .ProseMirror h3,
+.note-milkdown-editor .ProseMirror h4,
+.note-milkdown-editor .ProseMirror h5,
+.note-milkdown-editor .ProseMirror h6 {
+  margin: 0.35rem 0 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--accent) 80%, var(--panel));
+}
+
+.note-milkdown-editor .ProseMirror h1 {
+  font-size: 1.625rem;
+}
+
+.note-milkdown-editor .ProseMirror h2 {
+  font-size: 1.375rem;
+}
+
+.note-milkdown-editor .ProseMirror h3 {
+  font-size: 1.125rem;
+}
+
+.note-milkdown-editor .ProseMirror h4 {
+  font-size: 1rem;
+}
+
+.note-milkdown-editor .ProseMirror h5 {
+  font-size: 0.9375rem;
+}
+
+.note-milkdown-editor .ProseMirror h6 {
+  font-size: 0.8125rem;
+}
+
+.note-milkdown-editor .ProseMirror a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror strong,
+.note-milkdown-editor .ProseMirror b {
+  color: var(--text);
+}
+
+.note-milkdown-editor .ProseMirror em,
+.note-milkdown-editor .ProseMirror i {
+  color: var(--text);
+}
+
+.note-milkdown-editor .ProseMirror ul,
+.note-milkdown-editor .ProseMirror ol {
+  color: var(--text);
+  padding-left: 1.1rem;
+  margin: 0.1rem 0;
+}
+
+.note-milkdown-editor .ProseMirror li {
+  color: var(--text);
+  padding-left: 0.2rem;
+}
+
+.note-milkdown-editor .ProseMirror li::marker {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.note-milkdown-editor .milkdown-list-item-block {
+  padding: 0;
+}
+
+.note-milkdown-editor .milkdown-list-item-block > .list-item {
+  align-items: flex-start;
+}
+
+.note-milkdown-editor .milkdown-list-item-block li {
+  gap: 8px;
+}
+
+.note-milkdown-editor .milkdown-list-item-block li .label-wrapper {
+  display: flex;
+  height: 24px;
+  width: 24px;
+  color: var(--text);
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  margin: 0.35rem 0;
+}
+
+.note-milkdown-editor .milkdown-list-item-block li .label-wrapper svg,
+.note-milkdown-editor .milkdown-list-item-block li .label-wrapper svg * {
+  fill: var(--text);
+  stroke: var(--text);
+}
+
+.note-milkdown-editor .milkdown-list-item-block li .label-wrapper .label {
+  height: auto;
+  color: var(--text);
+  padding: 0;
+  line-height: 1;
+}
+
+.note-milkdown-editor .ProseMirror code {
+  border-radius: 2px !important;
+  background: transparent !important;
+  color: var(--text);
+  padding: 0.08rem 0.28rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.88em;
+}
+
+.note-milkdown-editor .ProseMirror pre {
+  border: 1px solid var(--line);
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--text);
+  padding: 0.75rem 0.85rem;
+  overflow-x: auto;
+}
+
+.note-milkdown-editor .ProseMirror pre code {
+  background: transparent !important;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.note-milkdown-editor .milkdown-code-block {
+  position: relative;
+  overflow: hidden;
+  margin: 0.35rem 0;
+  border: 1px solid var(--line);
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--text);
+}
+
+.note-milkdown-editor .milkdown .milkdown-code-block {
+  background: transparent !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .language-button,
+.note-milkdown-editor .milkdown-code-block .language-picker {
+  display: none !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 24px;
+  pointer-events: none;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools-button-group {
+  display: flex !important;
+  align-items: center;
+  gap: 12px !important;
+  pointer-events: auto;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .copy-button,
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .preview-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  min-height: 24px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 6px !important;
+  background: var(--panel-3) !important;
+  color: var(--text);
+  font-family: var(--app-font-family);
+  font-size: 0.6875rem;
+  line-height: 1;
+  opacity: 0;
+  position: static !important;
+  white-space: nowrap;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .copy-button {
+  gap: 4px;
+  width: auto !important;
+  min-width: 54px;
+  padding: 0 0.5rem !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .preview-toggle-button {
+  gap: 4px;
+  width: auto !important;
+  min-width: 58px;
+  padding: 0 0.5rem !important;
+}
+
+.note-milkdown-editor .milkdown-code-block:hover .tools .tools-button-group .copy-button,
+.note-milkdown-editor .milkdown-code-block:hover .tools .tools-button-group .preview-toggle-button,
+.note-milkdown-editor .milkdown-code-block:focus-within .tools .tools-button-group .copy-button,
+.note-milkdown-editor
+  .milkdown-code-block:focus-within
+  .tools
+  .tools-button-group
+  .preview-toggle-button {
+  opacity: 1;
+}
+
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .copy-button:hover,
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .preview-toggle-button:hover,
+.note-milkdown-editor .milkdown-code-block .tools .tools-button-group .copy-button:focus-visible,
+.note-milkdown-editor
+  .milkdown-code-block
+  .tools
+  .tools-button-group
+  .preview-toggle-button:focus-visible {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-3)) !important;
+  color: var(--text);
+}
+
+.note-milkdown-editor .milkdown-code-block .tools-button-group button:first-child,
+.note-milkdown-editor .milkdown-code-block .tools-button-group button:last-child {
+  border-radius: 6px !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .copy-button svg,
+.note-milkdown-editor .milkdown-code-block .preview-toggle-button svg {
+  flex: 0 0 auto;
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .codemirror-host,
+.note-milkdown-editor .milkdown-code-block .cm-editor,
+.note-milkdown-editor .milkdown-code-block .cm-editor *,
+.note-milkdown-editor .milkdown .milkdown-code-block .codemirror-host,
+.note-milkdown-editor .milkdown .milkdown-code-block .cm-editor {
+  background: transparent !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-editor {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-focused {
+  outline: none !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-scroller {
+  background: transparent !important;
+  overflow: auto;
+  font-family: inherit;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-content {
+  background: transparent !important;
+  min-height: 2.6rem;
+  padding: 0.75rem 0.85rem !important;
+  caret-color: var(--accent);
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-line {
+  padding: 0 !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-gutters {
+  display: none !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-activeLine,
+.note-milkdown-editor .milkdown-code-block .cm-activeLineGutter {
+  background: transparent !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .cm-selectionBackground,
+.note-milkdown-editor .milkdown-code-block .cm-content ::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent) !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .preview-panel .preview-divider {
+  background: var(--line-strong) !important;
+}
+
+.note-milkdown-editor .milkdown-code-block .preview-panel,
+.note-milkdown-editor .milkdown-code-block .preview-panel .preview {
+  background: transparent !important;
+}
+
+.note-milkdown-editor .ProseMirror {
+  caret-color: var(--text);
+}
+
+.note-milkdown-editor .note-inline-latex-source {
+  font-family: var(--crepe-font-code);
+  font-size: 0.92em;
+  color: var(--text);
+  caret-color: var(--text);
+}
+
+.note-milkdown-editor .note-inline-latex-source-hidden {
+  color: transparent !important;
+  font-size: 0;
+  letter-spacing: 0;
+}
+
+.note-milkdown-editor .note-latex-preview {
+  display: inline;
+  color: var(--text);
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+.note-milkdown-editor .note-latex-preview .katex {
+  font-size: 1em;
+}
+
+.note-milkdown-editor .note-latex-preview-inline {
+  display: inline;
+}
+
+.note-milkdown-editor .note-latex-preview-display {
+  display: block;
+  width: 100%;
+  margin: 0.9rem 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.note-milkdown-editor .note-latex-preview-display .katex-display {
+  margin: 0 auto;
+}
+
+.note-milkdown-editor .note-display-latex-source-hidden {
+  display: inline-block;
+  width: 100%;
+  line-height: 0;
+}
+
+.note-milkdown-editor .note-inline-latex-error {
+  color: var(--danger);
+  font-family: var(--crepe-font-code);
+  font-size: 0.92em;
+  caret-color: var(--text);
+}
+
+.note-milkdown-editor .katex,
+.note-milkdown-editor .katex *,
+.note-milkdown-editor .katex-display,
+.note-milkdown-editor .katex-display * {
+  background: transparent !important;
+}
+
+.note-milkdown-editor .ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  margin-left: 0.8rem !important;
+  padding-left: 1.4rem !important;
+}
+
+.note-milkdown-editor .ProseMirror blockquote::before {
+  content: none !important;
+}
+
+.note-milkdown-editor .ProseMirror hr {
+  border-color: var(--line);
+}
+
+.note-milkdown-editor .ProseMirror table {
+  border-collapse: collapse;
+}
+
+.note-milkdown-editor .ProseMirror img {
+  display: block;
+  width: min(100%, 960px);
+  max-width: 100%;
+  height: auto;
+}
+
+.note-milkdown-editor .milkdown-image-block,
+.note-milkdown-editor .milkdown-image-inline {
+  width: min(100%, 960px) !important;
+  max-width: 100% !important;
+}
+
+.note-milkdown-editor .ProseMirror th,
+.note-milkdown-editor .ProseMirror td {
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+}
+
+.note-milkdown-editor .ProseMirror th {
+  background: var(--panel-2);
+}
+
+.note-milkdown-editor .ProseMirror .selectedCell::after {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+.note-milkdown-editor .ProseMirror ::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.note-milkdown-editor .milkdown-toolbar,
+.note-milkdown-editor .milkdown-slash-menu,
+.note-milkdown-editor .milkdown-link-tooltip,
+.note-milkdown-editor .milkdown-block-handle,
+.note-milkdown-editor .milkdown-image-block {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.note-milkdown-editor button,
+.note-milkdown-editor [role='button'] {
+  border-radius: 6px;
 }

@@ -12,18 +12,8 @@ import { AgentHistoryStore } from './agentHistoryStore'
 import { FileService, sanitizeNotePath } from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
-import {
-  getProjectFolderPath,
-  getProjectProtectionKind,
-  getProjectsRootPath,
-  getProjectTagForPath,
-  isDirectProjectFolderPath,
-  isManagedProjectsRootChild,
-  isProjectsRootPath,
-  isProtectedProjectTreePath,
-  resolveProjectByFolderPath
-} from '../shared/projectFolders'
-import { generateProjectTag, isProjectTag } from '../shared/noteTags'
+import { getProjectProtectionKind } from '../shared/projectFolders'
+import { generateProjectTag } from '../shared/noteTags'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -49,6 +39,7 @@ import {
   AgentRunRecord,
   AppSettingsUpdate,
   CompleteNoteWithAiInput,
+  BlockNoteMigrationResult,
   NoteImportResult,
   Project,
   ProjectMilestone,
@@ -186,8 +177,9 @@ export class VaultRuntime {
     this.assertReady()
     this.assertNoteCreationAllowed(relPath)
     const nextRelPath = await this.fileService!.createNoteAtPath(relPath)
-    await this.syncProjectTagForNote(nextRelPath)
-    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(nextRelPath))
+    const content = serializeStoredNoteDocument(
+      await this.fileService!.readNoteDocument(nextRelPath)
+    )
     await this.indexer!.upsertFromRaw({
       id: createStableId(nextRelPath),
       relPath: nextRelPath,
@@ -257,6 +249,31 @@ export class VaultRuntime {
     return { imported, failed }
   }
 
+  async migrateBlockNoteNotes(): Promise<BlockNoteMigrationResult> {
+    this.assertReady()
+    const result = await this.fileService!.migrateBlockNoteMarkdownNotes()
+    if (result.converted > 0) {
+      await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    }
+    return result
+  }
+
+  async migrateTaggedNoteBodyFrontmatter(): Promise<{
+    converted: number
+    skipped: number
+    failed: Array<{
+      relPath: string
+      error: string
+    }>
+  }> {
+    this.assertReady()
+    const result = await this.fileService!.migrateTaggedNoteBodyFrontmatter()
+    if (result.converted > 0) {
+      await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    }
+    return result
+  }
+
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     this.assertReady()
     await this.fileService!.rename(oldPath, newPath)
@@ -274,7 +291,6 @@ export class VaultRuntime {
     this.assertReady()
     await this.assertPathMutationAllowed(oldPath, newPath)
     await this.fileService!.renamePath(oldPath, newPath)
-    await this.syncProjectTagsForEntry(newPath)
     await this.indexer!.rebuild(this.currentPaths!.notesPath)
   }
 
@@ -361,10 +377,15 @@ export class VaultRuntime {
   }
 
   private sanitizeExportFileName(input: string): string {
+    const invalidFileNameCharacters = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+    const sanitized = Array.from(input.trim())
+      .map((character) =>
+        character.charCodeAt(0) <= 31 || invalidFileNameCharacters.has(character) ? '-' : character
+      )
+      .join('')
+
     return (
-      input
-        .trim()
-        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+      sanitized
         .replace(/\s+/g, ' ')
         .replace(/^-+|-+$/g, '')
         .slice(0, 120) || 'untitled-project'
@@ -697,7 +718,7 @@ export class VaultRuntime {
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
       if (next.projects) {
-        await this.syncProjectFolders(current.projects, merged.projects)
+        await this.reconcileProjectTags(current.projects, merged.projects)
       }
 
       if (next.calendarTasks) {
@@ -719,7 +740,7 @@ export class VaultRuntime {
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
       if (next.projects) {
-        await this.syncProjectFolders(current.projects, merged.projects)
+        await this.reconcileProjectTags(current.projects, merged.projects)
       }
 
       if (next.calendarTasks) {
@@ -781,7 +802,7 @@ export class VaultRuntime {
     }
 
     const settings = await this.settings.readVault(this.currentPaths.rootPath)
-    await this.syncProjectFolders([], settings.projects)
+    await this.reconcileProjectTags(settings.projects, settings.projects)
 
     this.indexer = await initializeIndexerWithRetry(
       this.currentPaths.indexPath,
@@ -846,7 +867,7 @@ export class VaultRuntime {
 
     const current = await this.settings.readVault(this.currentPaths.rootPath)
     const remap = (relPath: string | null): string | null =>
-      relPath ? pathMap[relPath] ?? relPath : null
+      relPath ? (pathMap[relPath] ?? relPath) : null
 
     await this.settings.updateVault(this.currentPaths.rootPath, {
       lastOpenedNotePath: remap(current.lastOpenedNotePath),
@@ -865,16 +886,18 @@ export class VaultRuntime {
     })
   }
 
-  private decorateProjectTree(nodes: Awaited<ReturnType<FileService['listTree']>>, projects: Project[]) {
+  private decorateProjectTree(
+    nodes: Awaited<ReturnType<FileService['listTree']>>,
+    projects: Project[]
+  ): Awaited<ReturnType<FileService['listTree']>> {
     return nodes.map((node) => {
       const protectionKind = getProjectProtectionKind(node.relPath, projects)
-      const project = resolveProjectByFolderPath(node.relPath, projects)
       if (node.kind === 'folder') {
         return {
           ...node,
           isProtected: Boolean(protectionKind),
           protectionKind,
-          projectId: project?.id,
+          projectId: undefined,
           children: this.decorateProjectTree(node.children, projects)
         }
       }
@@ -883,280 +906,70 @@ export class VaultRuntime {
         ...node,
         isProtected: false,
         protectionKind: null,
-        projectId: project?.id
+        projectId: undefined
       }
     })
   }
 
-  private async syncProjectFolders(previousProjects: Project[], nextProjects: Project[]): Promise<void> {
+  private async reconcileProjectTags(
+    previousProjects: Project[],
+    nextProjects: Project[]
+  ): Promise<void> {
     if (!this.currentPaths || !this.fileService) {
       return
     }
 
-    await fs.mkdir(assertPathInVault(this.currentPaths, getProjectsRootPath(), 'notes'), {
-      recursive: true
-    })
+    const nextProjectTags = new Set(nextProjects.map((project) => generateProjectTag(project.id)))
+    const removedProjectTags = previousProjects
+      .map((project) => generateProjectTag(project.id))
+      .filter((tag) => !nextProjectTags.has(tag))
 
-    const previousById = new Map(previousProjects.map((project) => [project.id, project]))
-    const nextById = new Map(nextProjects.map((project) => [project.id, project]))
-
-    for (const project of nextProjects) {
-      const previous = previousById.get(project.id)
-      if (!previous) {
-        continue
-      }
-
-      const previousFolderPath = getProjectFolderPath(previous)
-      const nextFolderPath = getProjectFolderPath(project)
-      if (previousFolderPath === nextFolderPath) {
-        continue
-      }
-
-      await this.renameOrMergeProjectFolder(previousFolderPath, nextFolderPath)
-      await this.rewriteProjectFolderTags(nextFolderPath, generateProjectTag(project.name))
-    }
-
-    for (const project of previousProjects) {
-      if (nextById.has(project.id)) {
-        continue
-      }
-
-      const folderPath = getProjectFolderPath(project)
-      if (await this.entryExists(folderPath)) {
-        await this.fileService.deletePath(folderPath)
-      }
-    }
-
-    for (const project of nextProjects) {
-      const folderPath = getProjectFolderPath(project)
-      if (!(await this.entryExists(folderPath))) {
-        await this.fileService.createFolder(folderPath)
-      }
-    }
-
-    await this.reconcileProjectNoteLinks(nextProjects)
-
-    if (this.indexer && this.currentPaths) {
-      await this.indexer.rebuild(this.currentPaths.notesPath)
-    }
-  }
-
-  private async renameOrMergeProjectFolder(fromRelPath: string, toRelPath: string): Promise<void> {
-    if (!this.fileService) {
+    if (removedProjectTags.length === 0) {
       return
     }
 
-    const fromExists = await this.entryExists(fromRelPath)
-    if (!fromExists) {
-      if (!(await this.entryExists(toRelPath))) {
-        await this.fileService.createFolder(toRelPath)
-      }
-      return
-    }
-
-    const toExists = await this.entryExists(toRelPath)
-    if (!toExists) {
-      await this.fileService.renamePath(fromRelPath, toRelPath)
-      return
-    }
-
-    const entries = await fs.readdir(assertPathInVault(this.currentPaths!, fromRelPath, 'notes'))
-    for (const name of entries) {
-      const fromChild = `${fromRelPath}/${name}`
-      const toChild = await this.findAvailableEntryPath(`${toRelPath}/${name}`)
-      await this.fileService.renamePath(fromChild, toChild)
-    }
-
-    await this.fileService.deletePath(fromRelPath)
-  }
-
-  private async rewriteProjectFolderTags(
-    folderPath: string,
-    expectedProjectTag: string
-  ): Promise<void> {
-    if (!this.fileService) {
-      return
-    }
-
+    const removedTagSet = new Set(removedProjectTags)
     const notes = await this.fileService.listNotes()
-    const matchingNotes = notes.filter(
-      (note) => note.relPath === folderPath || note.relPath.startsWith(`${folderPath}/`)
-    )
-
-    for (const note of matchingNotes) {
-      await this.setProjectTagOnNote(note.relPath, expectedProjectTag)
-    }
-  }
-
-  private async reconcileProjectNoteLinks(projects: Project[]): Promise<void> {
-    if (!this.fileService) {
-      return
-    }
-
-    const validProjectTags = new Set(projects.map((project) => generateProjectTag(project.name)))
-    const projectByTag = new Map(projects.map((project) => [generateProjectTag(project.name), project]))
-    const notes = await this.fileService.listNotes()
+    let changed = false
 
     for (const note of notes) {
-      const projectFromPath = resolveProjectByFolderPath(note.relPath, projects)
-      if (projectFromPath) {
-        await this.setProjectTagOnNote(note.relPath, generateProjectTag(projectFromPath.name))
+      if (!note.tags.some((tag) => removedTagSet.has(tag))) {
         continue
       }
 
-      const matchedProject = note.tags
-        .filter((tag) => projectByTag.has(tag))
-        .map((tag) => projectByTag.get(tag) ?? null)
-        .find((project): project is Project => Boolean(project))
-
-      if (matchedProject) {
-        const nextRelPath = await this.moveNoteIntoProjectFolder(note.relPath, matchedProject)
-        await this.setProjectTagOnNote(nextRelPath, generateProjectTag(matchedProject.name))
+      const document = await this.fileService.readNoteDocument(note.relPath)
+      const nextTags = document.tags.filter((tag) => !removedTagSet.has(tag))
+      if (sameStringArray(document.tags, nextTags)) {
         continue
       }
 
-      if (note.tags.some((tag) => isProjectTag(tag)) && !note.tags.some((tag) => validProjectTags.has(tag))) {
-        await this.clearProjectTagsOnNote(note.relPath)
-      }
-    }
-  }
-
-  private async moveNoteIntoProjectFolder(relPath: string, project: Project): Promise<string> {
-    if (!this.fileService) {
-      return relPath
+      await this.fileService.writeNoteDocument(note.relPath, {
+        ...document,
+        tags: nextTags
+      })
+      changed = true
     }
 
-    const folderPath = getProjectFolderPath(project)
-    const currentProject = resolveProjectByFolderPath(relPath, [project])
-    if (currentProject?.id === project.id) {
-      return relPath
+    if (changed) {
+      await this.indexer?.rebuild(this.currentPaths.notesPath)
     }
-
-    const nextRelPath = await this.findAvailableEntryPath(
-      `${folderPath}/${path.basename(relPath)}`
-    )
-    if (nextRelPath === relPath) {
-      return relPath
-    }
-
-    await this.fileService.renamePath(relPath, nextRelPath)
-    return nextRelPath
-  }
-
-  private async syncProjectTagsForEntry(relPath: string): Promise<void> {
-    const absolutePath = assertPathInVault(this.currentPaths!, relPath, 'notes')
-    const stats = await fs.stat(absolutePath)
-    if (stats.isDirectory()) {
-      const notes = await this.fileService!.listNotes()
-      const nestedNotes = notes.filter(
-        (note) => note.relPath.startsWith(`${relPath}/`) || note.relPath === relPath
-      )
-      for (const note of nestedNotes) {
-        await this.syncProjectTagForNote(note.relPath)
-      }
-      return
-    }
-
-    await this.syncProjectTagForNote(relPath)
-  }
-
-  private async syncProjectTagForNote(relPath: string): Promise<void> {
-    const settings = await this.settings.readVault(this.getCurrentVaultRoot())
-    const expectedTag = getProjectTagForPath(relPath, settings.projects)
-    if (expectedTag) {
-      await this.setProjectTagOnNote(relPath, expectedTag)
-      return
-    }
-
-    await this.clearProjectTagsOnNote(relPath)
-  }
-
-  private async setProjectTagOnNote(relPath: string, expectedTag: string): Promise<void> {
-    const document = await this.fileService!.readNoteDocument(relPath)
-    const nextTags = [...document.tags.filter((tag) => !isProjectTag(tag)), expectedTag]
-    if (sameStringArray(document.tags, nextTags)) {
-      return
-    }
-    await this.fileService!.writeNoteDocument(relPath, {
-      ...document,
-      tags: nextTags
-    })
-  }
-
-  private async clearProjectTagsOnNote(relPath: string): Promise<void> {
-    const document = await this.fileService!.readNoteDocument(relPath)
-    const nextTags = document.tags.filter((tag) => !isProjectTag(tag))
-    if (sameStringArray(document.tags, nextTags)) {
-      return
-    }
-    await this.fileService!.writeNoteDocument(relPath, {
-      ...document,
-      tags: nextTags
-    })
   }
 
   private async assertFolderCreationAllowed(relPath: string): Promise<void> {
-    if (isProjectsRootPath(relPath) || isDirectProjectFolderPath(relPath)) {
-      throw new Error('Project folders are managed automatically')
-    }
-
-    if (isManagedProjectsRootChild(path.dirname(relPath))) {
-      return
-    }
+    void relPath
   }
 
   private assertNoteCreationAllowed(relPath: string): void {
-    if (path.posix.dirname(relPath) === getProjectsRootPath()) {
-      throw new Error('Create notes inside a project folder, not directly under Projects')
-    }
+    void relPath
   }
 
   private async assertPathMutationAllowed(oldPath: string, newPath: string): Promise<void> {
-    const settings = await this.settings.readVault(this.getCurrentVaultRoot())
-    if (isProtectedProjectTreePath(oldPath, settings.projects)) {
-      throw new Error('Project folders are managed automatically')
-    }
-    if (isProtectedProjectTreePath(newPath, settings.projects)) {
-      throw new Error('Project folders are managed automatically')
-    }
-    if (isManagedProjectsRootChild(oldPath) || isManagedProjectsRootChild(newPath)) {
-      throw new Error('Project folders are managed automatically')
-    }
+    void oldPath
     this.assertNoteCreationAllowed(newPath)
   }
 
   private async assertPathDeletionAllowed(relPath: string): Promise<void> {
-    const settings = await this.settings.readVault(this.getCurrentVaultRoot())
-    if (isProtectedProjectTreePath(relPath, settings.projects)) {
-      throw new Error('Project folders are managed automatically')
-    }
-  }
-
-  private async entryExists(relPath: string): Promise<boolean> {
-    try {
-      await fs.access(assertPathInVault(this.currentPaths!, relPath, 'notes'))
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  private async findAvailableEntryPath(preferredRelPath: string): Promise<string> {
-    const extension = path.extname(preferredRelPath)
-    const directory = path.posix.dirname(preferredRelPath)
-    const baseName = extension
-      ? path.basename(preferredRelPath, extension)
-      : path.basename(preferredRelPath)
-
-    let candidate = preferredRelPath
-    let suffix = 2
-    while (await this.entryExists(candidate)) {
-      const fileName = extension ? `${baseName}-${suffix}${extension}` : `${baseName}-${suffix}`
-      candidate = directory === '.' ? fileName : `${directory}/${fileName}`
-      suffix += 1
-    }
-
-    return candidate
+    void relPath
   }
 
   private getAgentHistoryStore(): AgentHistoryStore {
@@ -1702,7 +1515,7 @@ const AGENT_CHAT_TOOLS: MistralTool[] = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Relative note path, usually ending in .xnote.' }
+          path: { type: 'string', description: 'Relative note path, usually ending in .md.' }
         },
         required: ['path']
       }

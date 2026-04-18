@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
-import type { NoteEditorBlock, NoteEditorSnapshot } from '../lib/noteEditorSession'
+import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import type { NoteOutlineItem } from '../lib/noteOutline'
@@ -11,7 +11,7 @@ import type { NoteOutlineItem } from '../lib/noteOutline'
 interface EditorPageProps {
   editorRef?: RefObject<NoteEditorHandle | null>
   editorSessionKey: number
-  initialBlocks?: NoteEditorBlock[] | null
+  initialContent?: string | null
   notePath: string
   tags: string[]
   notes: NoteListItem[]
@@ -24,6 +24,7 @@ interface EditorPageProps {
   onFindByTag: (tag: string) => void
   onOpenNoteLink?: (target: string) => void
   onRename: (newName: string) => Promise<void>
+  titleEditToken?: number
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
 }
@@ -31,7 +32,7 @@ interface EditorPageProps {
 export function EditorPage({
   editorRef,
   editorSessionKey,
-  initialBlocks,
+  initialContent,
   notePath,
   tags,
   notes,
@@ -44,6 +45,7 @@ export function EditorPage({
   onFindByTag,
   onOpenNoteLink,
   onRename,
+  titleEditToken = 0,
   onOutlineChange,
   onJumpToHeadingChange
 }: EditorPageProps): ReactElement {
@@ -53,11 +55,12 @@ export function EditorPage({
   const currentName = stripNoteExtension(notePath).split('/').pop() || ''
 
   const handleAddTag = (): void => {
-    if (newTagValue.trim()) {
-      void onAddTag(newTagValue.trim())
-      setNewTagValue('')
-      setIsAddingTag(false)
-    }
+    const nextTag = newTagValue.trim()
+    if (!nextTag) return
+
+    void onAddTag(nextTag)
+    setNewTagValue('')
+    setIsAddingTag(true)
   }
 
   return (
@@ -67,9 +70,10 @@ export function EditorPage({
           <InlineEditableText
             value={currentName}
             onCommit={onRename}
+            editToken={titleEditToken}
             displayAs="h1"
             displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-4xl font-bold text-[var(--text)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-[var(--accent)]"
-            inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-[var(--text)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
+            inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-[var(--text)] caret-[var(--accent)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
             title="Click to rename"
           />
         </div>
@@ -92,6 +96,8 @@ export function EditorPage({
                 onChange={(e) => setNewTagValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.stopPropagation()
                     handleAddTag()
                   } else if (e.key === 'Escape') {
                     setIsAddingTag(false)
@@ -108,7 +114,7 @@ export function EditorPage({
                 }}
                 placeholder="tag name"
                 autoFocus
-                className="w-32 rounded-md border border-[var(--accent)] bg-[var(--panel)] px-2.5 py-1 text-sm"
+                className="w-32 rounded-md border border-[var(--accent)] bg-[var(--panel)] px-2.5 py-1 text-sm caret-[var(--accent)]"
               />
             </div>
           ) : (
@@ -123,11 +129,11 @@ export function EditorPage({
           )}
         </div>
       </div>
-      <div className="relative px-8 pb-8">
+      <div className="relative px-8 pb-8 h-full">
         <Editor
           ref={editorRef}
           key={`${notePath}:${editorSessionKey}`}
-          initialBlocks={initialBlocks}
+          initialContent={initialContent}
           onDirty={onDirty}
           onSnapshotChange={onSnapshotChange}
           onDropFile={onDropFile}

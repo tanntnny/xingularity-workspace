@@ -1,4 +1,4 @@
-import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -6,7 +6,6 @@ import {
   Check,
   Download,
   Funnel,
-  Heart,
   Keyboard,
   Paintbrush,
   Trash2,
@@ -20,7 +19,9 @@ import {
   CalendarDays,
   Target,
   FolderOpen,
-  List
+  ChevronUp,
+  List,
+  Star
 } from 'lucide-react'
 import {
   CalendarTask,
@@ -35,6 +36,7 @@ import {
   ProjectMilestone,
   ProjectStatus,
   ProjectSubtask,
+  NativeMenuItemDescriptor,
   RendererVaultApi,
   TaskReminder,
   CalendarTaskType,
@@ -47,20 +49,19 @@ import {
   PROJECT_ICON_VARIANTS
 } from '../../shared/projectIcons'
 import {
-  appendTextToNoteBlocks,
+  appendTextToNoteMarkdown,
   getNoteDisplayName,
-  noteBlocksToText,
-  noteTextToBlocks,
   serializeStoredNoteDocument,
   stripNoteExtension,
   withNoteExtension
 } from '../../shared/noteDocument'
-import { normalizeTag } from '../../shared/noteTags'
-import { normalizeMentionTarget } from '../../shared/noteMentions'
+import { splitNoteContent } from '../../shared/noteContent'
+import { generateProjectTag, normalizeTag } from '../../shared/noteTags'
 import {
-  getProjectFolderPath,
-  isProtectedProjectTreePath
-} from '../../shared/projectFolders'
+  createNoteMentionResolver,
+  extractMentionTargetsFromMarkdown,
+  normalizeMentionTarget
+} from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
@@ -116,6 +117,7 @@ import { SearchPage } from './pages/SearchPage'
 import { FontOption, SettingsPage } from './pages/SettingsPage'
 import { AgentHistoryPage } from './pages/AgentHistoryPage'
 import { SchedulesPage } from './pages/SchedulesPage'
+import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import {
   ScheduleDocumentationPage,
   SCHEDULE_DOCUMENTATION_MARKDOWN
@@ -134,12 +136,7 @@ import {
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
 import { buildMilestoneCalendarEvents, normalizeCalendarTasks } from './lib/calendarTasks'
-import {
-  cloneNoteEditorBlocks,
-  type NoteEditorBlock,
-  type NoteEditorSnapshot,
-  type NoteEditorSessionSnapshot
-} from './lib/noteEditorSession'
+import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
 import {
   computeProjectProgress,
@@ -156,12 +153,15 @@ import {
 import { shiftIsoMonthClamped } from './lib/calendarDate'
 import { GRID_PAGE_ENABLED } from './lib/featureFlags'
 import type { NoteOutlineItem } from './lib/noteOutline'
+import { hideManagedProjectTree } from './lib/noteTreeVisibility'
+import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
   knowledge: 'Knowledge',
   notes: 'Notes',
   projects: 'Projects',
+  subscriptions: 'Subscriptions',
   grid: 'Grid',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
@@ -206,11 +206,17 @@ function pushNoteSaveTrace(event: string, details: Record<string, unknown>): voi
   void details
 }
 
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index])
+}
+
 if (typeof window !== 'undefined') {
   ;(
     window as Window & {
       __XINGULARITY_E2E__?: {
-        getCurrentNoteSnapshot: () => { path: string | null; content: string }
+        getCurrentNoteSnapshot: () =>
+          | { path: string | null; content: string }
+          | Promise<{ path: string | null; content: string }>
         getLastPageLeaveSaveDebug: () => PageLeaveSaveDebug
       }
     }
@@ -295,6 +301,7 @@ function App(): ReactElement {
   const setSettings = useVaultStore((state) => state.setSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
+  const useNativeMenus = canUseNativeMenus()
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
@@ -309,10 +316,12 @@ function App(): ReactElement {
   const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
   const [currentNoteOutline, setCurrentNoteOutline] = useState<NoteOutlineItem[]>([])
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
-  const [currentNoteEditorBlocks, setCurrentNoteEditorBlocks] = useState<NoteEditorBlock[] | null>(
-    null
-  )
+  const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
   const [currentNoteEditorVersion, setCurrentNoteEditorVersion] = useState(0)
+  const [noteTitleEditTarget, setNoteTitleEditTarget] = useState<{
+    relPath: string
+    token: number
+  } | null>(null)
   const [jumpToNoteHeading, setJumpToNoteHeading] = useState<((blockId: string) => void) | null>(
     null
   )
@@ -320,9 +329,14 @@ function App(): ReactElement {
   const [noteSortField, setNoteSortField] = useState<NoteSortField>('created')
   const [noteSortDirection, setNoteSortDirection] = useState<NoteSortDirection>('desc')
   const [notePanelView, setNotePanelView] = useState<NotePanelView>('tree')
+  const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntry, setSelectedNoteTreeEntry] = useState<NoteTreeSelection>(null)
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
+  const handlePendingNoteTreeEditHandled = useCallback((): void => {
+    setPendingNoteTreeEditId(null)
+  }, [])
+  const visibleNoteTree = useMemo(() => hideManagedProjectTree(noteTree), [noteTree])
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const gridBoard = useMemo(
@@ -337,6 +351,10 @@ function App(): ReactElement {
   const [gridAddMode, setGridAddMode] = useState<'note' | 'project'>('note')
   const [gridAddQuery, setGridAddQuery] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [projectNameEditTarget, setProjectNameEditTarget] = useState<{
+    projectId: string
+    token: number
+  } | null>(null)
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectFilterMode>('all')
   const [projectSortField, setProjectSortField] = useState<ProjectSortField>('name')
   const [projectSortDirection, setProjectSortDirection] = useState<ProjectSortDirection>('asc')
@@ -384,7 +402,14 @@ function App(): ReactElement {
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
+  const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const noteFilterButtonRef = useRef<HTMLButtonElement | null>(null)
+  const noteSortButtonRef = useRef<HTMLButtonElement | null>(null)
+  const projectFilterButtonRef = useRef<HTMLButtonElement | null>(null)
+  const projectSortButtonRef = useRef<HTMLButtonElement | null>(null)
   const lastPersistedNoteRef = useRef<{ relPath: string; fingerprint: string } | null>(null)
+  const createNoteRef = useRef<(() => Promise<void>) | null>(null)
+  const notesRef = useRef(notes)
   const currentNotePathRef = useRef(currentNotePath)
   const currentNoteContentRef = useRef(currentNoteContent)
   const currentNoteTagsRef = useRef<string[]>([])
@@ -402,7 +427,7 @@ function App(): ReactElement {
     hasVault &&
     (activePage === 'dashboard' ||
       activePage === 'knowledge' ||
-      activePage === 'notes' ||
+      (activePage === 'notes' && notePanelView !== 'tree') ||
       activePage === 'projects' ||
       activePage === 'grid' ||
       activePage === 'calendar')
@@ -430,18 +455,21 @@ function App(): ReactElement {
 
     const target = window as Window & {
       __XINGULARITY_E2E__?: {
-        getCurrentNoteSnapshot?: () => { path: string | null; content: string }
+        getCurrentNoteSnapshot?: () =>
+          | { path: string | null; content: string }
+          | Promise<{ path: string | null; content: string }>
         getLastPageLeaveSaveDebug?: () => PageLeaveSaveDebug
       }
     }
 
     target.__XINGULARITY_E2E__ = {
       ...target.__XINGULARITY_E2E__,
-      getCurrentNoteSnapshot: () => {
+      getCurrentNoteSnapshot: async () => {
         const state = useVaultStore.getState()
+        const liveSnapshot = await currentNoteEditorRef.current?.captureSnapshot()
         return {
           path: state.currentNotePath,
-          content: state.currentNoteContent
+          content: liveSnapshot?.content ?? state.currentNoteContent
         }
       },
       getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState })
@@ -508,6 +536,37 @@ function App(): ReactElement {
   useEffect(() => {
     currentNoteContentRef.current = currentNoteContent
   }, [currentNoteContent])
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
+
+  const replaceNotes = useCallback(
+    (nextNotes: NoteListItem[]): void => {
+      notesRef.current = nextNotes
+      setNotes(nextNotes)
+    },
+    [setNotes]
+  )
+
+  const updateNoteMentionTargets = useCallback(
+    (relPath: string, markdown: string): void => {
+      const nextMentionTargets = extractMentionTargetsFromMarkdown(markdown)
+      const currentNotes = notesRef.current
+      const currentNote = currentNotes.find((note) => note.relPath === relPath)
+
+      if (!currentNote || arraysEqual(currentNote.mentionTargets ?? [], nextMentionTargets)) {
+        return
+      }
+
+      replaceNotes(
+        currentNotes.map((note) =>
+          note.relPath === relPath ? { ...note, mentionTargets: nextMentionTargets } : note
+        )
+      )
+    },
+    [replaceNotes]
+  )
 
   useEffect(() => {
     currentNoteTagsRef.current = currentNoteTagsState
@@ -642,36 +701,16 @@ function App(): ReactElement {
     if (!currentNotePath) {
       return []
     }
-
-    const exactPathLookup = new Map<string, string>()
-    const noteNameGroups = new Map<string, NoteListItem[]>()
-
-    notes.forEach((note) => {
-      exactPathLookup.set(normalizeMentionTarget(note.relPath), note.relPath)
-      const nameKey = normalizeMentionTarget(note.name)
-      const matches = noteNameGroups.get(nameKey)
-      if (matches) {
-        matches.push(note)
-      } else {
-        noteNameGroups.set(nameKey, [note])
-      }
-    })
+    const resolveNoteMentionTarget = createNoteMentionResolver(notes)
 
     return notes.filter((note) => {
       if (note.relPath === currentNotePath || !note.mentionTargets?.length) {
         return false
       }
 
-      return note.mentionTargets.some((target) => {
-        const normalizedTarget = normalizeMentionTarget(target)
-        const exactMatch = exactPathLookup.get(normalizedTarget)
-        if (exactMatch) {
-          return exactMatch === currentNotePath
-        }
-
-        const byNameMatches = noteNameGroups.get(normalizedTarget) ?? []
-        return byNameMatches.length === 1 && byNameMatches[0].relPath === currentNotePath
-      })
+      return note.mentionTargets.some(
+        (target) => resolveNoteMentionTarget(target) === currentNotePath
+      )
     })
   }, [currentNotePath, notes])
   useEffect(() => {
@@ -684,96 +723,102 @@ function App(): ReactElement {
 
   const resetCurrentNoteEditorSession = useCallback((): void => {
     currentNoteEditorDirtyRef.current = false
-    setCurrentNoteEditorBlocks(null)
+    setCurrentNoteEditorDraft(null)
     setCurrentNoteEditorVersion((current) => current + 1)
   }, [])
 
-  const checkpointCurrentNote = useCallback(async (): Promise<NoteEditorSessionSnapshot | null> => {
-    const relPath = currentNotePathRef.current
-    if (!relPath) {
-      pushNoteSaveTrace('checkpoint:skip-no-path', {})
-      return null
-    }
-
-    if (!currentNoteEditorRef.current) {
-      const existingSession = noteEditorSessionsRef.current[relPath] ?? null
-      if (existingSession) {
-        setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(existingSession.blocks))
+  const checkpointCurrentNote = useCallback(
+    async ({
+      updateDraftState = true
+    }: {
+      updateDraftState?: boolean
+    } = {}): Promise<NoteEditorSessionSnapshot | null> => {
+      const relPath = currentNotePathRef.current
+      if (!relPath) {
+        pushNoteSaveTrace('checkpoint:skip-no-path', {})
+        return null
       }
-      pushNoteSaveTrace('checkpoint:reuse-session', {
+
+      if (!currentNoteEditorRef.current) {
+        const existingSession = noteEditorSessionsRef.current[relPath] ?? null
+        if (existingSession && updateDraftState) {
+          setCurrentNoteEditorDraft(existingSession.content)
+        }
+        pushNoteSaveTrace('checkpoint:reuse-session', {
+          relPath,
+          hasSession: Boolean(existingSession),
+          sessionContentPreview: summarizeTraceContent(existingSession?.content)
+        })
+        return existingSession
+      }
+
+      const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.flushPendingChanges()
+      const nextSession: NoteEditorSessionSnapshot = {
+        content: snapshot.content,
+        tags: [...currentNoteTagsRef.current]
+      }
+
+      noteEditorSessionsRef.current[relPath] = nextSession
+      currentNoteContentRef.current = nextSession.content
+      currentNoteEditorDirtyRef.current = false
+      if (updateDraftState) {
+        setCurrentNoteContent(nextSession.content)
+        setCurrentNoteEditorDraft(nextSession.content)
+      }
+      pushNoteSaveTrace('checkpoint:capture', {
         relPath,
-        hasSession: Boolean(existingSession),
-        sessionContentPreview: summarizeTraceContent(existingSession?.content)
+        contentPreview: summarizeTraceContent(nextSession.content),
+        tagCount: nextSession.tags.length
       })
-      return existingSession
-    }
 
-    const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.flushPendingChanges()
-    const nextSession: NoteEditorSessionSnapshot = {
-      blocks: cloneNoteEditorBlocks(snapshot.blocks),
-      content: snapshot.content,
-      tags: [...currentNoteTagsRef.current]
-    }
-
-    noteEditorSessionsRef.current[relPath] = nextSession
-    currentNoteContentRef.current = nextSession.content
-    currentNoteEditorDirtyRef.current = false
-    setCurrentNoteContent(nextSession.content)
-    setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(nextSession.blocks))
-    pushNoteSaveTrace('checkpoint:capture', {
-      relPath,
-      blockCount: nextSession.blocks.length,
-      contentPreview: summarizeTraceContent(nextSession.content),
-      tagCount: nextSession.tags.length
-    })
-
-    return nextSession
-  }, [setCurrentNoteContent])
+      return nextSession
+    },
+    [setCurrentNoteContent]
+  )
 
   const setCurrentNoteEditorSession = useCallback(
-    (nextBlocks: NoteEditorBlock[]): void => {
+    (nextContent: string): void => {
       const relPath = currentNotePathRef.current
       const nextSession: NoteEditorSessionSnapshot = {
-        blocks: cloneNoteEditorBlocks(nextBlocks),
-        content: noteBlocksToText(nextBlocks),
+        content: nextContent,
         tags: [...currentNoteTagsRef.current]
       }
 
       if (relPath) {
         noteEditorSessionsRef.current[relPath] = nextSession
+        updateNoteMentionTargets(relPath, nextSession.content)
       }
 
       currentNoteContentRef.current = nextSession.content
       setCurrentNoteContent(nextSession.content)
-      setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(nextSession.blocks))
+      setCurrentNoteEditorDraft(nextSession.content)
       setCurrentNoteEditorVersion((current) => current + 1)
     },
-    [setCurrentNoteContent]
+    [setCurrentNoteContent, updateNoteMentionTargets]
   )
 
   const handleCurrentNoteSnapshotChange = useCallback(
     (snapshot: NoteEditorSnapshot): void => {
       const relPath = currentNotePathRef.current
       const nextSession: NoteEditorSessionSnapshot = {
-        blocks: cloneNoteEditorBlocks(snapshot.blocks),
         content: snapshot.content,
         tags: [...currentNoteTagsRef.current]
       }
 
       if (relPath) {
         noteEditorSessionsRef.current[relPath] = nextSession
+        updateNoteMentionTargets(relPath, nextSession.content)
       }
 
       currentNoteContentRef.current = nextSession.content
       setCurrentNoteContent(nextSession.content)
       pushNoteSaveTrace('editor:snapshot-change', {
         relPath,
-        blockCount: nextSession.blocks.length,
         contentPreview: summarizeTraceContent(nextSession.content),
         tagCount: nextSession.tags.length
       })
     },
-    [setCurrentNoteContent]
+    [setCurrentNoteContent, updateNoteMentionTargets]
   )
   // Unscheduled tasks (no date assigned)
   const unscheduledTasks = useMemo(() => {
@@ -833,8 +878,7 @@ function App(): ReactElement {
         return 'No Note Selected'
       }
 
-      const fileName = currentNotePath.split('/').pop() ?? currentNotePath
-      return stripNoteExtension(fileName)
+      return null
     }
 
     if (activePage === 'projects') {
@@ -865,6 +909,10 @@ function App(): ReactElement {
         : 'No Week Selected'
     }
 
+    if (activePage === 'subscriptions') {
+      return 'Subscriptions'
+    }
+
     return null
   }, [
     activePage,
@@ -877,6 +925,18 @@ function App(): ReactElement {
     shouldRestoreLastOpenedNote,
     selectedWeeklyPlanWeek
   ])
+  const noteHeaderBreadcrumbSegments = useMemo(() => {
+    if (
+      activePage !== 'notes' ||
+      searchQuery.trim() ||
+      shouldRestoreLastOpenedNote ||
+      !currentNotePath
+    ) {
+      return null
+    }
+
+    return stripNoteExtension(currentNotePath).split('/').filter(Boolean)
+  }, [activePage, currentNotePath, searchQuery, shouldRestoreLastOpenedNote])
 
   useEffect(() => {
     if (!weeklyPlanWeeks.length) {
@@ -1018,14 +1078,12 @@ function App(): ReactElement {
       writeNote: async ({ relPath, document }) => {
         pushNoteSaveTrace('coordinator:write-start', {
           relPath,
-          blockCount: document.blocks.length,
           tagCount: document.tags.length,
-          contentPreview: summarizeTraceContent(noteBlocksToText(document.blocks))
+          contentPreview: summarizeTraceContent(document.markdown)
         })
         await vaultApi.files.writeNoteDocument(relPath, document)
         pushNoteSaveTrace('coordinator:write-done', {
           relPath,
-          blockCount: document.blocks.length,
           tagCount: document.tags.length
         })
       },
@@ -1036,15 +1094,14 @@ function App(): ReactElement {
         }
         pushNoteSaveTrace('coordinator:on-persisted', {
           relPath,
-          blockCount: document.blocks.length,
           tagCount: document.tags.length,
-          contentPreview: summarizeTraceContent(noteBlocksToText(document.blocks))
+          contentPreview: summarizeTraceContent(document.markdown)
         })
         const nextNotes = await vaultApi.files.listNotes()
-        setNotes(nextNotes)
+        replaceNotes(nextNotes)
       }
     })
-  }, [vaultApi, setNotes])
+  }, [replaceNotes, vaultApi])
 
   const hasPendingCurrentNoteSave = useCallback((): boolean => {
     const relPath = currentNotePathRef.current
@@ -1123,15 +1180,18 @@ function App(): ReactElement {
       }
 
       pendingNoteSaveRef.current = null
+      const shouldRestoreEditorFocus =
+        !settleEditor && currentNoteEditorRef.current?.hasFocusIntent() === true
 
       const savePromise = (async (): Promise<void> => {
-        const checkpoint = await checkpointCurrentNote()
+        const checkpoint = await checkpointCurrentNote({
+          updateDraftState: force || settleEditor
+        })
         const content = checkpoint?.content ?? currentNoteContentRef.current
-        const blocks = checkpoint?.blocks ?? currentNoteEditorBlocks ?? noteTextToBlocks(content)
         const document = {
           version: 1 as const,
           tags: [...currentNoteTagsRef.current],
-          blocks
+          markdown: content
         }
 
         const lastPersisted = lastPersistedNoteRef.current
@@ -1142,7 +1202,6 @@ function App(): ReactElement {
           pushNoteSaveTrace('flush:skip-unchanged', {
             relPath,
             contentPreview: summarizeTraceContent(content),
-            blockCount: blocks.length,
             tagCount: document.tags.length
           })
           return
@@ -1151,7 +1210,6 @@ function App(): ReactElement {
         pushNoteSaveTrace('flush:enqueue', {
           relPath,
           contentPreview: summarizeTraceContent(content),
-          blockCount: blocks.length,
           tagCount: document.tags.length
         })
         await noteSaveCoordinator.enqueue({
@@ -1165,6 +1223,12 @@ function App(): ReactElement {
 
       try {
         await savePromise
+        if (
+          shouldRestoreEditorFocus ||
+          (!settleEditor && document.activeElement === document.body)
+        ) {
+          currentNoteEditorRef.current?.focus()
+        }
         pushNoteSaveTrace('flush:done', {
           relPath,
           currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
@@ -1175,13 +1239,7 @@ function App(): ReactElement {
         }
       }
     },
-    [
-      checkpointCurrentNote,
-      currentNoteEditorBlocks,
-      hasPendingCurrentNoteSave,
-      noteSaveCoordinator,
-      settleCurrentNoteEditor
-    ]
+    [checkpointCurrentNote, hasPendingCurrentNoteSave, noteSaveCoordinator, settleCurrentNoteEditor]
   )
 
   const scheduleCurrentNoteAutosave = useCallback((): void => {
@@ -1258,11 +1316,10 @@ function App(): ReactElement {
 
         const checkpoint = await checkpointCurrentNote()
         const content = checkpoint?.content ?? currentNoteContentRef.current
-        const blocks = checkpoint?.blocks ?? currentNoteEditorBlocks ?? noteTextToBlocks(content)
         const document = {
           version: 1 as const,
           tags: [...currentNoteTagsRef.current],
-          blocks
+          markdown: content
         }
         const fingerprint = serializeStoredNoteDocument(document)
 
@@ -1290,7 +1347,6 @@ function App(): ReactElement {
           requestedPage: page,
           relPath,
           contentPreview: summarizeTraceContent(content),
-          blockCount: blocks.length,
           tagCount: document.tags.length
         })
         const savePromise = noteSaveCoordinator.enqueue({
@@ -1323,7 +1379,7 @@ function App(): ReactElement {
         throw error
       }
     },
-    [checkpointCurrentNote, currentNoteEditorBlocks, noteSaveCoordinator, settleCurrentNoteEditor]
+    [checkpointCurrentNote, noteSaveCoordinator, settleCurrentNoteEditor]
   )
 
   const navigateToPage = useCallback(
@@ -1932,7 +1988,6 @@ function App(): ReactElement {
         if (cachedSession) {
           pushNoteSaveTrace('open-note:use-session', {
             relPath,
-            blockCount: cachedSession.blocks.length,
             tagCount: cachedSession.tags.length,
             contentPreview: summarizeTraceContent(cachedSession.content)
           })
@@ -1943,23 +1998,20 @@ function App(): ReactElement {
           setCurrentNotePath(relPath)
           setCurrentNoteContent(cachedSession.content)
           setCurrentNoteTagsState(cachedSession.tags)
-          setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(cachedSession.blocks))
+          setCurrentNoteEditorDraft(cachedSession.content)
           setCurrentNoteEditorVersion((current) => current + 1)
           void persistLastOpenedNotePath(relPath)
           return
         }
 
         const document = await vaultApi.files.readNoteDocument(relPath)
-        const blocks = cloneNoteEditorBlocks(document.blocks as NoteEditorBlock[])
-        const content = noteBlocksToText(blocks)
+        const content = splitNoteContent(document.markdown).body
         pushNoteSaveTrace('open-note:read-disk', {
           relPath,
-          blockCount: blocks.length,
           tagCount: document.tags.length,
           contentPreview: summarizeTraceContent(content)
         })
         noteEditorSessionsRef.current[relPath] = {
-          blocks,
           content,
           tags: [...document.tags]
         }
@@ -1975,7 +2027,7 @@ function App(): ReactElement {
         setCurrentNotePath(relPath)
         setCurrentNoteContent(content)
         setCurrentNoteTagsState(document.tags)
-        setCurrentNoteEditorBlocks(blocks)
+        setCurrentNoteEditorDraft(content)
         setCurrentNoteEditorVersion((current) => current + 1)
         void persistLastOpenedNotePath(relPath)
       } catch (error) {
@@ -2103,13 +2155,40 @@ function App(): ReactElement {
       setSearchResults([])
       await navigateToPage('notes')
       await openNote(relPath)
+      setNoteTitleEditTarget({ relPath, token: Date.now() })
       pushToast('success', 'Note created')
     } catch (error) {
       pushToast('error', String(error))
     }
   }
 
-  const createProjectNote = async (projectName: string): Promise<void> => {
+  createNoteRef.current = createNote
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!hasVault) {
+        return
+      }
+
+      const isNewNoteShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'n'
+
+      if (!isNewNoteShortcut) {
+        return
+      }
+
+      event.preventDefault()
+      void createNoteRef.current?.()
+    }
+
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [hasVault])
+
+  const createProjectNote = async (project: Project): Promise<void> => {
     if (!vaultApi) {
       pushToast('error', 'Create note is only available inside the Electron app')
       return
@@ -2122,12 +2201,28 @@ function App(): ReactElement {
     }
 
     try {
-      const relPath = await createNoteAtPathWithFallback(
-        getProjectFolderPath({ name: projectName })
-      )
+      let relPath: string | null = null
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const suffix = attempt === 0 ? '' : ` ${attempt + 1}`
+        try {
+          relPath = await vaultApi.files.createNoteWithTags(`${project.name}${suffix}`, [
+            generateProjectTag(project.id)
+          ])
+          break
+        } catch (error) {
+          if (!String(error).includes('EEXIST')) {
+            throw error
+          }
+        }
+      }
+
+      if (!relPath) {
+        throw new Error('Could not create a unique project note name')
+      }
       await refreshNotesAndTree()
       await navigateToPage('notes')
       await openNote(relPath)
+      setNoteTitleEditTarget({ relPath, token: Date.now() })
       pushToast('success', 'Project note created')
     } catch (error) {
       pushToast('error', String(error))
@@ -2168,6 +2263,88 @@ function App(): ReactElement {
     }
   }
 
+  const migrateBlockNoteNotes = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Note migration is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before migrating notes')
+      void navigateToPage('settings')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Convert old BlockNote JSON notes in this vault to markdown? This rewrites detected .md files in notes/.'
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const openPath = currentNotePathRef.current
+
+    try {
+      await flushCurrentNote({ force: true, settleEditor: true })
+      const result = await vaultApi.files.migrateBlockNoteNotes()
+      noteEditorSessionsRef.current = {}
+      await refreshNotesAndTree()
+
+      if (openPath) {
+        await openNote(openPath)
+      }
+
+      const failedLabel = result.failed.length > 0 ? `, ${result.failed.length} failed` : ''
+      pushToast(
+        result.failed.length > 0 ? 'error' : 'success',
+        `Converted ${result.converted} old note${result.converted === 1 ? '' : 's'}${failedLabel}`
+      )
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const migrateTaggedNoteBodyFrontmatter = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Note migration is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before migrating notes')
+      void navigateToPage('settings')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Normalize notes that still have tag frontmatter in the visible body? This rewrites the matching .md files in notes/.'
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const openPath = currentNotePathRef.current
+
+    try {
+      await flushCurrentNote({ force: true, settleEditor: true })
+      const result = await vaultApi.files.migrateTaggedNoteBodyFrontmatter()
+      noteEditorSessionsRef.current = {}
+      await refreshNotesAndTree()
+
+      if (openPath) {
+        await openNote(openPath)
+      }
+
+      const failedLabel = result.failed.length > 0 ? `, ${result.failed.length} failed` : ''
+      pushToast(
+        result.failed.length > 0 ? 'error' : 'success',
+        `Normalized ${result.converted} note${result.converted === 1 ? '' : 's'}${failedLabel}`
+      )
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
   const runSearch = async (query: string): Promise<void> => {
     if (!vaultApi) {
       return
@@ -2189,59 +2366,106 @@ function App(): ReactElement {
 
   const runCommandPaletteSearch = useCallback(
     async (query: string): Promise<void> => {
-      const trimmedQuery = query.trim()
+      const searchInput = parseCommandPaletteSearchInput(query)
       const requestId = commandPaletteSearchRequestRef.current + 1
       commandPaletteSearchRequestRef.current = requestId
 
-      if (!trimmedQuery) {
+      if (!searchInput.query) {
         setCommandPaletteResults([])
         setCommandPaletteLoading(false)
+        return
+      }
+
+      if (searchInput.mode === 'name') {
+        const noteResults = rankCommandPaletteNotes(notes, searchInput.query, searchInput.mode)
+          .slice(0, 10)
+          .map<CommandPaletteSearchResult>((note) => ({
+            id: `note:${note.relPath}`,
+            kind: 'note',
+            title: note.title,
+            subtitle: note.relPath,
+            value: `note:${note.relPath}`,
+            keywords: [
+              note.title,
+              note.fileName,
+              note.relPath,
+              ...note.aliases,
+              ...note.pathSegments
+            ],
+            tags: note.tags,
+            updatedAt: note.updatedAt
+          }))
+
+        const projectResults = rankCommandPaletteProjects(projects, searchInput.query)
+          .slice(0, 10)
+          .map<CommandPaletteSearchResult>((project) => ({
+            id: `project:${project.id}`,
+            kind: 'project',
+            title: project.name,
+            subtitle: project.summary || 'Project',
+            value: `project:${project.id}`,
+            keywords: [
+              project.name,
+              project.summary,
+              project.folderPath ?? '',
+              ...getSearchPathSegments(project.folderPath ?? '')
+            ]
+          }))
+
+        if (commandPaletteSearchRequestRef.current !== requestId) {
+          return
+        }
+
+        setCommandPaletteLoading(false)
+        setCommandPaletteResults([...noteResults, ...projectResults])
         return
       }
 
       setCommandPaletteLoading(true)
 
       try {
-        const [noteResults, projectResults] = await Promise.all([
-          vaultApi ? vaultApi.search.query(trimmedQuery) : Promise.resolve([]),
-          Promise.resolve(
-            projects
-              .filter((project) => {
-                const lowerQuery = trimmedQuery.toLowerCase()
-                return (
-                  project.name.toLowerCase().includes(lowerQuery) ||
-                  project.summary.toLowerCase().includes(lowerQuery)
-                )
-              })
-              .slice(0, 10)
-              .map<CommandPaletteSearchResult>((project) => ({
-                id: `project:${project.id}`,
-                kind: 'project',
-                title: project.name,
-                subtitle: project.summary || 'Project',
-                value: `project:${project.id}`,
-                keywords: [project.name, project.summary]
-              }))
-          )
-        ])
-
-        if (commandPaletteSearchRequestRef.current !== requestId) {
-          return
+        let indexedNoteResults: Awaited<ReturnType<RendererVaultApi['search']['query']>> = []
+        if (vaultApi) {
+          try {
+            indexedNoteResults = await vaultApi.search.query(`@${searchInput.query}`)
+          } catch {
+            indexedNoteResults = []
+          }
         }
-
-        setCommandPaletteResults([
-          ...noteResults.slice(0, 10).map<CommandPaletteSearchResult>((result) => ({
+        const indexedNotePaths = new Set(indexedNoteResults.map((result) => result.relPath))
+        const rankedNoteResults = rankCommandPaletteNotes(
+          notes,
+          searchInput.query,
+          searchInput.mode
+        ).filter((note) => !indexedNotePaths.has(note.relPath))
+        const noteResults = [
+          ...indexedNoteResults.map<CommandPaletteSearchResult>((result) => ({
             id: `note:${result.relPath}`,
             kind: 'note',
             title: result.title,
             subtitle: result.relPath,
             value: `note:${result.relPath}`,
-            keywords: [result.title, result.relPath, ...result.tags],
+            keywords: [result.title, result.relPath, result.snippet],
             tags: result.tags,
             updatedAt: result.updated
           })),
-          ...projectResults
-        ])
+          ...rankedNoteResults.map<CommandPaletteSearchResult>((note) => ({
+            id: `note:${note.relPath}`,
+            kind: 'note',
+            title: note.title,
+            subtitle: note.relPath,
+            value: `note:${note.relPath}`,
+            keywords: [note.title, note.fileName, note.relPath, note.bodyPreview],
+            tags: note.tags,
+            updatedAt: note.updatedAt
+          }))
+        ].slice(0, 10)
+
+        if (commandPaletteSearchRequestRef.current !== requestId) {
+          return
+        }
+
+        setCommandPaletteResults(noteResults)
       } catch (error) {
         if (commandPaletteSearchRequestRef.current !== requestId) {
           return
@@ -2253,7 +2477,7 @@ function App(): ReactElement {
         }
       }
     },
-    [projects, pushToast, vaultApi]
+    [notes, projects, pushToast, vaultApi]
   )
 
   const runCommandPaletteAi = useCallback(
@@ -2279,19 +2503,13 @@ function App(): ReactElement {
       try {
         await checkpointCurrentNote()
         const noteContent = currentNoteContentRef.current
-        const noteBlocks =
-          currentNotePath && noteEditorSessionsRef.current[currentNotePath]
-            ? noteEditorSessionsRef.current[currentNotePath]!.blocks
-            : (currentNoteEditorBlocks ?? noteTextToBlocks(noteContent))
         const completion = await vaultApi.ai.completeNote({
           notePath: currentNotePath,
           noteContent,
           prompt: trimmedPrompt
         })
 
-        setCurrentNoteEditorSession(
-          appendTextToNoteBlocks(noteBlocks, completion) as NoteEditorBlock[]
-        )
+        setCurrentNoteEditorSession(appendTextToNoteMarkdown(noteContent, completion))
         currentNoteEditorDirtyRef.current = true
         scheduleCurrentNoteAutosave()
         pushToast('success', 'AI note completion added')
@@ -2305,7 +2523,6 @@ function App(): ReactElement {
     },
     [
       checkpointCurrentNote,
-      currentNoteEditorBlocks,
       currentNotePath,
       pushToast,
       scheduleCurrentNoteAutosave,
@@ -2331,7 +2548,11 @@ function App(): ReactElement {
 
       const normalizedRoot = vault.rootPath.replace(/\\/g, '/').replace(/\/+$/, '')
       const normalizedRelative = vaultRelative.replace(/^\/+/, '')
-      return `vault-file://${normalizedRoot}/${normalizedRelative}`
+      const absolutePath = `${normalizedRoot}/${normalizedRelative}`
+      const normalizedAbsolutePath = absolutePath.startsWith('/')
+        ? absolutePath
+        : `/${absolutePath}`
+      return `vault-file://${encodeURI(normalizedAbsolutePath)}`
     },
     [vault]
   )
@@ -2472,15 +2693,11 @@ function App(): ReactElement {
       const newPath = dir ? `${dir}/${newFileName}` : newFileName
       const checkpoint = await checkpointCurrentNote()
       const content = checkpoint?.content ?? currentNoteContentRef.current
-      const blocks =
-        checkpoint?.blocks ??
-        currentNoteEditorBlocks ??
-        (noteTextToBlocks(content) as NoteEditorBlock[])
       const tags = [...currentNoteTagsRef.current]
       const document = {
         version: 1 as const,
         tags,
-        blocks
+        markdown: content
       }
 
       await flushCurrentNote({ force: true })
@@ -2488,7 +2705,6 @@ function App(): ReactElement {
       const nextNotes = await vaultApi.files.listNotes()
       setNotes(nextNotes)
       noteEditorSessionsRef.current[newPath] = {
-        blocks: cloneNoteEditorBlocks(blocks),
         content,
         tags
       }
@@ -2503,7 +2719,7 @@ function App(): ReactElement {
       setCurrentNotePath(newPath)
       setCurrentNoteContent(content)
       setCurrentNoteTagsState(tags)
-      setCurrentNoteEditorBlocks(cloneNoteEditorBlocks(blocks))
+      setCurrentNoteEditorDraft(content)
       void persistLastOpenedNotePath(newPath)
       if (favoriteNotePaths.includes(oldPath)) {
         void persistFavoriteNotePaths(
@@ -2587,7 +2803,7 @@ function App(): ReactElement {
 
     try {
       const exportedPath = await vaultApi.files.exportNote(
-        'Schedule API Guide.xnote',
+        'Schedule API Guide.md',
         SCHEDULE_DOCUMENTATION_MARKDOWN
       )
       if (!exportedPath) {
@@ -2605,12 +2821,9 @@ function App(): ReactElement {
       return
     }
 
-    const projectFolderPath = getProjectFolderPath(project)
+    const projectTag = generateProjectTag(project.id)
     const projectNotes = notes
-      .filter(
-        (note) =>
-          note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
-      )
+      .filter((note) => note.tags.includes(projectTag))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 
     try {
@@ -2652,7 +2865,7 @@ function App(): ReactElement {
       const projectNotesSection =
         noteSections.length > 0
           ? noteSections.join('\n\n---\n\n')
-          : '_No project note in this project folder yet._'
+          : '_No notes tagged for this project yet._'
 
       const exportContent = [
         `# ${project.name}`,
@@ -2827,7 +3040,9 @@ function App(): ReactElement {
     const nextProjectIcons = { ...projectIcons, [nextProject.id]: nextProject.icon }
     void persistProjectData(nextProjects, nextProjectIcons)
     selectProject(nextProject.id)
+    setProjectNameEditTarget({ projectId: nextProject.id, token: Date.now() })
     setProjectSearchQuery('')
+    void navigateToPage('projects')
     pushToast('success', 'Project created')
   }
 
@@ -3442,15 +3657,8 @@ function App(): ReactElement {
       return
     }
 
-    const projectFolderPath = getProjectFolderPath(project)
-    const syncedNoteCount = notes.filter(
-      (note) => note.relPath === projectFolderPath || note.relPath.startsWith(`${projectFolderPath}/`)
-    ).length
-
     const confirmed = window.confirm(
-      syncedNoteCount > 0
-        ? `Remove project "${project.name}"? This will also delete ${syncedNoteCount} synced note${syncedNoteCount === 1 ? '' : 's'} in ${projectFolderPath}. This cannot be undone.`
-        : `Remove project "${project.name}" from this workspace? This cannot be undone.`
+      `Remove project "${project.name}" from this workspace? Tagged notes will stay in the vault. This cannot be undone.`
     )
     if (!confirmed) {
       return
@@ -3593,7 +3801,10 @@ function App(): ReactElement {
 
     setNotes(nextNotes)
     setNoteTree(nextTree)
-    if (currentNotePathRef.current && !nextNotes.some((note) => note.relPath === currentNotePathRef.current)) {
+    if (
+      currentNotePathRef.current &&
+      !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
+    ) {
       currentNotePathRef.current = null
       currentNoteContentRef.current = ''
       currentNoteTagsRef.current = []
@@ -3652,11 +3863,11 @@ function App(): ReactElement {
         const relPath = await createNoteAtPathWithFallback(targetDir ?? getTreeTargetDirectory())
         await refreshNotesAndTree()
         setSelectedNoteTreeEntry({ kind: 'note', relPath })
-        setPendingNoteTreeEditId(`note:${relPath}`)
         setSearchQuery('')
         setSearchResults([])
         await navigateToPage('notes')
         await openNote(relPath)
+        setNoteTitleEditTarget({ relPath, token: Date.now() })
         pushToast('success', 'Note created')
       } catch (error) {
         pushToast('error', String(error))
@@ -3713,10 +3924,9 @@ function App(): ReactElement {
           : target
 
       try {
-        const relPath =
-          exactMatch?.relPath ??
-          (byNameMatches.length === 1 ? byNameMatches[0].relPath : null) ??
-          (await createNoteAtExactPathWithFallback(preferredPath))
+        const matchedRelPath =
+          exactMatch?.relPath ?? (byNameMatches.length === 1 ? byNameMatches[0].relPath : null)
+        const relPath = matchedRelPath ?? (await createNoteAtExactPathWithFallback(preferredPath))
 
         await refreshNotesAndTree()
         setSearchQuery('')
@@ -3725,7 +3935,8 @@ function App(): ReactElement {
         setSelectedNoteTreeEntry({ kind: 'note', relPath })
         await openNote(relPath)
 
-        if (!exactMatch && byNameMatches.length !== 1) {
+        if (!matchedRelPath) {
+          setNoteTitleEditTarget({ relPath, token: Date.now() })
           pushToast('success', 'Note created')
         }
       } catch (error) {
@@ -3787,11 +3998,6 @@ function App(): ReactElement {
         return
       }
 
-      if (kind === 'folder' && isProtectedProjectTreePath(relPath, projects)) {
-        pushToast('error', 'Project folders are managed automatically')
-        return
-      }
-
       const trimmed = nextName.trim()
       if (!trimmed) {
         return
@@ -3807,9 +4013,13 @@ function App(): ReactElement {
       }
 
       try {
-        await vaultApi.files.renamePath(relPath, nextRelPath)
-        await refreshNotesAndTree()
-        setSelectedNoteTreeEntry({ kind, relPath: nextRelPath })
+        const nextCurrentNotePath =
+          kind === 'note'
+            ? currentNotePath === relPath
+              ? nextRelPath
+              : currentNotePath
+            : remapNestedPath(currentNotePath, relPath, nextRelPath)
+
         if (kind === 'note') {
           const existingSession = noteEditorSessionsRef.current[relPath]
           if (existingSession) {
@@ -3825,12 +4035,14 @@ function App(): ReactElement {
             }
           })
         }
-        const nextCurrentNotePath =
-          kind === 'note'
-            ? currentNotePath === relPath
-              ? nextRelPath
-              : currentNotePath
-            : remapNestedPath(currentNotePath, relPath, nextRelPath)
+
+        if (nextCurrentNotePath !== currentNotePath) {
+          currentNotePathRef.current = nextCurrentNotePath
+        }
+
+        await vaultApi.files.renamePath(relPath, nextRelPath)
+        await refreshNotesAndTree()
+        setSelectedNoteTreeEntry({ kind, relPath: nextRelPath })
         if (nextCurrentNotePath !== currentNotePath) {
           currentNotePathRef.current = nextCurrentNotePath
           setCurrentNotePath(nextCurrentNotePath)
@@ -3863,11 +4075,6 @@ function App(): ReactElement {
   const deleteTreePath = useCallback(
     async (relPath: string, kind: 'note' | 'folder'): Promise<void> => {
       if (!vaultApi) {
-        return
-      }
-
-      if (kind === 'folder' && isProtectedProjectTreePath(relPath, projects)) {
-        pushToast('error', 'Project folders are managed automatically')
         return
       }
 
@@ -3928,7 +4135,6 @@ function App(): ReactElement {
       resetCurrentNoteEditorSession,
       setCurrentNoteContent,
       setCurrentNotePath,
-      projects,
       vaultApi
     ]
   )
@@ -3939,16 +4145,14 @@ function App(): ReactElement {
         return
       }
 
-      await vaultApi.files.renamePath(fromRelPath, toRelPath)
-      await refreshNotesAndTree()
       const movedKind = fromRelPath === withNoteExtension(fromRelPath) ? 'note' : 'folder'
-      setSelectedNoteTreeEntry({ kind: movedKind, relPath: toRelPath })
       const nextCurrentNotePath =
         movedKind === 'note'
           ? currentNotePath === fromRelPath
             ? toRelPath
             : currentNotePath
           : remapNestedPath(currentNotePath, fromRelPath, toRelPath)
+
       if (movedKind === 'note') {
         const existingSession = noteEditorSessionsRef.current[fromRelPath]
         if (existingSession) {
@@ -3964,6 +4168,14 @@ function App(): ReactElement {
           }
         })
       }
+
+      if (nextCurrentNotePath !== currentNotePath) {
+        currentNotePathRef.current = nextCurrentNotePath
+      }
+
+      await vaultApi.files.renamePath(fromRelPath, toRelPath)
+      await refreshNotesAndTree()
+      setSelectedNoteTreeEntry({ kind: movedKind, relPath: toRelPath })
       if (nextCurrentNotePath !== currentNotePath) {
         currentNotePathRef.current = nextCurrentNotePath
         setCurrentNotePath(nextCurrentNotePath)
@@ -4019,7 +4231,12 @@ function App(): ReactElement {
     activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
   const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
-  const headerPageLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
+  const headerPageLabel =
+    hasVault && activePage === 'subscriptions'
+      ? 'Finance'
+      : hasVault
+        ? PAGE_LABELS[activePage]
+        : 'Vault'
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
       void navigateToPage(page)
@@ -4040,6 +4257,161 @@ function App(): ReactElement {
       setCommandPaletteOpen(false)
     }
   }, [commandPaletteOpen, setCommandPaletteOpen])
+
+  const openNativeNoteActionsMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !noteActionsButtonRef.current) {
+      return
+    }
+
+    const items: NativeMenuItemDescriptor[] = [
+      { id: 'new-note', label: 'New note' },
+      ...(notePanelView === 'tree' ? [{ id: 'new-folder', label: 'New folder' }] : []),
+      { type: 'separator' },
+      { id: 'import-markdown', label: 'Import markdown' }
+    ]
+    const actionId = await showNativeMenu(
+      items,
+      getElementMenuPosition(noteActionsButtonRef.current, 'start')
+    )
+
+    if (actionId === 'new-note') {
+      void (notePanelView === 'tree' ? createNoteFromTree() : createNote())
+      return
+    }
+    if (actionId === 'new-folder') {
+      void createFolderFromTree()
+      return
+    }
+    if (actionId === 'import-markdown') {
+      void importNotes()
+    }
+  }
+
+  const openNativeNoteFilterMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !noteFilterButtonRef.current) {
+      return
+    }
+
+    const actionId = await showNativeMenu(
+      [
+        { id: 'all', type: 'checkbox', label: 'All', checked: noteFilterMode === 'all' },
+        { id: 'tagged', type: 'checkbox', label: 'Tagged', checked: noteFilterMode === 'tagged' },
+        {
+          id: 'untagged',
+          type: 'checkbox',
+          label: 'Untagged',
+          checked: noteFilterMode === 'untagged'
+        }
+      ],
+      getElementMenuPosition(noteFilterButtonRef.current, 'start')
+    )
+
+    if (actionId === 'all' || actionId === 'tagged' || actionId === 'untagged') {
+      setNoteFilterMode(actionId)
+    }
+  }
+
+  const openNativeNoteSortMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !noteSortButtonRef.current) {
+      return
+    }
+
+    const actionId = await showNativeMenu(
+      [
+        { id: 'name', type: 'checkbox', label: 'Name', checked: noteSortField === 'name' },
+        { id: 'created', type: 'checkbox', label: 'Created', checked: noteSortField === 'created' },
+        { id: 'updated', type: 'checkbox', label: 'Updated', checked: noteSortField === 'updated' },
+        { type: 'separator' },
+        {
+          id: 'toggle-direction',
+          label: `Direction: ${noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}`
+        }
+      ],
+      getElementMenuPosition(noteSortButtonRef.current, 'start')
+    )
+
+    if (actionId === 'name' || actionId === 'created' || actionId === 'updated') {
+      setNoteSortField(actionId)
+      setNoteSortDirection(actionId === 'name' ? 'asc' : 'desc')
+      return
+    }
+    if (actionId === 'toggle-direction') {
+      setNoteSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    }
+  }
+
+  const openNativeProjectFilterMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !projectFilterButtonRef.current) {
+      return
+    }
+
+    const actionId = await showNativeMenu(
+      [
+        { id: 'all', type: 'checkbox', label: 'All', checked: projectFilterMode === 'all' },
+        {
+          id: 'favorites',
+          type: 'checkbox',
+          label: 'Favorites',
+          checked: projectFilterMode === 'favorites'
+        },
+        {
+          id: 'active',
+          type: 'checkbox',
+          label: 'In Progress',
+          checked: projectFilterMode === 'active'
+        },
+        {
+          id: 'completed',
+          type: 'checkbox',
+          label: 'Done',
+          checked: projectFilterMode === 'completed'
+        }
+      ],
+      getElementMenuPosition(projectFilterButtonRef.current, 'start')
+    )
+
+    if (
+      actionId === 'all' ||
+      actionId === 'favorites' ||
+      actionId === 'active' ||
+      actionId === 'completed'
+    ) {
+      setProjectFilterMode(actionId)
+    }
+  }
+
+  const openNativeProjectSortMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !projectSortButtonRef.current) {
+      return
+    }
+
+    const actionId = await showNativeMenu(
+      [
+        { id: 'name', type: 'checkbox', label: 'Name', checked: projectSortField === 'name' },
+        {
+          id: 'updated',
+          type: 'checkbox',
+          label: 'Updated',
+          checked: projectSortField === 'updated'
+        },
+        { type: 'separator' },
+        {
+          id: 'toggle-direction',
+          label: `Direction: ${projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}`
+        }
+      ],
+      getElementMenuPosition(projectSortButtonRef.current, 'start')
+    )
+
+    if (actionId === 'name' || actionId === 'updated') {
+      setProjectSortField(actionId)
+      setProjectSortDirection(actionId === 'name' ? 'asc' : 'desc')
+      return
+    }
+    if (actionId === 'toggle-direction') {
+      setProjectSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+    }
+  }
 
   return (
     <div className="flex h-screen">
@@ -4100,7 +4472,28 @@ function App(): ReactElement {
                           {headerPageLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
-                      {middleHeaderBreadcrumbItem ? (
+                      {noteHeaderBreadcrumbSegments ? (
+                        noteHeaderBreadcrumbSegments.map((segment, index) => {
+                          const isLast = index === noteHeaderBreadcrumbSegments.length - 1
+
+                          return (
+                            <Fragment key={`${segment}:${index}`}>
+                              <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                              <BreadcrumbItem>
+                                <BreadcrumbPage
+                                  className={
+                                    isLast
+                                      ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
+                                      : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
+                                  }
+                                >
+                                  {segment}
+                                </BreadcrumbPage>
+                              </BreadcrumbItem>
+                            </Fragment>
+                          )
+                        })
+                      ) : middleHeaderBreadcrumbItem ? (
                         <>
                           <BreadcrumbSeparator className="text-[var(--line-strong)]" />
                           <BreadcrumbItem>
@@ -4197,7 +4590,7 @@ function App(): ReactElement {
                           }
                           active={currentNoteIsFavorite}
                           icon={
-                            <Heart
+                            <Star
                               size={18}
                               className={currentNoteIsFavorite ? 'fill-current' : ''}
                             />
@@ -4371,10 +4764,10 @@ function App(): ReactElement {
                           active={selectedProject.status === 'completed'}
                           icon={
                             selectedProject.status === 'completed' ? (
-                            <RotateCcw size={18} />
-                          ) : (
-                            <Check size={18} />
-                          )
+                              <RotateCcw size={18} />
+                            ) : (
+                              <Check size={18} />
+                            )
                           }
                         />
                       </WorkspaceHeaderActionGroup>
@@ -4389,7 +4782,7 @@ function App(): ReactElement {
                           }
                           active={currentProjectIsFavorite}
                           icon={
-                            <Heart
+                            <Star
                               size={18}
                               className={currentProjectIsFavorite ? 'fill-current' : ''}
                             />
@@ -4636,7 +5029,7 @@ function App(): ReactElement {
                       <EditorPage
                         editorRef={currentNoteEditorRef}
                         editorSessionKey={currentNoteEditorVersion}
-                        initialBlocks={currentNoteEditorBlocks}
+                        initialContent={currentNoteEditorDraft}
                         notePath={currentNotePath}
                         tags={currentNoteTags}
                         notes={notes}
@@ -4651,6 +5044,11 @@ function App(): ReactElement {
                           void openOrCreateNoteMention(target)
                         }}
                         onRename={renameCurrentNote}
+                        titleEditToken={
+                          noteTitleEditTarget?.relPath === currentNotePath
+                            ? noteTitleEditTarget.token
+                            : 0
+                        }
                         onOutlineChange={setCurrentNoteOutline}
                         onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
                       />
@@ -4703,6 +5101,11 @@ function App(): ReactElement {
                         focusedMilestoneToken={
                           focusedMilestoneTarget?.projectId === selectedProject.id
                             ? focusedMilestoneTarget.token
+                            : 0
+                        }
+                        nameEditToken={
+                          projectNameEditTarget?.projectId === selectedProject.id
+                            ? projectNameEditTarget.token
                             : 0
                         }
                         onRename={(nextName) => renameProject(selectedProject.id, nextName)}
@@ -4788,7 +5191,7 @@ function App(): ReactElement {
                           removeMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
                         }
                         onCreateProjectNote={() => {
-                          void createProjectNote(selectedProject.name)
+                          void createProjectNote(selectedProject)
                         }}
                         onOpenNote={(relPath) => {
                           void navigateToPage('notes')
@@ -4800,6 +5203,8 @@ function App(): ReactElement {
                         Pick a project from the right panel to open details
                       </div>
                     )
+                  ) : activePage === 'subscriptions' ? (
+                    <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
                   ) : activePage === 'grid' ? (
                     GRID_PAGE_ENABLED ? (
                       <GridPage
@@ -4904,6 +5309,12 @@ function App(): ReactElement {
                       onChangeVaultLocation={() => {
                         void openVault('open')
                       }}
+                      onMigrateBlockNoteNotes={() => {
+                        void migrateBlockNoteNotes()
+                      }}
+                      onMigrateTaggedNoteBodyFrontmatter={() => {
+                        void migrateTaggedNoteBodyFrontmatter()
+                      }}
                     />
                   ) : (
                     <div className="p-5 text-sm text-[var(--muted)]">
@@ -4939,117 +5350,165 @@ function App(): ReactElement {
                       activePage === 'notes' ? (
                         <WorkspaceHeaderActions>
                           <WorkspaceHeaderActionGroup>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceActionButton
-                                  aria-label="Note actions"
-                                  title="Note actions"
-                                  icon={<Plus size={18} aria-hidden="true" />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    void (notePanelView === 'tree'
-                                      ? createNoteFromTree()
-                                      : createNote())
-                                  }}
-                                >
-                                  New note
-                                </DropdownMenuItem>
-                                {notePanelView === 'tree' ? (
+                            {notePanelView === 'tree' ? (
+                              <WorkspaceActionButton
+                                aria-label="Collapse all folders"
+                                title="Collapse all folders"
+                                icon={<ChevronUp size={18} aria-hidden="true" />}
+                                onClick={() =>
+                                  setCollapseAllNotesTreeToken((current) => current + 1)
+                                }
+                              />
+                            ) : null}
+                            {useNativeMenus ? (
+                              <WorkspaceActionButton
+                                ref={noteActionsButtonRef}
+                                onClick={() => {
+                                  void openNativeNoteActionsMenu()
+                                }}
+                                aria-label="Note actions"
+                                title="Note actions"
+                                icon={<Plus size={18} aria-hidden="true" />}
+                              />
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <WorkspaceActionButton
+                                    aria-label="Note actions"
+                                    title="Note actions"
+                                    icon={<Plus size={18} aria-hidden="true" />}
+                                  />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
                                   <DropdownMenuItem
                                     onClick={() => {
-                                      void createFolderFromTree()
+                                      void (notePanelView === 'tree'
+                                        ? createNoteFromTree()
+                                        : createNote())
                                     }}
                                   >
-                                    New folder
+                                    New note
                                   </DropdownMenuItem>
-                                ) : null}
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    void importNotes()
-                                  }}
-                                >
-                                  Import markdown
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  {notePanelView === 'tree' ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        void createFolderFromTree()
+                                      }}
+                                    >
+                                      New folder
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void importNotes()
+                                    }}
+                                  >
+                                    Import markdown
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </WorkspaceHeaderActionGroup>
                           {notePanelView === 'cards' ? (
                             <>
                               <WorkspaceHeaderActionDivider />
                               <WorkspaceHeaderActionGroup>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <WorkspaceActionButton
-                                      aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                      title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                      icon={<Funnel size={18} aria-hidden="true" />}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuRadioGroup
-                                      value={noteFilterMode}
-                                      onValueChange={(value) =>
-                                        setNoteFilterMode(value as NoteFilterMode)
-                                      }
-                                    >
-                                      <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="tagged">
-                                        Tagged
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="untagged">
-                                        Untagged
-                                      </DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <WorkspaceActionButton
-                                      aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                      title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                      icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuRadioGroup
-                                      value={noteSortField}
-                                      onValueChange={(value) => {
-                                        const field = value as NoteSortField
-                                        setNoteSortField(field)
-                                        setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
-                                      }}
-                                    >
-                                      <DropdownMenuRadioItem value="name">
-                                        Name
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="created">
-                                        Created
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="updated">
-                                        Updated
-                                      </DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        setNoteSortDirection((current) =>
-                                          current === 'asc' ? 'desc' : 'asc'
-                                        )
-                                      }
-                                    >
-                                      {noteSortDirection === 'asc' ? (
-                                        <ArrowUp size={12} aria-hidden="true" />
-                                      ) : (
-                                        <ArrowDown size={12} aria-hidden="true" />
-                                      )}
-                                      Direction:{' '}
-                                      {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                {useNativeMenus ? (
+                                  <WorkspaceActionButton
+                                    ref={noteFilterButtonRef}
+                                    onClick={() => {
+                                      void openNativeNoteFilterMenu()
+                                    }}
+                                    aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                    title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                    icon={<Funnel size={18} aria-hidden="true" />}
+                                  />
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <WorkspaceActionButton
+                                        aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                        title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                        icon={<Funnel size={18} aria-hidden="true" />}
+                                      />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                      <DropdownMenuRadioGroup
+                                        value={noteFilterMode}
+                                        onValueChange={(value) =>
+                                          setNoteFilterMode(value as NoteFilterMode)
+                                        }
+                                      >
+                                        <DropdownMenuRadioItem value="all">
+                                          All
+                                        </DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="tagged">
+                                          Tagged
+                                        </DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="untagged">
+                                          Untagged
+                                        </DropdownMenuRadioItem>
+                                      </DropdownMenuRadioGroup>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                                {useNativeMenus ? (
+                                  <WorkspaceActionButton
+                                    ref={noteSortButtonRef}
+                                    onClick={() => {
+                                      void openNativeNoteSortMenu()
+                                    }}
+                                    aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                    title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                    icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                  />
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <WorkspaceActionButton
+                                        aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                        title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                        icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                      />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                      <DropdownMenuRadioGroup
+                                        value={noteSortField}
+                                        onValueChange={(value) => {
+                                          const field = value as NoteSortField
+                                          setNoteSortField(field)
+                                          setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
+                                        }}
+                                      >
+                                        <DropdownMenuRadioItem value="name">
+                                          Name
+                                        </DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="created">
+                                          Created
+                                        </DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="updated">
+                                          Updated
+                                        </DropdownMenuRadioItem>
+                                      </DropdownMenuRadioGroup>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setNoteSortDirection((current) =>
+                                            current === 'asc' ? 'desc' : 'asc'
+                                          )
+                                        }
+                                      >
+                                        {noteSortDirection === 'asc' ? (
+                                          <ArrowUp size={12} aria-hidden="true" />
+                                        ) : (
+                                          <ArrowDown size={12} aria-hidden="true" />
+                                        )}
+                                        Direction:{' '}
+                                        {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
                               </WorkspaceHeaderActionGroup>
                             </>
                           ) : null}
@@ -5095,74 +5554,98 @@ function App(): ReactElement {
                           </WorkspaceHeaderActionGroup>
                           <WorkspaceHeaderActionDivider />
                           <WorkspaceHeaderActionGroup>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceActionButton
-                                  aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                  title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                  icon={<Funnel size={18} aria-hidden="true" />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuRadioGroup
-                                  value={projectFilterMode}
-                                  onValueChange={(value) =>
-                                    setProjectFilterMode(value as ProjectFilterMode)
-                                  }
-                                >
-                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="favorites">
-                                    Favorites
-                                  </DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="active">
-                                    In Progress
-                                  </DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="completed">
-                                    Done
-                                  </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceActionButton
-                                  aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                  title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                  icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuRadioGroup
-                                  value={projectSortField}
-                                  onValueChange={(value) => {
-                                    const field = value as ProjectSortField
-                                    setProjectSortField(field)
-                                    setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
-                                  }}
-                                >
-                                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="updated">
-                                    Updated
-                                  </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    setProjectSortDirection((current) =>
-                                      current === 'asc' ? 'desc' : 'asc'
-                                    )
-                                  }
-                                >
-                                  {projectSortDirection === 'asc' ? (
-                                    <ArrowUp size={12} aria-hidden="true" />
-                                  ) : (
-                                    <ArrowDown size={12} aria-hidden="true" />
-                                  )}
-                                  Direction:{' '}
-                                  {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            {useNativeMenus ? (
+                              <WorkspaceActionButton
+                                ref={projectFilterButtonRef}
+                                onClick={() => {
+                                  void openNativeProjectFilterMenu()
+                                }}
+                                aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                icon={<Funnel size={18} aria-hidden="true" />}
+                              />
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <WorkspaceActionButton
+                                    aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                    title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                    icon={<Funnel size={18} aria-hidden="true" />}
+                                  />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuRadioGroup
+                                    value={projectFilterMode}
+                                    onValueChange={(value) =>
+                                      setProjectFilterMode(value as ProjectFilterMode)
+                                    }
+                                  >
+                                    <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                    <DropdownMenuRadioItem value="favorites">
+                                      Favorites
+                                    </DropdownMenuRadioItem>
+                                    <DropdownMenuRadioItem value="active">
+                                      In Progress
+                                    </DropdownMenuRadioItem>
+                                    <DropdownMenuRadioItem value="completed">
+                                      Done
+                                    </DropdownMenuRadioItem>
+                                  </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                            {useNativeMenus ? (
+                              <WorkspaceActionButton
+                                ref={projectSortButtonRef}
+                                onClick={() => {
+                                  void openNativeProjectSortMenu()
+                                }}
+                                aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                              />
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <WorkspaceActionButton
+                                    aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                    title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                    icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                  />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuRadioGroup
+                                    value={projectSortField}
+                                    onValueChange={(value) => {
+                                      const field = value as ProjectSortField
+                                      setProjectSortField(field)
+                                      setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
+                                    }}
+                                  >
+                                    <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                                    <DropdownMenuRadioItem value="updated">
+                                      Updated
+                                    </DropdownMenuRadioItem>
+                                  </DropdownMenuRadioGroup>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setProjectSortDirection((current) =>
+                                        current === 'asc' ? 'desc' : 'asc'
+                                      )
+                                    }
+                                  >
+                                    {projectSortDirection === 'asc' ? (
+                                      <ArrowUp size={12} aria-hidden="true" />
+                                    ) : (
+                                      <ArrowDown size={12} aria-hidden="true" />
+                                    )}
+                                    Direction:{' '}
+                                    {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </WorkspaceHeaderActionGroup>
                         </WorkspaceHeaderActions>
                       ) : activePage === 'calendar' ? (
@@ -5258,12 +5741,13 @@ function App(): ReactElement {
                     {activePage === 'notes' ? (
                       notePanelView === 'tree' ? (
                         <NotesTreeView
-                          tree={noteTree}
+                          tree={visibleNoteTree}
                           searchTerm={searchQuery}
                           activeNotePath={currentNotePath}
                           selectedEntry={selectedNoteTreeEntry}
+                          collapseAllToken={collapseAllNotesTreeToken}
                           pendingEditId={pendingNoteTreeEditId}
-                          onPendingEditHandled={() => setPendingNoteTreeEditId(null)}
+                          onPendingEditHandled={handlePendingNoteTreeEditHandled}
                           onSelectionChange={setSelectedNoteTreeEntry}
                           onOpenNote={(relPath) => {
                             setSearchQuery('')
@@ -5747,6 +6231,230 @@ function formatNoteFilterMode(mode: NoteFilterMode): string {
 function formatNoteSortLabel(field: NoteSortField, direction: NoteSortDirection): string {
   const label = field === 'name' ? 'Name' : field === 'created' ? 'Created' : 'Updated'
   return `${label} ${direction === 'asc' ? '↑' : '↓'}`
+}
+
+type RankedCommandPaletteNote = {
+  relPath: string
+  title: string
+  fileName: string
+  tags: string[]
+  aliases: string[]
+  pathSegments: string[]
+  bodyPreview: string
+  updatedAt: string
+}
+
+type CommandPaletteSearchMode = 'name' | 'body'
+
+function parseCommandPaletteSearchInput(input: string): {
+  mode: CommandPaletteSearchMode
+  query: string
+} {
+  const trimmedInput = input.trim()
+  if (trimmedInput.startsWith('@')) {
+    return {
+      mode: 'body',
+      query: trimmedInput.slice(1).trim()
+    }
+  }
+
+  return {
+    mode: 'name',
+    query: trimmedInput
+  }
+}
+
+function rankCommandPaletteNotes(
+  notes: NoteListItem[],
+  query: string,
+  mode: CommandPaletteSearchMode = 'name'
+): RankedCommandPaletteNote[] {
+  const terms = tokenizeSearchQuery(query)
+
+  return notes
+    .map((note) => {
+      const title = stripNoteExtension(note.name)
+      const aliases = note.mentionTargets ?? []
+      const pathSegments = getSearchPathSegments(note.relPath)
+      const score = scoreSearchDocument(
+        terms,
+        mode === 'body'
+          ? [{ text: note.bodyPreview ?? '', weight: 7 }]
+          : [
+              { text: title, weight: 7 },
+              { text: note.name, weight: 6 },
+              { text: aliases.join(' '), weight: 5 },
+              { text: pathSegments.join(' '), weight: 4 },
+              { text: note.relPath, weight: 3 }
+            ]
+      )
+
+      if (score === 0) {
+        return null
+      }
+
+      return {
+        score,
+        note: {
+          relPath: note.relPath,
+          title,
+          fileName: note.name,
+          tags: note.tags,
+          aliases,
+          pathSegments,
+          bodyPreview: note.bodyPreview ?? '',
+          updatedAt: note.updatedAt
+        }
+      }
+    })
+    .filter(
+      (
+        result
+      ): result is {
+        score: number
+        note: RankedCommandPaletteNote
+      } => result !== null
+    )
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score
+      }
+
+      return right.note.updatedAt.localeCompare(left.note.updatedAt)
+    })
+    .map((result) => result.note)
+}
+
+function rankCommandPaletteProjects(projects: Project[], query: string): Project[] {
+  const terms = tokenizeSearchQuery(query)
+
+  return projects
+    .map((project) => {
+      const folderPath = project.folderPath ?? ''
+      const score = scoreSearchDocument(terms, [
+        { text: project.name, weight: 7 },
+        { text: folderPath, weight: 4 },
+        { text: getSearchPathSegments(folderPath).join(' '), weight: 4 }
+      ])
+
+      return score > 0 ? { score, project } : null
+    })
+    .filter((result): result is { score: number; project: Project } => result !== null)
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score
+      }
+
+      return right.project.updatedAt.localeCompare(left.project.updatedAt)
+    })
+    .map((result) => result.project)
+}
+
+function tokenizeSearchQuery(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/[\s/_.-]+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+}
+
+function getSearchPathSegments(input: string): string[] {
+  if (!input) {
+    return []
+  }
+
+  return input
+    .split('/')
+    .flatMap((segment) => stripNoteExtension(segment).split(/[\s_.-]+/))
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function scoreSearchDocument(
+  terms: string[],
+  fields: Array<{
+    text: string
+    weight: number
+  }>
+): number {
+  if (terms.length === 0) {
+    return 0
+  }
+
+  let totalScore = 0
+
+  for (const term of terms) {
+    let bestTermScore = 0
+
+    for (const field of fields) {
+      const fieldScore = scoreSearchField(term, field.text) * field.weight
+      if (fieldScore > bestTermScore) {
+        bestTermScore = fieldScore
+      }
+    }
+
+    if (bestTermScore === 0) {
+      return 0
+    }
+
+    totalScore += bestTermScore
+  }
+
+  return totalScore
+}
+
+function scoreSearchField(term: string, rawFieldText: string): number {
+  const fieldText = rawFieldText.toLowerCase().trim()
+  if (!term || !fieldText) {
+    return 0
+  }
+
+  if (fieldText === term) {
+    return 140
+  }
+
+  if (fieldText.startsWith(term)) {
+    return 110
+  }
+
+  const words = fieldText.split(/[\s/_.-]+/).filter(Boolean)
+  if (words.some((word) => word === term)) {
+    return 95
+  }
+
+  if (words.some((word) => word.startsWith(term))) {
+    return 78
+  }
+
+  const includesIndex = fieldText.indexOf(term)
+  if (includesIndex >= 0) {
+    return Math.max(52 - includesIndex, 28)
+  }
+
+  return scoreSubsequenceMatch(term, fieldText)
+}
+
+function scoreSubsequenceMatch(term: string, fieldText: string): number {
+  let searchIndex = 0
+  let firstMatchIndex = -1
+  let lastMatchIndex = -1
+
+  for (const char of term) {
+    const nextIndex = fieldText.indexOf(char, searchIndex)
+    if (nextIndex === -1) {
+      return 0
+    }
+
+    if (firstMatchIndex === -1) {
+      firstMatchIndex = nextIndex
+    }
+
+    lastMatchIndex = nextIndex
+    searchIndex = nextIndex + 1
+  }
+
+  const span = lastMatchIndex - firstMatchIndex + 1
+  return Math.max(26 - (span - term.length) - Math.floor(firstMatchIndex / 2), 8)
 }
 
 function formatProjectFilterMode(mode: ProjectFilterMode): string {

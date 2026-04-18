@@ -1,5 +1,5 @@
 import { getNoteDisplayName } from '../../../shared/noteDocument'
-import { normalizeMentionTarget } from '../../../shared/noteMentions'
+import { createNoteMentionResolver } from '../../../shared/noteMentions'
 import type { NoteListItem } from '../../../shared/types'
 
 export interface KnowledgeGraphNode {
@@ -7,6 +7,7 @@ export interface KnowledgeGraphNode {
   relPath: string
   label: string
   degree: number
+  isOrphan: boolean
 }
 
 export interface KnowledgeGraphLink {
@@ -20,34 +21,14 @@ export interface KnowledgeGraphData {
 }
 
 export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
-  const exactPathLookup = new Map<string, string>()
-  const noteNameGroups = new Map<string, NoteListItem[]>()
-
-  notes.forEach((note) => {
-    exactPathLookup.set(normalizeMentionTarget(note.relPath), note.relPath)
-    const nameKey = normalizeMentionTarget(note.name)
-    const matches = noteNameGroups.get(nameKey)
-    if (matches) {
-      matches.push(note)
-      return
-    }
-
-    noteNameGroups.set(nameKey, [note])
-  })
-
+  const resolveNoteMentionTarget = createNoteMentionResolver(notes)
   const degreeByPath = new Map<string, number>()
   const links: KnowledgeGraphLink[] = []
   const linkKeys = new Set<string>()
 
   notes.forEach((note) => {
     note.mentionTargets?.forEach((target) => {
-      const normalizedTarget = normalizeMentionTarget(target)
-      const resolvedTarget =
-        exactPathLookup.get(normalizedTarget) ??
-        (() => {
-          const matches = noteNameGroups.get(normalizedTarget) ?? []
-          return matches.length === 1 ? matches[0].relPath : null
-        })()
+      const resolvedTarget = resolveNoteMentionTarget(target)
 
       if (!resolvedTarget || resolvedTarget === note.relPath) {
         return
@@ -67,14 +48,19 @@ export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
   })
 
   const nodes = notes
-    .filter((note) => degreeByPath.has(note.relPath))
     .map((note) => ({
       id: note.relPath,
       relPath: note.relPath,
       label: getNoteDisplayName(note.relPath),
-      degree: degreeByPath.get(note.relPath) ?? 0
+      degree: degreeByPath.get(note.relPath) ?? 0,
+      isOrphan: !degreeByPath.has(note.relPath)
     }))
-    .sort((left, right) => right.degree - left.degree || left.label.localeCompare(right.label))
+    .sort(
+      (left, right) =>
+        Number(left.isOrphan) - Number(right.isOrphan) ||
+        right.degree - left.degree ||
+        left.label.localeCompare(right.label)
+    )
 
   return { nodes, links }
 }

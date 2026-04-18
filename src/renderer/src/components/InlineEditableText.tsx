@@ -1,4 +1,4 @@
-import { KeyboardEvent, ReactElement, ReactNode, useEffect, useMemo, useState } from 'react'
+import { KeyboardEvent, ReactElement, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
 
@@ -13,6 +13,7 @@ interface InlineEditableTextProps {
   allowEmpty?: boolean
   normalize?: (value: string) => string
   renderDisplay?: (value: string) => ReactNode
+  editToken?: number
 }
 
 const defaultDisplayClassName =
@@ -29,8 +30,11 @@ export function InlineEditableText({
   placeholder,
   allowEmpty = false,
   normalize,
-  renderDisplay
+  renderDisplay,
+  editToken = 0
 }: InlineEditableTextProps): ReactElement {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const handledEditTokenRef = useRef(0)
   const [isEditing, setIsEditing] = useState(false)
   const [draftValue, setDraftValue] = useState(value)
   const [isCommitting, setIsCommitting] = useState(false)
@@ -42,6 +46,29 @@ export function InlineEditableText({
       setDraftValue(value)
     }
   }, [value, isEditing])
+
+  useEffect(() => {
+    if (editToken <= 0 || editToken === handledEditTokenRef.current) {
+      return
+    }
+
+    handledEditTokenRef.current = editToken
+    setDraftValue(value)
+    setIsEditing(true)
+  }, [editToken, value])
+
+  useEffect(() => {
+    if (!isEditing) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isEditing])
 
   const cancel = (): void => {
     setDraftValue(value)
@@ -91,6 +118,7 @@ export function InlineEditableText({
   if (isEditing) {
     return (
       <input
+        ref={inputRef}
         type="text"
         value={draftValue}
         onChange={(event) => setDraftValue(event.target.value)}

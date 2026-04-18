@@ -3,6 +3,7 @@ import {
   AGENT_TOOL_CHANNELS,
   IPC_CHANNELS,
   SCHEDULE_CHANNELS,
+  SUBSCRIPTION_CHANNELS,
   WEEKLY_PLAN_CHANNELS
 } from '../shared/ipc'
 import { AgentChatEvent, RendererVaultApi } from '../shared/types'
@@ -36,6 +37,9 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(IPC_CHANNELS.createNoteWithTags, name, tags),
     createFolder: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createFolder, relPath),
     importNotes: () => ipcRenderer.invoke(IPC_CHANNELS.importNotes),
+    migrateBlockNoteNotes: () => ipcRenderer.invoke(IPC_CHANNELS.migrateBlockNoteNotes),
+    migrateTaggedNoteBodyFrontmatter: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.migrateTaggedNoteBodyFrontmatter),
     rename: (fromRelPath, toRelPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.renameNote, fromRelPath, toRelPath),
     renamePath: (fromRelPath, toRelPath) =>
@@ -65,8 +69,9 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(IPC_CHANNELS.agentChatDeleteSession, sessionId),
     approveTool: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentChatApproveTool, input),
     onEvent: (listener): (() => void) => {
-      const wrapped = (_event: Electron.IpcRendererEvent, payload: AgentChatEvent) =>
+      const wrapped = (_event: Electron.IpcRendererEvent, payload: AgentChatEvent): void => {
         listener(payload)
+      }
       ipcRenderer.on(IPC_CHANNELS.agentChatEvent, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.agentChatEvent, wrapped)
     }
@@ -86,6 +91,15 @@ const api: RendererVaultApi = {
     listRuns: (jobId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.listRuns, jobId),
     applyActions: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.applyActions, runId),
     dismissRun: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.dismissRun, runId)
+  },
+  subscriptions: {
+    list: () => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.list),
+    get: (id) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.get, id),
+    create: (input) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.create, input),
+    update: (input) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.update, input),
+    delete: (id) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.delete, id),
+    archive: (id) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.archive, id),
+    getAnalytics: (filters) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.getAnalytics, filters)
   },
   weeklyPlan: {
     getState: () => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.getState),

@@ -22,14 +22,14 @@ describe('createNoteSaveCoordinator', () => {
     })
 
     const firstSave = coordinator.enqueue({
-      relPath: 'note.xnote',
+      relPath: 'note.md',
       content: 'first',
-      document: { version: 1, tags: [], blocks: [] }
+      document: { version: 1, tags: [], markdown: 'first' }
     })
     const secondSave = coordinator.enqueue({
-      relPath: 'note.xnote',
+      relPath: 'note.md',
       content: 'second',
-      document: { version: 1, tags: [], blocks: [] }
+      document: { version: 1, tags: [], markdown: 'second' }
     })
 
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -56,23 +56,23 @@ describe('createNoteSaveCoordinator', () => {
 
     await expect(
       coordinator.enqueue({
-        relPath: 'note.xnote',
+        relPath: 'note.md',
         content: 'broken',
-        document: { version: 1, tags: [], blocks: [] }
+        document: { version: 1, tags: [], markdown: 'broken' }
       })
     ).rejects.toThrow('write failed')
 
     await coordinator.enqueue({
-      relPath: 'note.xnote',
+      relPath: 'note.md',
       content: 'recovered',
-      document: { version: 1, tags: [], blocks: [] }
+      document: { version: 1, tags: [], markdown: 'recovered' }
     })
 
     expect(onPersisted).toHaveBeenCalledTimes(1)
     expect(onPersisted).toHaveBeenCalledWith({
-      relPath: 'note.xnote',
+      relPath: 'note.md',
       content: 'recovered',
-      document: { version: 1, tags: [], blocks: [] }
+      document: { version: 1, tags: [], markdown: 'recovered' }
     })
   })
 })

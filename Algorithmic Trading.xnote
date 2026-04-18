@@ -1,0 +1,428 @@
+{
+  "version": 1,
+  "tags": [
+    "finance"
+  ],
+  "blocks": [
+    {
+      "id": "691aa1e1-9be1-4b9c-b02d-9a03bb4e94fd",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Terminology",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "54508c04-d276-45cc-b740-39ca33ea2c4b",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Swing High",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "ba452ed4-df99-491a-9c17-489c5297160b",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "MSS: Market Structure Ship",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "3809d780-ccac-4fb7-b815-8a975abca2c9",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "TP: Take Profit",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "594322f3-62ba-4ceb-9d6c-54f7bce7f72c",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "FVG",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "e427789e-bca4-448c-894f-8aeb0bbe668d",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Regime",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "4fa439cf-d5b8-4633-af68-2c40de91fa58",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "A strategy may work in ",
+          "styles": {}
+        },
+        {
+          "type": "text",
+          "text": "one regime",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " and fail in another.",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "e52b2eb8-e4b7-4fae-ad1f-258408c81120",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Trending up\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "price keeps making higher highs / higher lows",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "2e397529-d388-4bd0-b06d-0801180f7df3",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Trending down\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "price keeps making lower highs / lower lows",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "bed28ffd-c41e-435d-bc31-db7e3bc79e45",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Range-bound / sideways\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "price moves back and forth in a band",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "e4f8bf9c-e5ae-4cc1-bd0c-11424aa758bb",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "High-volatility regime\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "large fast moves, wider swings, more noise",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "3b9eefcf-6aa7-4c77-8768-f7971f5c8ed9",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Low-volatility regime\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "smaller moves, calmer price action",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "81470c4b-24f4-4841-8a67-62cbc8522791",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Risk-on / risk-off\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "markets are aggressively buying risky assets vs moving into safer assets",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c56c295b-6a9e-4a1f-a815-51fe3fb7dd4d",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Liquidity-rich vs liquidity-thin\n",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "easier vs harder execution, spread/slippage behavior changes",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "f8e25d13-19fb-4b90-825a-5066501a72a7",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Liquidity",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "61602ad6-61c9-4889-af5a-c1658047e9e5",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "link",
+          "href": "https://www.youtube.com/watch?v=sLoLznlatHA",
+          "content": [
+            {
+              "type": "text",
+              "text": "https://www.youtube.com/watch?v=sLoLznlatHA",
+              "styles": {}
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "1b25a24e-76cc-4f8c-ae52-93c4b0f2b8d4",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Community",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "2e6e1f0f-64bf-45f8-a08b-cdc65919dd4d",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Youtube: ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://www.youtube.com/@TomCrown/videos",
+          "content": [
+            {
+              "type": "text",
+              "text": "https://www.youtube.com/@TomCrown/videos",
+              "styles": {}
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "2758b1ae-52cf-48bc-80ec-fda16720ced3",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Facebook: ปลาทูดูกราฟ",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "e16203ef-eaf3-498f-9ae1-45d8684982c0",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [],
+      "children": []
+    }
+  ]
+}

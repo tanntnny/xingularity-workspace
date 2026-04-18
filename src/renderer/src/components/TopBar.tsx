@@ -23,6 +23,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
   notes: 'Notes',
   projects: 'Projects',
+  subscriptions: 'Subscriptions',
   grid: 'Grid',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
@@ -35,7 +36,8 @@ const PAGE_LABELS: Record<AppPage, string> = {
 const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
   dashboard: 'Board',
   knowledge: 'Board',
-  grid: 'Board'
+  grid: 'Board',
+  subscriptions: 'Finance'
 }
 
 export function TopBar({

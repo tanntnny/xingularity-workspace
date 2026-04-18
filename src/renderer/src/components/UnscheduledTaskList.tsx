@@ -1,10 +1,11 @@
-import { ReactElement, useState, DragEvent } from 'react'
+import { ReactElement, useMemo, useState, DragEvent } from 'react'
 import { CalendarPlus, Plus } from 'lucide-react'
 import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { isDeleteShortcut } from './ui/context-menu'
 import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
@@ -41,6 +42,8 @@ export function UnscheduledTaskList({
 
   const pendingCount = tasks.filter((t) => !t.completed).length
   const completedCount = tasks.filter((t) => t.completed).length
+  const revealItemIds = useMemo(() => tasks.map((task) => task.id), [tasks])
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds)
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
@@ -111,7 +114,7 @@ export function UnscheduledTaskList({
 
       <div className="mx-4 border-t border-[var(--line)]" />
 
-      <div className="flex-1 overflow-auto px-4 py-3">
+      <div ref={containerRef} className="flex-1 overflow-auto px-4 py-3">
         <div
           className={`rounded-xl border p-2 transition-all ${
             isDragOver
@@ -126,44 +129,49 @@ export function UnscheduledTaskList({
           ) : null}
 
           <div className="flex flex-col gap-2">
-            {tasks.map((task) => (
-              <TaskContextMenu
-                key={task.id}
-                task={task}
-                selectedDate={selectedDate}
-                onToggle={onToggle}
-                onDelete={onDelete}
-                onRename={onRename}
-                onUpdateTaskType={onUpdateTaskType}
-                onUpdateTime={onUpdateTime}
-                onUpdateReminders={onUpdateReminders}
-                onScheduleTask={onScheduleTask}
-                onUnscheduleTask={(taskId) => onUnscheduleTask?.(taskId)}
-              >
-                <article
-                  draggable
-                  tabIndex={0}
-                  data-unscheduled-task-id={task.id}
-                  data-unscheduled-task-title={task.title}
-                  onDragStart={(e: DragEvent<HTMLElement>) => {
-                    e.dataTransfer.setData('text/plain', `move:${task.id}`)
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                  onKeyDown={(event) => {
-                    if (!isDeleteShortcut(event)) {
-                      return
-                    }
-                    event.preventDefault()
-                    onDelete(task.id)
-                  }}
-                  className={`beacon-task-surface beacon-task-event beacon-task-${task.taskType || 'assignment'} ${
-                    task.completed ? 'beacon-task-completed' : ''
-                  } cursor-grab rounded-md border transition-shadow active:cursor-grabbing`}
+            {tasks.map((task) => {
+              const revealProps = getRevealItemProps(task.id)
+              return (
+                <TaskContextMenu
+                  key={task.id}
+                  task={task}
+                  selectedDate={selectedDate}
+                  onToggle={onToggle}
+                  onDelete={onDelete}
+                  onRename={onRename}
+                  onUpdateTaskType={onUpdateTaskType}
+                  onUpdateTime={onUpdateTime}
+                  onUpdateReminders={onUpdateReminders}
+                  onScheduleTask={onScheduleTask}
+                  onUnscheduleTask={(taskId) => onUnscheduleTask?.(taskId)}
                 >
-                  <CalendarTaskCard task={task} onToggle={onToggle} />
-                </article>
-              </TaskContextMenu>
-            ))}
+                  <article
+                    ref={revealProps.ref}
+                    draggable
+                    tabIndex={0}
+                    data-unscheduled-task-id={task.id}
+                    data-unscheduled-task-title={task.title}
+                    style={revealProps.style}
+                    onDragStart={(e: DragEvent<HTMLElement>) => {
+                      e.dataTransfer.setData('text/plain', `move:${task.id}`)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onKeyDown={(event) => {
+                      if (!isDeleteShortcut(event)) {
+                        return
+                      }
+                      event.preventDefault()
+                      onDelete(task.id)
+                    }}
+                    className={`${revealProps.className} beacon-task-surface beacon-task-event beacon-task-${task.taskType || 'assignment'} ${
+                      task.completed ? 'beacon-task-completed' : ''
+                    } cursor-grab rounded-md border transition-shadow active:cursor-grabbing`}
+                  >
+                    <CalendarTaskCard task={task} onToggle={onToggle} />
+                  </article>
+                </TaskContextMenu>
+              )
+            })}
 
             {tasks.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center">

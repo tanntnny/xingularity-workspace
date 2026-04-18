@@ -22,6 +22,7 @@ import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspa
 import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export type { Project, ProjectMilestone, ProjectSubtask, ProjectStatus }
 export type ProjectListItem = Project
@@ -116,9 +117,18 @@ export function ProjectPreviewList({
     () => nonFavoriteProjects.filter((project) => project.status === 'completed'),
     [nonFavoriteProjects]
   )
+  const revealItemIds = useMemo(
+    () => [
+      ...favoriteProjects.map((project) => `favorite:${project.id}`),
+      ...inProgressProjects.map((project) => `in-progress:${project.id}`),
+      ...doneProjects.map((project) => `done:${project.id}`)
+    ],
+    [doneProjects, favoriteProjects, inProgressProjects]
+  )
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds)
 
   return (
-    <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
+    <div ref={containerRef} className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       {sortedProjects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">No projects found</div>
       ) : (
@@ -137,6 +147,8 @@ export function ProjectPreviewList({
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
+            getRevealItemProps={getRevealItemProps}
+            revealKeyPrefix="favorite"
           />
           <ProjectSection
             title="In-Progress Projects"
@@ -152,6 +164,8 @@ export function ProjectPreviewList({
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
+            getRevealItemProps={getRevealItemProps}
+            revealKeyPrefix="in-progress"
           />
           <ProjectSection
             title="Done Projects"
@@ -167,6 +181,8 @@ export function ProjectPreviewList({
             onCopyLink={onCopyLink}
             neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
+            getRevealItemProps={getRevealItemProps}
+            revealKeyPrefix="done"
           />
         </>
       )}
@@ -187,7 +203,9 @@ function ProjectSection({
   onDuplicate,
   onCopyLink,
   neutralChipClass,
-  useNativeMenus
+  useNativeMenus,
+  getRevealItemProps,
+  revealKeyPrefix
 }: {
   title: string
   icon: ReactElement
@@ -202,6 +220,12 @@ function ProjectSection({
   onCopyLink?: (projectId: string) => void
   neutralChipClass: string
   useNativeMenus: boolean
+  getRevealItemProps: (itemId: string) => {
+    ref: (node: HTMLElement | null) => void
+    className: string
+    style: React.CSSProperties
+  }
+  revealKeyPrefix: string
 }): ReactElement {
   return (
     <WorkspacePanelSection>
@@ -210,6 +234,7 @@ function ProjectSection({
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
         projects.map((project) => {
+          const revealProps = getRevealItemProps(`${revealKeyPrefix}:${project.id}`)
           const updatedLabel = new Date(project.updatedAt).toLocaleDateString()
           const milestoneCount = project.milestones.length
           const menuItems: NativeMenuItemDescriptor[] = [
@@ -253,11 +278,13 @@ function ProjectSection({
           const projectButton = (
             <button
               type="button"
-              className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+              ref={revealProps.ref}
+              className={`${revealProps.className} flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                 selectedProjectId === project.id
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                   : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
               }`}
+              style={revealProps.style}
               onClick={() => onSelect(project.id)}
               onContextMenu={
                 useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined

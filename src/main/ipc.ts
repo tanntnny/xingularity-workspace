@@ -17,7 +17,7 @@ const tagsArraySchema = z.array(z.string().min(1).max(100)).max(50)
 const noteDocumentSchema = z.object({
   version: z.literal(1),
   tags: z.array(z.string()).max(200),
-  blocks: z.array(z.unknown()).max(20_000)
+  markdown: z.string().max(2_000_000)
 })
 const aiCompletionInputSchema = z.object({
   notePath: z.string().min(1).max(512),
@@ -323,7 +323,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
   ipcMain.handle(
     IPC_CHANNELS.writeNoteDocument,
     async (_event, relPath: unknown, document: unknown) => {
-      await runtime.writeNoteDocument(notePathSchema.parse(relPath), noteDocumentSchema.parse(document))
+      await runtime.writeNoteDocument(
+        notePathSchema.parse(relPath),
+        noteDocumentSchema.parse(document)
+      )
     }
   )
 
@@ -345,6 +348,14 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   ipcMain.handle(IPC_CHANNELS.importNotes, async () => {
     return runtime.importNotes()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.migrateBlockNoteNotes, async () => {
+    return runtime.migrateBlockNoteNotes()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.migrateTaggedNoteBodyFrontmatter, async () => {
+    return runtime.migrateTaggedNoteBodyFrontmatter()
   })
 
   ipcMain.handle(

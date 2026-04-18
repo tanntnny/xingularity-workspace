@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   ClipboardList,
+  CreditCard,
   LayoutDashboard,
   LayoutGrid,
   FileText,
@@ -36,6 +37,7 @@ export type AppPage =
   | 'knowledge'
   | 'notes'
   | 'projects'
+  | 'subscriptions'
   | 'grid'
   | 'weeklyPlan'
   | 'calendar'
@@ -61,7 +63,7 @@ type SidebarPageItem = {
   id: AppPage
   label: string
   icon: typeof FileText
-  shortcut: string
+  shortcut?: string
 }
 
 const GRID_HOME_PAGE: SidebarPageItem = {
@@ -82,6 +84,10 @@ const HOME_PAGES: SidebarPageItem[] = [
   { id: 'projects', label: 'Projects', icon: FolderKanban, shortcut: '⌘2' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '⌘3' },
   { id: 'weeklyPlan', label: 'Weekly Plan', icon: ClipboardList, shortcut: '⌘4' }
+]
+
+const FINANCE_PAGES: SidebarPageItem[] = [
+  { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard }
 ]
 
 const DOCUMENT_PAGES: Array<{ id: AppPage; label: string; icon: typeof Zap; shortcut: string }> = [
@@ -215,9 +221,11 @@ export function AppSidebar({
                     >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
-                      <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                        {renderShortcut(page.shortcut)}
-                      </Kbd>
+                      {page.shortcut ? (
+                        <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
+                          {renderShortcut(page.shortcut)}
+                        </Kbd>
+                      ) : null}
                     </ButtonBase>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -246,9 +254,11 @@ export function AppSidebar({
                     >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
-                      <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                        {renderShortcut(page.shortcut)}
-                      </Kbd>
+                      {page.shortcut ? (
+                        <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
+                          {renderShortcut(page.shortcut)}
+                        </Kbd>
+                      ) : null}
                     </ButtonBase>
                   </SidebarMenuButton>
                   {page.id === 'notes' && notesCount > 0 ? (
@@ -260,6 +270,34 @@ export function AppSidebar({
                   {page.id === 'calendar' && calendarUndoneCount > 0 ? (
                     <SidebarMenuBadge>{calendarUndoneCountLabel}</SidebarMenuBadge>
                   ) : null}
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarSeparator />
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Finance</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {FINANCE_PAGES.map((page) => (
+                <SidebarMenuItem key={page.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activePage === page.id}
+                    onClick={() => onChange(page.id)}
+                    tooltip={page.label}
+                  >
+                    <ButtonBase
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isLocked}
+                    >
+                      <page.icon size={17} strokeWidth={2} />
+                      <span>{page.label}</span>
+                    </ButtonBase>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
