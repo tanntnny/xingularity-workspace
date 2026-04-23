@@ -25,6 +25,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   projects: 'Projects',
   subscriptions: 'Subscriptions',
   grid: 'Grid',
+  excalidraw: 'Excalidraw',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   settings: 'Settings',
@@ -37,6 +38,7 @@ const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
   dashboard: 'Board',
   knowledge: 'Board',
   grid: 'Board',
+  excalidraw: 'Board',
   subscriptions: 'Finance'
 }
 

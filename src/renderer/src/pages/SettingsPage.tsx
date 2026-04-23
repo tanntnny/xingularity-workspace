@@ -11,10 +11,12 @@ interface SettingsPageProps {
   mistralApiKey: string
   fontOptions: FontOption[]
   selectedFontFamily: string
+  workspaceVibrancyEnabled: boolean
   vaultLocation: string | null
   onSaveProfile: (name: string) => void
   onSaveMistralApiKey: (apiKey: string) => void
   onSelectFont: (fontFamily: string) => void
+  onToggleWorkspaceVibrancy: (enabled: boolean) => void
   onChangeVaultLocation: () => void
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
@@ -25,10 +27,12 @@ export function SettingsPage({
   mistralApiKey,
   fontOptions,
   selectedFontFamily,
+  workspaceVibrancyEnabled,
   vaultLocation,
   onSaveProfile,
   onSaveMistralApiKey,
   onSelectFont,
+  onToggleWorkspaceVibrancy,
   onChangeVaultLocation,
   onMigrateBlockNoteNotes,
   onMigrateTaggedNoteBodyFrontmatter
@@ -112,7 +116,7 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid max-w-[360px] gap-1.5" aria-label="Profile settings">
+          <div className="grid w-full gap-1.5" aria-label="Profile settings">
             <span className="text-sm text-[var(--muted)]">Profile Name</span>
             <input
               type="text"
@@ -122,7 +126,7 @@ export function SettingsPage({
               onChange={(event) => setProfileDraft(event.target.value)}
               onBlur={commitProfileName}
               onKeyDown={onProfileInputKeyDown}
-              className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
             />
             <span className="text-xs text-[var(--muted)]">Press Enter or click away to save.</span>
           </div>
@@ -133,15 +137,15 @@ export function SettingsPage({
         <div className="grid gap-5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+            <p className="w-full text-sm text-[var(--muted)]">
               Review where your local vault lives and change it when you want to work from a
               different folder.
             </p>
           </div>
 
-          <div className="grid max-w-[360px] gap-1.5" aria-label="Vault location">
+          <div className="grid w-full gap-1.5" aria-label="Vault location">
             <span className="text-sm text-[var(--muted)]">Vault Location</span>
-            <div className="break-words rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-sm text-[var(--text)]">
+            <div className="w-full break-words rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-sm text-[var(--text)]">
               {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
             </div>
             <button
@@ -153,7 +157,7 @@ export function SettingsPage({
             </button>
           </div>
 
-          <div className="grid max-w-[520px] gap-1.5" aria-label="Note migration">
+          <div className="grid w-full gap-1.5" aria-label="Note migration">
             <span className="text-sm text-[var(--muted)]">Old Note Conversion</span>
             <p className="text-sm leading-6 text-[var(--muted)]">
               Convert old BlockNote JSON note files into normal markdown in your vault.
@@ -181,15 +185,48 @@ export function SettingsPage({
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Appearance</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-              Tune how the app reads by choosing a font family and previewing it before you save.
+              Tune how the app reads with font and surface controls for the main workspace.
             </p>
           </div>
 
-          <label className="grid max-w-[360px] gap-1.5" htmlFor="font-family-select">
+          <div className="grid gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--text)]">Workspace Vibrancy</p>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Blur and soften the main workspace and right sidebar with translucent glass
+                  surfaces.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={workspaceVibrancyEnabled}
+                aria-label="Toggle workspace vibrancy"
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition-colors ${
+                  workspaceVibrancyEnabled
+                    ? 'border-[var(--accent-line)] bg-[var(--accent)]'
+                    : 'border-[var(--line)] bg-[var(--panel)]'
+                }`}
+                onClick={() => onToggleWorkspaceVibrancy(!workspaceVibrancyEnabled)}
+              >
+                <span
+                  className={`inline-block h-6 w-6 rounded-full bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
+                    workspaceVibrancyEnabled ? 'translate-x-[1.45rem]' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Keeps the global sidebar glassy and extends the effect through the workspace shell.
+            </p>
+          </div>
+
+          <label className="grid w-full gap-1.5" htmlFor="font-family-select">
             <span className="text-sm text-[var(--muted)]">App Font</span>
             <select
               id="font-family-select"
-              className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
               value={selectedFontFamily}
               onChange={(event) => onSelectFont(event.target.value)}
             >
@@ -202,7 +239,7 @@ export function SettingsPage({
           </label>
 
           <p
-            className="max-w-[560px] rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5"
+            className="w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5"
             style={{ fontFamily: selectedFontFamily }}
           >
             The quick brown fox jumps over the lazy dog.
@@ -219,7 +256,7 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid max-w-[420px] gap-1.5" aria-label="Mistral AI settings">
+          <div className="grid w-full gap-1.5" aria-label="Mistral AI settings">
             <span className="text-sm text-[var(--muted)]">Mistral API Key</span>
             <input
               type="password"
@@ -228,7 +265,7 @@ export function SettingsPage({
               onChange={(event) => setMistralApiKeyDraft(event.target.value)}
               onBlur={commitMistralApiKey}
               onKeyDown={onProfileInputKeyDown}
-              className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
               autoComplete="off"
               spellCheck={false}
             />

@@ -3,7 +3,7 @@ import * as React from 'react'
 import { cn } from '../../lib/utils'
 
 const workspaceHeaderClass =
-  'app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
+  'document-workspace-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
 
 const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
 
@@ -21,7 +21,7 @@ const DocumentWorkspaceMain = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      'flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]',
+      'document-workspace-main-surface flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]',
       className
     )}
     {...props}
@@ -35,7 +35,10 @@ const DocumentWorkspacePanel = React.forwardRef<
 >(({ className, style, ...props }, ref) => (
   <aside
     ref={ref}
-    className={cn('flex w-[300px] shrink-0 flex-col bg-[var(--panel)]', className)}
+    className={cn(
+      'document-workspace-panel-surface flex w-[300px] shrink-0 flex-col bg-[var(--panel)]',
+      className
+    )}
     style={{
       width: 'var(--workspace-pane-width)',
       flexBasis: 'var(--workspace-pane-width)',
@@ -83,11 +86,12 @@ const DocumentWorkspacePanelHeader = React.forwardRef<
 })
 DocumentWorkspacePanelHeader.displayName = 'DocumentWorkspacePanelHeader'
 
-const WorkspaceHeaderActions = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('flex items-center gap-2', className)} {...props} />
-  )
-)
+const WorkspaceHeaderActions = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('flex items-center gap-2', className)} {...props} />
+))
 WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 
 const WorkspaceHeaderActionGroup = React.forwardRef<
@@ -111,8 +115,10 @@ const WorkspaceHeaderActionDivider = React.forwardRef<
 ))
 WorkspaceHeaderActionDivider.displayName = 'WorkspaceHeaderActionDivider'
 
-interface WorkspaceActionButtonProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+interface WorkspaceActionButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'children'
+> {
   icon: React.ReactNode
   label?: string
   active?: boolean
@@ -125,9 +131,7 @@ const WorkspaceActionButton = React.forwardRef<HTMLButtonElement, WorkspaceActio
       type={type}
       className={cn(
         'inline-flex shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-        label
-          ? 'h-9 gap-2 rounded-full px-3 text-xs font-medium'
-          : 'h-8 w-8 rounded-lg',
+        label ? 'h-9 gap-2 rounded-full px-3 text-xs font-medium' : 'h-8 w-8 rounded-lg',
         active
           ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
           : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]',

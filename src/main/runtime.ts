@@ -9,6 +9,7 @@ import type {
 import type { Messages as MistralChatMessage } from '@mistralai/mistralai/models/components/chatcompletionrequest'
 import { AgentChatStore } from './agentChatStore'
 import { AgentHistoryStore } from './agentHistoryStore'
+import { ExcalidrawSessionStore } from './excalidrawSessionStore'
 import { FileService, sanitizeNotePath } from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
@@ -25,6 +26,8 @@ import {
 import { VaultWatcher } from './watcher'
 import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
+import { HistoryService } from './historyService'
+import { TrashService, TrashedEntry } from './trashService'
 import {
   AppSettings,
   AgentChatEvent,
@@ -38,6 +41,7 @@ import {
   AgentChatToolStep,
   AgentRunRecord,
   AppSettingsUpdate,
+  AppSettingsUpdateOptions,
   CompleteNoteWithAiInput,
   BlockNoteMigrationResult,
   NoteImportResult,
@@ -45,7 +49,10 @@ import {
   ProjectMilestone,
   SearchResult,
   StoredNoteDocument,
-  VaultOpenResult
+  VaultOpenResult,
+  HistoryOperationResult,
+  HistoryStatus,
+  ExcalidrawSession
 } from '../shared/types'
 
 export class VaultRuntime {
@@ -60,6 +67,8 @@ export class VaultRuntime {
   private vaultListeners: Array<(paths: VaultPaths | null) => void> = []
   private agentChatListeners: Array<(event: AgentChatEvent) => void> = []
   private agentToolInvoker: ((name: string, input: unknown) => Promise<unknown>) | null = null
+
+  constructor(private readonly history = new HistoryService()) {}
 
   async openWithDialog(): Promise<VaultOpenResult | null> {
     const chosen = await chooseVaultFolder('Open vault folder')
@@ -296,15 +305,43 @@ export class VaultRuntime {
 
   async deleteNote(relPath: string): Promise<void> {
     this.assertReady()
-    await this.fileService!.delete(relPath)
-    await this.indexer!.deleteByRelPath(sanitizeNotePath(relPath))
+    const safeRelPath = sanitizeNotePath(relPath)
+    const trashed = await this.createTrashService().moveEntryToTrash(safeRelPath)
+    await this.indexer!.deleteByRelPath(safeRelPath)
+    this.pushFileDeleteHistory('Delete note', [trashed])
   }
 
   async deletePath(relPath: string): Promise<void> {
     this.assertReady()
     await this.assertPathDeletionAllowed(relPath)
-    await this.fileService!.deletePath(relPath)
+    const trashed = await this.createTrashService().moveEntryToTrash(relPath)
     await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
+      trashed
+    ])
+  }
+
+  async deletePaths(relPaths: string[]): Promise<void> {
+    this.assertReady()
+    const uniqueRelPaths = Array.from(new Set(relPaths))
+    if (uniqueRelPaths.length === 0) {
+      return
+    }
+
+    for (const relPath of uniqueRelPaths) {
+      await this.assertPathDeletionAllowed(relPath)
+    }
+
+    const trash = this.createTrashService()
+    const trashedEntries: TrashedEntry[] = []
+    for (const relPath of uniqueRelPaths) {
+      trashedEntries.push(await trash.moveEntryToTrash(relPath))
+    }
+    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    this.pushFileDeleteHistory(
+      uniqueRelPaths.length === 1 ? 'Delete item' : 'Delete items',
+      trashedEntries
+    )
   }
 
   async exportNote(relPath: string, content: string): Promise<string | null> {
@@ -580,6 +617,21 @@ export class VaultRuntime {
     await this.getAgentChatStore().deleteSession(sessionId)
   }
 
+  async listExcalidrawSessions(): Promise<ExcalidrawSession[]> {
+    this.assertReady()
+    return this.getExcalidrawSessionStore().listSessions()
+  }
+
+  async saveExcalidrawSession(session: ExcalidrawSession): Promise<ExcalidrawSession> {
+    this.assertReady()
+    return this.getExcalidrawSessionStore().saveSession(session)
+  }
+
+  async deleteExcalidrawSession(sessionId: string): Promise<void> {
+    this.assertReady()
+    await this.getExcalidrawSessionStore().deleteSession(sessionId)
+  }
+
   async approveAgentChatTool(input: {
     requestId?: string
     stepId: string
@@ -712,7 +764,23 @@ export class VaultRuntime {
     return settings
   }
 
-  async updateSettings(next: AppSettingsUpdate): Promise<AppSettings> {
+  async updateSettings(
+    next: AppSettingsUpdate,
+    options?: AppSettingsUpdateOptions
+  ): Promise<AppSettings> {
+    return this.updateSettingsInternal(next, {
+      recordHistory: options?.history !== false,
+      label: 'Update workspace'
+    })
+  }
+
+  private async updateSettingsInternal(
+    next: AppSettingsUpdate,
+    options: {
+      recordHistory: boolean
+      label: string
+    }
+  ): Promise<AppSettings> {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
@@ -723,6 +791,15 @@ export class VaultRuntime {
 
       if (next.calendarTasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
+      }
+
+      if (options.recordHistory && !sameJson(current, merged)) {
+        await this.createTrashService().archiveSettingsDeletes(current, merged)
+        this.pushSettingsHistory(
+          deriveSettingsHistoryLabel(current, merged, options.label),
+          current,
+          merged
+        )
       }
 
       return merged
@@ -747,8 +824,32 @@ export class VaultRuntime {
         this.reminderService.updateTasks(merged.calendarTasks)
       }
 
+      if (!sameJson(current, merged)) {
+        await this.createTrashService().archiveSettingsDeletes(current, merged)
+        this.pushSettingsHistory(
+          deriveSettingsHistoryLabel(current, merged, 'Update workspace'),
+          current,
+          merged
+        )
+      }
+
       return result
     })
+  }
+
+  async undoHistory(): Promise<HistoryOperationResult> {
+    this.assertReady()
+    return this.history.undo()
+  }
+
+  async redoHistory(): Promise<HistoryOperationResult> {
+    this.assertReady()
+    return this.history.redo()
+  }
+
+  historyStatus(): HistoryStatus {
+    this.assertReady()
+    return this.history.status()
   }
 
   setAgentToolInvoker(invoker: (name: string, input: unknown) => Promise<unknown>): void {
@@ -782,6 +883,7 @@ export class VaultRuntime {
   private async activateVault(folderPath: string, createMode: boolean): Promise<VaultOpenResult> {
     console.log('[VaultRuntime] activateVault', { folderPath, createMode })
     await this.closeCurrentVault()
+    this.history.clear()
     this.currentPaths = createMode
       ? await initializeVault(folderPath)
       : await validateVault(folderPath)
@@ -824,6 +926,7 @@ export class VaultRuntime {
     if (this.currentPaths) {
       this.notifyVaultChange(null)
     }
+    this.history.clear()
     await this.watcher?.stop()
     this.watcher = null
     this.fileService = null
@@ -955,6 +1058,73 @@ export class VaultRuntime {
     }
   }
 
+  private createTrashService(): TrashService {
+    this.assertReady()
+    return new TrashService(this.currentPaths!.rootPath, this.currentPaths!.notesPath)
+  }
+
+  private pushFileDeleteHistory(label: string, initialEntries: TrashedEntry[]): void {
+    const entries = initialEntries.map((entry) => ({
+      activeRelPath: entry.originalRelPath,
+      trashedEntry: entry as TrashedEntry | null
+    }))
+
+    this.history.push({
+      label,
+      affected: { notes: true },
+      undo: async () => {
+        this.assertReady()
+        for (const entry of entries) {
+          if (!entry.trashedEntry) {
+            continue
+          }
+          entry.activeRelPath = await this.createTrashService().restoreEntry(entry.trashedEntry)
+          entry.trashedEntry = null
+        }
+        await this.indexer!.rebuild(this.currentPaths!.notesPath)
+        return { notes: true }
+      },
+      redo: async () => {
+        this.assertReady()
+        const trash = this.createTrashService()
+        for (const entry of entries) {
+          if (entry.trashedEntry) {
+            continue
+          }
+          entry.trashedEntry = await trash.moveEntryToTrash(entry.activeRelPath)
+          entry.activeRelPath = entry.trashedEntry.originalRelPath
+        }
+        await this.indexer!.rebuild(this.currentPaths!.notesPath)
+        return { notes: true }
+      }
+    })
+  }
+
+  private pushSettingsHistory(label: string, before: AppSettings, after: AppSettings): void {
+    const beforeSnapshot = cloneSettings(before)
+    const afterSnapshot = cloneSettings(after)
+
+    this.history.push({
+      label,
+      affected: { settings: true },
+      undo: async () => {
+        await this.applySettingsSnapshot(beforeSnapshot)
+        return { settings: true }
+      },
+      redo: async () => {
+        await this.applySettingsSnapshot(afterSnapshot)
+        return { settings: true }
+      }
+    })
+  }
+
+  private async applySettingsSnapshot(snapshot: AppSettings): Promise<void> {
+    await this.updateSettingsInternal(settingsSnapshotToUpdate(snapshot), {
+      recordHistory: false,
+      label: 'Restore workspace state'
+    })
+  }
+
   private async assertFolderCreationAllowed(relPath: string): Promise<void> {
     void relPath
   }
@@ -978,6 +1148,10 @@ export class VaultRuntime {
 
   private getAgentChatStore(): AgentChatStore {
     return new AgentChatStore(this.getCurrentVaultRoot())
+  }
+
+  private getExcalidrawSessionStore(): ExcalidrawSessionStore {
+    return new ExcalidrawSessionStore(this.getCurrentVaultRoot())
   }
 
   private async recordAgentRun(run: AgentRunRecord): Promise<void> {
@@ -1622,4 +1796,80 @@ function extractMistralText(response: unknown): string {
       return ''
     })
     .join('')
+}
+
+function cloneSettings(settings: AppSettings): AppSettings {
+  return JSON.parse(JSON.stringify(settings)) as AppSettings
+}
+
+function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
+  return {
+    isSidebarCollapsed: settings.isSidebarCollapsed,
+    profile: settings.profile,
+    ai: settings.ai,
+    fontFamily: settings.fontFamily,
+    workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
+    calendarTasks: settings.calendarTasks,
+    projectIcons: settings.projectIcons,
+    projects: settings.projects,
+    gridBoard: settings.gridBoard,
+    lastOpenedNotePath: settings.lastOpenedNotePath,
+    lastOpenedProjectId: settings.lastOpenedProjectId,
+    favoriteNotePaths: settings.favoriteNotePaths,
+    favoriteProjectIds: settings.favoriteProjectIds
+  }
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function deriveSettingsHistoryLabel(
+  previous: AppSettings,
+  next: AppSettings,
+  fallback: string
+): string {
+  if (previous.projects.length > next.projects.length) {
+    const nextProjectIds = new Set(next.projects.map((project) => project.id))
+    if (previous.projects.some((project) => !nextProjectIds.has(project.id))) {
+      return 'Delete project'
+    }
+  }
+
+  for (const project of previous.projects) {
+    const nextProject = next.projects.find((item) => item.id === project.id)
+    if (!nextProject) {
+      continue
+    }
+
+    if (project.milestones.length > nextProject.milestones.length) {
+      const nextMilestoneIds = new Set(nextProject.milestones.map((milestone) => milestone.id))
+      if (project.milestones.some((milestone) => !nextMilestoneIds.has(milestone.id))) {
+        return 'Delete milestone'
+      }
+    }
+
+    for (const milestone of project.milestones) {
+      const nextMilestone = nextProject.milestones.find((item) => item.id === milestone.id)
+      if (!nextMilestone) {
+        continue
+      }
+      if (milestone.subtasks.length > nextMilestone.subtasks.length) {
+        const nextSubtaskIds = new Set(nextMilestone.subtasks.map((subtask) => subtask.id))
+        if (milestone.subtasks.some((subtask) => !nextSubtaskIds.has(subtask.id))) {
+          return 'Delete subtask'
+        }
+      }
+    }
+  }
+
+  if (previous.calendarTasks.length > next.calendarTasks.length) {
+    return 'Delete task'
+  }
+
+  if (previous.gridBoard.items.length > next.gridBoard.items.length) {
+    return 'Remove grid item'
+  }
+
+  return fallback
 }

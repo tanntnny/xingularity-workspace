@@ -46,6 +46,7 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(IPC_CHANNELS.renamePath, fromRelPath, toRelPath),
     delete: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deleteNote, relPath),
     deletePath: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.deletePath, relPath),
+    deletePaths: (relPaths) => ipcRenderer.invoke(IPC_CHANNELS.deletePaths, relPaths),
     exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content),
     exportProject: (projectName, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
@@ -79,9 +80,20 @@ const api: RendererVaultApi = {
   agentHistory: {
     listRuns: () => ipcRenderer.invoke(IPC_CHANNELS.agentHistoryListRuns)
   },
+  excalidraw: {
+    listSessions: () => ipcRenderer.invoke(IPC_CHANNELS.excalidrawListSessions),
+    saveSession: (session) => ipcRenderer.invoke(IPC_CHANNELS.excalidrawSaveSession, session),
+    deleteSession: (sessionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.excalidrawDeleteSession, sessionId)
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
-    update: (next) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next)
+    update: (next, options) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next, options)
+  },
+  history: {
+    undo: () => ipcRenderer.invoke(IPC_CHANNELS.historyUndo),
+    redo: () => ipcRenderer.invoke(IPC_CHANNELS.historyRedo),
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.historyStatus)
   },
   schedules: {
     listJobs: () => ipcRenderer.invoke(SCHEDULE_CHANNELS.listJobs),

@@ -490,7 +490,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       root,
       defaultValue: initialValue,
       features: {
+        [CrepeFeature.BlockEdit]: false,
         [CrepeFeature.CodeMirror]: true,
+        [CrepeFeature.Cursor]: false,
         [CrepeFeature.LinkTooltip]: true,
         [CrepeFeature.Latex]: false
       },

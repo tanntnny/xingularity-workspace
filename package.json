@@ -8,19 +8,30 @@
   "build": {
     "appId": "com.xingularity.app",
     "productName": "Xingularity",
+    "directories": {
+      "buildResources": "build"
+    },
     "mac": {
       "target": [
         "dir",
         "dmg"
       ],
+      "icon": "build/icon.png",
       "identity": "-",
       "hardenedRuntime": false
+    },
+    "win": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png"
     },
     "dmg": {
       "sign": false
     }
   },
   "scripts": {
+    "sync:icons": "node scripts/sync-icons.cjs",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -28,15 +39,15 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run sync:icons && npm run typecheck && electron-vite build",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "electron-vite build && playwright test",
+    "test:e2e": "npm run sync:icons && electron-vite build && playwright test",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:win": "npm run sync:icons && npm run build && electron-builder --win",
+    "build:mac": "npm run sync:icons && electron-vite build && electron-builder --mac",
+    "build:linux": "npm run sync:icons && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -50,6 +61,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@fullcalendar/daygrid": "^6.1.20",
     "@fullcalendar/interaction": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",

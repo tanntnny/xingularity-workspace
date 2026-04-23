@@ -107,6 +107,11 @@
     --glass-workspace-blur: 12px;
     --glass-header-blur: 10px;
     --glass-border-alpha: 0.48;
+    --workspace-vibrancy-shell-alpha: 0.48;
+    --workspace-vibrancy-shell-blur: 22px;
+    --workspace-vibrancy-panel-alpha: 0.78;
+    --workspace-vibrancy-panel-2-alpha: 0.62;
+    --workspace-vibrancy-panel-3-alpha: 0.48;
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
   }
@@ -187,6 +192,11 @@
       --glass-workspace-blur: 14px;
       --glass-header-blur: 12px;
       --glass-border-alpha: 0.38;
+      --workspace-vibrancy-shell-alpha: 0.42;
+      --workspace-vibrancy-shell-blur: 26px;
+      --workspace-vibrancy-panel-alpha: 0.62;
+      --workspace-vibrancy-panel-2-alpha: 0.48;
+      --workspace-vibrancy-panel-3-alpha: 0.36;
       --drawer-width: 640px;
       --workspace-pane-width: 300px;
     }
@@ -442,22 +452,86 @@
 }
 
 /* Keep blur on shell surfaces only (not all descendants) */
-.group\/sidebar-wrapper > main {
+.group\/sidebar-wrapper > main[data-workspace-vibrancy='on'] {
   background-color: rgba(
     var(--panel-r),
     var(--panel-g),
     var(--panel-b),
-    var(--glass-workspace-alpha)
+    var(--workspace-vibrancy-shell-alpha)
   );
-  -webkit-backdrop-filter: saturate(135%) blur(var(--glass-workspace-blur));
-  backdrop-filter: saturate(135%) blur(var(--glass-workspace-blur));
+  background-image:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0%,
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent-soft) 88%, transparent) 0%,
+      transparent 42%
+    );
+  -webkit-backdrop-filter: saturate(160%) blur(var(--workspace-vibrancy-shell-blur));
+  backdrop-filter: saturate(160%) blur(var(--workspace-vibrancy-shell-blur));
 }
 
-.app-drag-region {
+main[data-workspace-vibrancy='on'] .workspace-vibrancy-scope {
+  --panel: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--workspace-vibrancy-panel-alpha));
+  --panel-2: rgba(
+    var(--panel-r),
+    var(--panel-g),
+    var(--panel-b),
+    var(--workspace-vibrancy-panel-2-alpha)
+  );
+  --panel-3: rgba(
+    var(--panel-r),
+    var(--panel-g),
+    var(--panel-b),
+    var(--workspace-vibrancy-panel-3-alpha)
+  );
+}
+
+main[data-workspace-vibrancy='on'] .app-drag-region {
   background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-header-alpha));
   border-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha));
   -webkit-backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
   backdrop-filter: saturate(145%) blur(var(--glass-header-blur));
+}
+
+main[data-workspace-vibrancy='on'] .document-workspace-main-surface,
+main[data-workspace-vibrancy='on'] .document-workspace-panel-surface {
+  -webkit-backdrop-filter: saturate(135%) blur(calc(var(--glass-workspace-blur) * 0.85));
+  backdrop-filter: saturate(135%) blur(calc(var(--glass-workspace-blur) * 0.85));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 28px 80px rgba(7, 5, 18, 0.14);
+}
+
+main[data-workspace-vibrancy='on'] .document-workspace-main-surface {
+  background-image: radial-gradient(
+    circle at top left,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    transparent 28%
+  );
+}
+
+main[data-workspace-vibrancy='on'] .document-workspace-panel-surface {
+  background-image: linear-gradient(
+    180deg,
+    rgba(var(--panel-r), var(--panel-g), var(--panel-b), 0.08),
+    transparent 28%
+  );
+}
+
+.document-workspace-header {
+  transition:
+    padding-left 500ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+[data-focus-mode='true'] .document-workspace-header {
+  padding-left: 96px;
 }
 
 .search-palette-surface-blur {
@@ -466,8 +540,8 @@
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   [data-sidebar='sidebar'],
-  .group\/sidebar-wrapper > main,
-  .app-drag-region {
+  .group\/sidebar-wrapper > main[data-workspace-vibrancy='on'],
+  main[data-workspace-vibrancy='on'] .app-drag-region {
     background-color: rgb(var(--panel-r), var(--panel-g), var(--panel-b));
     box-shadow: none;
   }

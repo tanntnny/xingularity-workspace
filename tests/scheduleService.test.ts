@@ -24,6 +24,7 @@ function createDefaultSettings(): AppSettings {
     profile: { name: '' },
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
+    workspaceVibrancyEnabled: true,
     calendarTasks: [],
     projectIcons: {},
     projects: [],

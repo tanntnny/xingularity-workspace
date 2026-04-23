@@ -15,6 +15,7 @@ import {
   GitBranch,
   LayoutDashboard,
   LayoutGrid,
+  PenTool,
   Plus
 } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
@@ -50,6 +51,7 @@ type CommandPalettePage =
   | 'projects'
   | 'subscriptions'
   | 'grid'
+  | 'excalidraw'
   | 'calendar'
   | 'weeklyPlan'
   | 'schedules'
@@ -322,6 +324,12 @@ export function CommandPalette({
             }
           ]
         : []),
+      {
+        value: '>go excalidraw',
+        label: 'Go to Excalidraw',
+        onSelect: () => onOpenPage('excalidraw'),
+        icon: PenTool
+      },
       {
         value: '>go calendar',
         label: 'Go to Calendar',

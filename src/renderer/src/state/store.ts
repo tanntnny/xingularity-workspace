@@ -53,6 +53,7 @@ export const useVaultStore = create<VaultState>((set) => ({
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    workspaceVibrancyEnabled: true,
     calendarTasks: [],
     projectIcons: {},
     projects: [],

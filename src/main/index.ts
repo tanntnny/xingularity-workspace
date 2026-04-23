@@ -12,12 +12,14 @@ import { registerAgentToolIpcHandlers } from './agentToolsIpc'
 import { AgentToolsService } from './agentToolsService'
 import { createMainWindow } from './window'
 import { IPC_CHANNELS } from '../shared/ipc'
+import { HistoryService } from './historyService'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
-const runtime = new VaultRuntime()
+const historyService = new HistoryService()
+const runtime = new VaultRuntime(historyService)
 const scheduleService = new ScheduleService(runtime)
-const weeklyPlanService = new WeeklyPlanService()
+const weeklyPlanService = new WeeklyPlanService(historyService)
 const subscriptionsService = new SubscriptionsService()
 const agentToolsService = new AgentToolsService(runtime, weeklyPlanService)
 runtime.setAgentToolInvoker((name, input) => agentToolsService.invoke(name as never, input))

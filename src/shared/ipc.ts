@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   renamePath: 'files:rename-path',
   deleteNote: 'files:delete-note',
   deletePath: 'files:delete-path',
+  deletePaths: 'files:delete-paths',
   exportNote: 'files:export-note',
   exportProject: 'files:export-project',
   searchQuery: 'search:query',
@@ -32,12 +33,18 @@ export const IPC_CHANNELS = {
   agentChatDeleteSession: 'agent-chat:delete-session',
   agentChatApproveTool: 'agent-chat:approve-tool',
   agentChatEvent: 'agent-chat:event',
+  excalidrawListSessions: 'excalidraw:list-sessions',
+  excalidrawSaveSession: 'excalidraw:save-session',
+  excalidrawDeleteSession: 'excalidraw:delete-session',
   agentHistoryListRuns: 'agent-history:list-runs',
   appErrorEvent: 'app:error-event',
   importAttachment: 'attachments:import',
   importAttachmentFromBuffer: 'attachments:import-from-buffer',
   settingsGet: 'settings:get',
-  settingsUpdate: 'settings:update'
+  settingsUpdate: 'settings:update',
+  historyUndo: 'history:undo',
+  historyRedo: 'history:redo',
+  historyStatus: 'history:status'
 } as const
 
 export const SCHEDULE_CHANNELS = {

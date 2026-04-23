@@ -11,15 +11,21 @@ import {
   WeeklyPlanState,
   WeeklyPlanWeek
 } from '../../shared/types'
+import { HistoryService } from '../historyService'
+import { TrashService } from '../trashService'
 import { WeeklyPlanStore } from './weeklyPlanStore'
 
 const MAX_PRIORITIES_PER_WEEK = 7
 
 export class WeeklyPlanService {
   private store: WeeklyPlanStore | null = null
+  private vaultRoot: string | null = null
   private mutationQueue: Promise<void> = Promise.resolve()
 
+  constructor(private readonly history?: HistoryService) {}
+
   handleVaultChange(vaultRoot: string | null): void {
+    this.vaultRoot = vaultRoot
     this.store = vaultRoot ? new WeeklyPlanStore(vaultRoot) : null
   }
 
@@ -99,16 +105,21 @@ export class WeeklyPlanService {
 
   async deleteWeek(input: DeleteWeeklyPlanWeekInput): Promise<WeeklyPlanState> {
     return this.enqueueMutation(async () => {
-      return this.assertStore().update((state) => {
-        const exists = state.weeks.some((week) => week.id === input.id)
-        if (!exists) {
-          throw new Error(`Week not found: ${input.id}`)
-        }
-        const weeks = state.weeks.filter((week) => week.id !== input.id)
-        const priorities = state.priorities.filter((priority) => priority.weekId !== input.id)
-        const reviews = state.reviews.filter((review) => review.weekId !== input.id)
-        return { weeks, priorities, reviews }
-      })
+      const store = this.assertStore()
+      const before = await store.read()
+      const exists = before.weeks.some((week) => week.id === input.id)
+      if (!exists) {
+        throw new Error(`Week not found: ${input.id}`)
+      }
+      const after = {
+        weeks: before.weeks.filter((week) => week.id !== input.id),
+        priorities: before.priorities.filter((priority) => priority.weekId !== input.id),
+        reviews: before.reviews.filter((review) => review.weekId !== input.id)
+      }
+      await store.write(after)
+      await this.archiveWeeklyPlanDeletes(before, after)
+      this.pushWeeklyPlanHistory('Delete week plan', before, after)
+      return after
     })
   }
 
@@ -172,20 +183,26 @@ export class WeeklyPlanService {
 
   async deletePriority(priorityId: string): Promise<WeeklyPlanState> {
     return this.enqueueMutation(async () => {
-      return this.assertStore().update((state) => {
-        const priority = state.priorities.find((item) => item.id === priorityId)
-        if (!priority) {
-          throw new Error(`Priority not found: ${priorityId}`)
-        }
-        const priorities = state.priorities
+      const store = this.assertStore()
+      const before = await store.read()
+      const priority = before.priorities.find((item) => item.id === priorityId)
+      if (!priority) {
+        throw new Error(`Priority not found: ${priorityId}`)
+      }
+      const after = {
+        ...before,
+        priorities: before.priorities
           .filter((item) => item.id !== priorityId)
           .map((item) =>
             item.weekId === priority.weekId && item.order > priority.order
               ? { ...item, order: item.order - 1 }
               : item
           )
-        return { ...state, priorities }
-      })
+      }
+      await store.write(after)
+      await this.archiveWeeklyPlanDeletes(before, after)
+      this.pushWeeklyPlanHistory('Delete weekly priority', before, after)
+      return after
     })
   }
 
@@ -269,6 +286,50 @@ export class WeeklyPlanService {
     }
     return this.store
   }
+
+  private async archiveWeeklyPlanDeletes(
+    before: WeeklyPlanState,
+    after: WeeklyPlanState
+  ): Promise<void> {
+    if (!this.vaultRoot) {
+      return
+    }
+    await new TrashService(this.vaultRoot).archiveWeeklyPlanDeletes(before, after)
+  }
+
+  private pushWeeklyPlanHistory(
+    label: string,
+    before: WeeklyPlanState,
+    after: WeeklyPlanState
+  ): void {
+    if (!this.history || sameJson(before, after)) {
+      return
+    }
+
+    const beforeSnapshot = cloneWeeklyPlanState(before)
+    const afterSnapshot = cloneWeeklyPlanState(after)
+
+    this.history.push({
+      label,
+      affected: { weeklyPlan: true },
+      undo: async () => {
+        await this.assertStore().write(beforeSnapshot)
+        return { weeklyPlan: true }
+      },
+      redo: async () => {
+        await this.assertStore().write(afterSnapshot)
+        return { weeklyPlan: true }
+      }
+    })
+  }
+}
+
+function cloneWeeklyPlanState(state: WeeklyPlanState): WeeklyPlanState {
+  return JSON.parse(JSON.stringify(state)) as WeeklyPlanState
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 function sanitizeIsoDate(value: string): string {

@@ -47,6 +47,7 @@ export function createDefaultAppSettings(): AppSettings {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    workspaceVibrancyEnabled: true,
     calendarTasks: [],
     projectIcons: {},
     projects: [],
@@ -79,6 +80,10 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsed.ai.mistralApiKey
           : defaults.ai.mistralApiKey
     },
+    workspaceVibrancyEnabled:
+      typeof parsed.workspaceVibrancyEnabled === 'boolean'
+        ? parsed.workspaceVibrancyEnabled
+        : defaults.workspaceVibrancyEnabled,
     calendarTasks: Array.isArray(parsed.calendarTasks)
       ? parsed.calendarTasks
       : defaults.calendarTasks,
@@ -416,6 +421,7 @@ export class SettingsStore {
       profile: settings.profile,
       ai: settings.ai,
       fontFamily: settings.fontFamily,
+      workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
       gridBoard: settings.gridBoard
     }
 

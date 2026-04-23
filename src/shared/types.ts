@@ -206,6 +206,23 @@ export interface GridBoardState {
   items: GridBoardItem[]
 }
 
+export interface ExcalidrawSessionScene {
+  type?: string
+  version?: number
+  source?: string
+  elements: unknown[]
+  appState?: Record<string, unknown> | null
+  files?: Record<string, unknown>
+}
+
+export interface ExcalidrawSession {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  scene: ExcalidrawSessionScene
+}
+
 export interface FileMapEntry {
   id: string
   hash: string
@@ -228,6 +245,7 @@ export interface AppSettings {
     mistralApiKey: string
   }
   fontFamily: string
+  workspaceVibrancyEnabled: boolean
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
@@ -243,6 +261,7 @@ export interface AppSettingsUpdate {
     mistralApiKey: string
   }
   fontFamily?: string
+  workspaceVibrancyEnabled?: boolean
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
@@ -251,6 +270,30 @@ export interface AppSettingsUpdate {
   lastOpenedProjectId?: Maybe<string>
   favoriteNotePaths?: string[]
   favoriteProjectIds?: string[]
+}
+
+export interface AppSettingsUpdateOptions {
+  history?: boolean
+}
+
+export interface HistoryAffectedAreas {
+  notes?: boolean
+  settings?: boolean
+  weeklyPlan?: boolean
+}
+
+export interface HistoryOperationResult {
+  performed: boolean
+  action: 'undo' | 'redo'
+  label: string | null
+  affected: HistoryAffectedAreas
+}
+
+export interface HistoryStatus {
+  canUndo: boolean
+  canRedo: boolean
+  undoLabel: string | null
+  redoLabel: string | null
 }
 
 export type WeeklyPlanPriorityStatus = 'planned' | 'in_progress' | 'done'
@@ -784,6 +827,7 @@ export interface RendererVaultApi {
     renamePath: (fromRelPath: string, toRelPath: string) => Promise<void>
     delete: (relPath: string) => Promise<void>
     deletePath: (relPath: string) => Promise<void>
+    deletePaths: (relPaths: string[]) => Promise<void>
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }
@@ -810,9 +854,19 @@ export interface RendererVaultApi {
   agentHistory: {
     listRuns: () => Promise<AgentRunRecord[]>
   }
+  excalidraw: {
+    listSessions: () => Promise<ExcalidrawSession[]>
+    saveSession: (session: ExcalidrawSession) => Promise<ExcalidrawSession>
+    deleteSession: (sessionId: string) => Promise<void>
+  }
   settings: {
     get: () => Promise<AppSettings>
-    update: (next: AppSettingsUpdate) => Promise<AppSettings>
+    update: (next: AppSettingsUpdate, options?: AppSettingsUpdateOptions) => Promise<AppSettings>
+  }
+  history: {
+    undo: () => Promise<HistoryOperationResult>
+    redo: () => Promise<HistoryOperationResult>
+    status: () => Promise<HistoryStatus>
   }
   schedules: import('./scheduleTypes').RendererScheduleApi
   subscriptions: RendererSubscriptionsApi

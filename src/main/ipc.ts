@@ -80,6 +80,21 @@ const agentChatSessionSchema = z.object({
   messages: z.array(agentChatMessageRecordSchema).max(500)
 })
 const sessionIdSchema = z.string().min(1).max(200)
+const excalidrawSceneSchema = z.object({
+  type: z.string().optional(),
+  version: z.number().optional(),
+  source: z.string().optional(),
+  elements: z.array(z.unknown()),
+  appState: z.record(z.string(), z.unknown()).nullable().optional(),
+  files: z.record(z.string(), z.unknown()).optional()
+})
+const excalidrawSessionSchema = z.object({
+  id: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  createdAt: z.string().min(1).max(100),
+  updatedAt: z.string().min(1).max(100),
+  scene: excalidrawSceneSchema
+})
 const approveToolInputSchema = z.object({
   requestId: z.string().min(1).max(200).optional(),
   stepId: z.string().min(1).max(200),
@@ -243,6 +258,7 @@ const settingsUpdateSchema = z.object({
     })
     .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
+  workspaceVibrancyEnabled: z.boolean().optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
   projects: z.array(projectSchema).max(100).optional(),
@@ -252,6 +268,12 @@ const settingsUpdateSchema = z.object({
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
   favoriteProjectIds: z.array(z.string().min(1).max(120)).max(1000).optional()
 })
+
+const settingsUpdateOptionsSchema = z
+  .object({
+    history: z.boolean().optional()
+  })
+  .optional()
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
   ipcMain.handle(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
@@ -383,6 +405,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     await runtime.deletePath(genericPathSchema.parse(relPath))
   })
 
+  ipcMain.handle(IPC_CHANNELS.deletePaths, async (_event, relPaths: unknown) => {
+    await runtime.deletePaths(z.array(genericPathSchema).min(1).max(100).parse(relPaths))
+  })
+
   ipcMain.handle(IPC_CHANNELS.exportNote, async (_event, relPath: unknown, content: unknown) => {
     return runtime.exportNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
@@ -421,6 +447,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.deleteAgentChatSession(sessionIdSchema.parse(sessionId))
   })
 
+  ipcMain.handle(IPC_CHANNELS.excalidrawListSessions, async () => {
+    return runtime.listExcalidrawSessions()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.excalidrawSaveSession, async (_event, session: unknown) => {
+    return runtime.saveExcalidrawSession(excalidrawSessionSchema.parse(session))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.excalidrawDeleteSession, async (_event, sessionId: unknown) => {
+    return runtime.deleteExcalidrawSession(sessionIdSchema.parse(sessionId))
+  })
+
   ipcMain.handle(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {
     return runtime.approveAgentChatTool(approveToolInputSchema.parse(input))
   })
@@ -447,8 +485,23 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.getSettings()
   })
 
-  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown) => {
-    return runtime.updateSettings(settingsUpdateSchema.parse(next))
+  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown, options: unknown) => {
+    return runtime.updateSettings(
+      settingsUpdateSchema.parse(next),
+      settingsUpdateOptionsSchema.parse(options)
+    )
+  })
+
+  ipcMain.handle(IPC_CHANNELS.historyUndo, async () => {
+    return runtime.undoHistory()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.historyRedo, async () => {
+    return runtime.redoHistory()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.historyStatus, () => {
+    return runtime.historyStatus()
   })
 }
 

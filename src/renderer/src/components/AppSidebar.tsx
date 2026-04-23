@@ -12,6 +12,7 @@ import {
   GitBranch,
   Search,
   Settings,
+  PenTool,
   Zap
 } from 'lucide-react'
 import {
@@ -29,7 +30,7 @@ import {
   SidebarSeparator
 } from './ui/sidebar'
 import { Kbd } from './ui/kbd'
-import appLogo from '../../../../assets/logo.png'
+import appLogo from '../../../../assets/workspace_letter.png'
 import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 
 export type AppPage =
@@ -39,6 +40,7 @@ export type AppPage =
   | 'projects'
   | 'subscriptions'
   | 'grid'
+  | 'excalidraw'
   | 'weeklyPlan'
   | 'calendar'
   | 'settings'
@@ -57,6 +59,7 @@ interface AppSidebarProps {
   profileName: string
   isLocked?: boolean
   className?: string
+  collapsible?: 'offcanvas' | 'icon' | 'none'
 }
 
 type SidebarPageItem = {
@@ -73,10 +76,16 @@ const GRID_HOME_PAGE: SidebarPageItem = {
   shortcut: '⌘G'
 }
 
+const EXCALIDRAW_PAGE: SidebarPageItem = {
+  id: 'excalidraw',
+  label: 'Excalidraw',
+  icon: PenTool
+}
+
 const BOARD_PAGES: SidebarPageItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
   { id: 'knowledge', label: 'Knowledge', icon: GitBranch, shortcut: '⌘K' },
-  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE] : [])
+  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE, EXCALIDRAW_PAGE] : [EXCALIDRAW_PAGE])
 ]
 
 const HOME_PAGES: SidebarPageItem[] = [
@@ -140,7 +149,8 @@ export function AppSidebar({
   calendarUndoneCount,
   profileName,
   isLocked = false,
-  className
+  className,
+  collapsible = 'icon'
 }: AppSidebarProps): ReactElement {
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
   const notesCountLabel = toBadgeLabel(notesCount)
@@ -155,7 +165,7 @@ export function AppSidebar({
   )
   return (
     <Sidebar
-      collapsible="icon"
+      collapsible={collapsible}
       className={`app-sidebar-glass ${className ?? ''}`.trim()}
       onPointerDownCapture={() => onSidebarInteract?.()}
     >
@@ -164,7 +174,7 @@ export function AppSidebar({
           <img
             src={appLogo}
             alt="Xingularity logo"
-            className="h-11 w-11 shrink-0 rounded-2xl border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
+            className="h-11 w-11 shrink-0 rounded-lg border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
           />
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold tracking-[0.12em] text-sidebar-foreground/70">
@@ -196,7 +206,6 @@ export function AppSidebar({
           <span className="min-w-0 flex-1 text-sm text-sidebar-foreground/70">
             Command palette...
           </span>
-          <Kbd className="shrink-0 gap-0.5">{renderShortcut('⌘P')}</Kbd>
         </button>
       </div>
       <SidebarSeparator />
@@ -221,9 +230,9 @@ export function AppSidebar({
                     >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
-                      {page.shortcut ? (
+                      {page.id === 'notes' || page.id === 'projects' || page.id === 'calendar' ? (
                         <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                          {renderShortcut(page.shortcut)}
+                          {renderShortcut(page.shortcut ?? '')}
                         </Kbd>
                       ) : null}
                     </ButtonBase>
@@ -254,11 +263,6 @@ export function AppSidebar({
                     >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
-                      {page.shortcut ? (
-                        <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                          {renderShortcut(page.shortcut)}
-                        </Kbd>
-                      ) : null}
                     </ButtonBase>
                   </SidebarMenuButton>
                   {page.id === 'notes' && notesCount > 0 ? (
@@ -324,9 +328,6 @@ export function AppSidebar({
                     >
                       <page.icon size={17} strokeWidth={2} />
                       <span>{page.label}</span>
-                      <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                        {renderShortcut(page.shortcut)}
-                      </Kbd>
                     </ButtonBase>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

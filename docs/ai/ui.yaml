@@ -1,0 +1,10 @@
+workspace_shell:
+  workspace_vibrancy_enabled:
+    default: true
+    scope:
+      - main workspace area
+      - right sidebar
+    behavior:
+      - When enabled, the workspace shell overrides panel variables with translucent glass surfaces.
+      - The toggle lives in Appearance settings and persists in vault settings.
+      - Global sidebar glass styling remains managed separately from workspace shell styling.

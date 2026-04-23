@@ -40,7 +40,8 @@ import {
   RendererVaultApi,
   TaskReminder,
   CalendarTaskType,
-  WeeklyPlanWeek
+  WeeklyPlanWeek,
+  HistoryAffectedAreas
 } from '../../shared/types'
 import {
   createRandomProjectIcon,
@@ -124,6 +125,11 @@ import {
 } from './pages/ScheduleDocumentationPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
+import {
+  ExcalidrawPage,
+  ExcalidrawSidebar,
+  ExcalidrawWorkspaceProvider
+} from './pages/ExcalidrawPage'
 import { GridPage, type GridWorkspaceActions } from './pages/GridPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { useVaultStore } from './state/store'
@@ -153,6 +159,11 @@ import {
 import { shiftIsoMonthClamped } from './lib/calendarDate'
 import { GRID_PAGE_ENABLED } from './lib/featureFlags'
 import type { NoteOutlineItem } from './lib/noteOutline'
+import {
+  getPrimaryNoteTreeSelectionEntry,
+  normalizeNoteTreeSelection,
+  type NoteTreeSelection
+} from './lib/noteTreeSelection'
 import { hideManagedProjectTree } from './lib/noteTreeVisibility'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 
@@ -163,6 +174,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   projects: 'Projects',
   subscriptions: 'Subscriptions',
   grid: 'Grid',
+  excalidraw: 'Excalidraw',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   settings: 'Settings',
@@ -265,11 +277,6 @@ const NOTE_AUTOSAVE_DELAY_MS = 1200
 
 type NotePanelView = 'cards' | 'tree'
 
-type NoteTreeSelection = {
-  kind: 'note' | 'folder'
-  relPath: string
-} | null
-
 function App(): ReactElement {
   const vaultApi = (window as unknown as { vaultApi?: RendererVaultApi }).vaultApi
   const vault = useVaultStore((state) => state.vault)
@@ -287,6 +294,9 @@ function App(): ReactElement {
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
+  const workspaceVibrancyEnabled = useVaultStore(
+    (state) => state.settings.workspaceVibrancyEnabled
+  )
   const profileName = useVaultStore((state) => state.settings.profile.name)
   const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
   const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
@@ -331,7 +341,8 @@ function App(): ReactElement {
   const [notePanelView, setNotePanelView] = useState<NotePanelView>('tree')
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
-  const [selectedNoteTreeEntry, setSelectedNoteTreeEntry] = useState<NoteTreeSelection>(null)
+  const [selectedNoteTreeEntries, setSelectedNoteTreeEntries] = useState<NoteTreeSelection>([])
+  const primarySelectedNoteTreeEntry = getPrimaryNoteTreeSelectionEntry(selectedNoteTreeEntries)
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
   const handlePendingNoteTreeEditHandled = useCallback((): void => {
     setPendingNoteTreeEditId(null)
@@ -369,7 +380,8 @@ function App(): ReactElement {
     updatePriority,
     deletePriority,
     reorderPriorities,
-    upsertReview
+    upsertReview,
+    refresh: refreshWeeklyPlan
   } = useWeeklyPlan(vaultApi, pushToast, vault)
   const [selectedWeeklyPlanWeekId, setSelectedWeeklyPlanWeekId] = useState<string | null>(null)
   const [pendingWeekStart, setPendingWeekStart] = useState<string | null>(null)
@@ -399,6 +411,8 @@ function App(): ReactElement {
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState('')
   const [commandPaletteLoading, setCommandPaletteLoading] = useState(false)
   const [commandPaletteAiLoading, setCommandPaletteAiLoading] = useState(false)
+  const [isFocusMode, setIsFocusMode] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
   const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
@@ -430,15 +444,30 @@ function App(): ReactElement {
       (activePage === 'notes' && notePanelView !== 'tree') ||
       activePage === 'projects' ||
       activePage === 'grid' ||
+      activePage === 'excalidraw' ||
       activePage === 'calendar')
   const showWorkspacePanel =
     hasVault &&
     (activePage === 'notes' ||
       activePage === 'projects' ||
       activePage === 'calendar' ||
+      activePage === 'excalidraw' ||
       activePage === 'weeklyPlan')
+  const shouldSlideWorkspacePanelOut = showWorkspacePanel && (isRightPanelCollapsed || isFocusMode)
   const hasRightPanel =
     showWorkspacePanel || activePage === 'schedules' || activePage === 'agentHistory'
+  const shouldUseExcalidrawWorkspace = hasVault && activePage === 'excalidraw'
+  const wrapWorkspaceChrome = useCallback(
+    (content: ReactElement): ReactElement =>
+      shouldUseExcalidrawWorkspace ? (
+        <ExcalidrawWorkspaceProvider vaultApi={vaultApi} pushToast={pushToast}>
+          {content}
+        </ExcalidrawWorkspaceProvider>
+      ) : (
+        content
+      ),
+    [pushToast, shouldUseExcalidrawWorkspace, vaultApi]
+  )
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
@@ -573,7 +602,7 @@ function App(): ReactElement {
   }, [currentNoteTagsState])
 
   const persistLastOpenedNotePath = useCallback(
-    async (relPath: string | null): Promise<void> => {
+    async (relPath: string | null, options?: { history?: boolean }): Promise<void> => {
       if (!vaultApi) {
         return
       }
@@ -583,7 +612,10 @@ function App(): ReactElement {
       }
 
       try {
-        const nextSettings = await vaultApi.settings.update({ lastOpenedNotePath: relPath })
+        const nextSettings = await vaultApi.settings.update(
+          { lastOpenedNotePath: relPath },
+          options
+        )
         setSettings(nextSettings)
       } catch (error) {
         pushToast('error', String(error))
@@ -593,7 +625,7 @@ function App(): ReactElement {
   )
 
   const persistLastOpenedProjectId = useCallback(
-    async (projectId: string | null): Promise<void> => {
+    async (projectId: string | null, options?: { history?: boolean }): Promise<void> => {
       if (!vaultApi) {
         return
       }
@@ -603,7 +635,10 @@ function App(): ReactElement {
       }
 
       try {
-        const nextSettings = await vaultApi.settings.update({ lastOpenedProjectId: projectId })
+        const nextSettings = await vaultApi.settings.update(
+          { lastOpenedProjectId: projectId },
+          options
+        )
         setSettings(nextSettings)
       } catch (error) {
         pushToast('error', String(error))
@@ -613,7 +648,7 @@ function App(): ReactElement {
   )
 
   const persistFavoriteNotePaths = useCallback(
-    async (favoritePaths: string[]): Promise<void> => {
+    async (favoritePaths: string[], options?: { history?: boolean }): Promise<void> => {
       if (!vaultApi) {
         return
       }
@@ -628,7 +663,10 @@ function App(): ReactElement {
       }
 
       try {
-        const nextSettings = await vaultApi.settings.update({ favoriteNotePaths: normalized })
+        const nextSettings = await vaultApi.settings.update(
+          { favoriteNotePaths: normalized },
+          options
+        )
         setSettings(nextSettings)
       } catch (error) {
         pushToast('error', String(error))
@@ -638,7 +676,7 @@ function App(): ReactElement {
   )
 
   const persistFavoriteProjectIds = useCallback(
-    async (favoriteProjectIds: string[]): Promise<void> => {
+    async (favoriteProjectIds: string[], options?: { history?: boolean }): Promise<void> => {
       if (!vaultApi) {
         return
       }
@@ -653,7 +691,10 @@ function App(): ReactElement {
       }
 
       try {
-        const nextSettings = await vaultApi.settings.update({ favoriteProjectIds: normalized })
+        const nextSettings = await vaultApi.settings.update(
+          { favoriteProjectIds: normalized },
+          options
+        )
         setSettings(nextSettings)
       } catch (error) {
         pushToast('error', String(error))
@@ -690,7 +731,7 @@ function App(): ReactElement {
     if (!selectedWeeklyPlanWeek) {
       return
     }
-    if (!window.confirm('Delete this week plan? This cannot be undone.')) {
+    if (!window.confirm('Delete this week plan? Moved to Trash. Use Undo to restore.')) {
       return
     }
     await deleteWeek({ id: selectedWeeklyPlanWeek.id })
@@ -887,6 +928,10 @@ function App(): ReactElement {
 
     if (activePage === 'grid') {
       return GRID_PAGE_ENABLED ? 'Spatial Board' : 'Unavailable in This Version'
+    }
+
+    if (activePage === 'excalidraw') {
+      return 'Infinite whiteboard'
     }
 
     if (activePage === 'knowledge') {
@@ -1424,6 +1469,83 @@ function App(): ReactElement {
     [hasVault, persistCurrentNoteForPageLeave]
   )
 
+  const refreshAfterHistoryOperation = useCallback(
+    async (affected: HistoryAffectedAreas): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      if (affected.settings) {
+        const nextSettings = await vaultApi.settings.get()
+        calendarTasksRef.current = nextSettings.calendarTasks
+        setSettings(nextSettings)
+      }
+
+      if (affected.notes) {
+        const [nextNotes, nextTree] = await Promise.all([
+          vaultApi.files.listNotes(),
+          vaultApi.files.listTree()
+        ])
+        setNotes(nextNotes)
+        setNoteTree(nextTree)
+
+        if (
+          currentNotePathRef.current &&
+          !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
+        ) {
+          currentNotePathRef.current = null
+          currentNoteContentRef.current = ''
+          currentNoteTagsRef.current = []
+          setCurrentNotePath(null)
+          resetCurrentNoteEditorSession()
+          setCurrentNoteTagsState([])
+          setCurrentNoteContent('')
+          void persistLastOpenedNotePath(null, { history: false })
+        }
+      }
+
+      if (affected.weeklyPlan) {
+        await refreshWeeklyPlan()
+      }
+    },
+    [
+      persistLastOpenedNotePath,
+      refreshWeeklyPlan,
+      resetCurrentNoteEditorSession,
+      setCurrentNoteContent,
+      setCurrentNotePath,
+      setNotes,
+      setSettings,
+      setNoteTree,
+      vaultApi
+    ]
+  )
+
+  const runHistoryOperation = useCallback(
+    async (action: 'undo' | 'redo'): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      try {
+        const result =
+          action === 'undo' ? await vaultApi.history.undo() : await vaultApi.history.redo()
+        if (!result.performed) {
+          pushToast('info', action === 'undo' ? 'Nothing to undo' : 'Nothing to redo')
+          return
+        }
+        await refreshAfterHistoryOperation(result.affected)
+        pushToast(
+          'success',
+          `${action === 'undo' ? 'Undid' : 'Redid'} ${formatHistoryLabel(result.label)}`
+        )
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, refreshAfterHistoryOperation, vaultApi]
+  )
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!hasVault) {
@@ -1463,11 +1585,31 @@ function App(): ReactElement {
         return
       }
 
+      const target = event.target
+      const isTypingTarget = isEditableWorkspaceUndoTarget(target)
+      const isFocusModeShortcut =
+        isModifierPressed && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f'
+
+      if (isFocusModeShortcut) {
+        event.preventDefault()
+        setIsFocusMode((current) => !current)
+        return
+      }
+
+      const isUndoShortcut =
+        isModifierPressed && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'z'
+      const isRedoShortcut =
+        isModifierPressed && !event.altKey && event.shiftKey && event.key.toLowerCase() === 'z'
+
+      if ((isUndoShortcut || isRedoShortcut) && !isTypingTarget) {
+        event.preventDefault()
+        void runHistoryOperation(isUndoShortcut ? 'undo' : 'redo')
+        return
+      }
+
       const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
       const pageByCode: Partial<Record<string, AppPage>> = {
-        KeyD: 'dashboard',
-        KeyK: 'knowledge',
-        ...(GRID_PAGE_ENABLED ? { KeyG: 'grid' } : {}),
+        KeyE: 'excalidraw',
         Digit1: 'notes',
         Digit2: 'projects',
         Digit3: 'calendar',
@@ -1477,9 +1619,7 @@ function App(): ReactElement {
         Comma: 'settings'
       }
       const pageByKey: Partial<Record<string, AppPage>> = {
-        d: 'dashboard',
-        k: 'knowledge',
-        ...(GRID_PAGE_ENABLED ? { g: 'grid' } : {}),
+        e: 'excalidraw',
         '1': 'notes',
         '2': 'projects',
         '3': 'calendar',
@@ -1495,15 +1635,6 @@ function App(): ReactElement {
         return
       }
 
-      const target = event.target
-      const isTypingTarget =
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.getAttribute('role') === 'textbox')
-
       if (isTypingTarget) {
         return
       }
@@ -1515,8 +1646,10 @@ function App(): ReactElement {
     hasRightPanel,
     hasVault,
     navigateToPage,
+    runHistoryOperation,
     setCommandPaletteInitialQuery,
-    setCommandPaletteOpen
+    setCommandPaletteOpen,
+    setIsFocusMode
   ])
 
   useEffect(() => {
@@ -1568,6 +1701,20 @@ function App(): ReactElement {
       const nextSettings = await vaultApi.settings.update({ fontFamily })
       setSettings(nextSettings)
       pushToast('success', 'Font updated')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateWorkspaceVibrancy = async (enabled: boolean): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({ workspaceVibrancyEnabled: enabled })
+      setSettings(nextSettings)
+      pushToast('success', enabled ? 'Workspace vibrancy enabled' : 'Workspace vibrancy disabled')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -2120,7 +2267,7 @@ function App(): ReactElement {
   useEffect(() => {
     if (!vaultApi || !vault) {
       setNoteTree([])
-      setSelectedNoteTreeEntry(null)
+      setSelectedNoteTreeEntries([])
       return
     }
 
@@ -2132,7 +2279,7 @@ function App(): ReactElement {
       return
     }
 
-    setSelectedNoteTreeEntry({ kind: 'note', relPath: currentNotePath })
+    setSelectedNoteTreeEntries([{ kind: 'note', relPath: currentNotePath }])
   }, [currentNotePath])
 
   const createNote = async (): Promise<void> => {
@@ -2738,7 +2885,9 @@ function App(): ReactElement {
     }
 
     const fileName = relPath.split('/').pop() ?? relPath
-    const confirmed = window.confirm(`Delete note "${fileName}"? This cannot be undone.`)
+    const confirmed = window.confirm(
+      `Delete note "${fileName}"? Moved to Trash. Use Undo to restore.`
+    )
     if (!confirmed) {
       return
     }
@@ -2749,7 +2898,12 @@ function App(): ReactElement {
       setNotes(nextNotes)
       delete noteEditorSessionsRef.current[relPath]
       if (favoriteNotePaths.includes(relPath)) {
-        void persistFavoriteNotePaths(favoriteNotePaths.filter((path) => path !== relPath))
+        void persistFavoriteNotePaths(
+          favoriteNotePaths.filter((path) => path !== relPath),
+          {
+            history: false
+          }
+        )
       }
       if (currentNotePath === relPath) {
         currentNotePathRef.current = null
@@ -2759,7 +2913,7 @@ function App(): ReactElement {
         resetCurrentNoteEditorSession()
         setCurrentNoteTagsState([])
         setCurrentNoteContent('')
-        void persistLastOpenedNotePath(null)
+        void persistLastOpenedNotePath(null, { history: false })
       }
       pushToast('success', 'Note deleted')
     } catch (error) {
@@ -3652,13 +3806,17 @@ function App(): ReactElement {
   }
 
   const removeProjectById = async (projectId: string): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
     const project = projects.find((item) => item.id === projectId)
     if (!project) {
       return
     }
 
     const confirmed = window.confirm(
-      `Remove project "${project.name}" from this workspace? Tagged notes will stay in the vault. This cannot be undone.`
+      `Remove project "${project.name}" from this workspace? Tagged notes will stay in the vault. Use Undo to restore.`
     )
     if (!confirmed) {
       return
@@ -3669,15 +3827,27 @@ function App(): ReactElement {
       nextProjects.find((item) => item.id === selectedProjectId) ?? nextProjects[0] ?? null
     const nextProjectIcons = { ...projectIcons }
     delete nextProjectIcons[projectId]
-    const saved = await persistProjectData(nextProjects, nextProjectIcons)
-    if (!saved) {
+    const nextFavoriteProjectIds = favoriteProjectIds.filter((id) => id !== projectId)
+    const nextSelectedProjectId =
+      selectedProjectId === projectId ? (nextSelectedProject?.id ?? null) : selectedProjectId
+    const nextLastOpenedProjectId =
+      lastOpenedProjectId === projectId ? nextSelectedProjectId : lastOpenedProjectId
+
+    try {
+      const nextSettings = await vaultApi.settings.update({
+        projects: nextProjects,
+        projectIcons: nextProjectIcons,
+        favoriteProjectIds: nextFavoriteProjectIds,
+        lastOpenedProjectId: nextLastOpenedProjectId
+      })
+      setSettings(nextSettings)
+    } catch (error) {
+      pushToast('error', String(error))
       return
     }
-    if (favoriteProjectIds.includes(projectId)) {
-      void persistFavoriteProjectIds(favoriteProjectIds.filter((id) => id !== projectId))
-    }
+
     if (selectedProjectId === projectId) {
-      selectProject(nextSelectedProject?.id ?? null)
+      setSelectedProjectId(nextSelectedProjectId)
     }
     pushToast('success', 'Project removed')
   }
@@ -3812,7 +3982,7 @@ function App(): ReactElement {
       resetCurrentNoteEditorSession()
       setCurrentNoteTagsState([])
       setCurrentNoteContent('')
-      void persistLastOpenedNotePath(null)
+      void persistLastOpenedNotePath(null, { history: false })
     }
     return nextTree
   }, [
@@ -3834,17 +4004,17 @@ function App(): ReactElement {
   }, [projects, refreshNotesAndTree, vault, vaultApi])
 
   const getTreeTargetDirectory = useCallback((): string => {
-    if (!selectedNoteTreeEntry) {
+    if (!primarySelectedNoteTreeEntry) {
       return ''
     }
 
-    if (selectedNoteTreeEntry.kind === 'folder') {
-      return selectedNoteTreeEntry.relPath
+    if (primarySelectedNoteTreeEntry.kind === 'folder') {
+      return primarySelectedNoteTreeEntry.relPath
     }
 
-    const slashIndex = selectedNoteTreeEntry.relPath.lastIndexOf('/')
-    return slashIndex >= 0 ? selectedNoteTreeEntry.relPath.slice(0, slashIndex) : ''
-  }, [selectedNoteTreeEntry])
+    const slashIndex = primarySelectedNoteTreeEntry.relPath.lastIndexOf('/')
+    return slashIndex >= 0 ? primarySelectedNoteTreeEntry.relPath.slice(0, slashIndex) : ''
+  }, [primarySelectedNoteTreeEntry])
 
   const createNoteFromTree = useCallback(
     async (targetDir?: string): Promise<void> => {
@@ -3862,7 +4032,7 @@ function App(): ReactElement {
       try {
         const relPath = await createNoteAtPathWithFallback(targetDir ?? getTreeTargetDirectory())
         await refreshNotesAndTree()
-        setSelectedNoteTreeEntry({ kind: 'note', relPath })
+        setSelectedNoteTreeEntries([{ kind: 'note', relPath }])
         setSearchQuery('')
         setSearchResults([])
         await navigateToPage('notes')
@@ -3932,7 +4102,7 @@ function App(): ReactElement {
         setSearchQuery('')
         setSearchResults([])
         await navigateToPage('notes')
-        setSelectedNoteTreeEntry({ kind: 'note', relPath })
+        setSelectedNoteTreeEntries([{ kind: 'note', relPath }])
         await openNote(relPath)
 
         if (!matchedRelPath) {
@@ -3974,7 +4144,7 @@ function App(): ReactElement {
       try {
         const relPath = await createFolderWithFallback(targetDir ?? getTreeTargetDirectory())
         await refreshNotesAndTree()
-        setSelectedNoteTreeEntry({ kind: 'folder', relPath })
+        setSelectedNoteTreeEntries([{ kind: 'folder', relPath }])
         setPendingNoteTreeEditId(`folder:${relPath}`)
         pushToast('success', 'Folder created')
       } catch (error) {
@@ -4042,7 +4212,7 @@ function App(): ReactElement {
 
         await vaultApi.files.renamePath(relPath, nextRelPath)
         await refreshNotesAndTree()
-        setSelectedNoteTreeEntry({ kind, relPath: nextRelPath })
+        setSelectedNoteTreeEntries([{ kind, relPath: nextRelPath }])
         if (nextCurrentNotePath !== currentNotePath) {
           currentNotePathRef.current = nextCurrentNotePath
           setCurrentNotePath(nextCurrentNotePath)
@@ -4053,7 +4223,7 @@ function App(): ReactElement {
             ? favoriteNotePaths.map((path) => (path === relPath ? nextRelPath : path))
             : favoriteNotePaths.map((path) => remapNestedPath(path, relPath, nextRelPath) ?? path)
         if (nextFavoritePaths.some((path, index) => path !== favoriteNotePaths[index])) {
-          void persistFavoriteNotePaths(nextFavoritePaths)
+          void persistFavoriteNotePaths(nextFavoritePaths, { history: false })
         }
         pushToast('success', `${kind === 'folder' ? 'Folder' : 'Note'} renamed`)
       } catch (error) {
@@ -4072,44 +4242,71 @@ function App(): ReactElement {
     ]
   )
 
-  const deleteTreePath = useCallback(
-    async (relPath: string, kind: 'note' | 'folder'): Promise<void> => {
+  const deleteTreeEntries = useCallback(
+    async (entries: NoteTreeSelection): Promise<void> => {
       if (!vaultApi) {
         return
       }
 
-      const itemName = relPath.split('/').pop() ?? relPath
+      const normalizedEntries = normalizeNoteTreeSelection(entries)
+      if (normalizedEntries.length === 0) {
+        return
+      }
+
+      const singleEntry = normalizedEntries[0]
       const confirmed = window.confirm(
-        kind === 'folder'
-          ? `Delete folder "${itemName}" and all nested notes? This cannot be undone.`
-          : `Delete note "${itemName}"? This cannot be undone.`
+        normalizedEntries.length === 1
+          ? singleEntry?.kind === 'folder'
+            ? `Delete folder "${singleEntry.relPath.split('/').pop() ?? singleEntry.relPath}" and all nested notes? Moved to Trash. Use Undo to restore.`
+            : `Delete note "${singleEntry?.relPath.split('/').pop() ?? singleEntry?.relPath}"? Moved to Trash. Use Undo to restore.`
+          : `Delete ${normalizedEntries.length} selected items? Nested notes inside selected folders will also be moved to Trash. Use Undo to restore.`
       )
       if (!confirmed) {
         return
       }
 
       try {
-        await vaultApi.files.deletePath(relPath)
+        await vaultApi.files.deletePaths(normalizedEntries.map((entry) => entry.relPath))
+
         await refreshNotesAndTree()
-        setSelectedNoteTreeEntry(null)
-        const nextFavoritePaths =
-          kind === 'note'
-            ? favoriteNotePaths.filter((path) => path !== relPath)
-            : favoriteNotePaths.filter((path) => !isNestedPath(path, relPath))
+        setSelectedNoteTreeEntries([])
+
+        const removedPaths = normalizedEntries
+          .filter((entry) => entry.kind === 'folder')
+          .map((entry) => entry.relPath)
+        const removedFoldersSet = new Set(removedPaths)
+        const removedNotes = normalizedEntries
+          .filter((entry) => entry.kind === 'note')
+          .map((entry) => entry.relPath)
+        const removedNotesSet = new Set(removedNotes)
+
+        const nextFavoritePaths = favoriteNotePaths.filter((path) => {
+          if (removedNotesSet.has(path)) {
+            return false
+          }
+
+          return !Array.from(removedFoldersSet).some((folderPath) => isNestedPath(path, folderPath))
+        })
+
         if (nextFavoritePaths.length !== favoriteNotePaths.length) {
           void persistFavoriteNotePaths(nextFavoritePaths)
         }
-        const shouldClearCurrent =
-          kind === 'note' ? currentNotePath === relPath : isNestedPath(currentNotePath, relPath)
-        if (kind === 'note') {
-          delete noteEditorSessionsRef.current[relPath]
-        } else {
-          Object.keys(noteEditorSessionsRef.current).forEach((path) => {
-            if (isNestedPath(path, relPath)) {
-              delete noteEditorSessionsRef.current[path]
-            }
-          })
-        }
+
+        const shouldClearCurrent = normalizedEntries.some((entry) =>
+          entry.kind === 'note'
+            ? currentNotePath === entry.relPath
+            : isNestedPath(currentNotePath, entry.relPath)
+        )
+
+        Object.keys(noteEditorSessionsRef.current).forEach((path) => {
+          const shouldDeleteSession = normalizedEntries.some((entry) =>
+            entry.kind === 'note' ? path === entry.relPath : isNestedPath(path, entry.relPath)
+          )
+          if (shouldDeleteSession) {
+            delete noteEditorSessionsRef.current[path]
+          }
+        })
+
         if (shouldClearCurrent) {
           currentNotePathRef.current = null
           currentNoteContentRef.current = ''
@@ -4118,9 +4315,15 @@ function App(): ReactElement {
           resetCurrentNoteEditorSession()
           setCurrentNoteTagsState([])
           setCurrentNoteContent('')
-          void persistLastOpenedNotePath(null)
+          void persistLastOpenedNotePath(null, { history: false })
         }
-        pushToast('success', `${kind === 'folder' ? 'Folder' : 'Note'} deleted`)
+
+        pushToast(
+          'success',
+          normalizedEntries.length === 1
+            ? `${singleEntry?.kind === 'folder' ? 'Folder' : 'Note'} deleted`
+            : `${normalizedEntries.length} items deleted`
+        )
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -4139,52 +4342,83 @@ function App(): ReactElement {
     ]
   )
 
-  const moveTreePath = useCallback(
-    async (fromRelPath: string, toRelPath: string): Promise<void> => {
+  const moveTreeEntries = useCallback(
+    async (entries: NoteTreeSelection, targetFolderPath: string): Promise<void> => {
       if (!vaultApi) {
         return
       }
 
-      const movedKind = fromRelPath === withNoteExtension(fromRelPath) ? 'note' : 'folder'
-      const nextCurrentNotePath =
-        movedKind === 'note'
-          ? currentNotePath === fromRelPath
-            ? toRelPath
-            : currentNotePath
-          : remapNestedPath(currentNotePath, fromRelPath, toRelPath)
+      const normalizedEntries = normalizeNoteTreeSelection(entries)
+      const moveOperations = normalizedEntries
+        .map((entry) => ({
+          ...entry,
+          toRelPath: joinRelPath(targetFolderPath, entry.relPath.split('/').pop() ?? entry.relPath)
+        }))
+        .filter((entry) => entry.toRelPath !== entry.relPath)
 
-      if (movedKind === 'note') {
-        const existingSession = noteEditorSessionsRef.current[fromRelPath]
-        if (existingSession) {
-          noteEditorSessionsRef.current[toRelPath] = existingSession
-          delete noteEditorSessionsRef.current[fromRelPath]
-        }
-      } else {
-        Object.entries(noteEditorSessionsRef.current).forEach(([path, session]) => {
-          const remappedPath = remapNestedPath(path, fromRelPath, toRelPath)
-          if (remappedPath && remappedPath !== path) {
-            noteEditorSessionsRef.current[remappedPath] = session
-            delete noteEditorSessionsRef.current[path]
+      if (moveOperations.length === 0) {
+        return
+      }
+
+      let nextCurrentNotePath = currentNotePath
+
+      for (const operation of moveOperations) {
+        nextCurrentNotePath =
+          operation.kind === 'note'
+            ? nextCurrentNotePath === operation.relPath
+              ? operation.toRelPath
+              : nextCurrentNotePath
+            : remapNestedPath(nextCurrentNotePath, operation.relPath, operation.toRelPath)
+
+        if (operation.kind === 'note') {
+          const existingSession = noteEditorSessionsRef.current[operation.relPath]
+          if (existingSession) {
+            noteEditorSessionsRef.current[operation.toRelPath] = existingSession
+            delete noteEditorSessionsRef.current[operation.relPath]
           }
-        })
+        } else {
+          Object.entries(noteEditorSessionsRef.current).forEach(([path, session]) => {
+            const remappedPath = remapNestedPath(path, operation.relPath, operation.toRelPath)
+            if (remappedPath && remappedPath !== path) {
+              noteEditorSessionsRef.current[remappedPath] = session
+              delete noteEditorSessionsRef.current[path]
+            }
+          })
+        }
       }
 
       if (nextCurrentNotePath !== currentNotePath) {
         currentNotePathRef.current = nextCurrentNotePath
       }
 
-      await vaultApi.files.renamePath(fromRelPath, toRelPath)
+      for (const operation of moveOperations) {
+        await vaultApi.files.renamePath(operation.relPath, operation.toRelPath)
+      }
+
       await refreshNotesAndTree()
-      setSelectedNoteTreeEntry({ kind: movedKind, relPath: toRelPath })
+      setSelectedNoteTreeEntries(
+        moveOperations.map((operation) => ({
+          kind: operation.kind,
+          relPath: operation.toRelPath
+        }))
+      )
+
       if (nextCurrentNotePath !== currentNotePath) {
         currentNotePathRef.current = nextCurrentNotePath
         setCurrentNotePath(nextCurrentNotePath)
         void persistLastOpenedNotePath(nextCurrentNotePath)
       }
-      const nextFavoritePaths =
-        movedKind === 'note'
-          ? favoriteNotePaths.map((path) => (path === fromRelPath ? toRelPath : path))
-          : favoriteNotePaths.map((path) => remapNestedPath(path, fromRelPath, toRelPath) ?? path)
+
+      const nextFavoritePaths = favoriteNotePaths.map((path) => {
+        return moveOperations.reduce((nextPath, operation) => {
+          if (operation.kind === 'note') {
+            return nextPath === operation.relPath ? operation.toRelPath : nextPath
+          }
+
+          return remapNestedPath(nextPath, operation.relPath, operation.toRelPath) ?? nextPath
+        }, path)
+      })
+
       if (nextFavoritePaths.some((path, index) => path !== favoriteNotePaths[index])) {
         void persistFavoriteNotePaths(nextFavoritePaths)
       }
@@ -4415,7 +4649,12 @@ function App(): ReactElement {
 
   return (
     <div className="flex h-screen">
-      <SidebarProvider className="h-full">
+      <SidebarProvider
+        className="h-full"
+        data-focus-mode={isFocusMode ? 'true' : 'false'}
+        open={isFocusMode ? false : isSidebarOpen}
+        onOpenChange={setIsSidebarOpen}
+      >
         <AppSidebar
           activePage={activePage}
           onChange={handleSidebarPageChange}
@@ -4427,10 +4666,14 @@ function App(): ReactElement {
           profileName={profileName}
           isLocked={!hasVault}
           className={`${paletteSurfaceClass}${paletteBlurClass}`}
+          collapsible={isFocusMode ? 'offcanvas' : 'icon'}
         />
 
-        <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
-          <div className="flex h-full min-w-0">
+        <SidebarInset
+          data-workspace-vibrancy={workspaceVibrancyEnabled ? 'on' : 'off'}
+          className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]"
+        >
+          <div className="workspace-vibrancy-scope flex h-full min-w-0">
             {hasVault && activePage === 'schedules' ? (
               <SchedulesPage
                 vaultApi={vaultApi}
@@ -4460,993 +4703,1170 @@ function App(): ReactElement {
                 isRightPanelCollapsed={isRightPanelCollapsed}
               />
             ) : null}
-            <DocumentWorkspaceMain
-              className={`${isStandalonePage ? 'hidden ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
-            >
-              <DocumentWorkspaceMainHeader
-                breadcrumb={
-                  <Breadcrumb>
-                    <BreadcrumbList className="text-[var(--muted)]">
-                      <BreadcrumbItem>
-                        <BreadcrumbPage className="text-sm text-[var(--muted)]">
-                          {headerPageLabel}
-                        </BreadcrumbPage>
-                      </BreadcrumbItem>
-                      {noteHeaderBreadcrumbSegments ? (
-                        noteHeaderBreadcrumbSegments.map((segment, index) => {
-                          const isLast = index === noteHeaderBreadcrumbSegments.length - 1
-
-                          return (
-                            <Fragment key={`${segment}:${index}`}>
-                              <BreadcrumbSeparator className="text-[var(--line-strong)]" />
-                              <BreadcrumbItem>
-                                <BreadcrumbPage
-                                  className={
-                                    isLast
-                                      ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
-                                      : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
-                                  }
-                                >
-                                  {segment}
-                                </BreadcrumbPage>
-                              </BreadcrumbItem>
-                            </Fragment>
-                          )
-                        })
-                      ) : middleHeaderBreadcrumbItem ? (
-                        <>
-                          <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+            {wrapWorkspaceChrome(
+              <>
+                <DocumentWorkspaceMain
+                  className={`${isStandalonePage ? 'hidden ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
+                >
+                  <DocumentWorkspaceMainHeader
+                    breadcrumb={
+                      <Breadcrumb>
+                        <BreadcrumbList className="text-[var(--muted)]">
                           <BreadcrumbItem>
-                            <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
-                              {middleHeaderBreadcrumbItem}
+                            <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                              {headerPageLabel}
                             </BreadcrumbPage>
                           </BreadcrumbItem>
-                        </>
-                      ) : null}
-                    </BreadcrumbList>
-                  </Breadcrumb>
-                }
-                actions={
-                  noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-                    <WorkspaceHeaderActions>
-                      <WorkspaceHeaderActionGroup>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <WorkspaceActionButton
-                              title="Show backlinks"
-                              aria-label="Show backlinks"
-                              icon={<Link2 size={18} />}
-                            />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-72">
-                            {currentNoteBacklinks.length > 0 ? (
-                              currentNoteBacklinks.map((note) => (
-                                <DropdownMenuItem
-                                  key={note.relPath}
-                                  onSelect={() => {
-                                    void openNote(note.relPath)
-                                  }}
-                                  className="flex flex-col items-start gap-0.5"
-                                >
-                                  <span className="max-w-full truncate font-medium">
-                                    {getNoteDisplayName(note.relPath)}
-                                  </span>
-                                  <span className="max-w-full truncate text-xs text-[var(--muted)]">
-                                    {stripNoteExtension(note.relPath)}
-                                  </span>
-                                </DropdownMenuItem>
-                              ))
-                            ) : (
-                              <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <WorkspaceActionButton
-                                title="Navigate headings"
-                                aria-label="Navigate headings"
-                                icon={<List size={18} />}
-                              />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              className="max-h-80 w-72 overflow-y-auto"
-                            >
-                              {currentNoteOutline.map((item) => (
-                                <DropdownMenuItem
-                                  key={item.id}
-                                  onSelect={() => jumpToNoteHeading(item.id)}
-                                  className="text-[var(--text)]"
-                                  style={{
-                                    paddingLeft: `${0.75 + Math.max(0, item.level - 1) * 0.75}rem`
-                                  }}
-                                >
-                                  <span className="mr-2 text-xs text-[var(--muted)]">
-                                    H{item.level}
-                                  </span>
-                                  <span className="truncate">{item.label}</span>
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : null}
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void exportCurrentNote()
-                          }}
-                          title="Export Note"
-                          aria-label="Export Note"
-                          icon={<Download size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                      <WorkspaceHeaderActionDivider />
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={toggleCurrentNoteFavorite}
-                          title={
-                            currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
-                          }
-                          active={currentNoteIsFavorite}
-                          icon={
-                            <Star
-                              size={18}
-                              className={currentNoteIsFavorite ? 'fill-current' : ''}
-                            />
-                          }
-                        />
-                      </WorkspaceHeaderActionGroup>
-                      <WorkspaceHeaderActionDivider />
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void deleteCurrentNote()
-                          }}
-                          title="Delete Note"
-                          icon={<Trash2 size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                    </WorkspaceHeaderActions>
-                  ) : activePage === 'projects' && selectedProject ? (
-                    <WorkspaceHeaderActions>
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void openProjectFolder(selectedProject)
-                          }}
-                          title={
-                            selectedProject.folderPath?.trim()
-                              ? `Open linked folder\n${selectedProject.folderPath}`
-                              : 'Link project folder'
-                          }
-                          aria-label={
-                            selectedProject.folderPath?.trim()
-                              ? 'Open linked project folder'
-                              : 'Link project folder'
-                          }
-                          icon={<FolderOpen size={18} />}
-                        />
-                        <Popover
-                          open={isProjectIconPickerOpen}
-                          onOpenChange={setIsProjectIconPickerOpen}
-                        >
-                          <PopoverTrigger asChild>
-                            <WorkspaceActionButton
-                              title="Customize project icon"
-                              aria-label="Customize project icon"
-                              icon={
-                                <NoteShapeIcon
-                                  icon={selectedProject.icon}
-                                  size={18}
-                                  className="shrink-0"
-                                />
-                              }
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="end"
-                            className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                          >
-                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                              Shape
-                            </div>
-                            <div className="mb-3 flex flex-wrap gap-1.5">
-                              {PROJECT_ICON_SHAPES.map((shape) => {
-                                const isActive = selectedProject.icon.shape === shape
-                                return (
-                                  <button
-                                    key={shape}
-                                    type="button"
-                                    className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
-                                      isActive
-                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                                        : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                                    }`}
-                                    onClick={() =>
-                                      updateProjectIcon(selectedProject.id, {
-                                        ...selectedProject.icon,
-                                        shape
-                                      })
-                                    }
-                                    title={shape}
-                                  >
-                                    <NoteShapeIcon
-                                      icon={{ ...selectedProject.icon, shape }}
-                                      size={15}
-                                    />
-                                  </button>
-                                )
-                              })}
-                            </div>
-                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                              Style
-                            </div>
-                            <div className="mb-3 flex gap-1.5">
-                              {PROJECT_ICON_VARIANTS.map((variant) => {
-                                const isActive = selectedProject.icon.variant === variant
-                                return (
-                                  <button
-                                    key={variant}
-                                    type="button"
-                                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                                      isActive
-                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
-                                    }`}
-                                    onClick={() =>
-                                      updateProjectIcon(selectedProject.id, {
-                                        ...selectedProject.icon,
-                                        variant
-                                      })
-                                    }
-                                  >
-                                    {variant}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                              Color
-                            </div>
-                            <div className="mb-3 flex flex-wrap gap-1.5">
-                              {PROJECT_ICON_COLORS.map((color) => {
-                                const isActive = selectedProject.icon.color === color
-                                return (
-                                  <button
-                                    key={color}
-                                    type="button"
-                                    className={`h-6 w-6 rounded-full border-2 ${
-                                      isActive
-                                        ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
-                                        : 'border-transparent'
-                                    }`}
-                                    style={{ backgroundColor: color }}
-                                    onClick={() =>
-                                      updateProjectIcon(selectedProject.id, {
-                                        ...selectedProject.icon,
-                                        color
-                                      })
-                                    }
-                                    title={color}
-                                  />
-                                )
-                              })}
-                            </div>
-                            <button
-                              type="button"
-                              className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
-                              onClick={() => randomizeProjectIcon(selectedProject.id)}
-                            >
-                              Randomize icon
-                            </button>
-                          </PopoverContent>
-                        </Popover>
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void exportProject(selectedProject)
-                          }}
-                          title="Export Project"
-                          icon={<Download size={18} />}
-                        />
-                        <WorkspaceActionButton
-                          onClick={() => toggleProjectDone(selectedProject.id)}
-                          title={
-                            selectedProject.status === 'completed'
-                              ? 'Reopen Project'
-                              : 'Mark Project Done'
-                          }
-                          aria-label={
-                            selectedProject.status === 'completed'
-                              ? 'Reopen project'
-                              : 'Mark project done'
-                          }
-                          active={selectedProject.status === 'completed'}
-                          icon={
-                            selectedProject.status === 'completed' ? (
-                              <RotateCcw size={18} />
-                            ) : (
-                              <Check size={18} />
-                            )
-                          }
-                        />
-                      </WorkspaceHeaderActionGroup>
-                      <WorkspaceHeaderActionDivider />
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={toggleCurrentProjectFavorite}
-                          title={
-                            currentProjectIsFavorite
-                              ? 'Remove Project from Favorites'
-                              : 'Add Project to Favorites'
-                          }
-                          active={currentProjectIsFavorite}
-                          icon={
-                            <Star
-                              size={18}
-                              className={currentProjectIsFavorite ? 'fill-current' : ''}
-                            />
-                          }
-                        />
-                      </WorkspaceHeaderActionGroup>
-                      <WorkspaceHeaderActionDivider />
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void removeSelectedProject()
-                          }}
-                          title="Remove Project"
-                          icon={<Trash2 size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                    </WorkspaceHeaderActions>
-                  ) : activePage === 'grid' ? (
-                    <WorkspaceHeaderActions>
-                      <WorkspaceHeaderActionGroup>
-                        <Popover
-                          open={isGridAddPopoverOpen}
-                          onOpenChange={(open) => {
-                            setIsGridAddPopoverOpen(open)
-                            if (!open) {
-                              setGridAddQuery('')
-                            }
-                          }}
-                        >
-                          <PopoverTrigger asChild>
-                            <WorkspaceActionButton
-                              title="Add to canvas"
-                              aria-label="Add to canvas"
-                              disabled={!gridWorkspaceActions}
-                              icon={<Plus size={18} />}
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="end"
-                            className="w-80 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                          >
-                            <div className="mb-3 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => openGridAddPicker('note')}
-                                className={`rounded-lg border px-3 py-1.5 text-sm ${
-                                  gridAddMode === 'note'
-                                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                                    : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-                                }`}
-                              >
-                                Add note
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openGridAddPicker('project')}
-                                className={`rounded-lg border px-3 py-1.5 text-sm ${
-                                  gridAddMode === 'project'
-                                    ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                                    : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-                                }`}
-                              >
-                                Add project
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleAddGridText}
-                                className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
-                              >
-                                Add text
-                              </button>
-                            </div>
-                            <label className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-[var(--muted)]">
-                              <Search size={14} aria-hidden="true" />
-                              <input
-                                value={gridAddQuery}
-                                onChange={(event) => setGridAddQuery(event.currentTarget.value)}
-                                placeholder={
-                                  gridAddMode === 'note'
-                                    ? 'Search notes by title, path, or tag'
-                                    : 'Search projects by name or summary'
-                                }
-                                className="w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
-                              />
-                            </label>
-                            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                              {gridAddMode === 'note'
-                                ? filteredGridAddNotes.slice(0, 16).map((note) => {
-                                    const existingItemId = gridBoardNoteItemIds.get(note.relPath)
-                                    return (
-                                      <button
-                                        key={note.relPath}
-                                        type="button"
-                                        onClick={() => handleAddGridNote(note.relPath)}
-                                        className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="min-w-0">
-                                            <div className="truncate text-sm font-semibold text-[var(--text)]">
-                                              {stripNoteExtension(note.name)}
-                                            </div>
-                                            <div className="mt-1 truncate text-xs text-[var(--muted)]">
-                                              {note.relPath}
-                                            </div>
-                                          </div>
-                                          <div className="rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--accent)]">
-                                            {existingItemId ? 'On canvas' : 'Add'}
-                                          </div>
-                                        </div>
-                                      </button>
-                                    )
-                                  })
-                                : filteredGridAddProjects.slice(0, 16).map((project) => {
-                                    const existingItemId = gridBoardProjectItemIds.get(project.id)
-                                    return (
-                                      <button
-                                        key={project.id}
-                                        type="button"
-                                        onClick={() => handleAddGridProject(project.id)}
-                                        className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="flex min-w-0 gap-3">
-                                            <NoteShapeIcon
-                                              icon={project.icon}
-                                              size={16}
-                                              className="mt-0.5 shrink-0"
-                                            />
-                                            <div className="min-w-0">
-                                              <div className="truncate text-sm font-semibold text-[var(--text)]">
-                                                {project.name}
-                                              </div>
-                                              <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">
-                                                {project.summary || 'Project'}
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <div className="rounded-full border border-[rgba(125,183,255,0.2)] bg-[rgba(125,183,255,0.1)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--text)]">
-                                            {existingItemId ? 'On canvas' : 'Add'}
-                                          </div>
-                                        </div>
-                                      </button>
-                                    )
-                                  })}
-                              {(
-                                gridAddMode === 'note'
-                                  ? filteredGridAddNotes.length === 0
-                                  : filteredGridAddProjects.length === 0
-                              ) ? (
-                                <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] px-3 py-4 text-sm text-[var(--muted)]">
-                                  No {gridAddMode}s match this search.
-                                </div>
-                              ) : null}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </WorkspaceHeaderActionGroup>
-                      <WorkspaceHeaderActionDivider />
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={() => gridWorkspaceActions?.fitAllCards()}
-                          title="Fit all cards"
-                          aria-label="Fit all cards"
-                          disabled={!gridWorkspaceActions}
-                          icon={<Target size={18} />}
-                        />
-                        <WorkspaceActionButton
-                          onClick={() => gridWorkspaceActions?.resetBoard()}
-                          title="Reset board"
-                          aria-label="Reset board"
-                          disabled={!gridWorkspaceActions}
-                          icon={<RotateCcw size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                    </WorkspaceHeaderActions>
-                  ) : activePage === 'calendar' ? (
-                    <WorkspaceHeaderActions>
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={goToPrevMonth}
-                          title="Previous month"
-                          icon={<ChevronLeft size={18} />}
-                        />
-                        <WorkspaceActionButton
-                          onClick={goToToday}
-                          title="Go to today"
-                          icon={<CalendarDays size={18} />}
-                        />
-                        <WorkspaceActionButton
-                          onClick={goToNextMonth}
-                          title="Next month"
-                          icon={<ChevronRight size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                    </WorkspaceHeaderActions>
-                  ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
-                    <WorkspaceHeaderActions>
-                      <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void handleDeleteSelectedWeeklyPlanWeek()
-                          }}
-                          title="Delete week"
-                          icon={<Trash2 size={18} />}
-                        />
-                      </WorkspaceHeaderActionGroup>
-                    </WorkspaceHeaderActions>
-                  ) : null
-                }
-              />
+                          {noteHeaderBreadcrumbSegments ? (
+                            noteHeaderBreadcrumbSegments.map((segment, index) => {
+                              const isLast = index === noteHeaderBreadcrumbSegments.length - 1
 
-              <DocumentWorkspaceMainContent
-                className={
-                  activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
-                }
-              >
-                <div
-                  key={activePage}
-                  className={`${activePage === 'notes' ? '' : 'page-transition '}w-full ${
-                    activePage === 'calendar' ? '' : 'h-full'
-                  }`.trim()}
-                >
-                  {!hasVault ? (
-                    <VaultSelectionPage
-                      lastVaultPath={lastVaultPath}
-                      onOpenVault={() => {
-                        void openVault('open')
-                      }}
-                      onCreateVault={() => {
-                        void openVault('create')
-                      }}
-                    />
-                  ) : activePage === 'notes' ? (
-                    searchQuery.trim() ? (
-                      <SearchPage
-                        results={searchResults}
-                        onOpen={(relPath) => {
-                          void openNote(relPath)
-                          setSearchQuery('')
-                          setSearchResults([])
-                        }}
-                      />
-                    ) : noteIsOpen && currentNotePath ? (
-                      <EditorPage
-                        editorRef={currentNoteEditorRef}
-                        editorSessionKey={currentNoteEditorVersion}
-                        initialContent={currentNoteEditorDraft}
-                        notePath={currentNotePath}
-                        tags={currentNoteTags}
-                        notes={notes}
-                        onDirty={handleCurrentNoteEditorDirty}
-                        onSnapshotChange={handleCurrentNoteSnapshotChange}
-                        onDropFile={(sourcePath) => importAttachment(sourcePath)}
-                        onPasteImage={importImageFromBlob}
-                        onAddTag={addTagToCurrentNote}
-                        onRemoveTag={removeTagFromCurrentNote}
-                        onFindByTag={findByTag}
-                        onOpenNoteLink={(target) => {
-                          void openOrCreateNoteMention(target)
-                        }}
-                        onRename={renameCurrentNote}
-                        titleEditToken={
-                          noteTitleEditTarget?.relPath === currentNotePath
-                            ? noteTitleEditTarget.token
-                            : 0
-                        }
-                        onOutlineChange={setCurrentNoteOutline}
-                        onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
-                      />
-                    ) : shouldRestoreLastOpenedNote ? (
-                      <div className="p-5 text-sm text-[var(--muted)]">Opening your last note…</div>
-                    ) : (
-                      <div className="p-5 text-sm text-[var(--muted)]">
-                        Pick a note from the right panel to open details
-                      </div>
-                    )
-                  ) : activePage === 'dashboard' ? (
-                    <DashboardPage
-                      projects={projects}
-                      currentWeek={currentWeeklyPlanWeek}
-                      currentWeekPriorities={currentWeekPriorities}
-                      tasks={calendarTasks}
-                      weeklyPlanLoading={weeklyPlanLoading}
-                      weeklyPlanReady={weeklyPlanReady}
-                      onOpenProject={(projectId) => {
-                        selectProject(projectId)
-                        void navigateToPage('projects')
-                      }}
-                      onOpenProjects={() => {
-                        void navigateToPage('projects')
-                      }}
-                      onOpenWeeklyPlan={() => {
-                        void navigateToPage('weeklyPlan')
-                      }}
-                    />
-                  ) : activePage === 'knowledge' ? (
-                    <KnowledgePage
-                      notes={notes}
-                      onOpenNote={(relPath) => {
-                        void navigateToPage('notes')
-                        setSearchQuery('')
-                        setSearchResults([])
-                        void openNote(relPath)
-                      }}
-                    />
-                  ) : activePage === 'projects' ? (
-                    selectedProject ? (
-                      <ProjectDetailsPage
-                        project={selectedProject}
-                        notes={notes}
-                        focusedMilestoneId={
-                          focusedMilestoneTarget?.projectId === selectedProject.id
-                            ? focusedMilestoneTarget.milestoneId
-                            : null
-                        }
-                        focusedMilestoneToken={
-                          focusedMilestoneTarget?.projectId === selectedProject.id
-                            ? focusedMilestoneTarget.token
-                            : 0
-                        }
-                        nameEditToken={
-                          projectNameEditTarget?.projectId === selectedProject.id
-                            ? projectNameEditTarget.token
-                            : 0
-                        }
-                        onRename={(nextName) => renameProject(selectedProject.id, nextName)}
-                        onUpdateSummary={(nextSummary) =>
-                          updateProjectSummary(selectedProject.id, nextSummary)
-                        }
-                        onAddMilestone={(title, dueDate) =>
-                          addMilestoneToProject(selectedProject.id, title, dueDate)
-                        }
-                        onRenameMilestone={(milestoneId, nextTitle) =>
-                          renameProjectMilestone(selectedProject.id, milestoneId, nextTitle)
-                        }
-                        onUpdateMilestoneDueDate={(milestoneId, nextDueDate) =>
-                          updateProjectMilestoneDueDate(
-                            selectedProject.id,
-                            milestoneId,
-                            nextDueDate
-                          )
-                        }
-                        onUpdateMilestoneDescription={(milestoneId, nextDescription) =>
-                          updateProjectMilestoneDescription(
-                            selectedProject.id,
-                            milestoneId,
-                            nextDescription
-                          )
-                        }
-                        onToggleMilestoneCollapsed={(milestoneId) =>
-                          toggleProjectMilestoneCollapsed(selectedProject.id, milestoneId)
-                        }
-                        onCycleMilestonePriority={(milestoneId) =>
-                          cycleProjectMilestonePriority(selectedProject.id, milestoneId)
-                        }
-                        onMoveMilestone={(milestoneId, direction) =>
-                          moveProjectMilestone(selectedProject.id, milestoneId, direction)
-                        }
-                        onReorderMilestones={(orderedMilestoneIds) =>
-                          reorderProjectMilestones(selectedProject.id, orderedMilestoneIds)
-                        }
-                        onRemoveMilestone={(milestoneId) =>
-                          removeProjectMilestone(selectedProject.id, milestoneId)
-                        }
-                        onAddSubtask={(milestoneId, title) =>
-                          addSubtaskToMilestone(selectedProject.id, milestoneId, title)
-                        }
-                        onToggleSubtask={(milestoneId, subtaskId) =>
-                          toggleMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
-                        }
-                        onCycleSubtaskPriority={(milestoneId, subtaskId) =>
-                          cycleMilestoneSubtaskPriority(selectedProject.id, milestoneId, subtaskId)
-                        }
-                        onRenameSubtask={(milestoneId, subtaskId, nextTitle) =>
-                          renameMilestoneSubtask(
-                            selectedProject.id,
-                            milestoneId,
-                            subtaskId,
-                            nextTitle
-                          )
-                        }
-                        onUpdateSubtaskDescription={(milestoneId, subtaskId, nextDescription) =>
-                          updateMilestoneSubtaskDescription(
-                            selectedProject.id,
-                            milestoneId,
-                            subtaskId,
-                            nextDescription
-                          )
-                        }
-                        onMoveSubtask={(milestoneId, subtaskId, direction) =>
-                          moveMilestoneSubtask(
-                            selectedProject.id,
-                            milestoneId,
-                            subtaskId,
-                            direction
-                          )
-                        }
-                        onReorderSubtasks={(milestoneId, orderedSubtaskIds) =>
-                          reorderMilestoneSubtasks(
-                            selectedProject.id,
-                            milestoneId,
-                            orderedSubtaskIds
-                          )
-                        }
-                        onRemoveSubtask={(milestoneId, subtaskId) =>
-                          removeMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
-                        }
-                        onCreateProjectNote={() => {
-                          void createProjectNote(selectedProject)
-                        }}
-                        onOpenNote={(relPath) => {
-                          void navigateToPage('notes')
-                          void openNote(relPath)
-                        }}
-                      />
-                    ) : (
-                      <div className="p-5 text-sm text-[var(--muted)]">
-                        Pick a project from the right panel to open details
-                      </div>
-                    )
-                  ) : activePage === 'subscriptions' ? (
-                    <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
-                  ) : activePage === 'grid' ? (
-                    GRID_PAGE_ENABLED ? (
-                      <GridPage
-                        board={gridBoardDraft}
-                        notes={notes}
-                        projects={projects}
-                        onActionsChange={setGridWorkspaceActions}
-                        onBoardChange={handleGridBoardChange}
-                        onOpenNote={(relPath) => {
-                          void navigateToPage('notes')
-                          setSearchQuery('')
-                          setSearchResults([])
-                          void openNote(relPath)
-                        }}
-                        onOpenProject={(projectId) => {
-                          void navigateToPage('projects')
-                          selectProject(projectId)
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center p-8">
-                        <div className="max-w-lg rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.16)]">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
-                            Unavailable
-                          </div>
-                          <h2 className="mt-3 text-2xl font-semibold text-[var(--text)]">
-                            Grid is disabled in this version
-                          </h2>
-                          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-                            The Grid page remains in the codebase, but it is not exposed as an
-                            active workspace in this release.
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  ) : activePage === 'weeklyPlan' ? (
-                    <WeeklyPlanWorkspace
-                      state={weeklyPlanState}
-                      loading={weeklyPlanLoading}
-                      selectedWeekId={selectedWeeklyPlanWeekId}
-                      isReady={weeklyPlanReady}
-                      onUpdateWeek={(input) => updateWeek(input)}
-                      onAddPriority={(input) => addPriority(input)}
-                      onUpdatePriority={(input) => updatePriority(input)}
-                      onDeletePriority={(priorityId) => deletePriority(priorityId)}
-                      onReorderPriorities={(input) => reorderPriorities(input)}
-                      onUpsertReview={(input) => upsertReview(input)}
-                    />
-                  ) : activePage === 'calendar' ? (
-                    <CalendarMonthView
-                      selectedDate={selectedCalendarDate}
-                      tasks={scheduledCalendarTasks}
-                      milestoneEvents={milestoneCalendarEvents}
-                      onSelectDate={setSelectedCalendarDate}
-                      onCreateTask={createTaskForDate}
-                      onOpenMilestone={openMilestoneFromCalendar}
-                      onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
-                      onRescheduleTask={(taskId, newDate) => {
-                        void rescheduleCalendarTask(taskId, newDate)
-                      }}
-                      onResizeTaskStart={(taskId, newStartDate) => {
-                        void resizeCalendarTaskStart(taskId, newStartDate)
-                      }}
-                      onResizeTaskEnd={(taskId, newEndDate) => {
-                        void resizeCalendarTaskEnd(taskId, newEndDate)
-                      }}
-                      onToggleTask={(taskId) => {
-                        void toggleCalendarTask(taskId)
-                      }}
-                      onDeleteTask={(taskId) => {
-                        void removeCalendarTask(taskId)
-                      }}
-                      onRenameTask={(taskId, newTitle) => {
-                        void renameCalendarTask(taskId, newTitle)
-                      }}
-                      onUpdateTaskType={(taskId, taskType) => {
-                        void updateCalendarTaskType(taskId, taskType)
-                      }}
-                      onUpdateTaskTime={(taskId, time) => {
-                        void updateCalendarTaskTime(taskId, time)
-                      }}
-                      onUpdateTaskReminders={(taskId, reminders) => {
-                        void updateCalendarTaskReminders(taskId, reminders)
-                      }}
-                    />
-                  ) : activePage === 'settings' ? (
-                    <SettingsPage
-                      profileName={profileName}
-                      mistralApiKey={mistralApiKey}
-                      fontOptions={FONT_OPTIONS}
-                      selectedFontFamily={fontFamily}
-                      vaultLocation={vault?.rootPath ?? lastVaultPath}
-                      onSaveProfile={(name) => {
-                        void updateProfileName(name)
-                      }}
-                      onSaveMistralApiKey={(apiKey) => {
-                        void updateMistralApiKey(apiKey)
-                      }}
-                      onSelectFont={(fontFamily) => {
-                        void updateFontFamily(fontFamily)
-                      }}
-                      onChangeVaultLocation={() => {
-                        void openVault('open')
-                      }}
-                      onMigrateBlockNoteNotes={() => {
-                        void migrateBlockNoteNotes()
-                      }}
-                      onMigrateTaggedNoteBodyFrontmatter={() => {
-                        void migrateTaggedNoteBodyFrontmatter()
-                      }}
-                    />
-                  ) : (
-                    <div className="p-5 text-sm text-[var(--muted)]">
-                      {activePage} workspace ready. Notes remain fully functional.
-                    </div>
-                  )}
-                </div>
-              </DocumentWorkspaceMainContent>
-            </DocumentWorkspaceMain>
-
-            <DocumentWorkspacePanel
-              className={`${!showWorkspacePanel || isStandalonePage || isRightPanelCollapsed ? 'hidden' : 'flex'} ${paletteSurfaceClass}${paletteBlurClass}`}
-            >
-              {activePage === 'weeklyPlan' ? (
-                <WeeklyPlanSidebar
-                  state={weeklyPlanState}
-                  loading={weeklyPlanLoading}
-                  selectedWeekId={selectedWeeklyPlanWeekId}
-                  currentWeekId={weeklyPlanCurrentWeekId}
-                  nextWeekStart={nextWeeklyPlanStart}
-                  todayIso={todayIso}
-                  isReady={weeklyPlanReady}
-                  onSelectWeek={setSelectedWeeklyPlanWeekId}
-                  onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
-                />
-              ) : (
-                <div
-                  key={shouldAnimateWorkspacePane ? `workspace-pane-${activePage}` : undefined}
-                  className={`flex h-full flex-col${shouldAnimateWorkspacePane ? ' animate-workspace-pane' : ''}`}
-                >
-                  <DocumentWorkspacePanelHeader
+                              return (
+                                <Fragment key={`${segment}:${index}`}>
+                                  <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                                  <BreadcrumbItem>
+                                    <BreadcrumbPage
+                                      className={
+                                        isLast
+                                          ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
+                                          : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
+                                      }
+                                    >
+                                      {segment}
+                                    </BreadcrumbPage>
+                                  </BreadcrumbItem>
+                                </Fragment>
+                              )
+                            })
+                          ) : middleHeaderBreadcrumbItem ? (
+                            <>
+                              <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                              <BreadcrumbItem>
+                                <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                                  {middleHeaderBreadcrumbItem}
+                                </BreadcrumbPage>
+                              </BreadcrumbItem>
+                            </>
+                          ) : null}
+                        </BreadcrumbList>
+                      </Breadcrumb>
+                    }
                     actions={
-                      activePage === 'notes' ? (
+                      noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                         <WorkspaceHeaderActions>
                           <WorkspaceHeaderActionGroup>
-                            {notePanelView === 'tree' ? (
-                              <WorkspaceActionButton
-                                aria-label="Collapse all folders"
-                                title="Collapse all folders"
-                                icon={<ChevronUp size={18} aria-hidden="true" />}
-                                onClick={() =>
-                                  setCollapseAllNotesTreeToken((current) => current + 1)
-                                }
-                              />
-                            ) : null}
-                            {useNativeMenus ? (
-                              <WorkspaceActionButton
-                                ref={noteActionsButtonRef}
-                                onClick={() => {
-                                  void openNativeNoteActionsMenu()
-                                }}
-                                aria-label="Note actions"
-                                title="Note actions"
-                                icon={<Plus size={18} aria-hidden="true" />}
-                              />
-                            ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <WorkspaceActionButton
+                                  title="Show backlinks"
+                                  aria-label="Show backlinks"
+                                  icon={<Link2 size={18} />}
+                                />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-72">
+                                {currentNoteBacklinks.length > 0 ? (
+                                  currentNoteBacklinks.map((note) => (
+                                    <DropdownMenuItem
+                                      key={note.relPath}
+                                      onSelect={() => {
+                                        void openNote(note.relPath)
+                                      }}
+                                      className="flex flex-col items-start gap-0.5"
+                                    >
+                                      <span className="max-w-full truncate font-medium">
+                                        {getNoteDisplayName(note.relPath)}
+                                      </span>
+                                      <span className="max-w-full truncate text-xs text-[var(--muted)]">
+                                        {stripNoteExtension(note.relPath)}
+                                      </span>
+                                    </DropdownMenuItem>
+                                  ))
+                                ) : (
+                                  <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <WorkspaceActionButton
+                                    title="Navigate headings"
+                                    aria-label="Navigate headings"
+                                    icon={<List size={18} />}
+                                  />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="max-h-80 w-72 overflow-y-auto"
+                                >
+                                  {currentNoteOutline.map((item) => (
+                                    <DropdownMenuItem
+                                      key={item.id}
+                                      onSelect={() => jumpToNoteHeading(item.id)}
+                                      className="text-[var(--text)]"
+                                      style={{
+                                        paddingLeft: `${0.75 + Math.max(0, item.level - 1) * 0.75}rem`
+                                      }}
+                                    >
+                                      <span className="mr-2 text-xs text-[var(--muted)]">
+                                        H{item.level}
+                                      </span>
+                                      <span className="truncate">{item.label}</span>
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void exportCurrentNote()
+                              }}
+                              title="Export Note"
+                              aria-label="Export Note"
+                              icon={<Download size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={toggleCurrentNoteFavorite}
+                              title={
+                                currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
+                              }
+                              active={currentNoteIsFavorite}
+                              icon={
+                                <Star
+                                  size={18}
+                                  className={currentNoteIsFavorite ? 'fill-current' : ''}
+                                />
+                              }
+                            />
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void deleteCurrentNote()
+                              }}
+                              title="Delete Note"
+                              icon={<Trash2 size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : activePage === 'projects' && selectedProject ? (
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void openProjectFolder(selectedProject)
+                              }}
+                              title={
+                                selectedProject.folderPath?.trim()
+                                  ? `Open linked folder\n${selectedProject.folderPath}`
+                                  : 'Link project folder'
+                              }
+                              aria-label={
+                                selectedProject.folderPath?.trim()
+                                  ? 'Open linked project folder'
+                                  : 'Link project folder'
+                              }
+                              icon={<FolderOpen size={18} />}
+                            />
+                            <Popover
+                              open={isProjectIconPickerOpen}
+                              onOpenChange={setIsProjectIconPickerOpen}
+                            >
+                              <PopoverTrigger asChild>
+                                <WorkspaceActionButton
+                                  title="Customize project icon"
+                                  aria-label="Customize project icon"
+                                  icon={
+                                    <NoteShapeIcon
+                                      icon={selectedProject.icon}
+                                      size={18}
+                                      className="shrink-0"
+                                    />
+                                  }
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="end"
+                                className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                              >
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                  Shape
+                                </div>
+                                <div className="mb-3 flex flex-wrap gap-1.5">
+                                  {PROJECT_ICON_SHAPES.map((shape) => {
+                                    const isActive = selectedProject.icon.shape === shape
+                                    return (
+                                      <button
+                                        key={shape}
+                                        type="button"
+                                        className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
+                                          isActive
+                                            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                                        }`}
+                                        onClick={() =>
+                                          updateProjectIcon(selectedProject.id, {
+                                            ...selectedProject.icon,
+                                            shape
+                                          })
+                                        }
+                                        title={shape}
+                                      >
+                                        <NoteShapeIcon
+                                          icon={{ ...selectedProject.icon, shape }}
+                                          size={15}
+                                        />
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                  Style
+                                </div>
+                                <div className="mb-3 flex gap-1.5">
+                                  {PROJECT_ICON_VARIANTS.map((variant) => {
+                                    const isActive = selectedProject.icon.variant === variant
+                                    return (
+                                      <button
+                                        key={variant}
+                                        type="button"
+                                        className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                                          isActive
+                                            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
+                                            : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
+                                        }`}
+                                        onClick={() =>
+                                          updateProjectIcon(selectedProject.id, {
+                                            ...selectedProject.icon,
+                                            variant
+                                          })
+                                        }
+                                      >
+                                        {variant}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                  Color
+                                </div>
+                                <div className="mb-3 flex flex-wrap gap-1.5">
+                                  {PROJECT_ICON_COLORS.map((color) => {
+                                    const isActive = selectedProject.icon.color === color
+                                    return (
+                                      <button
+                                        key={color}
+                                        type="button"
+                                        className={`h-6 w-6 rounded-full border-2 ${
+                                          isActive
+                                            ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
+                                            : 'border-transparent'
+                                        }`}
+                                        style={{ backgroundColor: color }}
+                                        onClick={() =>
+                                          updateProjectIcon(selectedProject.id, {
+                                            ...selectedProject.icon,
+                                            color
+                                          })
+                                        }
+                                        title={color}
+                                      />
+                                    )
+                                  })}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
+                                  onClick={() => randomizeProjectIcon(selectedProject.id)}
+                                >
+                                  Randomize icon
+                                </button>
+                              </PopoverContent>
+                            </Popover>
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void exportProject(selectedProject)
+                              }}
+                              title="Export Project"
+                              icon={<Download size={18} />}
+                            />
+                            <WorkspaceActionButton
+                              onClick={() => toggleProjectDone(selectedProject.id)}
+                              title={
+                                selectedProject.status === 'completed'
+                                  ? 'Reopen Project'
+                                  : 'Mark Project Done'
+                              }
+                              aria-label={
+                                selectedProject.status === 'completed'
+                                  ? 'Reopen project'
+                                  : 'Mark project done'
+                              }
+                              active={selectedProject.status === 'completed'}
+                              icon={
+                                selectedProject.status === 'completed' ? (
+                                  <RotateCcw size={18} />
+                                ) : (
+                                  <Check size={18} />
+                                )
+                              }
+                            />
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={toggleCurrentProjectFavorite}
+                              title={
+                                currentProjectIsFavorite
+                                  ? 'Remove Project from Favorites'
+                                  : 'Add Project to Favorites'
+                              }
+                              active={currentProjectIsFavorite}
+                              icon={
+                                <Star
+                                  size={18}
+                                  className={currentProjectIsFavorite ? 'fill-current' : ''}
+                                />
+                              }
+                            />
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void removeSelectedProject()
+                              }}
+                              title="Remove Project"
+                              icon={<Trash2 size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : activePage === 'grid' ? (
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <Popover
+                              open={isGridAddPopoverOpen}
+                              onOpenChange={(open) => {
+                                setIsGridAddPopoverOpen(open)
+                                if (!open) {
+                                  setGridAddQuery('')
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <WorkspaceActionButton
+                                  title="Add to canvas"
+                                  aria-label="Add to canvas"
+                                  disabled={!gridWorkspaceActions}
+                                  icon={<Plus size={18} />}
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="end"
+                                className="w-80 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                              >
+                                <div className="mb-3 flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => openGridAddPicker('note')}
+                                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                                      gridAddMode === 'note'
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
+                                    }`}
+                                  >
+                                    Add note
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openGridAddPicker('project')}
+                                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                                      gridAddMode === 'project'
+                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
+                                    }`}
+                                  >
+                                    Add project
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleAddGridText}
+                                    className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
+                                  >
+                                    Add text
+                                  </button>
+                                </div>
+                                <label className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-[var(--muted)]">
+                                  <Search size={14} aria-hidden="true" />
+                                  <input
+                                    value={gridAddQuery}
+                                    onChange={(event) => setGridAddQuery(event.currentTarget.value)}
+                                    placeholder={
+                                      gridAddMode === 'note'
+                                        ? 'Search notes by title, path, or tag'
+                                        : 'Search projects by name or summary'
+                                    }
+                                    className="w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+                                  />
+                                </label>
+                                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                                  {gridAddMode === 'note'
+                                    ? filteredGridAddNotes.slice(0, 16).map((note) => {
+                                        const existingItemId = gridBoardNoteItemIds.get(
+                                          note.relPath
+                                        )
+                                        return (
+                                          <button
+                                            key={note.relPath}
+                                            type="button"
+                                            onClick={() => handleAddGridNote(note.relPath)}
+                                            className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div className="min-w-0">
+                                                <div className="truncate text-sm font-semibold text-[var(--text)]">
+                                                  {stripNoteExtension(note.name)}
+                                                </div>
+                                                <div className="mt-1 truncate text-xs text-[var(--muted)]">
+                                                  {note.relPath}
+                                                </div>
+                                              </div>
+                                              <div className="rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--accent)]">
+                                                {existingItemId ? 'On canvas' : 'Add'}
+                                              </div>
+                                            </div>
+                                          </button>
+                                        )
+                                      })
+                                    : filteredGridAddProjects.slice(0, 16).map((project) => {
+                                        const existingItemId = gridBoardProjectItemIds.get(
+                                          project.id
+                                        )
+                                        return (
+                                          <button
+                                            key={project.id}
+                                            type="button"
+                                            onClick={() => handleAddGridProject(project.id)}
+                                            className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div className="flex min-w-0 gap-3">
+                                                <NoteShapeIcon
+                                                  icon={project.icon}
+                                                  size={16}
+                                                  className="mt-0.5 shrink-0"
+                                                />
+                                                <div className="min-w-0">
+                                                  <div className="truncate text-sm font-semibold text-[var(--text)]">
+                                                    {project.name}
+                                                  </div>
+                                                  <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">
+                                                    {project.summary || 'Project'}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="rounded-full border border-[rgba(125,183,255,0.2)] bg-[rgba(125,183,255,0.1)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--text)]">
+                                                {existingItemId ? 'On canvas' : 'Add'}
+                                              </div>
+                                            </div>
+                                          </button>
+                                        )
+                                      })}
+                                  {(
+                                    gridAddMode === 'note'
+                                      ? filteredGridAddNotes.length === 0
+                                      : filteredGridAddProjects.length === 0
+                                  ) ? (
+                                    <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] px-3 py-4 text-sm text-[var(--muted)]">
+                                      No {gridAddMode}s match this search.
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </WorkspaceHeaderActionGroup>
+                          <WorkspaceHeaderActionDivider />
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={() => gridWorkspaceActions?.fitAllCards()}
+                              title="Fit all cards"
+                              aria-label="Fit all cards"
+                              disabled={!gridWorkspaceActions}
+                              icon={<Target size={18} />}
+                            />
+                            <WorkspaceActionButton
+                              onClick={() => gridWorkspaceActions?.resetBoard()}
+                              title="Reset board"
+                              aria-label="Reset board"
+                              disabled={!gridWorkspaceActions}
+                              icon={<RotateCcw size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : activePage === 'calendar' ? (
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={goToPrevMonth}
+                              title="Previous month"
+                              icon={<ChevronLeft size={18} />}
+                            />
+                            <WorkspaceActionButton
+                              onClick={goToToday}
+                              title="Go to today"
+                              icon={<CalendarDays size={18} />}
+                            />
+                            <WorkspaceActionButton
+                              onClick={goToNextMonth}
+                              title="Next month"
+                              icon={<ChevronRight size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
+                        <WorkspaceHeaderActions>
+                          <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                void handleDeleteSelectedWeeklyPlanWeek()
+                              }}
+                              title="Delete week"
+                              icon={<Trash2 size={18} />}
+                            />
+                          </WorkspaceHeaderActionGroup>
+                        </WorkspaceHeaderActions>
+                      ) : null
+                    }
+                  />
+
+                  <DocumentWorkspaceMainContent
+                    className={
+                      activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
+                    }
+                  >
+                    <div
+                      key={activePage}
+                      className={`${activePage === 'notes' ? '' : 'page-transition '}w-full ${
+                        activePage === 'calendar' ? '' : 'h-full'
+                      }`.trim()}
+                    >
+                      {!hasVault ? (
+                        <VaultSelectionPage
+                          lastVaultPath={lastVaultPath}
+                          onOpenVault={() => {
+                            void openVault('open')
+                          }}
+                          onCreateVault={() => {
+                            void openVault('create')
+                          }}
+                        />
+                      ) : activePage === 'notes' ? (
+                        searchQuery.trim() ? (
+                          <SearchPage
+                            results={searchResults}
+                            onOpen={(relPath) => {
+                              void openNote(relPath)
+                              setSearchQuery('')
+                              setSearchResults([])
+                            }}
+                          />
+                        ) : noteIsOpen && currentNotePath ? (
+                          <EditorPage
+                            editorRef={currentNoteEditorRef}
+                            editorSessionKey={currentNoteEditorVersion}
+                            initialContent={currentNoteEditorDraft}
+                            notePath={currentNotePath}
+                            tags={currentNoteTags}
+                            notes={notes}
+                            onDirty={handleCurrentNoteEditorDirty}
+                            onSnapshotChange={handleCurrentNoteSnapshotChange}
+                            onDropFile={(sourcePath) => importAttachment(sourcePath)}
+                            onPasteImage={importImageFromBlob}
+                            onAddTag={addTagToCurrentNote}
+                            onRemoveTag={removeTagFromCurrentNote}
+                            onFindByTag={findByTag}
+                            onOpenNoteLink={(target) => {
+                              void openOrCreateNoteMention(target)
+                            }}
+                            onRename={renameCurrentNote}
+                            titleEditToken={
+                              noteTitleEditTarget?.relPath === currentNotePath
+                                ? noteTitleEditTarget.token
+                                : 0
+                            }
+                            onOutlineChange={setCurrentNoteOutline}
+                            onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
+                          />
+                        ) : shouldRestoreLastOpenedNote ? (
+                          <div className="p-5 text-sm text-[var(--muted)]">
+                            Opening your last note…
+                          </div>
+                        ) : (
+                          <div className="p-5 text-sm text-[var(--muted)]">
+                            Pick a note from the right panel to open details
+                          </div>
+                        )
+                      ) : activePage === 'dashboard' ? (
+                        <DashboardPage
+                          projects={projects}
+                          currentWeek={currentWeeklyPlanWeek}
+                          currentWeekPriorities={currentWeekPriorities}
+                          tasks={calendarTasks}
+                          weeklyPlanLoading={weeklyPlanLoading}
+                          weeklyPlanReady={weeklyPlanReady}
+                          onOpenProject={(projectId) => {
+                            selectProject(projectId)
+                            void navigateToPage('projects')
+                          }}
+                          onOpenProjects={() => {
+                            void navigateToPage('projects')
+                          }}
+                          onOpenWeeklyPlan={() => {
+                            void navigateToPage('weeklyPlan')
+                          }}
+                        />
+                      ) : activePage === 'knowledge' ? (
+                        <KnowledgePage
+                          notes={notes}
+                          onOpenNote={(relPath) => {
+                            void navigateToPage('notes')
+                            setSearchQuery('')
+                            setSearchResults([])
+                            void openNote(relPath)
+                          }}
+                        />
+                      ) : activePage === 'projects' ? (
+                        selectedProject ? (
+                          <ProjectDetailsPage
+                            project={selectedProject}
+                            notes={notes}
+                            focusedMilestoneId={
+                              focusedMilestoneTarget?.projectId === selectedProject.id
+                                ? focusedMilestoneTarget.milestoneId
+                                : null
+                            }
+                            focusedMilestoneToken={
+                              focusedMilestoneTarget?.projectId === selectedProject.id
+                                ? focusedMilestoneTarget.token
+                                : 0
+                            }
+                            nameEditToken={
+                              projectNameEditTarget?.projectId === selectedProject.id
+                                ? projectNameEditTarget.token
+                                : 0
+                            }
+                            onRename={(nextName) => renameProject(selectedProject.id, nextName)}
+                            onUpdateSummary={(nextSummary) =>
+                              updateProjectSummary(selectedProject.id, nextSummary)
+                            }
+                            onAddMilestone={(title, dueDate) =>
+                              addMilestoneToProject(selectedProject.id, title, dueDate)
+                            }
+                            onRenameMilestone={(milestoneId, nextTitle) =>
+                              renameProjectMilestone(selectedProject.id, milestoneId, nextTitle)
+                            }
+                            onUpdateMilestoneDueDate={(milestoneId, nextDueDate) =>
+                              updateProjectMilestoneDueDate(
+                                selectedProject.id,
+                                milestoneId,
+                                nextDueDate
+                              )
+                            }
+                            onUpdateMilestoneDescription={(milestoneId, nextDescription) =>
+                              updateProjectMilestoneDescription(
+                                selectedProject.id,
+                                milestoneId,
+                                nextDescription
+                              )
+                            }
+                            onToggleMilestoneCollapsed={(milestoneId) =>
+                              toggleProjectMilestoneCollapsed(selectedProject.id, milestoneId)
+                            }
+                            onCycleMilestonePriority={(milestoneId) =>
+                              cycleProjectMilestonePriority(selectedProject.id, milestoneId)
+                            }
+                            onMoveMilestone={(milestoneId, direction) =>
+                              moveProjectMilestone(selectedProject.id, milestoneId, direction)
+                            }
+                            onReorderMilestones={(orderedMilestoneIds) =>
+                              reorderProjectMilestones(selectedProject.id, orderedMilestoneIds)
+                            }
+                            onRemoveMilestone={(milestoneId) =>
+                              removeProjectMilestone(selectedProject.id, milestoneId)
+                            }
+                            onAddSubtask={(milestoneId, title) =>
+                              addSubtaskToMilestone(selectedProject.id, milestoneId, title)
+                            }
+                            onToggleSubtask={(milestoneId, subtaskId) =>
+                              toggleMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
+                            }
+                            onCycleSubtaskPriority={(milestoneId, subtaskId) =>
+                              cycleMilestoneSubtaskPriority(
+                                selectedProject.id,
+                                milestoneId,
+                                subtaskId
+                              )
+                            }
+                            onRenameSubtask={(milestoneId, subtaskId, nextTitle) =>
+                              renameMilestoneSubtask(
+                                selectedProject.id,
+                                milestoneId,
+                                subtaskId,
+                                nextTitle
+                              )
+                            }
+                            onUpdateSubtaskDescription={(milestoneId, subtaskId, nextDescription) =>
+                              updateMilestoneSubtaskDescription(
+                                selectedProject.id,
+                                milestoneId,
+                                subtaskId,
+                                nextDescription
+                              )
+                            }
+                            onMoveSubtask={(milestoneId, subtaskId, direction) =>
+                              moveMilestoneSubtask(
+                                selectedProject.id,
+                                milestoneId,
+                                subtaskId,
+                                direction
+                              )
+                            }
+                            onReorderSubtasks={(milestoneId, orderedSubtaskIds) =>
+                              reorderMilestoneSubtasks(
+                                selectedProject.id,
+                                milestoneId,
+                                orderedSubtaskIds
+                              )
+                            }
+                            onRemoveSubtask={(milestoneId, subtaskId) =>
+                              removeMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
+                            }
+                            onCreateProjectNote={() => {
+                              void createProjectNote(selectedProject)
+                            }}
+                            onOpenNote={(relPath) => {
+                              void navigateToPage('notes')
+                              void openNote(relPath)
+                            }}
+                          />
+                        ) : (
+                          <div className="p-5 text-sm text-[var(--muted)]">
+                            Pick a project from the right panel to open details
+                          </div>
+                        )
+                      ) : activePage === 'subscriptions' ? (
+                        <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
+                      ) : activePage === 'grid' ? (
+                        GRID_PAGE_ENABLED ? (
+                          <GridPage
+                            board={gridBoardDraft}
+                            notes={notes}
+                            projects={projects}
+                            onActionsChange={setGridWorkspaceActions}
+                            onBoardChange={handleGridBoardChange}
+                            onOpenNote={(relPath) => {
+                              void navigateToPage('notes')
+                              setSearchQuery('')
+                              setSearchResults([])
+                              void openNote(relPath)
+                            }}
+                            onOpenProject={(projectId) => {
+                              void navigateToPage('projects')
+                              selectProject(projectId)
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center p-8">
+                            <div className="max-w-lg rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.16)]">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
+                                Unavailable
+                              </div>
+                              <h2 className="mt-3 text-2xl font-semibold text-[var(--text)]">
+                                Grid is disabled in this version
+                              </h2>
+                              <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+                                The Grid page remains in the codebase, but it is not exposed as an
+                                active workspace in this release.
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      ) : activePage === 'excalidraw' ? (
+                        <ExcalidrawPage />
+                      ) : activePage === 'weeklyPlan' ? (
+                        <WeeklyPlanWorkspace
+                          state={weeklyPlanState}
+                          loading={weeklyPlanLoading}
+                          selectedWeekId={selectedWeeklyPlanWeekId}
+                          isReady={weeklyPlanReady}
+                          onUpdateWeek={(input) => updateWeek(input)}
+                          onAddPriority={(input) => addPriority(input)}
+                          onUpdatePriority={(input) => updatePriority(input)}
+                          onDeletePriority={(priorityId) => deletePriority(priorityId)}
+                          onReorderPriorities={(input) => reorderPriorities(input)}
+                          onUpsertReview={(input) => upsertReview(input)}
+                        />
+                      ) : activePage === 'calendar' ? (
+                        <CalendarMonthView
+                          selectedDate={selectedCalendarDate}
+                          tasks={scheduledCalendarTasks}
+                          milestoneEvents={milestoneCalendarEvents}
+                          onSelectDate={setSelectedCalendarDate}
+                          onCreateTask={createTaskForDate}
+                          onOpenMilestone={openMilestoneFromCalendar}
+                          onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
+                          onRescheduleTask={(taskId, newDate) => {
+                            void rescheduleCalendarTask(taskId, newDate)
+                          }}
+                          onResizeTaskStart={(taskId, newStartDate) => {
+                            void resizeCalendarTaskStart(taskId, newStartDate)
+                          }}
+                          onResizeTaskEnd={(taskId, newEndDate) => {
+                            void resizeCalendarTaskEnd(taskId, newEndDate)
+                          }}
+                          onToggleTask={(taskId) => {
+                            void toggleCalendarTask(taskId)
+                          }}
+                          onDeleteTask={(taskId) => {
+                            void removeCalendarTask(taskId)
+                          }}
+                          onRenameTask={(taskId, newTitle) => {
+                            void renameCalendarTask(taskId, newTitle)
+                          }}
+                          onUpdateTaskType={(taskId, taskType) => {
+                            void updateCalendarTaskType(taskId, taskType)
+                          }}
+                          onUpdateTaskTime={(taskId, time) => {
+                            void updateCalendarTaskTime(taskId, time)
+                          }}
+                          onUpdateTaskReminders={(taskId, reminders) => {
+                            void updateCalendarTaskReminders(taskId, reminders)
+                          }}
+                        />
+                      ) : activePage === 'settings' ? (
+                        <SettingsPage
+                          profileName={profileName}
+                          mistralApiKey={mistralApiKey}
+                          fontOptions={FONT_OPTIONS}
+                          selectedFontFamily={fontFamily}
+                          workspaceVibrancyEnabled={workspaceVibrancyEnabled}
+                          vaultLocation={vault?.rootPath ?? lastVaultPath}
+                          onSaveProfile={(name) => {
+                            void updateProfileName(name)
+                          }}
+                          onSaveMistralApiKey={(apiKey) => {
+                            void updateMistralApiKey(apiKey)
+                          }}
+                          onSelectFont={(fontFamily) => {
+                            void updateFontFamily(fontFamily)
+                          }}
+                          onToggleWorkspaceVibrancy={(enabled) => {
+                            void updateWorkspaceVibrancy(enabled)
+                          }}
+                          onChangeVaultLocation={() => {
+                            void openVault('open')
+                          }}
+                          onMigrateBlockNoteNotes={() => {
+                            void migrateBlockNoteNotes()
+                          }}
+                          onMigrateTaggedNoteBodyFrontmatter={() => {
+                            void migrateTaggedNoteBodyFrontmatter()
+                          }}
+                        />
+                      ) : (
+                        <div className="p-5 text-sm text-[var(--muted)]">
+                          {activePage} workspace ready. Notes remain fully functional.
+                        </div>
+                      )}
+                    </div>
+                  </DocumentWorkspaceMainContent>
+                </DocumentWorkspaceMain>
+
+                <DocumentWorkspacePanel
+                  className={`${
+                    !showWorkspacePanel || isStandalonePage ? 'hidden' : 'flex'
+                  } overflow-hidden border-l border-[var(--line)] transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    shouldSlideWorkspacePanelOut
+                      ? 'pointer-events-none translate-x-full border-l-transparent opacity-0'
+                      : 'translate-x-0 opacity-100'
+                  } ${paletteSurfaceClass}${paletteBlurClass}`}
+                  style={
+                    shouldSlideWorkspacePanelOut ? { width: '0px', flexBasis: '0px' } : undefined
+                  }
+                >
+                  {activePage === 'weeklyPlan' ? (
+                    <WeeklyPlanSidebar
+                      state={weeklyPlanState}
+                      loading={weeklyPlanLoading}
+                      selectedWeekId={selectedWeeklyPlanWeekId}
+                      currentWeekId={weeklyPlanCurrentWeekId}
+                      nextWeekStart={nextWeeklyPlanStart}
+                      todayIso={todayIso}
+                      isReady={weeklyPlanReady}
+                      onSelectWeek={setSelectedWeeklyPlanWeekId}
+                      onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
+                    />
+                  ) : activePage === 'excalidraw' ? (
+                    <ExcalidrawSidebar />
+                  ) : (
+                    <div
+                      key={shouldAnimateWorkspacePane ? `workspace-pane-${activePage}` : undefined}
+                      className={`flex h-full flex-col${shouldAnimateWorkspacePane ? ' animate-workspace-pane' : ''}`}
+                    >
+                      <DocumentWorkspacePanelHeader
+                        actions={
+                          activePage === 'notes' ? (
+                            <WorkspaceHeaderActions>
+                              <WorkspaceHeaderActionGroup>
+                                {notePanelView === 'tree' ? (
+                                  <WorkspaceActionButton
+                                    aria-label="Collapse all folders"
+                                    title="Collapse all folders"
+                                    icon={<ChevronUp size={18} aria-hidden="true" />}
+                                    onClick={() =>
+                                      setCollapseAllNotesTreeToken((current) => current + 1)
+                                    }
+                                  />
+                                ) : null}
+                                {useNativeMenus ? (
+                                  <WorkspaceActionButton
+                                    ref={noteActionsButtonRef}
+                                    onClick={() => {
+                                      void openNativeNoteActionsMenu()
+                                    }}
                                     aria-label="Note actions"
                                     title="Note actions"
                                     icon={<Plus size={18} aria-hidden="true" />}
                                   />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void (notePanelView === 'tree'
-                                        ? createNoteFromTree()
-                                        : createNote())
-                                    }}
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <WorkspaceActionButton
+                                        aria-label="Note actions"
+                                        title="Note actions"
+                                        icon={<Plus size={18} aria-hidden="true" />}
+                                      />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void (notePanelView === 'tree'
+                                            ? createNoteFromTree()
+                                            : createNote())
+                                        }}
+                                      >
+                                        New note
+                                      </DropdownMenuItem>
+                                      {notePanelView === 'tree' ? (
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            void createFolderFromTree()
+                                          }}
+                                        >
+                                          New folder
+                                        </DropdownMenuItem>
+                                      ) : null}
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void importNotes()
+                                        }}
+                                      >
+                                        Import markdown
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </WorkspaceHeaderActionGroup>
+                              {notePanelView === 'cards' ? (
+                                <>
+                                  <WorkspaceHeaderActionDivider />
+                                  <WorkspaceHeaderActionGroup>
+                                    {useNativeMenus ? (
+                                      <WorkspaceActionButton
+                                        ref={noteFilterButtonRef}
+                                        onClick={() => {
+                                          void openNativeNoteFilterMenu()
+                                        }}
+                                        aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                        title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                        icon={<Funnel size={18} aria-hidden="true" />}
+                                      />
+                                    ) : (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <WorkspaceActionButton
+                                            aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                            title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                            icon={<Funnel size={18} aria-hidden="true" />}
+                                          />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start">
+                                          <DropdownMenuRadioGroup
+                                            value={noteFilterMode}
+                                            onValueChange={(value) =>
+                                              setNoteFilterMode(value as NoteFilterMode)
+                                            }
+                                          >
+                                            <DropdownMenuRadioItem value="all">
+                                              All
+                                            </DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="tagged">
+                                              Tagged
+                                            </DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="untagged">
+                                              Untagged
+                                            </DropdownMenuRadioItem>
+                                          </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                    {useNativeMenus ? (
+                                      <WorkspaceActionButton
+                                        ref={noteSortButtonRef}
+                                        onClick={() => {
+                                          void openNativeNoteSortMenu()
+                                        }}
+                                        aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                        title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                        icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                      />
+                                    ) : (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <WorkspaceActionButton
+                                            aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                            title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                            icon={<ArrowUpDown size={18} aria-hidden="true" />}
+                                          />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start">
+                                          <DropdownMenuRadioGroup
+                                            value={noteSortField}
+                                            onValueChange={(value) => {
+                                              const field = value as NoteSortField
+                                              setNoteSortField(field)
+                                              setNoteSortDirection(
+                                                field === 'name' ? 'asc' : 'desc'
+                                              )
+                                            }}
+                                          >
+                                            <DropdownMenuRadioItem value="name">
+                                              Name
+                                            </DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="created">
+                                              Created
+                                            </DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="updated">
+                                              Updated
+                                            </DropdownMenuRadioItem>
+                                          </DropdownMenuRadioGroup>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              setNoteSortDirection((current) =>
+                                                current === 'asc' ? 'desc' : 'asc'
+                                              )
+                                            }
+                                          >
+                                            {noteSortDirection === 'asc' ? (
+                                              <ArrowUp size={12} aria-hidden="true" />
+                                            ) : (
+                                              <ArrowDown size={12} aria-hidden="true" />
+                                            )}
+                                            Direction:{' '}
+                                            {noteSortDirection === 'asc'
+                                              ? 'Ascending'
+                                              : 'Descending'}
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                  </WorkspaceHeaderActionGroup>
+                                </>
+                              ) : null}
+                              <WorkspaceHeaderActionDivider />
+                              <WorkspaceHeaderActionGroup>
+                                <ToggleGroup
+                                  type="single"
+                                  value={notePanelView}
+                                  onValueChange={(value) => {
+                                    if (value === 'cards' || value === 'tree') {
+                                      setNotePanelView(value)
+                                    }
+                                  }}
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  <ToggleGroupItem
+                                    value="cards"
+                                    aria-label="Card view"
+                                    data-testid="note-panel-toggle:cards"
                                   >
-                                    New note
-                                  </DropdownMenuItem>
-                                  {notePanelView === 'tree' ? (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        void createFolderFromTree()
-                                      }}
-                                    >
-                                      New folder
-                                    </DropdownMenuItem>
-                                  ) : null}
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void importNotes()
-                                    }}
+                                    <List size={14} aria-hidden="true" />
+                                  </ToggleGroupItem>
+                                  <ToggleGroupItem
+                                    value="tree"
+                                    aria-label="Tree view"
+                                    data-testid="note-panel-toggle:tree"
                                   >
-                                    Import markdown
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </WorkspaceHeaderActionGroup>
-                          {notePanelView === 'cards' ? (
-                            <>
+                                    <FolderOpen size={14} aria-hidden="true" />
+                                  </ToggleGroupItem>
+                                </ToggleGroup>
+                              </WorkspaceHeaderActionGroup>
+                            </WorkspaceHeaderActions>
+                          ) : activePage === 'projects' ? (
+                            <WorkspaceHeaderActions>
+                              <WorkspaceHeaderActionGroup>
+                                <WorkspaceActionButton
+                                  onClick={createProject}
+                                  aria-label="Add new project"
+                                  title="Add new project"
+                                  icon={<Plus size={18} aria-hidden="true" />}
+                                />
+                              </WorkspaceHeaderActionGroup>
                               <WorkspaceHeaderActionDivider />
                               <WorkspaceHeaderActionGroup>
                                 {useNativeMenus ? (
                                   <WorkspaceActionButton
-                                    ref={noteFilterButtonRef}
+                                    ref={projectFilterButtonRef}
                                     onClick={() => {
-                                      void openNativeNoteFilterMenu()
+                                      void openNativeProjectFilterMenu()
                                     }}
-                                    aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                    title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                    aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                    title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
                                     icon={<Funnel size={18} aria-hidden="true" />}
                                   />
                                 ) : (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <WorkspaceActionButton
-                                        aria-label={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
-                                        title={`Filter notes: ${formatNoteFilterMode(noteFilterMode)}`}
+                                        aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
+                                        title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
                                         icon={<Funnel size={18} aria-hidden="true" />}
                                       />
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">
                                       <DropdownMenuRadioGroup
-                                        value={noteFilterMode}
+                                        value={projectFilterMode}
                                         onValueChange={(value) =>
-                                          setNoteFilterMode(value as NoteFilterMode)
+                                          setProjectFilterMode(value as ProjectFilterMode)
                                         }
                                       >
                                         <DropdownMenuRadioItem value="all">
                                           All
                                         </DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="tagged">
-                                          Tagged
+                                        <DropdownMenuRadioItem value="favorites">
+                                          Favorites
                                         </DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="untagged">
-                                          Untagged
+                                        <DropdownMenuRadioItem value="active">
+                                          In Progress
+                                        </DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="completed">
+                                          Done
                                         </DropdownMenuRadioItem>
                                       </DropdownMenuRadioGroup>
                                     </DropdownMenuContent>
@@ -5454,37 +5874,34 @@ function App(): ReactElement {
                                 )}
                                 {useNativeMenus ? (
                                   <WorkspaceActionButton
-                                    ref={noteSortButtonRef}
+                                    ref={projectSortButtonRef}
                                     onClick={() => {
-                                      void openNativeNoteSortMenu()
+                                      void openNativeProjectSortMenu()
                                     }}
-                                    aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                    title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                    aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                    title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
                                     icon={<ArrowUpDown size={18} aria-hidden="true" />}
                                   />
                                 ) : (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <WorkspaceActionButton
-                                        aria-label={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
-                                        title={`Sort notes: ${formatNoteSortLabel(noteSortField, noteSortDirection)}`}
+                                        aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
+                                        title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
                                         icon={<ArrowUpDown size={18} aria-hidden="true" />}
                                       />
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">
                                       <DropdownMenuRadioGroup
-                                        value={noteSortField}
+                                        value={projectSortField}
                                         onValueChange={(value) => {
-                                          const field = value as NoteSortField
-                                          setNoteSortField(field)
-                                          setNoteSortDirection(field === 'name' ? 'asc' : 'desc')
+                                          const field = value as ProjectSortField
+                                          setProjectSortField(field)
+                                          setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
                                         }}
                                       >
                                         <DropdownMenuRadioItem value="name">
                                           Name
-                                        </DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="created">
-                                          Created
                                         </DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="updated">
                                           Updated
@@ -5493,383 +5910,250 @@ function App(): ReactElement {
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          setNoteSortDirection((current) =>
+                                          setProjectSortDirection((current) =>
                                             current === 'asc' ? 'desc' : 'asc'
                                           )
                                         }
                                       >
-                                        {noteSortDirection === 'asc' ? (
+                                        {projectSortDirection === 'asc' ? (
                                           <ArrowUp size={12} aria-hidden="true" />
                                         ) : (
                                           <ArrowDown size={12} aria-hidden="true" />
                                         )}
                                         Direction:{' '}
-                                        {noteSortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                                        {projectSortDirection === 'asc'
+                                          ? 'Ascending'
+                                          : 'Descending'}
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 )}
                               </WorkspaceHeaderActionGroup>
-                            </>
-                          ) : null}
-                          <WorkspaceHeaderActionDivider />
-                          <WorkspaceHeaderActionGroup>
-                            <ToggleGroup
-                              type="single"
-                              value={notePanelView}
-                              onValueChange={(value) => {
-                                if (value === 'cards' || value === 'tree') {
-                                  setNotePanelView(value)
-                                }
-                              }}
-                              variant="outline"
-                              size="sm"
-                            >
-                              <ToggleGroupItem
-                                value="cards"
-                                aria-label="Card view"
-                                data-testid="note-panel-toggle:cards"
-                              >
-                                <List size={14} aria-hidden="true" />
-                              </ToggleGroupItem>
-                              <ToggleGroupItem
-                                value="tree"
-                                aria-label="Tree view"
-                                data-testid="note-panel-toggle:tree"
-                              >
-                                <FolderOpen size={14} aria-hidden="true" />
-                              </ToggleGroupItem>
-                            </ToggleGroup>
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
-                      ) : activePage === 'projects' ? (
-                        <WorkspaceHeaderActions>
-                          <WorkspaceHeaderActionGroup>
+                            </WorkspaceHeaderActions>
+                          ) : activePage === 'calendar' ? (
+                            <WorkspaceHeaderActions>
+                              <WorkspaceHeaderActionGroup>
+                                <Popover
+                                  open={isCalendarBulkActionOpen}
+                                  onOpenChange={setIsCalendarBulkActionOpen}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <WorkspaceActionButton
+                                      title="Calendar bulk actions"
+                                      aria-label="Calendar bulk actions"
+                                      icon={<Target size={18} className="inline-block" />}
+                                    />
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    align="start"
+                                    className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
+                                  >
+                                    <div className="space-y-3">
+                                      <label className="flex flex-col gap-1">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                          Scope
+                                        </span>
+                                        <select
+                                          value={calendarBulkScope}
+                                          onChange={(event) =>
+                                            setCalendarBulkScope(
+                                              event.currentTarget
+                                                .value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
+                                            )
+                                          }
+                                          className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
+                                        >
+                                          {CALENDAR_BULK_SCOPE_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="flex flex-col gap-1">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                          Task Type
+                                        </span>
+                                        <select
+                                          value={calendarBulkTaskType}
+                                          onChange={(event) =>
+                                            setCalendarBulkTaskType(
+                                              event.currentTarget.value as CalendarTaskType
+                                            )
+                                          }
+                                          className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
+                                        >
+                                          {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)]"
+                                        onClick={() => {
+                                          void reassignCalendarTaskTypeForScope(
+                                            calendarBulkScope,
+                                            calendarBulkTaskType
+                                          )
+                                        }}
+                                      >
+                                        Apply
+                                      </button>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </WorkspaceHeaderActionGroup>
+                            </WorkspaceHeaderActions>
+                          ) : activePage === 'settings' ? (
                             <WorkspaceActionButton
-                              onClick={createProject}
-                              aria-label="Add new project"
-                              title="Add new project"
-                              icon={<Plus size={18} aria-hidden="true" />}
+                              onClick={() => {
+                                void updateFontFamily(FONT_OPTIONS[0].value)
+                              }}
+                              icon={<Type size={14} />}
+                              label="Reset Font"
                             />
-                          </WorkspaceHeaderActionGroup>
-                          <WorkspaceHeaderActionDivider />
-                          <WorkspaceHeaderActionGroup>
-                            {useNativeMenus ? (
-                              <WorkspaceActionButton
-                                ref={projectFilterButtonRef}
-                                onClick={() => {
-                                  void openNativeProjectFilterMenu()
-                                }}
-                                aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                icon={<Funnel size={18} aria-hidden="true" />}
-                              />
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <WorkspaceActionButton
-                                    aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                    title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                    icon={<Funnel size={18} aria-hidden="true" />}
-                                  />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                  <DropdownMenuRadioGroup
-                                    value={projectFilterMode}
-                                    onValueChange={(value) =>
-                                      setProjectFilterMode(value as ProjectFilterMode)
-                                    }
-                                  >
-                                    <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="favorites">
-                                      Favorites
-                                    </DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="active">
-                                      In Progress
-                                    </DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="completed">
-                                      Done
-                                    </DropdownMenuRadioItem>
-                                  </DropdownMenuRadioGroup>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                            {useNativeMenus ? (
-                              <WorkspaceActionButton
-                                ref={projectSortButtonRef}
-                                onClick={() => {
-                                  void openNativeProjectSortMenu()
-                                }}
-                                aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                              />
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <WorkspaceActionButton
-                                    aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                    title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                    icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                                  />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                  <DropdownMenuRadioGroup
-                                    value={projectSortField}
-                                    onValueChange={(value) => {
-                                      const field = value as ProjectSortField
-                                      setProjectSortField(field)
-                                      setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
-                                    }}
-                                  >
-                                    <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="updated">
-                                      Updated
-                                    </DropdownMenuRadioItem>
-                                  </DropdownMenuRadioGroup>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      setProjectSortDirection((current) =>
-                                        current === 'asc' ? 'desc' : 'asc'
-                                      )
-                                    }
-                                  >
-                                    {projectSortDirection === 'asc' ? (
-                                      <ArrowUp size={12} aria-hidden="true" />
-                                    ) : (
-                                      <ArrowDown size={12} aria-hidden="true" />
-                                    )}
-                                    Direction:{' '}
-                                    {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
-                      ) : activePage === 'calendar' ? (
-                        <WorkspaceHeaderActions>
-                          <WorkspaceHeaderActionGroup>
-                            <Popover
-                              open={isCalendarBulkActionOpen}
-                              onOpenChange={setIsCalendarBulkActionOpen}
-                            >
-                              <PopoverTrigger asChild>
-                                <WorkspaceActionButton
-                                  title="Calendar bulk actions"
-                                  aria-label="Calendar bulk actions"
-                                  icon={<Target size={18} className="inline-block" />}
-                                />
-                              </PopoverTrigger>
-                              <PopoverContent
-                                align="start"
-                                className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                              >
-                                <div className="space-y-3">
-                                  <label className="flex flex-col gap-1">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                      Scope
-                                    </span>
-                                    <select
-                                      value={calendarBulkScope}
-                                      onChange={(event) =>
-                                        setCalendarBulkScope(
-                                          event.currentTarget
-                                            .value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
-                                        )
-                                      }
-                                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                    >
-                                      {CALENDAR_BULK_SCOPE_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <label className="flex flex-col gap-1">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                      Task Type
-                                    </span>
-                                    <select
-                                      value={calendarBulkTaskType}
-                                      onChange={(event) =>
-                                        setCalendarBulkTaskType(
-                                          event.currentTarget.value as CalendarTaskType
-                                        )
-                                      }
-                                      className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                    >
-                                      {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)]"
-                                    onClick={() => {
-                                      void reassignCalendarTaskTypeForScope(
-                                        calendarBulkScope,
-                                        calendarBulkTaskType
-                                      )
-                                    }}
-                                  >
-                                    Apply
-                                  </button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
-                      ) : activePage === 'settings' ? (
-                        <WorkspaceActionButton
-                          onClick={() => {
-                            void updateFontFamily(FONT_OPTIONS[0].value)
-                          }}
-                          icon={<Type size={14} />}
-                          label="Reset Font"
-                        />
-                      ) : null
-                    }
-                  />
+                          ) : null
+                        }
+                      />
 
-                  <DocumentWorkspacePanelContent>
-                    {activePage === 'notes' ? (
-                      notePanelView === 'tree' ? (
-                        <NotesTreeView
-                          tree={visibleNoteTree}
-                          searchTerm={searchQuery}
-                          activeNotePath={currentNotePath}
-                          selectedEntry={selectedNoteTreeEntry}
-                          collapseAllToken={collapseAllNotesTreeToken}
-                          pendingEditId={pendingNoteTreeEditId}
-                          onPendingEditHandled={handlePendingNoteTreeEditHandled}
-                          onSelectionChange={setSelectedNoteTreeEntry}
-                          onOpenNote={(relPath) => {
-                            setSearchQuery('')
-                            setSearchResults([])
-                            void openNote(relPath)
-                          }}
-                          onCreateNote={(parentDir) => {
-                            setSelectedNoteTreeEntry(
-                              parentDir ? { kind: 'folder', relPath: parentDir } : null
-                            )
-                            void createNoteFromTree(parentDir)
-                          }}
-                          onCreateFolder={(parentDir) => {
-                            setSelectedNoteTreeEntry(
-                              parentDir ? { kind: 'folder', relPath: parentDir } : null
-                            )
-                            void createFolderFromTree(parentDir)
-                          }}
-                          onRenamePath={(relPath, nextName, kind) => {
-                            void renameTreePath(relPath, nextName, kind)
-                          }}
-                          onDeletePath={(relPath, kind) => {
-                            void deleteTreePath(relPath, kind)
-                          }}
-                          onMovePath={moveTreePath}
-                        />
-                      ) : (
-                        <NotePreviewList
-                          notes={notes}
-                          favoritePaths={favoriteNotePaths}
-                          selectedPath={currentNotePath}
-                          filter={searchQuery}
-                          filterMode={noteFilterMode}
-                          sortField={noteSortField}
-                          sortDirection={noteSortDirection}
-                          onOpen={(relPath) => {
-                            setSearchQuery('')
-                            setSearchResults([])
-                            void openNote(relPath)
-                          }}
-                          onDelete={(relPath) => {
-                            void deleteNoteByPath(relPath)
-                          }}
-                        />
-                      )
-                    ) : activePage === 'projects' ? (
-                      <ProjectPreviewList
-                        projects={projects}
-                        favoriteProjectIds={favoriteProjectIds}
-                        selectedProjectId={selectedProjectId}
-                        filter={projectSearchQuery}
-                        filterMode={projectFilterMode}
-                        sortField={projectSortField}
-                        sortDirection={projectSortDirection}
-                        onSelect={handleProjectListSelect}
-                        onDelete={(projectId) => {
-                          void removeProjectById(projectId)
-                        }}
-                      />
-                    ) : activePage === 'calendar' ? (
-                      <UnscheduledTaskList
-                        tasks={unscheduledTasks}
-                        selectedDate={selectedCalendarDate}
-                        newTaskValue={calendarHeaderNewTask}
-                        onNewTaskValueChange={setCalendarHeaderNewTask}
-                        onToggle={(taskId) => {
-                          void toggleCalendarTask(taskId)
-                        }}
-                        onDelete={(taskId) => {
-                          void removeCalendarTask(taskId)
-                        }}
-                        onRename={(taskId, newTitle) => {
-                          void renameCalendarTask(taskId, newTitle)
-                        }}
-                        onUpdateTaskType={(taskId, taskType) => {
-                          void updateCalendarTaskType(taskId, taskType)
-                        }}
-                        onUpdateTime={(taskId, time) => {
-                          void updateCalendarTaskTime(taskId, time)
-                        }}
-                        onUpdateReminders={(taskId, reminders) => {
-                          void updateCalendarTaskReminders(taskId, reminders)
-                        }}
-                        onScheduleTask={(taskId, date) => {
-                          void rescheduleCalendarTask(taskId, date)
-                        }}
-                        onUnscheduleTask={(taskId) => {
-                          void rescheduleCalendarTask(taskId, undefined)
-                        }}
-                        onInsertTask={() => {
-                          void addUnscheduledFromHeader()
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-full flex-col gap-4 p-3">
-                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-                          <WorkspacePanelSectionHeader
-                            icon={<Paintbrush size={16} aria-hidden="true" />}
-                            heading="Appearance"
-                            description="Theme and surface defaults for the workspace"
+                      <DocumentWorkspacePanelContent>
+                        {activePage === 'notes' ? (
+                          notePanelView === 'tree' ? (
+                            <NotesTreeView
+                              tree={visibleNoteTree}
+                              searchTerm={searchQuery}
+                              activeNotePath={currentNotePath}
+                              selectedEntries={selectedNoteTreeEntries}
+                              collapseAllToken={collapseAllNotesTreeToken}
+                              pendingEditId={pendingNoteTreeEditId}
+                              onPendingEditHandled={handlePendingNoteTreeEditHandled}
+                              onSelectionChange={setSelectedNoteTreeEntries}
+                              onOpenNote={(relPath) => {
+                                setSearchQuery('')
+                                setSearchResults([])
+                                void openNote(relPath)
+                              }}
+                              onCreateNote={(parentDir) => {
+                                setSelectedNoteTreeEntries(
+                                  parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                )
+                                void createNoteFromTree(parentDir)
+                              }}
+                              onCreateFolder={(parentDir) => {
+                                setSelectedNoteTreeEntries(
+                                  parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                )
+                                void createFolderFromTree(parentDir)
+                              }}
+                              onRenamePath={(relPath, nextName, kind) => {
+                                void renameTreePath(relPath, nextName, kind)
+                              }}
+                              onDeleteEntries={(entries) => {
+                                void deleteTreeEntries(entries)
+                              }}
+                              onMoveEntries={moveTreeEntries}
+                            />
+                          ) : (
+                            <NotePreviewList
+                              notes={notes}
+                              favoritePaths={favoriteNotePaths}
+                              selectedPath={currentNotePath}
+                              filter={searchQuery}
+                              filterMode={noteFilterMode}
+                              sortField={noteSortField}
+                              sortDirection={noteSortDirection}
+                              onOpen={(relPath) => {
+                                setSearchQuery('')
+                                setSearchResults([])
+                                void openNote(relPath)
+                              }}
+                              onDelete={(relPath) => {
+                                void deleteNoteByPath(relPath)
+                              }}
+                            />
+                          )
+                        ) : activePage === 'projects' ? (
+                          <ProjectPreviewList
+                            projects={projects}
+                            favoriteProjectIds={favoriteProjectIds}
+                            selectedProjectId={selectedProjectId}
+                            filter={projectSearchQuery}
+                            filterMode={projectFilterMode}
+                            sortField={projectSortField}
+                            sortDirection={projectSortDirection}
+                            onSelect={handleProjectListSelect}
+                            onDelete={(projectId) => {
+                              void removeProjectById(projectId)
+                            }}
                           />
-                        </WorkspacePanelSection>
-                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-                          <WorkspacePanelSectionHeader
-                            icon={<Type size={16} aria-hidden="true" />}
-                            heading="Editor Defaults"
-                            description="Type, writing, and editing preferences"
+                        ) : activePage === 'calendar' ? (
+                          <UnscheduledTaskList
+                            tasks={unscheduledTasks}
+                            selectedDate={selectedCalendarDate}
+                            newTaskValue={calendarHeaderNewTask}
+                            onNewTaskValueChange={setCalendarHeaderNewTask}
+                            onToggle={(taskId) => {
+                              void toggleCalendarTask(taskId)
+                            }}
+                            onDelete={(taskId) => {
+                              void removeCalendarTask(taskId)
+                            }}
+                            onRename={(taskId, newTitle) => {
+                              void renameCalendarTask(taskId, newTitle)
+                            }}
+                            onUpdateTaskType={(taskId, taskType) => {
+                              void updateCalendarTaskType(taskId, taskType)
+                            }}
+                            onUpdateTime={(taskId, time) => {
+                              void updateCalendarTaskTime(taskId, time)
+                            }}
+                            onUpdateReminders={(taskId, reminders) => {
+                              void updateCalendarTaskReminders(taskId, reminders)
+                            }}
+                            onScheduleTask={(taskId, date) => {
+                              void rescheduleCalendarTask(taskId, date)
+                            }}
+                            onUnscheduleTask={(taskId) => {
+                              void rescheduleCalendarTask(taskId, undefined)
+                            }}
+                            onInsertTask={() => {
+                              void addUnscheduledFromHeader()
+                            }}
                           />
-                        </WorkspacePanelSection>
-                        <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
-                          <WorkspacePanelSectionHeader
-                            icon={<Keyboard size={16} aria-hidden="true" />}
-                            heading="Shortcuts"
-                            description="Keyboard actions available across the app"
-                          />
-                        </WorkspacePanelSection>
-                      </div>
-                    )}
-                  </DocumentWorkspacePanelContent>
-                </div>
-              )}
-            </DocumentWorkspacePanel>
+                        ) : (
+                          <div className="flex h-full flex-col gap-4 p-3">
+                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                              <WorkspacePanelSectionHeader
+                                icon={<Paintbrush size={16} aria-hidden="true" />}
+                                heading="Appearance"
+                                description="Theme and surface defaults for the workspace"
+                              />
+                            </WorkspacePanelSection>
+                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                              <WorkspacePanelSectionHeader
+                                icon={<Type size={16} aria-hidden="true" />}
+                                heading="Editor Defaults"
+                                description="Type, writing, and editing preferences"
+                              />
+                            </WorkspacePanelSection>
+                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                              <WorkspacePanelSectionHeader
+                                icon={<Keyboard size={16} aria-hidden="true" />}
+                                heading="Shortcuts"
+                                description="Keyboard actions available across the app"
+                              />
+                            </WorkspacePanelSection>
+                          </div>
+                        )}
+                      </DocumentWorkspacePanelContent>
+                    </div>
+                  )}
+                </DocumentWorkspacePanel>
+              </>
+            )}
           </div>
 
           <SonnerBridge />
@@ -6494,6 +6778,33 @@ function remapNestedPath(
   }
 
   return `${toPath}${candidate.slice(fromPath.length)}`
+}
+
+function joinRelPath(parentDir: string, name: string): string {
+  return parentDir ? `${parentDir}/${name}` : name
+}
+
+function isEditableWorkspaceUndoTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.getAttribute('role') === 'textbox' ||
+    Boolean(target.closest('[data-testid="note-block-editor"]'))
+  )
+}
+
+function formatHistoryLabel(label: string | null): string {
+  if (!label) {
+    return 'last action'
+  }
+
+  return `${label.charAt(0).toLowerCase()}${label.slice(1)}`
 }
 
 function buildDefaultNoteName(): string {
