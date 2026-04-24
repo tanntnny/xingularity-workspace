@@ -2,6 +2,7 @@ import { app } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createRandomProjectIcon } from '../shared/projectIcons'
+import { isProfileColor } from '../shared/profileColors'
 import {
   AppSettings,
   AppSettingsUpdate,
@@ -41,7 +42,8 @@ export function createDefaultAppSettings(): AppSettings {
     favoriteNotePaths: [],
     favoriteProjectIds: [],
     profile: {
-      name: ''
+      name: '',
+      color: 'indigo'
     },
     ai: {
       mistralApiKey: ''
@@ -72,7 +74,8 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       name:
         typeof parsed.profile?.name === 'string' && parsed.profile.name.trim().length > 0
           ? parsed.profile.name
-          : defaults.profile.name
+          : defaults.profile.name,
+      color: isProfileColor(parsed.profile?.color) ? parsed.profile.color : defaults.profile.color
     },
     ai: {
       mistralApiKey:
@@ -378,7 +381,13 @@ export class SettingsStore {
 
   async updateVault(vaultRoot: string, next: AppSettingsUpdate): Promise<AppSettings> {
     const current = await this.readVault(vaultRoot)
-    const merged = normalizeSettings({ ...current, ...next, lastVaultPath: vaultRoot })
+    const merged = normalizeSettings({
+      ...current,
+      ...next,
+      profile: next.profile ? { ...current.profile, ...next.profile } : current.profile,
+      ai: next.ai ? { ...current.ai, ...next.ai } : current.ai,
+      lastVaultPath: vaultRoot
+    })
     await this.persistVaultFiles(vaultRoot, merged)
     return merged
   }

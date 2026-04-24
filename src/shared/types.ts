@@ -1,3 +1,5 @@
+import type { ProfileColor } from './profileColors'
+
 export type Maybe<T> = T | null
 
 export interface VaultInfo {
@@ -240,6 +242,7 @@ export interface AppSettings {
   favoriteProjectIds: string[]
   profile: {
     name: string
+    color: ProfileColor
   }
   ai: {
     mistralApiKey: string
@@ -255,7 +258,8 @@ export interface AppSettings {
 export interface AppSettingsUpdate {
   isSidebarCollapsed?: boolean // Optional
   profile?: {
-    name: string
+    name?: string
+    color?: ProfileColor
   }
   ai?: {
     mistralApiKey: string

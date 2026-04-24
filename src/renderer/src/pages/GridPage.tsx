@@ -573,7 +573,7 @@ function GridCanvas({
     <div
       ref={surfaceRef}
       data-testid="grid-page"
-      className="relative h-full overflow-hidden rounded-[28px] bg-[var(--panel)]"
+      className="workspace-clear-surface relative h-full overflow-hidden rounded-[28px]"
     >
       <ReactFlow<GridNode>
         data-testid="grid-canvas"
@@ -613,7 +613,7 @@ function GridCanvas({
           data-testid="grid-empty-state"
           className="pointer-events-none absolute inset-0 flex items-center justify-center p-10"
         >
-          <div className="max-w-xl rounded-[32px] border border-[var(--line)] bg-[var(--panel)] px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.12)]">
+          <div className="workspace-subtle-surface max-w-xl rounded-[32px] px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.08)]">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
               <Sparkles size={24} />
             </div>
@@ -710,7 +710,7 @@ function GridCardNode({ data, selected }: NodeProps<GridNode>): ReactElement {
         }
       }}
       data-testid={`grid-card:${data.kind}:${data.sourceId}`}
-      className={`group h-full rounded-[12px] border border-[var(--accent)] bg-[var(--panel)] transition duration-200 ${
+      className={`workspace-subtle-surface group h-full rounded-[12px] border border-[var(--accent)] transition duration-200 ${
         selected ? 'shadow-[0_0_0_1px_var(--accent)]' : ''
       }`}
     >

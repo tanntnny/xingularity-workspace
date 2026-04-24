@@ -21,7 +21,7 @@ function createDefaultSettings(): AppSettings {
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],
-    profile: { name: '' },
+    profile: { name: '', color: 'indigo' },
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
     workspaceVibrancyEnabled: true,
@@ -57,7 +57,9 @@ class MockRuntime {
   async updateSettings(next: AppSettingsUpdate): Promise<AppSettings> {
     this.settings = {
       ...this.settings,
-      ...next
+      ...next,
+      profile: next.profile ? { ...this.settings.profile, ...next.profile } : this.settings.profile,
+      ai: next.ai ? { ...this.settings.ai, ...next.ai } : this.settings.ai
     }
     return this.settings
   }

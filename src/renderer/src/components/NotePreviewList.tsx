@@ -144,7 +144,7 @@ export function NotePreviewList({
           <NoteSection
             title="All Notes"
             icon={<FileText size={16} aria-hidden="true" />}
-            description={`${allNotes.length} notes available in the current filter`}
+            description={`${allNotes.length} notes available`}
             emptyLabel="No other notes found"
             notes={allNotes}
             selectedPath={selectedPath}
@@ -262,7 +262,7 @@ function NoteSection({
               className={`${revealProps.className} flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                 isSelected
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                  : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                  : 'workspace-subtle-control border-[var(--line)]'
               }`}
               style={revealProps.style}
               onClick={() => onOpen(note.relPath)}

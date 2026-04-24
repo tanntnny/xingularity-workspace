@@ -89,7 +89,9 @@ function createEmptyScene(): ExcalidrawSessionScene {
     version: 2,
     source: 'https://excalidraw.com',
     elements: [],
-    appState: {},
+    appState: {
+      viewBackgroundColor: 'transparent'
+    },
     files: {}
   }
 }
@@ -181,6 +183,10 @@ export function ExcalidrawWorkspaceProvider({
 
     return {
       ...selectedSession.scene,
+      appState: {
+        ...selectedSession.scene.appState,
+        viewBackgroundColor: 'transparent'
+      },
       scrollToContent: true
     } as ExcalidrawInitialData
   }, [selectedSession])
@@ -502,8 +508,8 @@ export function ExcalidrawPage(): ReactElement {
     useExcalidrawWorkspace()
 
   return (
-    <div className="h-full min-w-0 bg-[var(--panel)] p-2">
-      <div className="h-full min-h-[560px] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--panel-2)] shadow-[0_28px_90px_rgba(7,5,18,0.14)]">
+    <div className="workspace-clear-surface h-full min-w-0 p-2">
+      <div className="h-full min-h-[560px] overflow-hidden rounded-md">
         {isLoading || !initialData ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
             Loading drawing...
@@ -590,7 +596,7 @@ export function ExcalidrawSidebar(): ReactElement {
                   className={`rounded-xl border px-3 py-2.5 transition-colors ${
                     isActive
                       ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                      : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                      : 'workspace-subtle-control border-[var(--line)]'
                   }`}
                 >
                   {isEditing ? (
@@ -613,7 +619,7 @@ export function ExcalidrawSidebar(): ReactElement {
                             handleCancelRenameSession()
                           }
                         }}
-                        className="w-full rounded-md border border-[var(--accent)] bg-[var(--panel)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text)] outline-none"
+                        className="workspace-subtle-control w-full rounded-md border border-[var(--accent)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text)] outline-none"
                       />
                       <div className="mt-1 text-xs text-[var(--muted)]">
                         Updated {formatUpdatedAt(session.updatedAt)}

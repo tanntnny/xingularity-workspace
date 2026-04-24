@@ -18,7 +18,7 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
         variant="default"
         size="default"
         className={cn(
-          'tab-menu-group rounded-md border border-[var(--line)] bg-[color-mix(in_srgb,var(--panel-2)_78%,var(--panel))] p-1',
+          'tab-menu-group rounded-md p-1',
           className
         )}
         {...props}

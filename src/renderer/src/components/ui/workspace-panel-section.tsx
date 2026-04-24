@@ -6,7 +6,11 @@ interface WorkspacePanelSectionProps extends React.HTMLAttributes<HTMLElement> {
 
 const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectionProps>(
   ({ className, ...props }, ref) => (
-    <section ref={ref} className={cn('flex flex-col gap-3', className)} {...props} />
+    <section
+      ref={ref}
+      className={cn('workspace-subtle-surface flex flex-col gap-3 rounded-2xl p-3.5', className)}
+      {...props}
+    />
   )
 )
 WorkspacePanelSection.displayName = 'WorkspacePanelSection'

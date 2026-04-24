@@ -1,5 +1,7 @@
 import { ReactElement, KeyboardEvent, useEffect, useState } from 'react'
 import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
+import type { ProfileColor } from '../../../shared/profileColors'
+import { PROFILE_COLOR_OPTIONS } from '../lib/profileColors'
 
 export interface FontOption {
   label: string
@@ -11,11 +13,13 @@ interface SettingsPageProps {
   mistralApiKey: string
   fontOptions: FontOption[]
   selectedFontFamily: string
+  profileColor: ProfileColor
   workspaceVibrancyEnabled: boolean
   vaultLocation: string | null
   onSaveProfile: (name: string) => void
   onSaveMistralApiKey: (apiKey: string) => void
   onSelectFont: (fontFamily: string) => void
+  onSelectProfileColor: (color: ProfileColor) => void
   onToggleWorkspaceVibrancy: (enabled: boolean) => void
   onChangeVaultLocation: () => void
   onMigrateBlockNoteNotes: () => void
@@ -27,11 +31,13 @@ export function SettingsPage({
   mistralApiKey,
   fontOptions,
   selectedFontFamily,
+  profileColor,
   workspaceVibrancyEnabled,
   vaultLocation,
   onSaveProfile,
   onSaveMistralApiKey,
   onSelectFont,
+  onSelectProfileColor,
   onToggleWorkspaceVibrancy,
   onChangeVaultLocation,
   onMigrateBlockNoteNotes,
@@ -108,7 +114,7 @@ export function SettingsPage({
       </TabMenu>
 
       {activeTab === 'profile' ? (
-        <div className="grid gap-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <div className="workspace-subtle-surface grid gap-4 rounded-2xl p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Profile</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
@@ -126,7 +132,7 @@ export function SettingsPage({
               onChange={(event) => setProfileDraft(event.target.value)}
               onBlur={commitProfileName}
               onKeyDown={onProfileInputKeyDown}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
             />
             <span className="text-xs text-[var(--muted)]">Press Enter or click away to save.</span>
           </div>
@@ -134,7 +140,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'workspace' ? (
-        <div className="grid gap-5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <div className="workspace-subtle-surface grid gap-5 rounded-2xl p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
             <p className="w-full text-sm text-[var(--muted)]">
@@ -145,12 +151,12 @@ export function SettingsPage({
 
           <div className="grid w-full gap-1.5" aria-label="Vault location">
             <span className="text-sm text-[var(--muted)]">Vault Location</span>
-            <div className="w-full break-words rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-sm text-[var(--text)]">
+            <div className="workspace-subtle-control w-full break-words rounded-lg border border-[var(--line)] p-2.5 text-sm text-[var(--text)]">
               {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
             </div>
             <button
               type="button"
-              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
               onClick={onChangeVaultLocation}
             >
               Change Vault Location
@@ -164,14 +170,14 @@ export function SettingsPage({
             </p>
             <button
               type="button"
-              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
               onClick={onMigrateBlockNoteNotes}
             >
               Convert old BlockNote notes
             </button>
             <button
               type="button"
-              className="w-fit rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 hover:border-[var(--accent)]"
+              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
               onClick={onMigrateTaggedNoteBodyFrontmatter}
             >
               Normalize tagged note bodies
@@ -181,7 +187,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'appearance' ? (
-        <div className="grid gap-5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <div className="workspace-subtle-surface grid gap-5 rounded-2xl p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Appearance</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
@@ -189,7 +195,7 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
+          <div className="workspace-subtle-surface grid gap-2 rounded-2xl p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--text)]">Workspace Vibrancy</p>
@@ -205,8 +211,8 @@ export function SettingsPage({
                 aria-label="Toggle workspace vibrancy"
                 className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition-colors ${
                   workspaceVibrancyEnabled
-                    ? 'border-[var(--accent-line)] bg-[var(--accent)]'
-                    : 'border-[var(--line)] bg-[var(--panel)]'
+                    ? 'border-[var(--accent-line)]'
+                    : 'workspace-subtle-control border-[var(--line)]'
                 }`}
                 onClick={() => onToggleWorkspaceVibrancy(!workspaceVibrancyEnabled)}
               >
@@ -222,11 +228,45 @@ export function SettingsPage({
             </p>
           </div>
 
+          <div className="grid gap-2">
+            <span className="text-sm text-[var(--muted)]">Accent Color</span>
+            <div className="flex flex-wrap gap-2">
+              {PROFILE_COLOR_OPTIONS.map((option) => {
+                const isActive = option.value === profileColor
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onSelectProfileColor(option.value)}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                      isActive
+                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
+                        : 'workspace-subtle-control border-[var(--line)] text-[var(--text)]'
+                    }`}
+                  >
+                    <span
+                      className="h-4 w-4 rounded-full border"
+                      style={{
+                        background: option.swatch,
+                        borderColor: option.swatchBorder
+                      }}
+                    />
+                    <span>{option.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Changes the app-wide accent color. `Monotone` becomes dark in light mode and white in
+              dark mode.
+            </p>
+          </div>
+
           <label className="grid w-full gap-1.5" htmlFor="font-family-select">
             <span className="text-sm text-[var(--muted)]">App Font</span>
             <select
               id="font-family-select"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
               value={selectedFontFamily}
               onChange={(event) => onSelectFont(event.target.value)}
             >
@@ -239,7 +279,7 @@ export function SettingsPage({
           </label>
 
           <p
-            className="w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5"
+            className="workspace-subtle-surface w-full rounded-xl p-3.5"
             style={{ fontFamily: selectedFontFamily }}
           >
             The quick brown fox jumps over the lazy dog.
@@ -248,7 +288,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'agent' ? (
-        <div className="grid gap-4 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <div className="workspace-subtle-surface grid gap-4 rounded-2xl p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Agent</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
@@ -265,7 +305,7 @@ export function SettingsPage({
               onChange={(event) => setMistralApiKeyDraft(event.target.value)}
               onBlur={commitMistralApiKey}
               onKeyDown={onProfileInputKeyDown}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5"
+              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
               autoComplete="off"
               spellCheck={false}
             />

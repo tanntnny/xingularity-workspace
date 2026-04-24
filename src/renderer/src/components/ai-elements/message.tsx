@@ -22,7 +22,7 @@ export const MessageContent = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'max-w-[min(860px,100%)] rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3 text-sm text-[var(--text)] shadow-sm',
+      'workspace-subtle-surface max-w-[min(860px,100%)] rounded-3xl px-4 py-3 text-sm text-[var(--text)]',
       className
     )}
     {...props}
@@ -38,7 +38,7 @@ export function MessageResponse({
   return (
     <div
       className={cn(
-        'prose prose-sm max-w-none break-words text-[var(--text)] prose-p:my-2 prose-pre:rounded-2xl prose-pre:border prose-pre:border-[var(--line)] prose-pre:bg-[var(--panel)]',
+        'prose prose-sm max-w-none break-words text-[var(--text)] prose-p:my-2 prose-pre:rounded-2xl prose-pre:border prose-pre:border-[var(--line)] prose-pre:bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]',
         className
       )}
       {...props}
@@ -66,7 +66,7 @@ export function MessageAction({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex h-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]',
+        'workspace-subtle-control inline-flex h-8 items-center justify-center rounded-full border border-[var(--line)] px-2.5 text-[var(--muted)] transition hover:text-[var(--accent)]',
         className
       )}
       {...props}

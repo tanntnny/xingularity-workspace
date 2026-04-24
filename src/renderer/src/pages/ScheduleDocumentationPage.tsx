@@ -147,7 +147,7 @@ interface ScheduleDocumentationPageProps {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): ReactElement {
   return (
-    <section className="space-y-3 rounded-[24px] border border-[var(--line)] bg-[var(--panel)] p-6 shadow-sm">
+    <section className="workspace-subtle-surface space-y-3 rounded-[24px] p-6 shadow-sm">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
       </div>
@@ -158,7 +158,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function CodeBlock({ code, language }: { code: string; language: string }): ReactElement {
   return (
-    <pre className="overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4 text-xs leading-6 text-[var(--text)]">
+    <pre className="workspace-subtle-surface overflow-x-auto rounded-2xl p-4 text-xs leading-6 text-[var(--text)]">
       <code data-language={language}>{code}</code>
     </pre>
   )
@@ -207,9 +207,9 @@ export function ScheduleDocumentationPage({
             </WorkspaceHeaderActions>
           }
         />
-        <DocumentWorkspaceMainContent className="overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_38%)]">
+        <DocumentWorkspaceMainContent className="overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-6 py-6">
-            <section className="rounded-[28px] border border-[var(--line)] bg-[var(--panel)] px-6 py-7 shadow-sm">
+            <section className="workspace-subtle-surface rounded-[28px] px-6 py-7 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
                 Standalone Documentation
               </p>

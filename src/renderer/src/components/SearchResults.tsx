@@ -16,7 +16,7 @@ export function SearchResults({ results, onOpen }: SearchResultsProps): ReactEle
       {results.map((result) => (
         <button
           key={`${result.id}-${result.relPath}`}
-          className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-left hover:border-[var(--accent)]"
+          className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5 text-left"
           onClick={() => onOpen(result.relPath)}
         >
           <div className="mb-0.5 text-base font-semibold">{result.title}</div>

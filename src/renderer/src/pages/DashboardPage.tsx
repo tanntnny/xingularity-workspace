@@ -35,8 +35,7 @@ const priorityStatusClass: Record<WeeklyPlanPriority['status'], string> = {
   done: 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
 }
 
-const cardClass =
-  'rounded-2xl border border-[color:color-mix(in_srgb,var(--line)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)]'
+const cardClass = 'workspace-subtle-surface rounded-2xl'
 const metricCardClass = `${cardClass} p-5`
 const chipClass = 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium'
 
@@ -138,7 +137,7 @@ export function DashboardPage({
               <button
                 type="button"
                 onClick={onOpenProjects}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm font-medium hover:border-[var(--accent)]"
+                className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
               >
                 <span>All projects</span>
                 <ArrowRight size={15} />
@@ -156,7 +155,7 @@ export function DashboardPage({
                       key={project.id}
                       type="button"
                       onClick={() => onOpenProject(project.id)}
-                      className="flex w-full items-start justify-between gap-4 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4 text-left transition-colors hover:border-[var(--accent)]"
+                      className="workspace-subtle-control flex w-full items-start justify-between gap-4 rounded-2xl border border-[var(--line)] px-4 py-4 text-left transition-colors"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -173,12 +172,12 @@ export function DashboardPage({
                             {statusMeta.titleLabel}
                           </span>
                           <span
-                            className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}
+                            className={`${chipClass} workspace-subtle-control border-[var(--line)] text-[var(--muted)]`}
                           >
                             {project.progress}% complete
                           </span>
                           <span
-                            className={`${chipClass} border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]`}
+                            className={`${chipClass} workspace-subtle-control border-[var(--line)] text-[var(--muted)]`}
                           >
                             {milestoneCount} milestones
                           </span>
@@ -213,7 +212,7 @@ export function DashboardPage({
               <button
                 type="button"
                 onClick={onOpenWeeklyPlan}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm font-medium hover:border-[var(--accent)]"
+                className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
               >
                 <span>Weekly plan</span>
                 <ArrowRight size={15} />
@@ -248,12 +247,12 @@ export function DashboardPage({
                   return (
                     <div
                       key={priority.id}
-                      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-4"
+                      className="workspace-subtle-surface rounded-2xl px-4 py-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-xs font-semibold text-[var(--muted)]">
+                            <span className="workspace-subtle-control inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
                               {index + 1}
                             </span>
                             <p className="truncate text-base font-semibold text-[var(--text)]">
@@ -331,7 +330,7 @@ function EmptyState({
       <button
         type="button"
         onClick={onAction}
-        className="mt-4 inline-flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm font-medium hover:border-[var(--accent)]"
+        className="workspace-subtle-control mt-4 inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
       >
         <span>{actionLabel}</span>
         <ArrowRight size={15} />

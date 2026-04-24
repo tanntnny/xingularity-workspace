@@ -19,10 +19,10 @@ import {
   EventMountArg,
   EventHoveringArg
 } from '@fullcalendar/core'
-import { createPortal } from 'react-dom'
 import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
+import { FloatingHoverCard } from './ui/floating-hover-card'
 import { Input } from './ui/input'
 import {
   buildCalendarEvents,
@@ -471,7 +471,7 @@ export function CalendarMonthView({
 
   return (
     <section className="calendar-full p-4">
-      <div className="relative rounded-2xl border border-[var(--line)] bg-[var(--panel)]">
+      <div className="workspace-subtle-surface relative rounded-2xl">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -564,7 +564,7 @@ export function CalendarMonthView({
                           className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
                             isCompleted
                               ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                              : 'border-[var(--line-strong)] bg-[var(--panel)]'
+                              : 'workspace-subtle-control border-[var(--line-strong)]'
                           }`}
                         >
                           {isCompleted ? <Check size={8} strokeWidth={3} /> : null}
@@ -615,15 +615,8 @@ export function CalendarMonthView({
           />
         </TaskContextMenu>
       ) : null}
-      {hoveredTaskCard && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-50 w-64 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 shadow-xl"
-              style={{
-                left: `${hoveredTaskCard.x}px`,
-                top: `${hoveredTaskCard.y}px`
-              }}
-            >
+      {hoveredTaskCard ? (
+        <FloatingHoverCard x={hoveredTaskCard.x} y={hoveredTaskCard.y} className="w-72">
               <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
                 {hoveredTaskCard.task.title}
               </div>
@@ -640,10 +633,8 @@ export function CalendarMonthView({
               {(hoveredTaskCard.task.reminders || []).some((reminder) => reminder.enabled) && (
                 <div className="mt-1 text-xs text-[var(--muted)]">Reminders enabled</div>
               )}
-            </div>,
-            document.body
-          )
-        : null}
+        </FloatingHoverCard>
+      ) : null}
       {editingTask ? (
         <TaskEditDialog
           task={editingTask}
@@ -756,7 +747,7 @@ function TaskEditDialog({
             <select
               value={taskType}
               onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm"
+              className="workspace-subtle-control mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
             >
               {TASK_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -792,7 +783,7 @@ function TaskEditDialog({
           <button
             type="button"
             onClick={handleDelete}
-            className="flex h-9 w-9 items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] p-1.5 text-[var(--text)] hover:border-[var(--accent)]"
+            className="workspace-subtle-control flex h-9 w-9 items-center justify-center rounded border border-[var(--line)] p-1.5 text-[var(--text)]"
             title="Delete task"
           >
             <Trash2 size={18} />

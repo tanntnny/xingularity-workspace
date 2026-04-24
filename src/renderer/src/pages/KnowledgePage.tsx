@@ -245,7 +245,7 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
     <div
       ref={containerRef}
       data-testid="knowledge-page"
-      className="relative h-full min-w-0 flex-1 overflow-hidden bg-[var(--panel)]"
+      className="workspace-clear-surface relative h-full min-w-0 flex-1 overflow-hidden"
     >
       <ReactFlow
         data-testid="knowledge-canvas"
@@ -282,7 +282,7 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
           data-testid="knowledge-empty-state"
           className="absolute inset-0 flex items-center justify-center p-10"
         >
-          <div className="max-w-xl rounded-[32px] border border-[var(--line)] bg-[var(--panel)] px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.12)]">
+          <div className="workspace-subtle-surface max-w-xl rounded-[32px] px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.08)]">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
               <Sparkles size={24} />
             </div>

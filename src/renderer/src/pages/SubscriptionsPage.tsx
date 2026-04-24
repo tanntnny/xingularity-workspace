@@ -1,5 +1,4 @@
 import { ReactElement, useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import * as d3 from 'd3'
 import { Archive, CalendarClock, Landmark, Pencil, Plus, Trash2, WalletCards } from 'lucide-react'
 import {
@@ -27,6 +26,7 @@ import {
   DrawerTitle
 } from '../components/ui/drawer'
 import { Input } from '../components/ui/input'
+import { FloatingHoverCard } from '../components/ui/floating-hover-card'
 import {
   SortableTableHead,
   Table,
@@ -390,7 +390,7 @@ function TreemapCard({
 
   if (!records.length) {
     return (
-      <div className="rounded-[24px] border border-[var(--line)] bg-[var(--panel)]/80">
+      <div className="workspace-subtle-surface rounded-[24px]">
         <div className="border-b border-[var(--line)] px-5 py-4">
           <div className="mb-4 border-t border-[var(--line)]" />
           <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
@@ -405,7 +405,7 @@ function TreemapCard({
                 onChange={(event) =>
                   onChangeStatusFilter(event.currentTarget.value as 'all' | SubscriptionStatus)
                 }
-                className="h-9 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 text-sm text-[var(--text)]"
+                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
               >
                 <option value="all">All statuses</option>
                 {STATUS_OPTIONS.map((status) => (
@@ -422,7 +422,7 @@ function TreemapCard({
                     event.currentTarget.value === 'all' ? null : event.currentTarget.value
                   )
                 }
-                className="h-9 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 text-sm text-[var(--text)]"
+                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
               >
                 <option value="all">All categories</option>
                 {categories.map((category) => (
@@ -451,7 +451,7 @@ function TreemapCard({
 
   return (
     <>
-      <div className="overflow-hidden shadow-[0_18px_60px_rgba(5,10,18,0.12)]">
+      <div className="workspace-subtle-surface overflow-hidden rounded-[24px] px-5 shadow-[0_18px_60px_rgba(5,10,18,0.12)]">
         <div className="border-b border-[var(--line)] py-4">
           <div className="mb-4 border-t border-[var(--line)]" />
           <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
@@ -466,7 +466,7 @@ function TreemapCard({
                 onChange={(event) =>
                   onChangeStatusFilter(event.currentTarget.value as 'all' | SubscriptionStatus)
                 }
-                className="h-9 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 text-sm text-[var(--text)]"
+                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
               >
                 <option value="all">All statuses</option>
                 {STATUS_OPTIONS.map((status) => (
@@ -483,7 +483,7 @@ function TreemapCard({
                     event.currentTarget.value === 'all' ? null : event.currentTarget.value
                   )
                 }
-                className="h-9 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 text-sm text-[var(--text)]"
+                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
               >
                 <option value="all">All categories</option>
                 {categories.map((category) => (
@@ -668,15 +668,8 @@ function TreemapCard({
           })}
         </svg>
       </div>
-      {hoverCard && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-50 w-72 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 shadow-xl"
-              style={{
-                left: `${hoverCard.x}px`,
-                top: `${hoverCard.y}px`
-              }}
-            >
+      {hoverCard ? (
+        <FloatingHoverCard x={hoverCard.x} y={hoverCard.y} className="w-72">
               {hoverCard.kind === 'record' ? (
                 <>
                   <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
@@ -717,10 +710,8 @@ function TreemapCard({
                   </div>
                 </>
               )}
-            </div>,
-            document.body
-          )
-        : null}
+        </FloatingHoverCard>
+      ) : null}
     </>
   )
 }
@@ -935,7 +926,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
   ]
 
   return (
-    <div className="h-full overflow-y-auto bg-[color-mix(in_srgb,var(--panel)_68%,transparent)]">
+    <div className="h-full overflow-y-auto bg-transparent">
       <div
         className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-5 py-5 md:px-6"
         data-testid="subscriptions-page"
@@ -943,7 +934,10 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         <section>
           <div className="grid gap-3 md:grid-cols-3">
             {kpiCards.map((card) => (
-              <div key={card.label} className="rounded-lg border border-[var(--line)] px-4 py-4">
+              <div
+                key={card.label}
+                className="workspace-subtle-surface rounded-2xl border border-[var(--line)] px-4 py-4"
+              >
                 <div className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
                   <card.icon size={16} />
                   <span>{card.label}</span>
@@ -957,7 +951,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         </section>
 
         {isLoading ? (
-          <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-6 py-8 text-sm text-[var(--muted)]">
+          <div className="workspace-subtle-surface rounded-3xl px-6 py-8 text-sm text-[var(--muted)]">
             Loading subscriptions…
           </div>
         ) : (
@@ -977,160 +971,164 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
             </section>
 
             <section>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-[var(--text)]">Subscriptions list</h2>
-                  <p className="text-sm text-[var(--muted)]">
-                    Sort, filter, and manage individual subscriptions.
-                  </p>
+              <div className="workspace-subtle-surface rounded-[24px] p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-[var(--text)]">
+                      Subscriptions list
+                    </h2>
+                    <p className="text-sm text-[var(--muted)]">
+                      Sort, filter, and manage individual subscriptions.
+                    </p>
+                  </div>
+                  <div className="text-sm text-[var(--muted)]">
+                    {filteredRecords.length} result{filteredRecords.length === 1 ? '' : 's'}
+                  </div>
                 </div>
-                <div className="text-sm text-[var(--muted)]">
-                  {filteredRecords.length} result{filteredRecords.length === 1 ? '' : 's'}
-                </div>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <SortableTableHead
-                        isActive={sortField === 'name'}
-                        sortDirection={sortDirection}
-                        onToggleSort={() => toggleSort('name')}
-                      >
-                        Subscription
-                      </SortableTableHead>
-                      <SortableTableHead
-                        isActive={sortField === 'category'}
-                        sortDirection={sortDirection}
-                        onToggleSort={() => toggleSort('category')}
-                      >
-                        Category
-                      </SortableTableHead>
-                      <SortableTableHead
-                        isActive={sortField === 'amount'}
-                        sortDirection={sortDirection}
-                        onToggleSort={() => toggleSort('amount')}
-                      >
-                        Monthly
-                      </SortableTableHead>
-                      <SortableTableHead
-                        isActive={sortField === 'nextRenewalAt'}
-                        sortDirection={sortDirection}
-                        onToggleSort={() => toggleSort('nextRenewalAt')}
-                      >
-                        Next renewal
-                      </SortableTableHead>
-                      <SortableTableHead
-                        isActive={sortField === 'status'}
-                        sortDirection={sortDirection}
-                        onToggleSort={() => toggleSort('status')}
-                      >
-                        Status
-                      </SortableTableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredRecords.map((record) => (
-                      <TableRow
-                        key={record.id}
-                        data-state={selectedId === record.id ? 'selected' : undefined}
-                        className="cursor-pointer"
-                        title={buildSubscriptionTooltip(record)}
-                        onClick={() => setSelectedId(record.id)}
-                      >
-                        <TableCell>
-                          <div className="font-medium text-[var(--text)]">{record.name}</div>
-                          <div className="text-xs text-[var(--muted)]">
-                            {record.provider ?? 'No provider'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <span>{record.category}</span>
-                            {(record.tags ?? []).length ? (
-                              <div className="flex flex-wrap gap-1">
-                                {(record.tags ?? []).slice(0, 3).map((tag) => (
-                                  <Badge
-                                    key={tag}
-                                    className="border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)]"
-                                  >
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-[var(--text)]">
-                            {formatCurrency(record.normalizedMonthlyAmount)}
-                          </div>
-                          <div className="text-xs capitalize text-[var(--muted)]">
-                            {formatCurrency(record.amount)} / {record.billingCycle}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-[var(--text)]">
-                            {formatRenewalLabel(record.nextRenewalAt)}
-                          </div>
-                          <div className="text-xs text-[var(--muted)]">
-                            {formatRelativeRenewal(record.nextRenewalAt)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge className={statusTone(record.status)}>{record.status}</Badge>
-                            {(record.reviewFlag ?? 'none') !== 'none' ? (
-                              <Badge className={reviewTone(record.reviewFlag ?? 'none')}>
-                                {record.reviewFlag}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Edit ${record.name}`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                openEditModal(record)
-                              }}
-                            >
-                              <Pencil size={14} />
-                            </Button>
-                            {record.status !== 'archived' ? (
+                <div className="mt-4 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTableHead
+                          isActive={sortField === 'name'}
+                          sortDirection={sortDirection}
+                          onToggleSort={() => toggleSort('name')}
+                        >
+                          Subscription
+                        </SortableTableHead>
+                        <SortableTableHead
+                          isActive={sortField === 'category'}
+                          sortDirection={sortDirection}
+                          onToggleSort={() => toggleSort('category')}
+                        >
+                          Category
+                        </SortableTableHead>
+                        <SortableTableHead
+                          isActive={sortField === 'amount'}
+                          sortDirection={sortDirection}
+                          onToggleSort={() => toggleSort('amount')}
+                        >
+                          Monthly
+                        </SortableTableHead>
+                        <SortableTableHead
+                          isActive={sortField === 'nextRenewalAt'}
+                          sortDirection={sortDirection}
+                          onToggleSort={() => toggleSort('nextRenewalAt')}
+                        >
+                          Next renewal
+                        </SortableTableHead>
+                        <SortableTableHead
+                          isActive={sortField === 'status'}
+                          sortDirection={sortDirection}
+                          onToggleSort={() => toggleSort('status')}
+                        >
+                          Status
+                        </SortableTableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords.map((record) => (
+                        <TableRow
+                          key={record.id}
+                          data-state={selectedId === record.id ? 'selected' : undefined}
+                          className="cursor-pointer"
+                          title={buildSubscriptionTooltip(record)}
+                          onClick={() => setSelectedId(record.id)}
+                        >
+                          <TableCell>
+                            <div className="font-medium text-[var(--text)]">{record.name}</div>
+                            <div className="text-xs text-[var(--muted)]">
+                              {record.provider ?? 'No provider'}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span>{record.category}</span>
+                              {(record.tags ?? []).length ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {(record.tags ?? []).slice(0, 3).map((tag) => (
+                                    <Badge
+                                      key={tag}
+                                      className="workspace-subtle-control border-[var(--line)] text-[var(--muted)]"
+                                    >
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-[var(--text)]">
+                              {formatCurrency(record.normalizedMonthlyAmount)}
+                            </div>
+                            <div className="text-xs capitalize text-[var(--muted)]">
+                              {formatCurrency(record.amount)} / {record.billingCycle}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-[var(--text)]">
+                              {formatRenewalLabel(record.nextRenewalAt)}
+                            </div>
+                            <div className="text-xs text-[var(--muted)]">
+                              {formatRelativeRenewal(record.nextRenewalAt)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className={statusTone(record.status)}>{record.status}</Badge>
+                              {(record.reviewFlag ?? 'none') !== 'none' ? (
+                                <Badge className={reviewTone(record.reviewFlag ?? 'none')}>
+                                  {record.reviewFlag}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label={`Archive ${record.name}`}
+                                aria-label={`Edit ${record.name}`}
                                 onClick={(event) => {
                                   event.stopPropagation()
-                                  void handleArchive(record)
+                                  openEditModal(record)
                                 }}
                               >
-                                <Archive size={14} />
+                                <Pencil size={14} />
                               </Button>
-                            ) : null}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Delete ${record.name}`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void handleDelete(record)
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                              {record.status !== 'archived' ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Archive ${record.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleArchive(record)
+                                  }}
+                                >
+                                  <Archive size={14} />
+                                </Button>
+                              ) : null}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Delete ${record.name}`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void handleDelete(record)
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </section>
           </>

@@ -71,7 +71,7 @@ export function UnscheduledTaskList({
     <div
       data-unscheduled-task-list="true"
       className={`flex h-full flex-col overflow-hidden transition-colors ${
-        isDragOver ? 'bg-[var(--accent-soft)]/40' : 'bg-[var(--panel)]'
+        isDragOver ? 'bg-[var(--accent-soft)]/40' : 'workspace-clear-surface'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -98,14 +98,14 @@ export function UnscheduledTaskList({
                 onInsertTask()
               }
             }}
-            className="h-8 min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 text-sm text-[var(--text)] outline-none"
+            className="workspace-subtle-control h-8 min-w-0 flex-1 rounded-md border border-[var(--line)] px-2.5 text-sm text-[var(--text)] outline-none"
           />
           <button
             type="button"
             onClick={onInsertTask}
             aria-label="Insert task"
             title="Insert task"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] transition-colors hover:border-[var(--accent)]"
+            className="workspace-subtle-control inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)] text-[var(--text)] transition-colors"
           >
             <Plus size={13} aria-hidden="true" />
           </button>
@@ -123,7 +123,7 @@ export function UnscheduledTaskList({
           }`}
         >
           {isDragOver ? (
-            <div className="mb-2 rounded-md bg-[var(--panel)] px-2 py-1 text-center text-[11px] text-[var(--accent)]">
+            <div className="workspace-subtle-surface mb-2 rounded-md px-2 py-1 text-center text-[11px] text-[var(--accent)]">
               Drop here to unschedule
             </div>
           ) : null}
@@ -175,7 +175,7 @@ export function UnscheduledTaskList({
 
             {tasks.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--panel-2)]">
+                <div className="workspace-subtle-surface mb-3 flex h-12 w-12 items-center justify-center rounded-2xl">
                   <CalendarPlus size={24} className="text-[var(--muted)]" />
                 </div>
                 <p className="text-sm font-medium text-[var(--text)]">No unscheduled tasks</p>

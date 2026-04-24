@@ -282,7 +282,7 @@ function ProjectSection({
               className={`${revealProps.className} flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                 selectedProjectId === project.id
                   ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                  : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                  : 'workspace-subtle-control border-[var(--line)]'
               }`}
               style={revealProps.style}
               onClick={() => onSelect(project.id)}

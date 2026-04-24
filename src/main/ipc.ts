@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
+import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { VaultRuntime } from './runtime'
 
@@ -249,7 +250,8 @@ const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
     .object({
-      name: z.string().trim().min(1).max(100)
+      name: z.string().trim().min(1).max(100).optional(),
+      color: z.enum(PROFILE_COLOR_VALUES).optional()
     })
     .optional(),
   ai: z

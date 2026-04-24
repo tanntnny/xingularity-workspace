@@ -550,10 +550,11 @@ export function SchedulesPage({
                     aria-label="Run now"
                     icon={
                       isRunning ? (
-                      <Loader2 size={18} className="animate-spin" />
-                    ) : (
-                      <Play size={18} />
-                    )}
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Play size={18} />
+                      )
+                    }
                   />
                 </WorkspaceHeaderActionGroup>
               </WorkspaceHeaderActions>
@@ -743,9 +744,7 @@ export function SchedulesPage({
         </DocumentWorkspaceMain>
 
         {/* ── Right: Schedule cards ───────────────────────────────────── */}
-        <DocumentWorkspacePanel
-          className={`${isRightPanelCollapsed ? 'hidden' : 'flex'} border-l border-[var(--line)]`}
-        >
+        <DocumentWorkspacePanel className={isRightPanelCollapsed ? 'hidden' : 'flex'}>
           <DocumentWorkspacePanelHeader
             actions={
               <WorkspaceHeaderActions>

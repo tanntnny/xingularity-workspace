@@ -175,7 +175,7 @@ function makeSettings(): AppSettings {
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],
-    profile: { name: '' },
+    profile: { name: '', color: 'indigo' },
     ai: { mistralApiKey: '' },
     fontFamily: 'serif',
     workspaceVibrancyEnabled: true,

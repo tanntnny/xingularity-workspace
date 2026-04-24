@@ -2,8 +2,11 @@ import * as React from 'react'
 
 import { cn } from '../../lib/utils'
 
-const workspaceHeaderClass =
-  'document-workspace-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--line-strong)] bg-[var(--panel)] px-3'
+const workspaceMainHeaderClass =
+  'document-workspace-header document-workspace-main-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)] px-3'
+
+const workspacePanelHeaderClass =
+  'document-workspace-header document-workspace-panel-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)] px-3'
 
 const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
 
@@ -21,7 +24,7 @@ const DocumentWorkspaceMain = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      'document-workspace-main-surface flex min-w-0 flex-1 flex-col border-r border-[var(--line)] bg-[var(--panel)]',
+      'document-workspace-main-surface flex min-w-0 flex-1 flex-col bg-[var(--workspace-main-panel)]',
       className
     )}
     {...props}
@@ -32,18 +35,13 @@ DocumentWorkspaceMain.displayName = 'DocumentWorkspaceMain'
 const DocumentWorkspacePanel = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
->(({ className, style, ...props }, ref) => (
+>(({ className, ...props }, ref) => (
   <aside
     ref={ref}
     className={cn(
-      'document-workspace-panel-surface flex w-[300px] shrink-0 flex-col bg-[var(--panel)]',
+      'document-workspace-panel-surface flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col border-l border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)]',
       className
     )}
-    style={{
-      width: 'var(--workspace-pane-width)',
-      flexBasis: 'var(--workspace-pane-width)',
-      ...style
-    }}
     {...props}
   />
 ))
@@ -56,7 +54,7 @@ interface DocumentWorkspaceMainHeaderProps extends React.HTMLAttributes<HTMLElem
 
 const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorkspaceMainHeaderProps>(
   ({ className, breadcrumb, actions, ...props }, ref) => (
-    <header ref={ref} className={cn(workspaceHeaderClass, className)} {...props}>
+    <header ref={ref} className={cn(workspaceMainHeaderClass, className)} {...props}>
       <div className="app-no-drag flex min-w-0 items-center gap-3">{breadcrumb}</div>
       {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
     </header>
@@ -76,7 +74,7 @@ const DocumentWorkspacePanelHeader = React.forwardRef<
   const resolvedLeading = leading ?? (!actions ? children : null)
 
   return (
-    <header ref={ref} className={cn(workspaceHeaderClass, className)} {...props}>
+    <header ref={ref} className={cn(workspacePanelHeaderClass, className)} {...props}>
       {resolvedLeading ? (
         <div className="app-no-drag flex min-w-0 items-center gap-3">{resolvedLeading}</div>
       ) : null}
@@ -109,7 +107,7 @@ const WorkspaceHeaderActionDivider = React.forwardRef<
   <div
     ref={ref}
     aria-hidden="true"
-    className={cn('h-5 w-px shrink-0 bg-[var(--line)]', className)}
+    className={cn('h-5 w-px shrink-0 bg-[var(--sidebar-border)]', className)}
     {...props}
   />
 ))
@@ -134,7 +132,7 @@ const WorkspaceActionButton = React.forwardRef<HTMLButtonElement, WorkspaceActio
         label ? 'h-9 gap-2 rounded-full px-3 text-xs font-medium' : 'h-8 w-8 rounded-lg',
         active
           ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-          : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
+          : 'workspace-subtle-control border-[var(--line)] text-[var(--muted)] hover:text-[var(--accent)]',
         className
       )}
       {...props}

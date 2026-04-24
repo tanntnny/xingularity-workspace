@@ -655,7 +655,7 @@ export function AgentHistoryPage({
                     void saveRename()
                   }}
                   onKeyDown={handleRenameKeyDown}
-                  className="mt-1 w-full max-w-[360px] rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-semibold text-[var(--text)]"
+                  className="workspace-subtle-control mt-1 w-full max-w-[360px] rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--text)]"
                 />
               ) : (
                 <p className="truncate text-sm font-semibold text-[var(--text)]">{headerTitle}</p>
@@ -696,9 +696,9 @@ export function AgentHistoryPage({
               Agent chat is only available inside the desktop app.
             </div>
           ) : (
-            <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.09),transparent_42%)]">
+            <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
               <div className="min-h-0 flex-1 px-5 pt-5">
-                <Conversation className="rounded-[28px] border border-[var(--line)] bg-[var(--panel)] shadow-sm">
+                <Conversation className="workspace-subtle-surface rounded-[28px] shadow-sm">
                   <ConversationContent className="space-y-4">
                     {messages.length === 0 ? (
                       <ConversationEmptyState
@@ -719,7 +719,7 @@ export function AgentHistoryPage({
                                   return (
                                     <div
                                       key={step.id}
-                                      className="rounded-3xl border border-[var(--line)] bg-[var(--panel-2)] p-4 shadow-sm"
+                                      className="workspace-subtle-surface rounded-3xl p-4 shadow-sm"
                                     >
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex min-w-0 items-center gap-2">
@@ -747,7 +747,7 @@ export function AgentHistoryPage({
                                           <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                                             Input
                                           </div>
-                                          <pre className="overflow-x-auto whitespace-pre-wrap rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">
+                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs text-[var(--muted)]">
                                             {step.inputSummary}
                                           </pre>
                                         </div>
@@ -755,7 +755,7 @@ export function AgentHistoryPage({
                                           <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                                             Output
                                           </div>
-                                          <pre className="overflow-x-auto whitespace-pre-wrap rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">
+                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs text-[var(--muted)]">
                                             {step.outputSummary}
                                           </pre>
                                         </div>
@@ -780,7 +780,7 @@ export function AgentHistoryPage({
                                             onClick={() => {
                                               void rejectToolStep(step.id)
                                             }}
-                                            className="inline-flex h-9 items-center rounded-full border border-[var(--line)] bg-[var(--panel)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                                            className="workspace-subtle-control inline-flex h-9 items-center rounded-full border border-[var(--line)] px-3 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
                                           >
                                             Reject
                                           </button>
@@ -796,7 +796,7 @@ export function AgentHistoryPage({
                               <MessageContent
                                 className={cn(
                                   isAssistant
-                                    ? 'bg-[var(--panel)]'
+                                    ? 'workspace-subtle-control'
                                     : 'border-[var(--accent)]/20 bg-[var(--accent-soft)]'
                                 )}
                               >
@@ -817,7 +817,7 @@ export function AgentHistoryPage({
                                     {message.contexts.map((context) => (
                                       <span
                                         key={context.id}
-                                        className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
+                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
                                       >
                                         {context.kind === 'note' ? (
                                           <FileText size={12} />
@@ -834,7 +834,7 @@ export function AgentHistoryPage({
                                     {message.mentions.map((mention) => (
                                       <span
                                         key={mention.id}
-                                        className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
+                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
                                       >
                                         {mention.kind === 'note' ? (
                                           <FileText size={12} />
@@ -1016,7 +1016,7 @@ export function AgentHistoryPage({
           }
         />
         <DocumentWorkspacePanelContent className="space-y-5 p-4">
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
+          <section className="workspace-subtle-surface rounded-3xl p-4">
             <WorkspacePanelSectionHeader
               className="mb-3"
               icon={<Bot size={16} aria-hidden="true" />}
@@ -1038,7 +1038,7 @@ export function AgentHistoryPage({
                         'block w-full rounded-2xl border px-3 py-3 text-left transition',
                         isActive
                           ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                          : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]/40'
+                          : 'workspace-subtle-control border-[var(--line)]'
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -1068,7 +1068,7 @@ export function AgentHistoryPage({
             )}
           </section>
 
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
+          <section className="workspace-subtle-surface rounded-3xl p-4">
             <WorkspacePanelSectionHeader
               className="mb-3"
               icon={<MessageSquarePlus size={16} aria-hidden="true" />}
@@ -1086,7 +1086,7 @@ export function AgentHistoryPage({
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
+                  <div className="workspace-subtle-surface rounded-2xl p-3">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                       Messages
                     </div>
@@ -1094,7 +1094,7 @@ export function AgentHistoryPage({
                       {activeSession.messages.length}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
+                  <div className="workspace-subtle-surface rounded-2xl p-3">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                       Title mode
                     </div>
@@ -1103,7 +1103,7 @@ export function AgentHistoryPage({
                     </p>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
+                <div className="workspace-subtle-surface rounded-2xl p-3">
                   <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                     Updated
                   </div>
@@ -1117,7 +1117,7 @@ export function AgentHistoryPage({
             )}
           </section>
 
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-4">
+          <section className="workspace-subtle-surface rounded-3xl p-4">
             <WorkspacePanelSectionHeader
               className="mb-3"
               icon={<AtSign size={16} aria-hidden="true" />}
@@ -1129,7 +1129,7 @@ export function AgentHistoryPage({
                 {selectedMentions.map((mention) => (
                   <span
                     key={mention.id}
-                    className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)]"
+                    className="workspace-subtle-control inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--text)]"
                   >
                     {mention.kind === 'note' ? <FileText size={13} /> : <FolderKanban size={13} />}
                     <span>{mention.label}</span>
@@ -1145,7 +1145,7 @@ export function AgentHistoryPage({
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] px-3 py-4 text-sm text-[var(--muted)]">
+              <div className="workspace-subtle-surface rounded-2xl border-dashed px-3 py-4 text-sm text-[var(--muted)]">
                 No context attached yet. Use <span className="font-semibold text-[var(--text)]">@</span> in the composer or the mention button below the chat.
               </div>
             )}

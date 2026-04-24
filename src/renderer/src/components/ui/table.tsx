@@ -16,10 +16,10 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead
-    ref={ref}
-    className={cn(
-      'bg-[color-mix(in_srgb,var(--panel-2)_82%,var(--accent-soft))] [&_tr]:border-b [&_tr]:border-[var(--line)]',
+    <thead
+      ref={ref}
+      className={cn(
+      'bg-[color:color-mix(in_srgb,var(--panel-2)_24%,transparent)] [&_tr]:border-b [&_tr]:border-[var(--line)]',
       className
     )}
     {...props}
@@ -39,10 +39,10 @@ const TableFooter = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <tfoot
-    ref={ref}
-    className={cn(
-      'border-t border-[var(--line)] bg-[var(--panel-2)] font-medium [&>tr]:last:border-b-0',
+    <tfoot
+      ref={ref}
+      className={cn(
+      'border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel-2)_18%,transparent)] font-medium [&>tr]:last:border-b-0',
       className
     )}
     {...props}
@@ -55,7 +55,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
     <tr
       ref={ref}
       className={cn(
-        'border-b border-[var(--line)] bg-[var(--panel)] transition-colors hover:bg-[var(--panel-2)]/60 data-[state=selected]:bg-[var(--accent-soft)]',
+        'border-b border-[var(--line)] bg-transparent transition-colors hover:bg-[color:color-mix(in_srgb,var(--panel-2)_16%,transparent)] data-[state=selected]:bg-[var(--accent-soft)]',
         className
       )}
       {...props}

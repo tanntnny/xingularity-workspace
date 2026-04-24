@@ -290,7 +290,7 @@ export function ProjectDetailsPage({
   }
 
   return (
-    <div className="h-full overflow-auto bg-[var(--panel)]">
+    <div className="workspace-clear-surface h-full overflow-auto">
       <div className="flex flex-col gap-3 px-8 py-5">
         <div className="flex min-w-0 items-center gap-1">
           <NoteShapeIcon icon={project.icon} size={20} className="shrink-0" />
@@ -364,7 +364,7 @@ export function ProjectDetailsPage({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col gap-2 bg-[var(--panel)] px-8 py-2">
+      <div className="workspace-clear-surface flex shrink-0 flex-col gap-2 px-8 py-2">
         <TabMenu
           className="project-tab-menu"
           value={activeTab}

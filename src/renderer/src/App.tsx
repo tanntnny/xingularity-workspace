@@ -1,4 +1,13 @@
-import { Fragment, ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  CSSProperties,
+  Fragment,
+  ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -43,12 +52,14 @@ import {
   WeeklyPlanWeek,
   HistoryAffectedAreas
 } from '../../shared/types'
+import type { ProfileColor } from '../../shared/profileColors'
 import {
   createRandomProjectIcon,
   PROJECT_ICON_COLORS,
   PROJECT_ICON_SHAPES,
   PROJECT_ICON_VARIANTS
 } from '../../shared/projectIcons'
+import { resolveProfileAccent } from './lib/profileColors'
 import {
   appendTextToNoteMarkdown,
   getNoteDisplayName,
@@ -111,7 +122,6 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
-import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
 import { SearchPage } from './pages/SearchPage'
@@ -294,10 +304,9 @@ function App(): ReactElement {
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
-  const workspaceVibrancyEnabled = useVaultStore(
-    (state) => state.settings.workspaceVibrancyEnabled
-  )
+  const workspaceVibrancyEnabled = useVaultStore((state) => state.settings.workspaceVibrancyEnabled)
   const profileName = useVaultStore((state) => state.settings.profile.name)
+  const profileColor = useVaultStore((state) => state.settings.profile.color)
   const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
   const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
   const projectIcons = useVaultStore((state) => state.settings.projectIcons)
@@ -312,6 +321,26 @@ function App(): ReactElement {
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const useNativeMenus = canUseNativeMenus()
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  const profileAccent = resolveProfileAccent(profileColor, isDarkMode)
+  const accentCssVars = useMemo(
+    () =>
+      ({
+        ['--accent' as string]: profileAccent.accent,
+        ['--accent-soft' as string]: profileAccent.soft,
+        ['--accent-line' as string]: profileAccent.line,
+        ['--accent-color' as string]: profileAccent.soft,
+        ['--accent-foreground' as string]: profileAccent.accent,
+        ['--ring' as string]: profileAccent.line,
+        ['--sidebar-primary' as string]: profileAccent.accent,
+        ['--sidebar-accent' as string]: profileAccent.soft,
+        ['--sidebar-accent-foreground' as string]: profileAccent.accent
+      }) as CSSProperties,
+    [profileAccent]
+  )
+  const shellAccentStyle = accentCssVars
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
@@ -332,6 +361,19 @@ function App(): ReactElement {
     relPath: string
     token: number
   } | null>(null)
+
+  useEffect(() => {
+    const rootStyle = document.documentElement.style
+    for (const [name, value] of Object.entries(accentCssVars)) {
+      rootStyle.setProperty(name, String(value))
+    }
+
+    return () => {
+      for (const name of Object.keys(accentCssVars)) {
+        rootStyle.removeProperty(name)
+      }
+    }
+  }, [accentCssVars])
   const [jumpToNoteHeading, setJumpToNoteHeading] = useState<((blockId: string) => void) | null>(
     null
   )
@@ -1039,6 +1081,18 @@ function App(): ReactElement {
   }, [vaultApi, vault?.rootPath, setSettings, pushToast])
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const syncColorScheme = (): void => setIsDarkMode(mediaQuery.matches)
+
+    syncColorScheme()
+    mediaQuery.addEventListener('change', syncColorScheme)
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncColorScheme)
+    }
+  }, [])
+
+  useEffect(() => {
     document.documentElement.style.setProperty('--app-font-family', fontFamily)
   }, [fontFamily])
 
@@ -1732,6 +1786,24 @@ function App(): ReactElement {
         }
       })
       setSettings(nextSettings)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateProfileColor = async (color: ProfileColor): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({
+        profile: {
+          color
+        }
+      })
+      setSettings(nextSettings)
+      pushToast('success', 'Accent color updated')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -4651,6 +4723,7 @@ function App(): ReactElement {
     <div className="flex h-screen">
       <SidebarProvider
         className="h-full"
+        style={shellAccentStyle}
         data-focus-mode={isFocusMode ? 'true' : 'false'}
         open={isFocusMode ? false : isSidebarOpen}
         onOpenChange={setIsSidebarOpen}
@@ -5553,6 +5626,7 @@ function App(): ReactElement {
                           mistralApiKey={mistralApiKey}
                           fontOptions={FONT_OPTIONS}
                           selectedFontFamily={fontFamily}
+                          profileColor={profileColor}
                           workspaceVibrancyEnabled={workspaceVibrancyEnabled}
                           vaultLocation={vault?.rootPath ?? lastVaultPath}
                           onSaveProfile={(name) => {
@@ -5563,6 +5637,9 @@ function App(): ReactElement {
                           }}
                           onSelectFont={(fontFamily) => {
                             void updateFontFamily(fontFamily)
+                          }}
+                          onSelectProfileColor={(color) => {
+                            void updateProfileColor(color)
                           }}
                           onToggleWorkspaceVibrancy={(enabled) => {
                             void updateWorkspaceVibrancy(enabled)
@@ -5790,32 +5867,31 @@ function App(): ReactElement {
                               ) : null}
                               <WorkspaceHeaderActionDivider />
                               <WorkspaceHeaderActionGroup>
-                                <ToggleGroup
-                                  type="single"
-                                  value={notePanelView}
-                                  onValueChange={(value) => {
-                                    if (value === 'cards' || value === 'tree') {
-                                      setNotePanelView(value)
-                                    }
-                                  }}
-                                  variant="outline"
-                                  size="sm"
-                                >
-                                  <ToggleGroupItem
-                                    value="cards"
-                                    aria-label="Card view"
-                                    data-testid="note-panel-toggle:cards"
-                                  >
-                                    <List size={14} aria-hidden="true" />
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="tree"
-                                    aria-label="Tree view"
-                                    data-testid="note-panel-toggle:tree"
-                                  >
-                                    <FolderOpen size={14} aria-hidden="true" />
-                                  </ToggleGroupItem>
-                                </ToggleGroup>
+                                <WorkspaceActionButton
+                                  onClick={() =>
+                                    setNotePanelView((current) =>
+                                      current === 'cards' ? 'tree' : 'cards'
+                                    )
+                                  }
+                                  aria-label={
+                                    notePanelView === 'cards'
+                                      ? 'Switch to tree view'
+                                      : 'Switch to card view'
+                                  }
+                                  title={
+                                    notePanelView === 'cards'
+                                      ? 'Switch to tree view'
+                                      : 'Switch to card view'
+                                  }
+                                  data-testid="note-panel-toggle"
+                                  icon={
+                                    notePanelView === 'cards' ? (
+                                      <FolderOpen size={18} aria-hidden="true" />
+                                    ) : (
+                                      <List size={18} aria-hidden="true" />
+                                    )
+                                  }
+                                />
                               </WorkspaceHeaderActionGroup>
                             </WorkspaceHeaderActions>
                           ) : activePage === 'projects' ? (
@@ -6125,21 +6201,21 @@ function App(): ReactElement {
                           />
                         ) : (
                           <div className="flex h-full flex-col gap-4 p-3">
-                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                            <WorkspacePanelSection className="rounded-xl">
                               <WorkspacePanelSectionHeader
                                 icon={<Paintbrush size={16} aria-hidden="true" />}
                                 heading="Appearance"
                                 description="Theme and surface defaults for the workspace"
                               />
                             </WorkspacePanelSection>
-                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                            <WorkspacePanelSection className="rounded-xl">
                               <WorkspacePanelSectionHeader
                                 icon={<Type size={16} aria-hidden="true" />}
                                 heading="Editor Defaults"
                                 description="Type, writing, and editing preferences"
                               />
                             </WorkspacePanelSection>
-                            <WorkspacePanelSection className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3.5">
+                            <WorkspacePanelSection className="rounded-xl">
                               <WorkspacePanelSectionHeader
                                 icon={<Keyboard size={16} aria-hidden="true" />}
                                 heading="Shortcuts"

@@ -92,6 +92,8 @@ export function CommandPalette({
   onOpenProject,
   onOpenPage
 }: CommandPaletteProps): ReactElement | null {
+  const paletteItemIconClass =
+    'mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--accent-line)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_72%,var(--panel))] text-[var(--accent)] transition-colors group-data-[selected=true]:border-[var(--accent-line)] group-data-[selected=true]:bg-[color:color-mix(in_srgb,var(--accent-soft)_92%,var(--panel))] group-data-[selected=true]:text-[var(--accent)]'
   const [query, setQuery] = useState('')
   const [hoveredResult, setHoveredResult] = useState<CommandPaletteSearchResult | null>(null)
   const [isWaitingForSearch, setIsWaitingForSearch] = useState(false)
@@ -470,11 +472,11 @@ export function CommandPalette({
 
   return (
     <div
-      className="command-palette-overlay fixed inset-0 z-50 grid place-items-start bg-black/40 pt-[18vh]"
+      className="dialog-glass-overlay command-palette-overlay fixed inset-0 z-50 grid place-items-start pt-[18vh]"
       onClick={onClose}
     >
       <div
-        className="command-palette-panel mx-auto flex w-[min(720px,92vw)] overflow-hidden rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] shadow-[0_20px_60px_rgb(0_0_0_/_22%)]"
+        className="dialog-glass-surface command-palette-panel mx-auto flex w-[min(720px,92vw)] overflow-hidden rounded-lg border-[var(--accent)]"
         onClick={(event) => event.stopPropagation()}
       >
         <Command
@@ -522,12 +524,14 @@ export function CommandPalette({
                     <CommandItem
                       key={item.value}
                       ref={revealProps.ref}
-                      className={revealProps.className}
+                      className={`group ${revealProps.className ?? ''}`}
                       style={revealProps.style}
                       value={item.value}
                       onSelect={handleSelect}
                     >
-                      <Icon className="mr-2 h-4 w-4" />
+                      <div className={paletteItemIconClass}>
+                        <Icon className="h-4 w-4" />
+                      </div>
                       <span>{item.label}</span>
                       {item.shortcut ? <CommandShortcut>{item.shortcut}</CommandShortcut> : null}
                     </CommandItem>
@@ -541,13 +545,15 @@ export function CommandPalette({
                   return (
                     <CommandItem
                       ref={revealProps.ref}
-                      className={revealProps.className}
+                      className={`group ${revealProps.className ?? ''}`}
                       style={revealProps.style}
                       value={aiActionValue}
                       onSelect={handleSelect}
                       disabled={!activeNotePath || !searchQuery || aiLoading}
                     >
-                      <Plus className="mr-2 h-4 w-4" />
+                      <div className={paletteItemIconClass}>
+                        <Plus className="h-4 w-4" />
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate">
                           {aiLoading
@@ -574,12 +580,14 @@ export function CommandPalette({
                   return (
                     <CommandItem
                       ref={revealProps.ref}
-                      className={revealProps.className}
+                      className={`group ${revealProps.className ?? ''}`}
                       style={revealProps.style}
                       value="new-note"
                       onSelect={handleSelect}
                     >
-                      <Plus className="mr-2 h-4 w-4" />
+                      <div className={paletteItemIconClass}>
+                        <Plus className="h-4 w-4" />
+                      </div>
                       <span>New Note</span>
                       <CommandShortcut>⌘N</CommandShortcut>
                     </CommandItem>
@@ -598,13 +606,15 @@ export function CommandPalette({
                       <CommandItem
                         key={`recent:${note.relPath}`}
                         ref={revealProps.ref}
-                        className={revealProps.className}
+                        className={`group ${revealProps.className ?? ''}`}
                         style={revealProps.style}
                         value={`recent:${note.relPath}`}
                         keywords={[note.name, note.relPath, ...note.tags]}
                         onSelect={handleSelect}
                       >
-                        <Clock className="mr-2 h-4 w-4" />
+                        <div className={paletteItemIconClass}>
+                          <Clock className="h-4 w-4" />
+                        </div>
                         <span className="truncate">{note.relPath}</span>
                       </CommandItem>
                     )
@@ -625,13 +635,15 @@ export function CommandPalette({
                           <CommandItem
                             key={result.id}
                             ref={revealProps.ref}
-                            className={revealProps.className}
+                            className={`group ${revealProps.className ?? ''}`}
                             style={revealProps.style}
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
                           >
-                            <FileText className="mr-2 h-4 w-4" />
+                            <div className={paletteItemIconClass}>
+                              <FileText className="h-4 w-4" />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{result.title}</div>
                               <div className="truncate text-xs text-[var(--muted)]">
@@ -647,7 +659,7 @@ export function CommandPalette({
                           <CommandItem
                             key={`fallback:${note.relPath}`}
                             ref={revealProps.ref}
-                            className={revealProps.className}
+                            className={`group ${revealProps.className ?? ''}`}
                             style={revealProps.style}
                             value={`note:${note.relPath}`}
                             keywords={[
@@ -658,7 +670,9 @@ export function CommandPalette({
                             ]}
                             onSelect={handleSelect}
                           >
-                            <FileText className="mr-2 h-4 w-4" />
+                            <div className={paletteItemIconClass}>
+                              <FileText className="h-4 w-4" />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{stripNoteExtension(note.name)}</div>
                               <div className="truncate text-xs text-[var(--muted)]">
@@ -677,13 +691,15 @@ export function CommandPalette({
                           <CommandItem
                             key={result.id}
                             ref={revealProps.ref}
-                            className={revealProps.className}
+                            className={`group ${revealProps.className ?? ''}`}
                             style={revealProps.style}
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
                           >
-                            <FolderKanban className="mr-2 h-4 w-4" />
+                            <div className={paletteItemIconClass}>
+                              <FolderKanban className="h-4 w-4" />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{result.title}</div>
                               <div className="truncate text-xs text-[var(--muted)]">
@@ -705,13 +721,15 @@ export function CommandPalette({
                     <CommandItem
                       key={note.relPath}
                       ref={revealProps.ref}
-                      className={revealProps.className}
+                      className={`group ${revealProps.className ?? ''}`}
                       style={revealProps.style}
                       value={`note:${note.relPath}`}
                       keywords={[note.name, note.relPath, ...note.tags]}
                       onSelect={handleSelect}
                     >
-                      <FileText className="mr-2 h-4 w-4" />
+                      <div className={paletteItemIconClass}>
+                        <FileText className="h-4 w-4" />
+                      </div>
                       <span className="truncate">{note.relPath}</span>
                     </CommandItem>
                   )
@@ -723,7 +741,14 @@ export function CommandPalette({
 
         {/* Note Preview Panel */}
         {hoveredResult && (
-          <div className="command-palette-preview hidden w-[260px] shrink-0 border-l border-[var(--line)] bg-[var(--panel-2)] p-4 md:block">
+          <div className="command-palette-preview hidden w-[260px] shrink-0 border-l border-[color:color-mix(in_srgb,var(--accent-line)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)] p-4 md:block">
+            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:color-mix(in_srgb,var(--accent-line)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_82%,var(--panel))] text-[var(--accent)]">
+              {hoveredResult.kind === 'project' ? (
+                <FolderKanban className="h-4 w-4" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+            </div>
             <div className="mb-2 text-sm font-semibold text-[var(--text)]">
               {hoveredResult.title}
             </div>
@@ -733,7 +758,7 @@ export function CommandPalette({
                 {hoveredResult.tags.slice(0, 5).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs text-[var(--accent)]"
+                    className="rounded-full border border-[color:color-mix(in_srgb,var(--accent-line)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_90%,var(--panel))] px-2 py-0.5 text-xs text-[var(--accent)]"
                   >
                     {tag}
                   </span>

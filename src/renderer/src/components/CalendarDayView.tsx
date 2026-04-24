@@ -86,7 +86,7 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToPrevDay}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+            className="workspace-subtle-control flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
           >
             &lt;
           </button>
@@ -101,7 +101,7 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToNextDay}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+            className="workspace-subtle-control flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
           >
             &gt;
           </button>
@@ -113,7 +113,7 @@ export function CalendarDayView({
 
       {/* All Day section */}
       {allDayTasks.length > 0 && (
-        <div className="shrink-0 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
+        <div className="workspace-subtle-surface shrink-0 rounded-xl p-3">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
             All Day / No Time Set
           </h3>
@@ -123,7 +123,7 @@ export function CalendarDayView({
                 key={task.id}
                 className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm ${
                   task.completed
-                    ? 'border-[var(--line)] bg-[var(--panel)] opacity-60 line-through'
+                    ? 'workspace-subtle-control border-[var(--line)] opacity-60 line-through'
                     : 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                 }`}
               >
@@ -185,7 +185,7 @@ export function CalendarDayView({
                       key={task.id}
                       className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm ${
                         task.completed
-                          ? 'border-[var(--line)] bg-[var(--panel)] opacity-60 line-through'
+                          ? 'workspace-subtle-control border-[var(--line)] opacity-60 line-through'
                           : 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
                       }`}
                     >

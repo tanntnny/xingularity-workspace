@@ -188,21 +188,30 @@ export function AppSidebar({
       </SidebarHeader>
 
       <div className="px-4 py-6 leading-tight group-data-[collapsible=icon]:hidden">
-        <p className="text-[1.1rem] font-semibold text-sidebar-foreground">
-          Welcome back, {welcomeName}
-        </p>
-        <p className="pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
-          Status: {isLocked ? 'Select vault' : 'Synced'}
-        </p>
+        <div className="flex items-center">
+          <div className="min-w-0">
+            <p className="text-[1.1rem] font-semibold text-sidebar-foreground">
+              Welcome back, <span style={{ color: 'var(--accent)' }}>{welcomeName}</span>
+            </p>
+            <div className="flex items-center gap-1.5 pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+              <span>Status: {isLocked ? 'Select vault' : 'Synced'}</span>
+            </div>
+          </div>
+        </div>
         <button
           type="button"
           onClick={onOpenSearchPalette}
           disabled={isLocked}
           className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)]/60 px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] hover:bg-[var(--panel)]/80"
+          style={{
+            borderColor: 'var(--accent-line)',
+            backgroundColor: 'var(--accent-soft)'
+          }}
           aria-label="Open command palette"
           title="Open command palette"
         >
-          <Search size={15} className="shrink-0 opacity-70" />
+          <Search size={15} className="shrink-0 opacity-70" style={{ color: 'var(--accent)' }} />
           <span className="min-w-0 flex-1 text-sm text-sidebar-foreground/70">
             Command palette...
           </span>

@@ -64,7 +64,7 @@ export function EditorPage({
   }
 
   return (
-    <div className="h-full overflow-auto bg-[var(--panel)]">
+    <div className="workspace-clear-surface h-full overflow-auto">
       <div className="flex flex-col gap-3 px-8 py-5">
         <div className="flex min-w-0 items-center">
           <InlineEditableText
@@ -114,14 +114,14 @@ export function EditorPage({
                 }}
                 placeholder="tag name"
                 autoFocus
-                className="w-32 rounded-md border border-[var(--accent)] bg-[var(--panel)] px-2.5 py-1 text-sm caret-[var(--accent)]"
+                className="workspace-subtle-control w-32 rounded-md border border-[var(--accent)] px-2.5 py-1 text-sm caret-[var(--accent)]"
               />
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setIsAddingTag(true)}
-              className="inline-flex items-center justify-center rounded-md border border-dashed border-[var(--line)] bg-[var(--panel)] p-1 hover:border-[var(--accent)]"
+              className="workspace-subtle-control inline-flex items-center justify-center rounded-md border border-dashed border-[var(--line)] p-1"
               title="Add tag"
             >
               <Plus size={16} />

@@ -30,7 +30,7 @@ export const PromptInput = React.forwardRef<
       <form
         ref={ref}
         className={cn(
-          'rounded-[28px] border border-[var(--line)] bg-[var(--panel)] p-2 shadow-sm',
+          'workspace-subtle-surface rounded-[28px] p-2',
           className
         )}
         onSubmit={handleSubmit}
@@ -107,7 +107,7 @@ export function PromptInputButton({
     <button
       type="button"
       className={cn(
-        'inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 text-xs font-medium text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]',
+        'workspace-subtle-control inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] px-3 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--accent)]',
         className
       )}
       {...props}

@@ -5,6 +5,20 @@ workspace_shell:
       - main workspace area
       - right sidebar
     behavior:
-      - When enabled, the workspace shell overrides panel variables with translucent glass surfaces.
+      - When enabled, only the root workspace shell and root right sidebar keep the strong translucent glass surface.
+      - Nested page cards, lists, and controls should use explicit subtle/clear workspace surface classes instead of full panel fills.
       - The toggle lives in Appearance settings and persists in vault settings.
+      - Appearance settings own the persisted global accent color; the `Monotone` option resolves to dark accent in light mode and white accent in dark mode.
+      - The Appearance settings monotone swatch follows `var(--text)`, so its preview dot flips black in light mode and white in dark mode.
+      - Active profile accent tokens are mirrored onto `document.documentElement` so overlays and any portal-rendered UI inherit the current accent even outside the workspace shell wrapper.
+      - Shared dialogs and alert dialogs use dedicated glass overlay/content surfaces and inherit the current global accent variables.
+      - The command palette applies current accent tokens to input chrome, result icon chips, selection states, preview tags, and the panel border; in light mode its overlay uses a pale translucent haze and the panel uses a lighter glass background instead of the shared dark dialog scrim.
+      - The FullCalendar month grid keeps header and day cell backgrounds transparent so the workspace glass shell remains visible behind the calendar lattice.
+      - The finance/subscriptions workspace keeps the page shell transparent and uses subtle glass surface wrappers for KPI cards, treemap, list container, and hover cards instead of opaque panel fills.
+      - Generic workspace surfaces and glass panels keep stable border colors on hover; button-like `workspace-subtle-control` elements and explicit button styles may shift their border to the accent color on hover.
+      - Document workspace header borders, header action dividers, and the right panel left border use `var(--sidebar-border)` to match the global sidebar line color and style.
+      - Global sidebar and workspace right panel both use shared `var(--sidebar-glass-opacity)` with a translucent `::after` overlay from `var(--sidebar-glass-overlay)`; no forced backdrop layer is rendered. Both side shadows use reduced-width `::before` strips at `z-index: 1` with subtle mirrored gradients, not element box shadows.
+      - Document workspace main surface keeps no outer shadow so it does not cast into the right panel; only its inset highlight remains.
+      - Focus mode hides both sidebar shadow strips because the global sidebar moves offcanvas while the right panel remains visible.
       - Global sidebar glass styling remains managed separately from workspace shell styling.
+      - Note editor tables use accent-colored cell borders, rounded outer corners, and translucent accent-soft table headers; note editor code blocks and embedded buttons use tighter 4px rounding.

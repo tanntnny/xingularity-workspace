@@ -131,7 +131,7 @@ export function CalendarWeekView({
               {/* Time label */}
               <div
                 key={`time-${slot.hour}`}
-                className="flex h-[50px] items-start justify-end bg-[var(--panel)] pr-2 pt-1 text-[10px] text-[var(--muted)]"
+                className="workspace-subtle-surface flex h-[50px] items-start justify-end pr-2 pt-1 text-[10px] text-[var(--muted)]"
               >
                 {slot.label}
               </div>
@@ -168,7 +168,7 @@ export function CalendarWeekView({
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    className={`h-[50px] cursor-pointer bg-[var(--panel-2)] transition-colors hover:bg-[var(--accent-soft)] ${
+                    className={`workspace-subtle-control h-[50px] cursor-pointer transition-colors hover:bg-[var(--accent-soft)] ${
                       isDragOver
                         ? 'bg-[var(--accent-soft)] ring-1 ring-inset ring-[var(--accent)]'
                         : ''

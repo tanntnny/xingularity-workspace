@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils'
 const buttonGroupVariants = cva('inline-flex items-center', {
   variants: {
     variant: {
-      default: 'rounded-lg bg-[var(--panel-2)] p-1 gap-0.5',
+      default: 'workspace-subtle-surface rounded-lg p-1 gap-0.5',
       outline: 'rounded-lg border border-[var(--line)] p-1 gap-0.5',
       ghost: 'gap-1'
     },
@@ -28,7 +28,7 @@ const buttonGroupItemVariants = cva(
     variants: {
       variant: {
         default:
-          'rounded-md text-[var(--muted)] hover:text-[var(--text)] data-[active=true]:bg-[var(--panel)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
+          'rounded-md text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--panel)_18%,transparent)] hover:text-[var(--text)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         outline:
           'rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         ghost:
