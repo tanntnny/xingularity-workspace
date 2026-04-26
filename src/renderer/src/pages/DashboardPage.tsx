@@ -35,9 +35,9 @@ const priorityStatusClass: Record<WeeklyPlanPriority['status'], string> = {
   done: 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
 }
 
-const cardClass = 'workspace-subtle-surface rounded-2xl'
+const cardClass = 'workspace-subtle-surface rounded-lg'
 const metricCardClass = `${cardClass} p-5`
-const chipClass = 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium'
+const chipClass = 'inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-medium'
 
 export function DashboardPage({
   projects,
@@ -155,7 +155,7 @@ export function DashboardPage({
                       key={project.id}
                       type="button"
                       onClick={() => onOpenProject(project.id)}
-                      className="workspace-subtle-control flex w-full items-start justify-between gap-4 rounded-2xl border border-[var(--line)] px-4 py-4 text-left transition-colors"
+                      className="workspace-subtle-control flex w-full items-start justify-between gap-4 rounded-lg border border-[var(--line)] px-4 py-4 text-left transition-colors"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -220,7 +220,7 @@ export function DashboardPage({
             </div>
 
             {weeklyPlanLoading ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-[var(--line)] px-4 py-6 text-sm workspace-meta">
+              <div className="mt-5 rounded-lg border border-dashed border-[var(--line)] px-4 py-6 text-sm workspace-meta">
                 Loading weekly plan priorities…
               </div>
             ) : !weeklyPlanReady ? (
@@ -247,12 +247,12 @@ export function DashboardPage({
                   return (
                     <div
                       key={priority.id}
-                      className="workspace-subtle-surface rounded-2xl px-4 py-4"
+                      className="workspace-subtle-surface rounded-lg px-4 py-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="workspace-subtle-control inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
+                            <span className="workspace-subtle-control inline-flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
                               {index + 1}
                             </span>
                             <p className="truncate text-base font-semibold text-[var(--text)]">
@@ -321,7 +321,7 @@ function EmptyState({
   onAction: () => void
 }): ReactElement {
   return (
-    <div className="mt-5 rounded-2xl border border-dashed border-[var(--line)] px-4 py-6">
+    <div className="mt-5 rounded-lg border border-dashed border-[var(--line)] px-4 py-6">
       <div className="flex items-center gap-2 text-[var(--text)]">
         {icon}
         <p className="font-medium">{title}</p>

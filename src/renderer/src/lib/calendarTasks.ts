@@ -1,4 +1,4 @@
-import { CalendarTask, Project } from '../../../shared/types'
+import { CalendarTask, CalendarTaskType, Project, TaskPriority } from '../../../shared/types'
 
 export type CalendarEventSource = 'task' | 'milestone'
 
@@ -17,6 +17,8 @@ export interface CalendarEventInput {
     projectId?: string
     projectName?: string
     milestoneId?: string
+    taskType?: CalendarTaskType
+    priority?: TaskPriority
     completed?: boolean
     syncSignature?: string
   }
@@ -52,7 +54,9 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[]
         allDay: true as const,
         extendedProps: {
           source: 'task',
-          taskId: task.id
+          taskId: task.id,
+          taskType: task.taskType,
+          priority: task.priority
         }
       }
     })

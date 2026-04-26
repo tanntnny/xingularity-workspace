@@ -95,26 +95,27 @@ export function SettingsPage({
       </p>
 
       <TabMenu
+        variant="inline-accent"
         className="settings-tab-menu"
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as typeof activeTab)}
       >
-        <TabMenuItem className="settings-tab-menu-item" value="profile">
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="profile">
           Profile
         </TabMenuItem>
-        <TabMenuItem className="settings-tab-menu-item" value="workspace">
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="workspace">
           Workspace
         </TabMenuItem>
-        <TabMenuItem className="settings-tab-menu-item" value="appearance">
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="appearance">
           Appearance
         </TabMenuItem>
-        <TabMenuItem className="settings-tab-menu-item" value="agent">
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="agent">
           Agent
         </TabMenuItem>
       </TabMenu>
 
       {activeTab === 'profile' ? (
-        <div className="workspace-subtle-surface grid gap-4 rounded-2xl p-5">
+        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Profile</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
@@ -140,7 +141,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'workspace' ? (
-        <div className="workspace-subtle-surface grid gap-5 rounded-2xl p-5">
+        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
             <p className="w-full text-sm text-[var(--muted)]">
@@ -187,7 +188,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'appearance' ? (
-        <div className="workspace-subtle-surface grid gap-5 rounded-2xl p-5">
+        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Appearance</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">
@@ -195,7 +196,7 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="workspace-subtle-surface grid gap-2 rounded-2xl p-4">
+          <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--text)]">Workspace Vibrancy</p>
@@ -209,7 +210,7 @@ export function SettingsPage({
                 role="switch"
                 aria-checked={workspaceVibrancyEnabled}
                 aria-label="Toggle workspace vibrancy"
-                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition-colors ${
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-lg border transition-colors ${
                   workspaceVibrancyEnabled
                     ? 'border-[var(--accent-line)]'
                     : 'workspace-subtle-control border-[var(--line)]'
@@ -217,7 +218,7 @@ export function SettingsPage({
                 onClick={() => onToggleWorkspaceVibrancy(!workspaceVibrancyEnabled)}
               >
                 <span
-                  className={`inline-block h-6 w-6 rounded-full bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
+                  className={`inline-block h-6 w-6 rounded-lg bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
                     workspaceVibrancyEnabled ? 'translate-x-[1.45rem]' : 'translate-x-1'
                   }`}
                 />
@@ -238,14 +239,14 @@ export function SettingsPage({
                     key={option.value}
                     type="button"
                     onClick={() => onSelectProfileColor(option.value)}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
                       isActive
                         ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
                         : 'workspace-subtle-control border-[var(--line)] text-[var(--text)]'
                     }`}
                   >
                     <span
-                      className="h-4 w-4 rounded-full border"
+                      className="h-4 w-4 rounded-lg border"
                       style={{
                         background: option.swatch,
                         borderColor: option.swatchBorder
@@ -279,7 +280,7 @@ export function SettingsPage({
           </label>
 
           <p
-            className="workspace-subtle-surface w-full rounded-xl p-3.5"
+            className="workspace-subtle-surface w-full rounded-lg p-3.5"
             style={{ fontFamily: selectedFontFamily }}
           >
             The quick brown fox jumps over the lazy dog.
@@ -288,7 +289,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'agent' ? (
-        <div className="workspace-subtle-surface grid gap-4 rounded-2xl p-5">
+        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Agent</h3>
             <p className="max-w-[56ch] text-sm text-[var(--muted)]">

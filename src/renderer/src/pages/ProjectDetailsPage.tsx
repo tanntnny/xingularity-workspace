@@ -39,6 +39,7 @@ import {
   SortableTableHead,
   TableRow
 } from '../components/ui/table'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { PROJECT_STATUS_META, getProjectHealthSummary } from '../lib/projectStatus'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
@@ -88,6 +89,14 @@ type ProjectNoteRow = {
 
 const neutralChipClass =
   'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
+const defaultProjectNoteSort: ProjectNoteSortState = {
+  key: 'name',
+  direction: 'asc'
+}
+const defaultProjectMilestoneSort: ProjectMilestoneSortState = {
+  key: 'dueDate',
+  direction: 'asc'
+}
 
 export function ProjectDetailsPage({
   project,
@@ -99,7 +108,6 @@ export function ProjectDetailsPage({
   onUpdateSummary,
   onAddMilestone,
   onRenameMilestone,
-  onUpdateMilestoneDescription,
   onUpdateMilestoneDueDate,
   onToggleMilestoneCollapsed,
   onCycleMilestonePriority,
@@ -108,11 +116,6 @@ export function ProjectDetailsPage({
   onToggleSubtask,
   onCycleSubtaskPriority,
   onRenameSubtask,
-  onUpdateSubtaskDescription,
-  onMoveMilestone: _onMoveMilestone,
-  onReorderMilestones: _onReorderMilestones,
-  onMoveSubtask: _onMoveSubtask,
-  onReorderSubtasks: _onReorderSubtasks,
   onRemoveSubtask,
   onDuplicateMilestone,
   onDuplicateSubtask,
@@ -124,7 +127,9 @@ export function ProjectDetailsPage({
   const useNativeMenus = canUseNativeMenus()
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false)
   const [newMilestoneTitle, setNewMilestoneTitle] = useState('')
-  const [newMilestoneDueDate, setNewMilestoneDueDate] = useState<string | undefined>(toIsoDate(new Date()))
+  const [newMilestoneDueDate, setNewMilestoneDueDate] = useState<string | undefined>(
+    toIsoDate(new Date())
+  )
   const [creatingSubtaskByMilestoneId, setCreatingSubtaskByMilestoneId] = useState<
     Record<string, boolean>
   >({})
@@ -132,15 +137,21 @@ export function ProjectDetailsPage({
     Record<string, string>
   >({})
   const [activeTab, setActiveTab] = useState<'milestones' | 'notes'>('milestones')
-  const [noteSort, setNoteSort] = useState<ProjectNoteSortState>({
-    key: 'name',
-    direction: 'asc'
-  })
-  const [milestoneSort, setMilestoneSort] = useState<ProjectMilestoneSortState>({
-    key: 'dueDate',
-    direction: 'asc'
-  })
-  const [hideCompletedItems, setHideCompletedItems] = useState(false)
+  const [noteSort, setNoteSort] = usePersistentState<ProjectNoteSortState>(
+    'beacon:project-details:note-sort',
+    defaultProjectNoteSort,
+    { validate: isProjectNoteSortState }
+  )
+  const [milestoneSort, setMilestoneSort] = usePersistentState<ProjectMilestoneSortState>(
+    'beacon:project-details:milestone-sort',
+    defaultProjectMilestoneSort,
+    { validate: isProjectMilestoneSortState }
+  )
+  const [hideCompletedItems, setHideCompletedItems] = usePersistentState<boolean>(
+    'beacon:project-details:hide-completed-items',
+    false,
+    { validate: (value): value is boolean => typeof value === 'boolean' }
+  )
   const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null)
   const milestoneRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
@@ -151,34 +162,20 @@ export function ProjectDetailsPage({
   }, [notes, projectTag])
 
   useEffect(() => {
-    const validIds = new Set(project.milestones.map((milestone) => milestone.id))
-
-    setCreatingSubtaskByMilestoneId((current) => {
-      return Object.fromEntries(
-        Object.entries(current).filter(([milestoneId]) => validIds.has(milestoneId))
-      )
-    })
-
-    setNewSubtaskTitleByMilestoneId((current) => {
-      return Object.fromEntries(
-        Object.entries(current).filter(([milestoneId]) => validIds.has(milestoneId))
-      )
-    })
-  }, [project.milestones])
-
-  useEffect(() => {
     if (!focusedMilestoneId) {
       return
     }
 
-    setHideCompletedItems(false)
-
-    if (activeTab !== 'milestones') {
-      setActiveTab('milestones')
-      return
-    }
-
     const frame = window.requestAnimationFrame(() => {
+      if (hideCompletedItems) {
+        setHideCompletedItems(false)
+      }
+
+      if (activeTab !== 'milestones') {
+        setActiveTab('milestones')
+        return
+      }
+
       const target = milestoneRowRefs.current[focusedMilestoneId]
       if (!target) {
         return
@@ -188,16 +185,21 @@ export function ProjectDetailsPage({
     })
 
     const timeout = window.setTimeout(() => {
-      setHighlightedMilestoneId((current) =>
-        current === focusedMilestoneId ? null : current
-      )
+      setHighlightedMilestoneId((current) => (current === focusedMilestoneId ? null : current))
     }, 2200)
 
     return () => {
       window.cancelAnimationFrame(frame)
       window.clearTimeout(timeout)
     }
-  }, [activeTab, focusedMilestoneId, focusedMilestoneToken, project.id])
+  }, [
+    activeTab,
+    focusedMilestoneId,
+    focusedMilestoneToken,
+    hideCompletedItems,
+    project.id,
+    setHideCompletedItems
+  ])
 
   const submitMilestone = (): void => {
     const nextTitle = newMilestoneTitle.trim()
@@ -252,9 +254,7 @@ export function ProjectDetailsPage({
 
         accumulator.push({
           ...milestone,
-          subtasks: hideCompletedItems
-            ? subtasks.filter((subtask) => !subtask.completed)
-            : subtasks
+          subtasks: hideCompletedItems ? subtasks.filter((subtask) => !subtask.completed) : subtasks
         })
 
         return accumulator
@@ -263,7 +263,10 @@ export function ProjectDetailsPage({
   const healthSummary = useMemo(() => getProjectHealthSummary(project), [project])
 
   const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
-    const actionId = await showNativeMenu([{ id: 'open', label: 'Open note' }], getElementMenuPosition(button))
+    const actionId = await showNativeMenu(
+      [{ id: 'open', label: 'Open note' }],
+      getElementMenuPosition(button)
+    )
 
     if (!actionId) {
       return
@@ -366,17 +369,18 @@ export function ProjectDetailsPage({
 
       <div className="workspace-clear-surface flex shrink-0 flex-col gap-2 px-8 py-2">
         <TabMenu
+          variant="inline-accent"
           className="project-tab-menu"
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
         >
-          <TabMenuItem className="project-tab-menu-item" value="milestones">
+          <TabMenuItem variant="inline-accent" className="project-tab-menu-item" value="milestones">
             <span className="inline-flex items-center gap-1.5">
               <Flag size={14} aria-hidden="true" />
               Milestones
             </span>
           </TabMenuItem>
-          <TabMenuItem className="project-tab-menu-item" value="notes">
+          <TabMenuItem variant="inline-accent" className="project-tab-menu-item" value="notes">
             <span className="inline-flex items-center gap-1.5">
               <FileText size={14} aria-hidden="true" />
               Project Notes
@@ -525,7 +529,7 @@ export function ProjectDetailsPage({
                     </button>
                   </TableHead>
                   <SortableTableHead
-                    className="w-[37%]"
+                    className="w-[68%]"
                     isActive={milestoneSort.key === 'title'}
                     sortDirection={milestoneSort.direction}
                     onToggleSort={() => toggleMilestoneSort('title')}
@@ -533,17 +537,6 @@ export function ProjectDetailsPage({
                     <span className="inline-flex items-center gap-1.5">
                       <FileText size={12} aria-hidden="true" />
                       Task
-                    </span>
-                  </SortableTableHead>
-                  <SortableTableHead
-                    className="w-[31%]"
-                    isActive={milestoneSort.key === 'description'}
-                    sortDirection={milestoneSort.direction}
-                    onToggleSort={() => toggleMilestoneSort('description')}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <CircleDashed size={12} aria-hidden="true" />
-                      Description
                     </span>
                   </SortableTableHead>
                   <SortableTableHead
@@ -624,21 +617,6 @@ export function ProjectDetailsPage({
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="p-0">
-                          <InlineEditableText
-                            value={milestone.description ?? ''}
-                            onCommit={(nextDescription) =>
-                              onUpdateMilestoneDescription(milestone.id, nextDescription)
-                            }
-                            displayAs="span"
-                            displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                            inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 text-sm text-[var(--muted)] outline-none"
-                            title="Click to edit milestone description"
-                            placeholder="-"
-                            allowEmpty={true}
-                            normalize={(next) => next.trim()}
-                          />
-                        </TableCell>
                         <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
                           <MilestoneCalendarPicker
                             value={milestone.dueDate}
@@ -646,7 +624,7 @@ export function ProjectDetailsPage({
                               onUpdateMilestoneDueDate(milestone.id, nextDate)
                             }
                             aria-label="Milestone due date"
-                            className="h-8 justify-start px-2 text-xs"
+                            className="h-8 justify-start bg-transparent px-2 text-xs hover:bg-transparent"
                           />
                         </TableCell>
                         <TableCell className="px-2 py-1">
@@ -788,25 +766,6 @@ export function ProjectDetailsPage({
                                     />
                                   </div>
                                 </TableCell>
-                                <TableCell className="p-0">
-                                  <InlineEditableText
-                                    value={subtask.description ?? ''}
-                                    onCommit={(nextDescription) => {
-                                      onUpdateSubtaskDescription(
-                                        milestone.id,
-                                        subtask.id,
-                                        nextDescription
-                                      )
-                                    }}
-                                    displayAs="span"
-                                    displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                                    inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 text-sm text-[var(--muted)] outline-none"
-                                    title="Click to edit subtask description"
-                                    placeholder="-"
-                                    allowEmpty={true}
-                                    normalize={(next) => next.trim()}
-                                  />
-                                </TableCell>
                                 <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
                                   <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
                                     -
@@ -914,7 +873,7 @@ export function ProjectDetailsPage({
                           ))}
                       {milestone.collapsed || !isCreatingSubtask ? null : (
                         <TableRow className="hover:bg-[var(--accent-soft)]/60">
-                          <TableCell colSpan={5} className="p-0">
+                          <TableCell colSpan={4} className="p-0">
                             <div className="flex items-center gap-2 rounded-md border border-dashed border-[var(--accent)] px-3 py-2">
                               <input
                                 type="text"
@@ -961,7 +920,7 @@ export function ProjectDetailsPage({
                   )
                 })}
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">
-                  <TableCell colSpan={5} className="p-0">
+                  <TableCell colSpan={4} className="p-0">
                     {isCreatingMilestone ? (
                       <div className="grid gap-2 rounded-md border border-dashed border-[var(--accent)] px-3 py-2 md:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
                         <input
@@ -1128,7 +1087,7 @@ function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): strin
 }
 
 type ProjectNoteSortKey = 'name' | 'tags'
-type ProjectMilestoneSortKey = 'title' | 'description' | 'dueDate'
+type ProjectMilestoneSortKey = 'title' | 'dueDate'
 type SortDirection = 'asc' | 'desc'
 
 interface ProjectNoteSortState {
@@ -1139,6 +1098,28 @@ interface ProjectNoteSortState {
 interface ProjectMilestoneSortState {
   key: ProjectMilestoneSortKey
   direction: SortDirection
+}
+
+function isProjectNoteSortState(value: unknown): value is ProjectNoteSortState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { key?: unknown }).key !== undefined &&
+    ((value as { key?: unknown }).key === 'name' || (value as { key?: unknown }).key === 'tags') &&
+    ((value as { direction?: unknown }).direction === 'asc' ||
+      (value as { direction?: unknown }).direction === 'desc')
+  )
+}
+
+function isProjectMilestoneSortState(value: unknown): value is ProjectMilestoneSortState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ((value as { key?: unknown }).key === 'title' ||
+      (value as { key?: unknown }).key === 'dueDate') &&
+    ((value as { direction?: unknown }).direction === 'asc' ||
+      (value as { direction?: unknown }).direction === 'desc')
+  )
 }
 
 function compareProjectNoteRows(
@@ -1204,11 +1185,6 @@ function compareProjectRows(
     const titleResult = left.title.localeCompare(right.title)
     if (titleResult !== 0) {
       return titleResult * factor
-    }
-  } else if (sort.key === 'description') {
-    const descriptionResult = compareNullableText(left.description, right.description)
-    if (descriptionResult !== 0) {
-      return descriptionResult * factor
     }
   } else {
     const dueDateResult = compareNullableText(left.dueDate, right.dueDate)

@@ -50,6 +50,7 @@ interface ExcalidrawWorkspaceProviderProps extends ExcalidrawPageProps {
 }
 
 interface ExcalidrawWorkspaceContextValue {
+  activeToolType: string
   editingSessionId: string | null
   handleCancelRenameSession: () => void
   handleCommitRenameSession: (sessionId: string) => Promise<void>
@@ -160,6 +161,7 @@ export function ExcalidrawWorkspaceProvider({
   const [theme, setTheme] = useState<ExcalidrawTheme>(getSystemExcalidrawTheme)
   const [sessions, setSessions] = useState<ExcalidrawSession[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [activeToolType, setActiveToolType] = useState('selection')
   const [isLoading, setIsLoading] = useState(true)
   const [, setSaveStatus] = useState<SaveStatus>('idle')
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
@@ -322,6 +324,8 @@ export function ExcalidrawWorkspaceProvider({
 
   const handleSceneChange = useCallback<ExcalidrawOnChange>(
     (elements, appState, files) => {
+      setActiveToolType(appState.activeTool.type)
+
       if (!selectedSessionIdRef.current) {
         return
       }
@@ -458,6 +462,7 @@ export function ExcalidrawWorkspaceProvider({
 
   const value = useMemo<ExcalidrawWorkspaceContextValue>(
     () => ({
+      activeToolType,
       editingSessionId,
       handleCancelRenameSession,
       handleCommitRenameSession,
@@ -474,11 +479,13 @@ export function ExcalidrawWorkspaceProvider({
       sessions,
       setApi: (api) => {
         apiRef.current = api
+        setActiveToolType(api?.getAppState().activeTool.type ?? 'selection')
       },
       setRenameDraft,
       theme
     }),
     [
+      activeToolType,
       editingSessionId,
       handleCancelRenameSession,
       handleCommitRenameSession,
@@ -504,12 +511,23 @@ export function ExcalidrawWorkspaceProvider({
 }
 
 export function ExcalidrawPage(): ReactElement {
-  const { handleSceneChange, initialData, isLoading, selectedSessionId, setApi, theme } =
-    useExcalidrawWorkspace()
+  const {
+    activeToolType,
+    handleSceneChange,
+    initialData,
+    isLoading,
+    selectedSessionId,
+    setApi,
+    theme
+  } = useExcalidrawWorkspace()
 
   return (
-    <div className="workspace-clear-surface h-full min-w-0 p-2">
-      <div className="h-full min-h-[560px] overflow-hidden rounded-md">
+    <div
+      className={`excalidraw-app-shell workspace-clear-surface h-full min-w-0 ${
+        activeToolType === 'eraser' ? 'excalidraw-tool-eraser' : ''
+      }`.trim()}
+    >
+      <div className="h-full min-h-0">
         {isLoading || !initialData ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
             Loading drawing...
@@ -544,7 +562,6 @@ export function ExcalidrawSidebar(): ReactElement {
     sessions,
     setRenameDraft
   } = useExcalidrawWorkspace()
-
   return (
     <Fragment>
       <DocumentWorkspacePanelHeader
@@ -579,88 +596,93 @@ export function ExcalidrawSidebar(): ReactElement {
         }
       />
       <DocumentWorkspacePanelContent className="p-3">
-        <WorkspacePanelSection>
-          <WorkspacePanelSectionHeader
-            icon={<PenTool size={16} aria-hidden="true" />}
-            heading="Saved drawings"
-            description={`${sessions.length} saved drawings in this vault`}
-          />
-          <div className="space-y-2">
-            {sessions.map((session) => {
-              const isActive = session.id === selectedSessionId
-              const isEditing = session.id === editingSessionId
+        <div
+          className="right-panel-stagger-item"
+          style={{ ['--right-panel-stagger-delay' as string]: '0ms' }}
+        >
+          <WorkspacePanelSection>
+            <WorkspacePanelSectionHeader
+              icon={<PenTool size={16} aria-hidden="true" />}
+              heading="Saved drawings"
+              description={`${sessions.length} saved drawings in this vault`}
+            />
+            <div className="space-y-2">
+              {sessions.map((session, index) => {
+                const isActive = session.id === selectedSessionId
+                const isEditing = session.id === editingSessionId
 
-              return (
-                <div
-                  key={session.id}
-                  className={`rounded-xl border px-3 py-2.5 transition-colors ${
-                    isActive
-                      ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                      : 'workspace-subtle-control border-[var(--line)]'
-                  }`}
-                >
-                  {isEditing ? (
-                    <div className="min-w-0">
-                      <input
-                        ref={renameInputRef}
-                        value={renameDraft}
-                        onChange={(event) => setRenameDraft(event.currentTarget.value)}
-                        onBlur={() => {
-                          void handleCommitRenameSession(session.id)
+                return (
+                  <div
+                    key={session.id}
+                    style={{
+                      ['--right-panel-stagger-delay' as string]: `${(index + 1) * 32}ms`
+                    }}
+                    data-active={isActive}
+                    className="right-panel-stagger-item sidebar-menu-card right-panel-menu-card flex-col px-3 py-2.5"
+                  >
+                    {isEditing ? (
+                      <div className="min-w-0">
+                        <input
+                          ref={renameInputRef}
+                          value={renameDraft}
+                          onChange={(event) => setRenameDraft(event.currentTarget.value)}
+                          onBlur={() => {
+                            void handleCommitRenameSession(session.id)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              void handleCommitRenameSession(session.id)
+                              return
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault()
+                              handleCancelRenameSession()
+                            }
+                          }}
+                          className="workspace-subtle-control w-full rounded-md border border-[var(--accent)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text)] outline-none"
+                        />
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          Updated {formatUpdatedAt(session.updatedAt)}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleSelectSession(session.id)
+                        }}
+                        onDoubleClick={() => {
+                          handleStartRenameSession(session.id)
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
+                          if (event.key === 'Enter' && event.metaKey) {
                             event.preventDefault()
-                            void handleCommitRenameSession(session.id)
+                            handleStartRenameSession(session.id)
                             return
                           }
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            handleCancelRenameSession()
+                          if (!isDeleteShortcut(event)) {
+                            return
                           }
-                        }}
-                        className="workspace-subtle-control w-full rounded-md border border-[var(--accent)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text)] outline-none"
-                      />
-                      <div className="mt-1 text-xs text-[var(--muted)]">
-                        Updated {formatUpdatedAt(session.updatedAt)}
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleSelectSession(session.id)
-                      }}
-                      onDoubleClick={() => {
-                        handleStartRenameSession(session.id)
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' && event.metaKey) {
                           event.preventDefault()
-                          handleStartRenameSession(session.id)
-                          return
-                        }
-                        if (!isDeleteShortcut(event)) {
-                          return
-                        }
-                        event.preventDefault()
-                        void handleDeleteSession(session.id)
-                      }}
-                      className="w-full text-left"
-                    >
-                      <div className="truncate text-sm font-semibold text-[var(--text)]">
-                        {session.title}
-                      </div>
-                      <div className="mt-1 text-xs text-[var(--muted)]">
-                        Updated {formatUpdatedAt(session.updatedAt)}
-                      </div>
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </WorkspacePanelSection>
+                          void handleDeleteSession(session.id)
+                        }}
+                        className="w-full text-left"
+                      >
+                        <div className="truncate text-sm font-semibold text-[var(--text)]">
+                          {session.title}
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          Updated {formatUpdatedAt(session.updatedAt)}
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </WorkspacePanelSection>
+        </div>
       </DocumentWorkspacePanelContent>
     </Fragment>
   )

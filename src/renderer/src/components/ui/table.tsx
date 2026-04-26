@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
+    <div className="table-no-ripple-scope relative w-full overflow-auto" data-no-ripple-scope>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )
@@ -16,9 +16,9 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-    <thead
-      ref={ref}
-      className={cn(
+  <thead
+    ref={ref}
+    className={cn(
       'bg-[color:color-mix(in_srgb,var(--panel-2)_24%,transparent)] [&_tr]:border-b [&_tr]:border-[var(--line)]',
       className
     )}
@@ -39,9 +39,9 @@ const TableFooter = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-    <tfoot
-      ref={ref}
-      className={cn(
+  <tfoot
+    ref={ref}
+    className={cn(
       'border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel-2)_18%,transparent)] font-medium [&>tr]:last:border-b-0',
       className
     )}

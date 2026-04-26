@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react'
+import { useMemo, type ReactElement } from 'react'
 import {
   ArrowRight,
   CalendarDays,
@@ -54,6 +54,7 @@ import {
   getWeekPriorities,
   getWeekReview
 } from '../lib/weeklyPlan'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface WeeklyPlanWorkspaceProps {
@@ -85,6 +86,10 @@ const metaPillClass =
   'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-[var(--muted)]'
 const neutralChipClass =
   'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
+const defaultWeeklyPrioritySort: WeeklyPrioritySortState = {
+  key: 'status',
+  direction: 'asc'
+}
 
 export function WeeklyPlanWorkspace({
   state,
@@ -95,16 +100,16 @@ export function WeeklyPlanWorkspace({
   onAddPriority,
   onUpdatePriority,
   onDeletePriority,
-  onReorderPriorities: _onReorderPriorities,
   onUpsertReview
 }: WeeklyPlanWorkspaceProps): ReactElement {
   const selectedWeek = state?.weeks.find((week) => week.id === selectedWeekId) ?? null
   const priorities = getWeekPriorities(state, selectedWeekId)
   const review = getWeekReview(state, selectedWeekId)
-  const [prioritySort, setPrioritySort] = useState<WeeklyPrioritySortState>({
-    key: 'status',
-    direction: 'asc'
-  })
+  const [prioritySort, setPrioritySort] = usePersistentState<WeeklyPrioritySortState>(
+    'beacon:weekly-plan:priority-sort',
+    defaultWeeklyPrioritySort,
+    { validate: isWeeklyPrioritySortState }
+  )
 
   const handleFocusCommit = async (nextValue: string): Promise<void> => {
     if (!selectedWeek) {
@@ -173,8 +178,8 @@ export function WeeklyPlanWorkspace({
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-[var(--muted)]">
         <CalendarDays size={24} />
         <p className="max-w-sm text-sm">
-          Weekly Plan isn't available in this build yet. Restart Beacon after updating or make sure
-          you're running the latest desktop app.
+          Weekly Plan isn&apos;t available in this build yet. Restart Beacon after updating or make
+          sure you&apos;re running the latest desktop app.
         </p>
       </div>
     )
@@ -514,12 +519,10 @@ export function WeeklyPlanSidebar({
                       ref={revealProps.ref}
                       onClick={() => onSelectWeek(week.id)}
                       style={revealProps.style}
+                      data-active={selectedWeekId === week.id}
                       className={cn(
                         revealProps.className,
-                        'flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
-                        selectedWeekId === week.id
-                          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                          : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                        'sidebar-menu-card right-panel-menu-card flex-col gap-1.5 px-3 py-2.5 text-left'
                       )}
                     >
                       <div className="flex items-center justify-between gap-3">
@@ -567,6 +570,17 @@ type WeeklyPrioritySortDirection = 'asc' | 'desc'
 interface WeeklyPrioritySortState {
   key: WeeklyPrioritySortKey
   direction: WeeklyPrioritySortDirection
+}
+
+function isWeeklyPrioritySortState(value: unknown): value is WeeklyPrioritySortState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ((value as { key?: unknown }).key === 'status' ||
+      (value as { key?: unknown }).key === 'title') &&
+    ((value as { direction?: unknown }).direction === 'asc' ||
+      (value as { direction?: unknown }).direction === 'desc')
+  )
 }
 
 function compareWeeklyPriorities(

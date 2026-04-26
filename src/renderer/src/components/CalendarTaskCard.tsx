@@ -16,6 +16,10 @@ export const CalendarTaskCard = forwardRef<
   { task, onToggle, onMouseMove, className, ...rest },
   ref
 ): ReactElement {
+  const priorityMarker = task.priority === 'high' ? '!!' : task.priority === 'medium' ? '!' : null
+  const priorityMarkerColor =
+    task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : null
+
   return (
     <div
       ref={ref}
@@ -37,7 +41,7 @@ export const CalendarTaskCard = forwardRef<
           <span
             className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
               task.completed
-                ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
                 : 'border-[var(--line-strong)] bg-[var(--panel)]'
             }`}
           >
@@ -52,6 +56,15 @@ export const CalendarTaskCard = forwardRef<
         </span>
       </div>
       <div className="mt-0.5 flex items-center gap-1">
+        {priorityMarker && priorityMarkerColor ? (
+          <span
+            className="pointer-events-none shrink-0 text-[11px] font-semibold leading-none"
+            style={{ color: priorityMarkerColor }}
+            aria-hidden="true"
+          >
+            {priorityMarker}
+          </span>
+        ) : null}
         <span className="pointer-events-none truncate text-[11px] font-medium text-[var(--text)]">
           {task.title}
         </span>

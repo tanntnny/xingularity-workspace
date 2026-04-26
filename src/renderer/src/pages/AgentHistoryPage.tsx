@@ -66,6 +66,7 @@ import {
   WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
 import { WorkspacePanelSectionHeader } from '../components/ui/workspace-panel-section'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 import { cn } from '../lib/utils'
 
 interface AgentHistoryPageProps {
@@ -179,27 +180,29 @@ function buildMentionSuggestions(notes: NoteListItem[], projects: Project[]): Me
   return [...projectSuggestions, ...noteSuggestions]
 }
 
-function stepStatusTone(
-  status: AgentChatToolStep['status']
-): { badgeClass: string; label: string; icon: ReactElement } {
+function stepStatusTone(status: AgentChatToolStep['status']): {
+  badgeClass: string
+  label: string
+  icon: ReactElement
+} {
   switch (status) {
     case 'error':
       return {
         badgeClass: 'bg-rose-500/10 text-rose-500',
         label: 'Error',
-        icon: <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+        icon: <span className="h-2.5 w-2.5 rounded-lg bg-rose-500" />
       }
     case 'approval-required':
       return {
         badgeClass: 'bg-amber-500/10 text-amber-600',
         label: 'Needs approval',
-        icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+        icon: <span className="h-2.5 w-2.5 rounded-lg bg-amber-500" />
       }
     case 'rejected':
       return {
         badgeClass: 'bg-slate-500/10 text-slate-500',
         label: 'Rejected',
-        icon: <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+        icon: <span className="h-2.5 w-2.5 rounded-lg bg-slate-500" />
       }
     default:
       return {
@@ -237,6 +240,32 @@ export function AgentHistoryPage({
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [selectedSessionId, sessions]
+  )
+  const panelRevealItemIds = useMemo(
+    () => [
+      'agent-chat-cards-section',
+      ...sessions.map((session) => `agent-session:${session.id}`),
+      'agent-active-chat-section',
+      ...(activeSession
+        ? [
+            'agent-active-title',
+            'agent-active-messages',
+            'agent-active-title-mode',
+            'agent-active-updated'
+          ]
+        : ['agent-active-empty']),
+      'agent-context-section',
+      ...(selectedMentions.length
+        ? selectedMentions.map((mention) => `agent-mention:${mention.id}`)
+        : ['agent-context-empty'])
+    ],
+    [activeSession, selectedMentions, sessions]
+  )
+  const { containerRef: panelRevealRef, getRevealItemProps } = useStaggeredScrollReveal(
+    panelRevealItemIds,
+    {
+      resetKey: panelRevealItemIds.join('|')
+    }
   )
 
   const messages = useMemo(() => {
@@ -433,7 +462,9 @@ export function AgentHistoryPage({
           messages: [
             ...activeSession.messages.map((message) => ({
               ...message,
-              toolSteps: message.toolSteps?.map((step) => (step.id === stepId ? result.toolStep : step))
+              toolSteps: message.toolSteps?.map((step) =>
+                step.id === stepId ? result.toolStep : step
+              )
             })),
             result.assistantMessage
           ]
@@ -468,15 +499,16 @@ export function AgentHistoryPage({
         messages: [
           ...activeSession.messages.map((message) => ({
             ...message,
-            toolSteps: message.toolSteps?.map((step): AgentChatToolStep =>
-              step.id === stepId
-                ? ({
-                    ...step,
-                    status: 'rejected',
-                    outputSummary: 'User rejected this change.',
-                    approvalRequest: undefined
-                  } satisfies AgentChatToolStep)
-                : step
+            toolSteps: message.toolSteps?.map(
+              (step): AgentChatToolStep =>
+                step.id === stepId
+                  ? ({
+                      ...step,
+                      status: 'rejected',
+                      outputSummary: 'User rejected this change.',
+                      approvalRequest: undefined
+                    } satisfies AgentChatToolStep)
+                  : step
             )
           })),
           rejectedMessage
@@ -698,7 +730,7 @@ export function AgentHistoryPage({
           ) : (
             <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
               <div className="min-h-0 flex-1 px-5 pt-5">
-                <Conversation className="workspace-subtle-surface rounded-[28px] shadow-sm">
+                <Conversation className="workspace-subtle-surface rounded-lg shadow-sm">
                   <ConversationContent className="space-y-4">
                     {messages.length === 0 ? (
                       <ConversationEmptyState
@@ -719,7 +751,7 @@ export function AgentHistoryPage({
                                   return (
                                     <div
                                       key={step.id}
-                                      className="workspace-subtle-surface rounded-3xl p-4 shadow-sm"
+                                      className="workspace-subtle-surface rounded-lg p-4 shadow-sm"
                                     >
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex min-w-0 items-center gap-2">
@@ -735,7 +767,7 @@ export function AgentHistoryPage({
                                         </div>
                                         <span
                                           className={cn(
-                                            'rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em]',
+                                            'rounded-lg px-2.5 py-1 text-[10px] uppercase tracking-[0.18em]',
                                             tone.badgeClass
                                           )}
                                         >
@@ -747,7 +779,7 @@ export function AgentHistoryPage({
                                           <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                                             Input
                                           </div>
-                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs text-[var(--muted)]">
+                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-lg px-3 py-2 text-xs text-[var(--muted)]">
                                             {step.inputSummary}
                                           </pre>
                                         </div>
@@ -755,12 +787,13 @@ export function AgentHistoryPage({
                                           <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                                             Output
                                           </div>
-                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs text-[var(--muted)]">
+                                          <pre className="workspace-subtle-surface overflow-x-auto whitespace-pre-wrap rounded-lg px-3 py-2 text-xs text-[var(--muted)]">
                                             {step.outputSummary}
                                           </pre>
                                         </div>
                                       </div>
-                                      {step.status === 'approval-required' && step.approvalRequest ? (
+                                      {step.status === 'approval-required' &&
+                                      step.approvalRequest ? (
                                         <div className="mt-3 flex items-center gap-2">
                                           <button
                                             type="button"
@@ -771,7 +804,7 @@ export function AgentHistoryPage({
                                                 step.approvalRequest!.input
                                               )
                                             }}
-                                            className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-xs font-medium text-white transition hover:bg-emerald-500"
+                                            className="inline-flex h-9 items-center rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition hover:bg-emerald-500"
                                           >
                                             Approve and run
                                           </button>
@@ -780,7 +813,7 @@ export function AgentHistoryPage({
                                             onClick={() => {
                                               void rejectToolStep(step.id)
                                             }}
-                                            className="workspace-subtle-control inline-flex h-9 items-center rounded-full border border-[var(--line)] px-3 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
+                                            className="workspace-subtle-control inline-flex h-9 items-center rounded-lg border border-[var(--line)] px-3 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--accent)]"
                                           >
                                             Reject
                                           </button>
@@ -817,7 +850,7 @@ export function AgentHistoryPage({
                                     {message.contexts.map((context) => (
                                       <span
                                         key={context.id}
-                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
+                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
                                       >
                                         {context.kind === 'note' ? (
                                           <FileText size={12} />
@@ -834,7 +867,7 @@ export function AgentHistoryPage({
                                     {message.mentions.map((mention) => (
                                       <span
                                         key={mention.id}
-                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
+                                        className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)]"
                                       >
                                         {mention.kind === 'note' ? (
                                           <FileText size={12} />
@@ -873,7 +906,7 @@ export function AgentHistoryPage({
               <div className="shrink-0 px-5 pb-5 pt-3">
                 <div className="relative mx-auto w-full max-w-4xl">
                   {activeMention && filteredSuggestions.length > 0 ? (
-                    <div className="absolute bottom-[calc(100%+12px)] left-0 right-0 z-10 overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--panel)] shadow-xl">
+                    <div className="absolute bottom-[calc(100%+12px)] left-0 right-0 z-10 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--panel)] shadow-xl">
                       <div className="border-b border-[var(--line)] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
                         Attach context
                       </div>
@@ -883,7 +916,7 @@ export function AgentHistoryPage({
                             key={suggestion.id}
                             type="button"
                             onClick={() => insertMention(suggestion)}
-                            className="flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-[var(--panel-2)]"
+                            className="flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-[var(--panel-2)]"
                           >
                             <div className="mt-0.5 text-[var(--muted)]">
                               {suggestion.kind === 'note' ? (
@@ -900,7 +933,7 @@ export function AgentHistoryPage({
                                 {suggestion.detail}
                               </div>
                             </div>
-                            <div className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                            <div className="rounded-lg border border-[var(--line)] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
                               {suggestion.kind}
                             </div>
                           </button>
@@ -920,7 +953,7 @@ export function AgentHistoryPage({
                         {selectedMentions.map((mention) => (
                           <span
                             key={mention.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)]"
+                            className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-xs text-[var(--text)]"
                           >
                             {mention.kind === 'note' ? (
                               <FileText size={13} />
@@ -1015,141 +1048,225 @@ export function AgentHistoryPage({
             </WorkspaceHeaderActions>
           }
         />
-        <DocumentWorkspacePanelContent className="space-y-5 p-4">
-          <section className="workspace-subtle-surface rounded-3xl p-4">
-            <WorkspacePanelSectionHeader
-              className="mb-3"
-              icon={<Bot size={16} aria-hidden="true" />}
-              heading="Chat cards"
-              description="Select the conversation you want to continue"
-            />
-            {isLoadingSessions ? (
-              <p className="text-sm text-[var(--muted)]">Loading chats...</p>
-            ) : sessions.length ? (
-              <div className="space-y-2">
-                {sessions.map((session) => {
-                  const isActive = session.id === selectedSessionId
-                  return (
-                    <button
-                      key={session.id}
-                      type="button"
-                      onClick={() => setSelectedSessionId(session.id)}
-                      className={cn(
-                        'block w-full rounded-2xl border px-3 py-3 text-left transition',
-                        isActive
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                          : 'workspace-subtle-control border-[var(--line)]'
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-[var(--text)]">
-                            {session.title}
+        <DocumentWorkspacePanelContent ref={panelRevealRef} className="space-y-5 p-4">
+          {(() => {
+            const revealProps = getRevealItemProps('agent-chat-cards-section')
+            return (
+              <section
+                ref={revealProps.ref}
+                style={revealProps.style}
+                className={`${revealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-4`}
+              >
+                <WorkspacePanelSectionHeader
+                  className="mb-3"
+                  icon={<Bot size={16} aria-hidden="true" />}
+                  heading="Chat cards"
+                  description="Select the conversation you want to continue"
+                />
+                {isLoadingSessions ? (
+                  <p className="text-sm text-[var(--muted)]">Loading chats...</p>
+                ) : sessions.length ? (
+                  <div className="space-y-2">
+                    {sessions.map((session) => {
+                      const isActive = session.id === selectedSessionId
+                      const sessionRevealProps = getRevealItemProps(`agent-session:${session.id}`)
+                      return (
+                        <button
+                          key={session.id}
+                          ref={sessionRevealProps.ref}
+                          style={sessionRevealProps.style}
+                          type="button"
+                          onClick={() => setSelectedSessionId(session.id)}
+                          data-active={isActive}
+                          className={cn(
+                            sessionRevealProps.className,
+                            'sidebar-menu-card right-panel-menu-card block px-3 py-3 text-left'
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[var(--text)]">
+                                {session.title}
+                              </p>
+                              <p className="mt-1 text-[11px] text-[var(--muted)]">
+                                {session.messages.length} messages
+                              </p>
+                            </div>
+                            {isActive ? (
+                              <span className="rounded-lg bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--accent)]">
+                                Active
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-[11px] text-[var(--muted)]">
+                            Updated {formatRelativeTime(session.updatedAt)}
                           </p>
-                          <p className="mt-1 text-[11px] text-[var(--muted)]">
-                            {session.messages.length} messages
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">No saved chats yet.</p>
+                )}
+              </section>
+            )
+          })()}
+
+          {(() => {
+            const revealProps = getRevealItemProps('agent-active-chat-section')
+            return (
+              <section
+                ref={revealProps.ref}
+                style={revealProps.style}
+                className={`${revealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-4`}
+              >
+                <WorkspacePanelSectionHeader
+                  className="mb-3"
+                  icon={<MessageSquarePlus size={16} aria-hidden="true" />}
+                  heading="Active chat"
+                  description="Details for the selected conversation"
+                />
+                {activeSession ? (
+                  <div className="space-y-3">
+                    {(() => {
+                      const titleRevealProps = getRevealItemProps('agent-active-title')
+                      return (
+                        <div
+                          ref={titleRevealProps.ref}
+                          style={titleRevealProps.style}
+                          className={titleRevealProps.className}
+                        >
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                            Title
+                          </div>
+                          <p className="mt-1 text-sm font-medium text-[var(--text)]">
+                            {activeSession.title}
                           </p>
                         </div>
-                        {isActive ? (
-                          <span className="rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--accent)]">
-                            Active
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-[11px] text-[var(--muted)]">
-                        Updated {formatRelativeTime(session.updatedAt)}
-                      </p>
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--muted)]">No saved chats yet.</p>
-            )}
-          </section>
-
-          <section className="workspace-subtle-surface rounded-3xl p-4">
-            <WorkspacePanelSectionHeader
-              className="mb-3"
-              icon={<MessageSquarePlus size={16} aria-hidden="true" />}
-              heading="Active chat"
-              description="Details for the selected conversation"
-            />
-            {activeSession ? (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                    Title
-                  </div>
-                  <p className="mt-1 text-sm font-medium text-[var(--text)]">
-                    {activeSession.title}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="workspace-subtle-surface rounded-2xl p-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                      Messages
+                      )
+                    })()}
+                    <div className="grid grid-cols-2 gap-3">
+                      {(() => {
+                        const messageRevealProps = getRevealItemProps('agent-active-messages')
+                        return (
+                          <div
+                            ref={messageRevealProps.ref}
+                            style={messageRevealProps.style}
+                            className={`${messageRevealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-3`}
+                          >
+                            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                              Messages
+                            </div>
+                            <p className="mt-1 text-sm font-medium text-[var(--text)]">
+                              {activeSession.messages.length}
+                            </p>
+                          </div>
+                        )
+                      })()}
+                      {(() => {
+                        const modeRevealProps = getRevealItemProps('agent-active-title-mode')
+                        return (
+                          <div
+                            ref={modeRevealProps.ref}
+                            style={modeRevealProps.style}
+                            className={`${modeRevealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-3`}
+                          >
+                            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                              Title mode
+                            </div>
+                            <p className="mt-1 text-sm font-medium capitalize text-[var(--text)]">
+                              {activeSession.titleMode ?? 'auto'}
+                            </p>
+                          </div>
+                        )
+                      })()}
                     </div>
-                    <p className="mt-1 text-sm font-medium text-[var(--text)]">
-                      {activeSession.messages.length}
-                    </p>
+                    {(() => {
+                      const updatedRevealProps = getRevealItemProps('agent-active-updated')
+                      return (
+                        <div
+                          ref={updatedRevealProps.ref}
+                          style={updatedRevealProps.style}
+                          className={`${updatedRevealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-3`}
+                        >
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                            Updated
+                          </div>
+                          <p className="mt-1 text-sm text-[var(--text)]">
+                            {formatRelativeTime(activeSession.updatedAt)}
+                          </p>
+                        </div>
+                      )
+                    })()}
                   </div>
-                  <div className="workspace-subtle-surface rounded-2xl p-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                      Title mode
-                    </div>
-                    <p className="mt-1 text-sm font-medium capitalize text-[var(--text)]">
-                      {activeSession.titleMode ?? 'auto'}
-                    </p>
-                  </div>
-                </div>
-                <div className="workspace-subtle-surface rounded-2xl p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                    Updated
-                  </div>
-                  <p className="mt-1 text-sm text-[var(--text)]">
-                    {formatRelativeTime(activeSession.updatedAt)}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--muted)]">Select or create a chat to see its details.</p>
-            )}
-          </section>
-
-          <section className="workspace-subtle-surface rounded-3xl p-4">
-            <WorkspacePanelSectionHeader
-              className="mb-3"
-              icon={<AtSign size={16} aria-hidden="true" />}
-              heading="Context added"
-              description="Mentions attached to the current draft before sending"
-            />
-            {selectedMentions.length ? (
-              <div className="flex flex-wrap gap-2">
-                {selectedMentions.map((mention) => (
-                  <span
-                    key={mention.id}
-                    className="workspace-subtle-control inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--text)]"
+                ) : (
+                  <p
+                    ref={getRevealItemProps('agent-active-empty').ref}
+                    className={`${getRevealItemProps('agent-active-empty').className} text-sm text-[var(--muted)]`}
                   >
-                    {mention.kind === 'note' ? <FileText size={13} /> : <FolderKanban size={13} />}
-                    <span>{mention.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeMention(mention.id)}
-                      className="text-[var(--muted)] transition hover:text-[var(--text)]"
-                      title={`Remove ${mention.label}`}
-                    >
-                      <X size={13} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="workspace-subtle-surface rounded-2xl border-dashed px-3 py-4 text-sm text-[var(--muted)]">
-                No context attached yet. Use <span className="font-semibold text-[var(--text)]">@</span> in the composer or the mention button below the chat.
-              </div>
-            )}
-          </section>
+                    Select or create a chat to see its details.
+                  </p>
+                )}
+              </section>
+            )
+          })()}
+
+          {(() => {
+            const revealProps = getRevealItemProps('agent-context-section')
+            return (
+              <section
+                ref={revealProps.ref}
+                style={revealProps.style}
+                className={`${revealProps.className} sidebar-menu-card right-panel-menu-card flex-col p-4`}
+              >
+                <WorkspacePanelSectionHeader
+                  className="mb-3"
+                  icon={<AtSign size={16} aria-hidden="true" />}
+                  heading="Context added"
+                  description="Mentions attached to the current draft before sending"
+                />
+                {selectedMentions.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedMentions.map((mention) => {
+                      const mentionRevealProps = getRevealItemProps(`agent-mention:${mention.id}`)
+                      return (
+                        <span
+                          key={mention.id}
+                          ref={mentionRevealProps.ref}
+                          style={mentionRevealProps.style}
+                          className={`${mentionRevealProps.className} workspace-subtle-control inline-flex items-center gap-2 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--text)]`}
+                        >
+                          {mention.kind === 'note' ? (
+                            <FileText size={13} />
+                          ) : (
+                            <FolderKanban size={13} />
+                          )}
+                          <span>{mention.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeMention(mention.id)}
+                            className="text-[var(--muted)] transition hover:text-[var(--text)]"
+                            title={`Remove ${mention.label}`}
+                          >
+                            <X size={13} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div
+                    ref={getRevealItemProps('agent-context-empty').ref}
+                    className={`${getRevealItemProps('agent-context-empty').className} sidebar-menu-card right-panel-menu-card border-dashed px-3 py-4 text-sm text-[var(--muted)]`}
+                  >
+                    No context attached yet. Use{' '}
+                    <span className="font-semibold text-[var(--text)]">@</span> in the composer or
+                    the mention button below the chat.
+                  </div>
+                )}
+              </section>
+            )
+          })()}
         </DocumentWorkspacePanelContent>
       </DocumentWorkspacePanel>
     </DocumentWorkspace>

@@ -18,7 +18,7 @@ export function Task({
   return (
     <TaskContext.Provider value={{ open, setOpen }}>
       <div
-        className={cn('rounded-2xl border border-[var(--line)] bg-[var(--panel)]', className)}
+        className={cn('rounded-lg border border-[var(--line)] bg-[var(--panel)]', className)}
         {...props}
       />
     </TaskContext.Provider>

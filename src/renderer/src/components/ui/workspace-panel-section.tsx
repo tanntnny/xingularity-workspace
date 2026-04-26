@@ -8,7 +8,7 @@ const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectio
   ({ className, ...props }, ref) => (
     <section
       ref={ref}
-      className={cn('workspace-subtle-surface flex flex-col gap-3 rounded-2xl p-3.5', className)}
+      className={cn('sidebar-menu-card right-panel-menu-card flex-col gap-3 p-3.5', className)}
       {...props}
     />
   )
@@ -26,11 +26,7 @@ const WorkspacePanelSectionHeader = React.forwardRef<
   HTMLDivElement,
   WorkspacePanelSectionHeaderProps
 >(({ className, icon, heading, description, actions, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('flex items-start justify-between gap-3', className)}
-    {...props}
-  >
+  <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
     <div className="flex min-w-0 items-center gap-2">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
         {icon}

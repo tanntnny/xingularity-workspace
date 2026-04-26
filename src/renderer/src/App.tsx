@@ -20,7 +20,6 @@ import {
   Trash2,
   Plus,
   RotateCcw,
-  Search,
   Type,
   Link2,
   ChevronLeft,
@@ -33,10 +32,9 @@ import {
   Star
 } from 'lucide-react'
 import {
+  CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CreateWeeklyPlanWeekInput,
-  GridBoardState,
-  GridTextStyle,
   NoteListItem,
   NoteImportResult,
   NoteTreeNode,
@@ -47,6 +45,7 @@ import {
   ProjectSubtask,
   NativeMenuItemDescriptor,
   RendererVaultApi,
+  TaskPriority,
   TaskReminder,
   CalendarTaskType,
   WeeklyPlanWeek,
@@ -140,10 +139,10 @@ import {
   ExcalidrawSidebar,
   ExcalidrawWorkspaceProvider
 } from './pages/ExcalidrawPage'
-import { GridPage, type GridWorkspaceActions } from './pages/GridPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
+import { useStaggeredScrollReveal } from './hooks/useStaggeredScrollReveal'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -167,7 +166,6 @@ import {
   getWeekPriorities
 } from './lib/weeklyPlan'
 import { shiftIsoMonthClamped } from './lib/calendarDate'
-import { GRID_PAGE_ENABLED } from './lib/featureFlags'
 import type { NoteOutlineItem } from './lib/noteOutline'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -183,7 +181,6 @@ const PAGE_LABELS: Record<AppPage, string> = {
   notes: 'Notes',
   projects: 'Projects',
   subscriptions: 'Subscriptions',
-  grid: 'Grid',
   excalidraw: 'Excalidraw',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
@@ -269,14 +266,6 @@ const FONT_OPTIONS: FontOption[] = [
   { label: 'Charter', value: "'Charter', 'Georgia', 'Times New Roman', serif" }
 ]
 
-const CALENDAR_TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
-  { value: 'meeting', label: 'Meeting' },
-  { value: 'assignment', label: 'Assignment' },
-  { value: 'review', label: 'Review' },
-  { value: 'personal', label: 'Personal' },
-  { value: 'other', label: 'Other' }
-]
-
 const CALENDAR_BULK_SCOPE_OPTIONS = [
   { value: 'day', label: 'This day' },
   { value: 'week', label: 'This week' },
@@ -286,6 +275,55 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
 const NOTE_AUTOSAVE_DELAY_MS = 1200
 
 type NotePanelView = 'cards' | 'tree'
+
+function SettingsRightPanelSections(): ReactElement {
+  const revealItemIds = ['settings-appearance', 'settings-editor-defaults', 'settings-shortcuts']
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds, {
+    resetKey: 'settings-right-panel'
+  })
+  const sections = [
+    {
+      id: 'settings-appearance',
+      icon: <Paintbrush size={16} aria-hidden="true" />,
+      heading: 'Appearance',
+      description: 'Theme and surface defaults for the workspace'
+    },
+    {
+      id: 'settings-editor-defaults',
+      icon: <Type size={16} aria-hidden="true" />,
+      heading: 'Editor Defaults',
+      description: 'Type, writing, and editing preferences'
+    },
+    {
+      id: 'settings-shortcuts',
+      icon: <Keyboard size={16} aria-hidden="true" />,
+      heading: 'Shortcuts',
+      description: 'Keyboard actions available across the app'
+    }
+  ]
+
+  return (
+    <div ref={containerRef} className="flex h-full flex-col gap-4 p-3">
+      {sections.map((section) => {
+        const revealProps = getRevealItemProps(section.id)
+        return (
+          <WorkspacePanelSection
+            key={section.id}
+            ref={revealProps.ref}
+            style={revealProps.style}
+            className={`${revealProps.className} rounded-xl`}
+          >
+            <WorkspacePanelSectionHeader
+              icon={section.icon}
+              heading={section.heading}
+              description={section.description}
+            />
+          </WorkspacePanelSection>
+        )
+      })}
+    </div>
+  )
+}
 
 function App(): ReactElement {
   const vaultApi = (window as unknown as { vaultApi?: RendererVaultApi }).vaultApi
@@ -297,7 +335,6 @@ function App(): ReactElement {
   const searchResults = useVaultStore((state) => state.searchResults)
   const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
   const settingsProjects = useVaultStore((state) => state.settings.projects)
-  const gridBoardSettings = useVaultStore((state) => state.settings.gridBoard)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const lastOpenedProjectId = useVaultStore((state) => state.settings.lastOpenedProjectId)
@@ -392,17 +429,6 @@ function App(): ReactElement {
   const visibleNoteTree = useMemo(() => hideManagedProjectTree(noteTree), [noteTree])
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
-  const gridBoard = useMemo(
-    () => sanitizeGridBoardState(gridBoardSettings, notes, projects),
-    [gridBoardSettings, notes, projects]
-  )
-  const [gridBoardDraft, setGridBoardDraft] = useState<GridBoardState>(gridBoard)
-  const [gridWorkspaceActions, setGridWorkspaceActions] = useState<GridWorkspaceActions | null>(
-    null
-  )
-  const [isGridAddPopoverOpen, setIsGridAddPopoverOpen] = useState(false)
-  const [gridAddMode, setGridAddMode] = useState<'note' | 'project'>('note')
-  const [gridAddQuery, setGridAddQuery] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectNameEditTarget, setProjectNameEditTarget] = useState<{
     projectId: string
@@ -485,7 +511,6 @@ function App(): ReactElement {
       activePage === 'knowledge' ||
       (activePage === 'notes' && notePanelView !== 'tree') ||
       activePage === 'projects' ||
-      activePage === 'grid' ||
       activePage === 'excalidraw' ||
       activePage === 'calendar')
   const showWorkspacePanel =
@@ -546,63 +571,6 @@ function App(): ReactElement {
       getLastPageLeaveSaveDebug: () => ({ ...pageLeaveSaveDebugState })
     }
   }, [currentNoteContent, currentNotePath])
-
-  useEffect(() => {
-    setGridBoardDraft(gridBoard)
-  }, [gridBoard])
-
-  useEffect(() => {
-    if (activePage !== 'grid') {
-      setIsGridAddPopoverOpen(false)
-      setGridAddQuery('')
-    }
-  }, [activePage])
-
-  const gridBoardNoteItemIds = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const item of gridBoardDraft.items) {
-      if (item.kind === 'note' && item.noteRelPath) {
-        map.set(item.noteRelPath, item.id)
-      }
-    }
-    return map
-  }, [gridBoardDraft.items])
-
-  const gridBoardProjectItemIds = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const item of gridBoardDraft.items) {
-      if (item.kind === 'project' && item.projectId) {
-        map.set(item.projectId, item.id)
-      }
-    }
-    return map
-  }, [gridBoardDraft.items])
-
-  const filteredGridAddNotes = useMemo(() => {
-    const query = gridAddQuery.trim().toLowerCase()
-    return notes.filter((note) => {
-      if (!query) {
-        return true
-      }
-      return (
-        note.name.toLowerCase().includes(query) ||
-        note.relPath.toLowerCase().includes(query) ||
-        note.tags.some((tag) => tag.toLowerCase().includes(query))
-      )
-    })
-  }, [gridAddQuery, notes])
-
-  const filteredGridAddProjects = useMemo(() => {
-    const query = gridAddQuery.trim().toLowerCase()
-    return projects.filter((project) => {
-      if (!query) {
-        return true
-      }
-      return (
-        project.name.toLowerCase().includes(query) || project.summary.toLowerCase().includes(query)
-      )
-    })
-  }, [gridAddQuery, projects])
 
   useEffect(() => {
     currentNoteContentRef.current = currentNoteContent
@@ -966,10 +934,6 @@ function App(): ReactElement {
 
     if (activePage === 'projects') {
       return selectedProject?.name ?? 'No Project Selected'
-    }
-
-    if (activePage === 'grid') {
-      return GRID_PAGE_ENABLED ? 'Spatial Board' : 'Unavailable in This Version'
     }
 
     if (activePage === 'excalidraw') {
@@ -1846,6 +1810,10 @@ function App(): ReactElement {
   ): Promise<CalendarTask[]> => {
     const nextTasks = normalizeCalendarTasks(updater(calendarTasksRef.current))
     calendarTasksRef.current = nextTasks
+    setSettings({
+      ...useVaultStore.getState().settings,
+      calendarTasks: nextTasks
+    })
     await persistCalendarTasks(nextTasks)
     return nextTasks
   }
@@ -1864,74 +1832,6 @@ function App(): ReactElement {
       return false
     }
   }
-
-  const persistGridBoard = useCallback(
-    async (nextGridBoard: GridBoardState): Promise<boolean> => {
-      if (!vaultApi) {
-        return false
-      }
-
-      try {
-        const nextSettings = await vaultApi.settings.update({ gridBoard: nextGridBoard })
-        setSettings(nextSettings)
-        return true
-      } catch (error) {
-        pushToast('error', String(error))
-        return false
-      }
-    },
-    [pushToast, setSettings, vaultApi]
-  )
-
-  const handleGridBoardChange = useCallback(
-    (nextGridBoard: GridBoardState): void => {
-      if (isGridBoardStateEqual(gridBoardDraft, nextGridBoard)) {
-        return
-      }
-
-      setGridBoardDraft(nextGridBoard)
-      void persistGridBoard(nextGridBoard)
-    },
-    [gridBoardDraft, persistGridBoard]
-  )
-
-  const openGridAddPicker = useCallback((mode: 'note' | 'project'): void => {
-    setGridAddMode(mode)
-    setGridAddQuery('')
-    setIsGridAddPopoverOpen(true)
-  }, [])
-
-  const handleAddGridText = useCallback((): void => {
-    gridWorkspaceActions?.addText()
-    setIsGridAddPopoverOpen(false)
-    setGridAddQuery('')
-  }, [gridWorkspaceActions])
-
-  const handleAddGridNote = useCallback(
-    (relPath: string): void => {
-      gridWorkspaceActions?.addNote(relPath)
-      setIsGridAddPopoverOpen(false)
-      setGridAddQuery('')
-    },
-    [gridWorkspaceActions]
-  )
-
-  const handleAddGridProject = useCallback(
-    (projectId: string): void => {
-      gridWorkspaceActions?.addProject(projectId)
-      setIsGridAddPopoverOpen(false)
-      setGridAddQuery('')
-    },
-    [gridWorkspaceActions]
-  )
-
-  useEffect(() => {
-    if (!settingsLoaded || !vaultApi || isGridBoardStateEqual(gridBoardSettings, gridBoard)) {
-      return
-    }
-
-    void persistGridBoard(gridBoard)
-  }, [gridBoard, gridBoardSettings, persistGridBoard, settingsLoaded, vaultApi])
 
   const persistProjectData = async (
     nextProjects: Project[],
@@ -1964,7 +1864,7 @@ function App(): ReactElement {
       date,
       completed: false,
       createdAt: new Date().toISOString(),
-      priority: 'medium',
+      priority: 'low',
       taskType: 'assignment',
       reminders: []
     }
@@ -2010,6 +1910,15 @@ function App(): ReactElement {
   ): Promise<void> => {
     await updateCalendarTasks((tasks) =>
       tasks.map((task) => (task.id === taskId ? { ...task, taskType } : task))
+    )
+  }
+
+  const updateCalendarTaskPriority = async (
+    taskId: string,
+    priority: TaskPriority
+  ): Promise<void> => {
+    await updateCalendarTasks((tasks) =>
+      tasks.map((task) => (task.id === taskId ? { ...task, priority } : task))
     )
   }
 
@@ -2190,6 +2099,16 @@ function App(): ReactElement {
   const openNote = useCallback(
     async (relPath: string): Promise<void> => {
       if (!vaultApi) {
+        return
+      }
+
+      if (currentNotePathRef.current === relPath) {
+        pushNoteSaveTrace('open-note:skip-current', {
+          targetRelPath: relPath,
+          currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        })
+        currentNoteEditorRef.current?.focus()
+        void persistLastOpenedNotePath(relPath)
         return
       }
 
@@ -2569,8 +2488,18 @@ function App(): ReactElement {
       return
     }
 
+    const trimmedQuery = query.trim()
+    if (trimmedQuery && activePageRef.current === 'notes' && currentNotePathRef.current) {
+      try {
+        await flushCurrentNote({ force: true, settleEditor: true })
+      } catch (error) {
+        pushToast('error', String(error))
+        return
+      }
+    }
+
     setSearchQuery(query)
-    if (!query.trim()) {
+    if (!trimmedQuery) {
       setSearchResults([])
       return
     }
@@ -4779,7 +4708,7 @@ function App(): ReactElement {
             {wrapWorkspaceChrome(
               <>
                 <DocumentWorkspaceMain
-                  className={`${isStandalonePage ? 'hidden ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
+                  className={`${isStandalonePage ? 'hidden ' : ''}${activePage === 'excalidraw' ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
                 >
                   <DocumentWorkspaceMainHeader
                     breadcrumb={
@@ -5118,168 +5047,6 @@ function App(): ReactElement {
                             />
                           </WorkspaceHeaderActionGroup>
                         </WorkspaceHeaderActions>
-                      ) : activePage === 'grid' ? (
-                        <WorkspaceHeaderActions>
-                          <WorkspaceHeaderActionGroup>
-                            <Popover
-                              open={isGridAddPopoverOpen}
-                              onOpenChange={(open) => {
-                                setIsGridAddPopoverOpen(open)
-                                if (!open) {
-                                  setGridAddQuery('')
-                                }
-                              }}
-                            >
-                              <PopoverTrigger asChild>
-                                <WorkspaceActionButton
-                                  title="Add to canvas"
-                                  aria-label="Add to canvas"
-                                  disabled={!gridWorkspaceActions}
-                                  icon={<Plus size={18} />}
-                                />
-                              </PopoverTrigger>
-                              <PopoverContent
-                                align="end"
-                                className="w-80 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                              >
-                                <div className="mb-3 flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => openGridAddPicker('note')}
-                                    className={`rounded-lg border px-3 py-1.5 text-sm ${
-                                      gridAddMode === 'note'
-                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-                                    }`}
-                                  >
-                                    Add note
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openGridAddPicker('project')}
-                                    className={`rounded-lg border px-3 py-1.5 text-sm ${
-                                      gridAddMode === 'project'
-                                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                                        : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-                                    }`}
-                                  >
-                                    Add project
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleAddGridText}
-                                    className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
-                                  >
-                                    Add text
-                                  </button>
-                                </div>
-                                <label className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-[var(--muted)]">
-                                  <Search size={14} aria-hidden="true" />
-                                  <input
-                                    value={gridAddQuery}
-                                    onChange={(event) => setGridAddQuery(event.currentTarget.value)}
-                                    placeholder={
-                                      gridAddMode === 'note'
-                                        ? 'Search notes by title, path, or tag'
-                                        : 'Search projects by name or summary'
-                                    }
-                                    className="w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
-                                  />
-                                </label>
-                                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                                  {gridAddMode === 'note'
-                                    ? filteredGridAddNotes.slice(0, 16).map((note) => {
-                                        const existingItemId = gridBoardNoteItemIds.get(
-                                          note.relPath
-                                        )
-                                        return (
-                                          <button
-                                            key={note.relPath}
-                                            type="button"
-                                            onClick={() => handleAddGridNote(note.relPath)}
-                                            className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
-                                          >
-                                            <div className="flex items-start justify-between gap-3">
-                                              <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold text-[var(--text)]">
-                                                  {stripNoteExtension(note.name)}
-                                                </div>
-                                                <div className="mt-1 truncate text-xs text-[var(--muted)]">
-                                                  {note.relPath}
-                                                </div>
-                                              </div>
-                                              <div className="rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--accent)]">
-                                                {existingItemId ? 'On canvas' : 'Add'}
-                                              </div>
-                                            </div>
-                                          </button>
-                                        )
-                                      })
-                                    : filteredGridAddProjects.slice(0, 16).map((project) => {
-                                        const existingItemId = gridBoardProjectItemIds.get(
-                                          project.id
-                                        )
-                                        return (
-                                          <button
-                                            key={project.id}
-                                            type="button"
-                                            onClick={() => handleAddGridProject(project.id)}
-                                            className="group w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel)]"
-                                          >
-                                            <div className="flex items-start justify-between gap-3">
-                                              <div className="flex min-w-0 gap-3">
-                                                <NoteShapeIcon
-                                                  icon={project.icon}
-                                                  size={16}
-                                                  className="mt-0.5 shrink-0"
-                                                />
-                                                <div className="min-w-0">
-                                                  <div className="truncate text-sm font-semibold text-[var(--text)]">
-                                                    {project.name}
-                                                  </div>
-                                                  <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">
-                                                    {project.summary || 'Project'}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                              <div className="rounded-full border border-[rgba(125,183,255,0.2)] bg-[rgba(125,183,255,0.1)] px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-[var(--text)]">
-                                                {existingItemId ? 'On canvas' : 'Add'}
-                                              </div>
-                                            </div>
-                                          </button>
-                                        )
-                                      })}
-                                  {(
-                                    gridAddMode === 'note'
-                                      ? filteredGridAddNotes.length === 0
-                                      : filteredGridAddProjects.length === 0
-                                  ) ? (
-                                    <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--panel-2)] px-3 py-4 text-sm text-[var(--muted)]">
-                                      No {gridAddMode}s match this search.
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </WorkspaceHeaderActionGroup>
-                          <WorkspaceHeaderActionDivider />
-                          <WorkspaceHeaderActionGroup>
-                            <WorkspaceActionButton
-                              onClick={() => gridWorkspaceActions?.fitAllCards()}
-                              title="Fit all cards"
-                              aria-label="Fit all cards"
-                              disabled={!gridWorkspaceActions}
-                              icon={<Target size={18} />}
-                            />
-                            <WorkspaceActionButton
-                              onClick={() => gridWorkspaceActions?.resetBoard()}
-                              title="Reset board"
-                              aria-label="Reset board"
-                              disabled={!gridWorkspaceActions}
-                              icon={<RotateCcw size={18} />}
-                            />
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
                       ) : activePage === 'calendar' ? (
                         <WorkspaceHeaderActions>
                           <WorkspaceHeaderActionGroup>
@@ -5323,9 +5090,11 @@ function App(): ReactElement {
                   >
                     <div
                       key={activePage}
-                      className={`${activePage === 'notes' ? '' : 'page-transition '}w-full ${
-                        activePage === 'calendar' ? '' : 'h-full'
-                      }`.trim()}
+                      className={`${
+                        activePage === 'notes' || activePage === 'excalidraw'
+                          ? ''
+                          : 'page-transition '
+                      }w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
                     >
                       {!hasVault ? (
                         <VaultSelectionPage
@@ -5533,41 +5302,6 @@ function App(): ReactElement {
                         )
                       ) : activePage === 'subscriptions' ? (
                         <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
-                      ) : activePage === 'grid' ? (
-                        GRID_PAGE_ENABLED ? (
-                          <GridPage
-                            board={gridBoardDraft}
-                            notes={notes}
-                            projects={projects}
-                            onActionsChange={setGridWorkspaceActions}
-                            onBoardChange={handleGridBoardChange}
-                            onOpenNote={(relPath) => {
-                              void navigateToPage('notes')
-                              setSearchQuery('')
-                              setSearchResults([])
-                              void openNote(relPath)
-                            }}
-                            onOpenProject={(projectId) => {
-                              void navigateToPage('projects')
-                              selectProject(projectId)
-                            }}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center p-8">
-                            <div className="max-w-lg rounded-3xl border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.16)]">
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">
-                                Unavailable
-                              </div>
-                              <h2 className="mt-3 text-2xl font-semibold text-[var(--text)]">
-                                Grid is disabled in this version
-                              </h2>
-                              <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-                                The Grid page remains in the codebase, but it is not exposed as an
-                                active workspace in this release.
-                              </p>
-                            </div>
-                          </div>
-                        )
                       ) : activePage === 'excalidraw' ? (
                         <ExcalidrawPage />
                       ) : activePage === 'weeklyPlan' ? (
@@ -5609,6 +5343,9 @@ function App(): ReactElement {
                           }}
                           onRenameTask={(taskId, newTitle) => {
                             void renameCalendarTask(taskId, newTitle)
+                          }}
+                          onUpdateTaskPriority={(taskId, priority) => {
+                            void updateCalendarTaskPriority(taskId, priority)
                           }}
                           onUpdateTaskType={(taskId, taskType) => {
                             void updateCalendarTaskType(taskId, taskType)
@@ -6180,6 +5917,9 @@ function App(): ReactElement {
                             onRename={(taskId, newTitle) => {
                               void renameCalendarTask(taskId, newTitle)
                             }}
+                            onUpdatePriority={(taskId, priority) => {
+                              void updateCalendarTaskPriority(taskId, priority)
+                            }}
                             onUpdateTaskType={(taskId, taskType) => {
                               void updateCalendarTaskType(taskId, taskType)
                             }}
@@ -6200,29 +5940,7 @@ function App(): ReactElement {
                             }}
                           />
                         ) : (
-                          <div className="flex h-full flex-col gap-4 p-3">
-                            <WorkspacePanelSection className="rounded-xl">
-                              <WorkspacePanelSectionHeader
-                                icon={<Paintbrush size={16} aria-hidden="true" />}
-                                heading="Appearance"
-                                description="Theme and surface defaults for the workspace"
-                              />
-                            </WorkspacePanelSection>
-                            <WorkspacePanelSection className="rounded-xl">
-                              <WorkspacePanelSectionHeader
-                                icon={<Type size={16} aria-hidden="true" />}
-                                heading="Editor Defaults"
-                                description="Type, writing, and editing preferences"
-                              />
-                            </WorkspacePanelSection>
-                            <WorkspacePanelSection className="rounded-xl">
-                              <WorkspacePanelSectionHeader
-                                icon={<Keyboard size={16} aria-hidden="true" />}
-                                heading="Shortcuts"
-                                description="Keyboard actions available across the app"
-                              />
-                            </WorkspacePanelSection>
-                          </div>
+                          <SettingsRightPanelSections />
                         )}
                       </DocumentWorkspacePanelContent>
                     </div>
@@ -6286,8 +6004,8 @@ function VaultSelectionPage({
         </div>
         <h2 className="mt-5 text-3xl font-semibold text-[var(--text)]">Select a vault first</h2>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Open an existing vault or create a new one before accessing notes, projects, calendar,
-          grid, and automation pages.
+          Open an existing vault or create a new one before accessing notes, projects, calendar, and
+          automation pages.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
@@ -6317,182 +6035,6 @@ function VaultSelectionPage({
         </div>
       </div>
     </div>
-  )
-}
-
-function sanitizeGridBoardState(
-  board: GridBoardState | undefined,
-  notes: NoteListItem[],
-  projects: Project[]
-): GridBoardState {
-  const notePaths = new Set(notes.map((note) => note.relPath))
-  const projectIds = new Set(projects.map((project) => project.id))
-  const fallback: GridBoardState = {
-    viewport: {
-      x: 0,
-      y: 0,
-      zoom: 1
-    },
-    items: []
-  }
-
-  if (!board) {
-    return fallback
-  }
-
-  const viewport = {
-    x: Number.isFinite(board.viewport?.x) ? board.viewport.x : fallback.viewport.x,
-    y: Number.isFinite(board.viewport?.y) ? board.viewport.y : fallback.viewport.y,
-    zoom: Number.isFinite(board.viewport?.zoom) ? board.viewport.zoom : fallback.viewport.zoom
-  }
-
-  const items = Array.isArray(board.items)
-    ? board.items.flatMap((item) => {
-        if (
-          !item ||
-          typeof item.id !== 'string' ||
-          (item.kind !== 'note' && item.kind !== 'project' && item.kind !== 'text') ||
-          !Number.isFinite(item.position?.x) ||
-          !Number.isFinite(item.position?.y) ||
-          !Number.isFinite(item.zIndex)
-        ) {
-          return []
-        }
-
-        if (item.kind === 'note') {
-          if (!(typeof item.noteRelPath === 'string' && notePaths.has(item.noteRelPath))) {
-            return []
-          }
-        } else if (item.kind === 'project') {
-          if (!(typeof item.projectId === 'string' && projectIds.has(item.projectId))) {
-            return []
-          }
-        } else if (!(item.textContent === undefined || typeof item.textContent === 'string')) {
-          return []
-        }
-
-        const textStyle = sanitizeGridTextStyle(item.textStyle)
-        const rawWidth = item.size?.width
-        const rawHeight = item.size?.height
-        const size =
-          typeof rawWidth === 'number' &&
-          Number.isFinite(rawWidth) &&
-          typeof rawHeight === 'number' &&
-          Number.isFinite(rawHeight) &&
-          rawWidth > 0 &&
-          rawHeight > 0
-            ? {
-                width: rawWidth,
-                height: rawHeight
-              }
-            : undefined
-
-        return [
-          {
-            ...item,
-            textStyle,
-            size
-          }
-        ]
-      })
-    : fallback.items
-
-  return {
-    viewport,
-    items
-  }
-}
-
-function isGridBoardStateEqual(left: GridBoardState | undefined, right: GridBoardState): boolean {
-  if (!left) {
-    return (
-      right.items.length === 0 &&
-      right.viewport.x === 0 &&
-      right.viewport.y === 0 &&
-      right.viewport.zoom === 1
-    )
-  }
-
-  if (
-    left.viewport.x !== right.viewport.x ||
-    left.viewport.y !== right.viewport.y ||
-    left.viewport.zoom !== right.viewport.zoom ||
-    left.items.length !== right.items.length
-  ) {
-    return false
-  }
-
-  return left.items.every((item, index) => isGridBoardItemEqual(item, right.items[index]))
-}
-
-function isGridBoardItemEqual(
-  left: GridBoardState['items'][number],
-  right: GridBoardState['items'][number] | undefined
-): boolean {
-  if (!right) {
-    return false
-  }
-
-  const leftWidth = left.size?.width
-  const leftHeight = left.size?.height
-  const rightWidth = right.size?.width
-  const rightHeight = right.size?.height
-
-  return (
-    left.id === right.id &&
-    left.kind === right.kind &&
-    left.noteRelPath === right.noteRelPath &&
-    left.projectId === right.projectId &&
-    left.textContent === right.textContent &&
-    isGridTextStyleEqual(left.textStyle, right.textStyle) &&
-    left.position.x === right.position.x &&
-    left.position.y === right.position.y &&
-    left.zIndex === right.zIndex &&
-    leftWidth === rightWidth &&
-    leftHeight === rightHeight
-  )
-}
-
-function sanitizeGridTextStyle(style: GridTextStyle | undefined): GridTextStyle | undefined {
-  if (!style || typeof style !== 'object') {
-    return undefined
-  }
-
-  const nextStyle: GridTextStyle = {}
-
-  if (style.fontSize === 'sm' || style.fontSize === 'md' || style.fontSize === 'lg') {
-    nextStyle.fontSize = style.fontSize
-  }
-  if (style.isBold === true) {
-    nextStyle.isBold = true
-  }
-  if (style.isItalic === true) {
-    nextStyle.isItalic = true
-  }
-  if (style.isUnderline === true) {
-    nextStyle.isUnderline = true
-  }
-  if (style.textAlign === 'left' || style.textAlign === 'center' || style.textAlign === 'right') {
-    nextStyle.textAlign = style.textAlign
-  }
-  if (style.color === 'default' || style.color === 'accent' || style.color === 'muted') {
-    nextStyle.color = style.color
-  }
-
-  return Object.keys(nextStyle).length > 0 ? nextStyle : undefined
-}
-
-function isGridTextStyleEqual(
-  left: GridTextStyle | undefined,
-  right: GridTextStyle | undefined
-): boolean {
-  return (
-    left?.fontSize === right?.fontSize &&
-    left?.isBold === right?.isBold &&
-    left?.isItalic === right?.isItalic &&
-    left?.isUnderline === right?.isUnderline &&
-    left?.textAlign === right?.textAlign &&
-    left?.color === right?.color
   )
 }
 

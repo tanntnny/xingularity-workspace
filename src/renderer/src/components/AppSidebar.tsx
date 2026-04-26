@@ -1,19 +1,13 @@
-import { ReactElement } from 'react'
+import { type CSSProperties, ReactElement, useState } from 'react'
 import { ButtonBase } from '@mui/material'
 import {
   Bot,
-  CalendarDays,
-  ClipboardList,
+  ChevronDown,
+  ChevronRight,
   CreditCard,
   LayoutDashboard,
-  LayoutGrid,
-  FileText,
-  FolderKanban,
-  GitBranch,
-  Search,
-  Settings,
-  PenTool,
-  Zap
+  House,
+  Search
 } from 'lucide-react'
 import {
   Sidebar,
@@ -21,7 +15,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -31,7 +24,6 @@ import {
 } from './ui/sidebar'
 import { Kbd } from './ui/kbd'
 import appLogo from '../../../../assets/workspace_letter.png'
-import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 
 export type AppPage =
   | 'dashboard'
@@ -39,7 +31,6 @@ export type AppPage =
   | 'notes'
   | 'projects'
   | 'subscriptions'
-  | 'grid'
   | 'excalidraw'
   | 'weeklyPlan'
   | 'calendar'
@@ -65,50 +56,59 @@ interface AppSidebarProps {
 type SidebarPageItem = {
   id: AppPage
   label: string
-  icon: typeof FileText
   shortcut?: string
 }
 
-const GRID_HOME_PAGE: SidebarPageItem = {
-  id: 'grid',
-  label: 'Grid',
-  icon: LayoutGrid,
-  shortcut: '⌘G'
+type SidebarSection = {
+  id: 'board' | 'home' | 'finance' | 'automations'
+  label: string
+  icon: typeof LayoutDashboard | typeof House | typeof CreditCard | typeof Bot
+  items: SidebarPageItem[]
 }
 
 const EXCALIDRAW_PAGE: SidebarPageItem = {
   id: 'excalidraw',
-  label: 'Excalidraw',
-  icon: PenTool
+  label: 'Excalidraw'
 }
 
 const BOARD_PAGES: SidebarPageItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
-  { id: 'knowledge', label: 'Knowledge', icon: GitBranch, shortcut: '⌘K' },
-  ...(GRID_PAGE_ENABLED ? [GRID_HOME_PAGE, EXCALIDRAW_PAGE] : [EXCALIDRAW_PAGE])
+  { id: 'dashboard', label: 'Dashboard', shortcut: '⌘D' },
+  { id: 'knowledge', label: 'Knowledge', shortcut: '⌘K' },
+  EXCALIDRAW_PAGE
 ]
 
 const HOME_PAGES: SidebarPageItem[] = [
-  { id: 'notes', label: 'Notes', icon: FileText, shortcut: '⌘1' },
-  { id: 'projects', label: 'Projects', icon: FolderKanban, shortcut: '⌘2' },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '⌘3' },
-  { id: 'weeklyPlan', label: 'Weekly Plan', icon: ClipboardList, shortcut: '⌘4' }
+  { id: 'notes', label: 'Notes', shortcut: '⌘1' },
+  { id: 'projects', label: 'Projects', shortcut: '⌘2' },
+  { id: 'calendar', label: 'Calendar', shortcut: '⌘3' },
+  { id: 'weeklyPlan', label: 'Weekly Plan', shortcut: '⌘4' }
 ]
 
-const FINANCE_PAGES: SidebarPageItem[] = [
-  { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard }
+const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscriptions' }]
+
+const DOCUMENT_PAGES: SidebarPageItem[] = [
+  { id: 'schedules', label: 'Schedules', shortcut: '⌘5' },
+  { id: 'agentHistory', label: 'Agent Chat', shortcut: '⌘I' }
 ]
 
-const DOCUMENT_PAGES: Array<{ id: AppPage; label: string; icon: typeof Zap; shortcut: string }> = [
-  { id: 'schedules', label: 'Schedules', icon: Zap, shortcut: '⌘5' },
-  { id: 'agentHistory', label: 'Agent Chat', icon: Bot, shortcut: '⌘I' }
-]
-
-const SETTINGS_PAGE: { id: AppPage; label: string; icon: typeof Settings; shortcut: string } = {
+const SETTINGS_PAGE: SidebarPageItem = {
   id: 'settings',
   label: 'Settings',
-  icon: Settings,
   shortcut: '⌘,'
+}
+
+const SIDEBAR_SECTIONS: SidebarSection[] = [
+  { id: 'board', label: 'Board', icon: LayoutDashboard, items: BOARD_PAGES },
+  { id: 'home', label: 'Home', icon: House, items: HOME_PAGES },
+  { id: 'finance', label: 'Finance', icon: CreditCard, items: FINANCE_PAGES },
+  { id: 'automations', label: 'Automations', icon: Bot, items: DOCUMENT_PAGES }
+]
+
+const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
+  board: true,
+  home: true,
+  finance: true,
+  automations: true
 }
 
 const SIDEBAR_MENU_BUTTON_SX = {
@@ -118,7 +118,7 @@ const SIDEBAR_MENU_BUTTON_SX = {
   alignItems: 'center',
   gap: 1,
   borderRadius: '0.5rem',
-  padding: '1.025rem 0.9rem',
+  padding: '1.025rem 0.9rem 1.025rem 1.75rem',
   border: '1px solid transparent',
   color: 'color-mix(in srgb, var(--sidebar-foreground) 60%, transparent)',
   background: 'transparent',
@@ -136,6 +136,26 @@ const SIDEBAR_MENU_BUTTON_SX = {
   '&[data-active="true"]:hover': {
     background:
       'linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end)) padding-box, linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end)) border-box'
+  }
+} as const
+
+const SIDEBAR_SECTION_BUTTON_SX = {
+  width: '100%',
+  justifyContent: 'flex-start',
+  alignItems: 'center',
+  gap: 0.6,
+  borderRadius: '0.5rem',
+  padding: '0.35rem 0.15rem 0.35rem 0.42rem',
+  border: '1px solid transparent',
+  background: 'transparent',
+  color: 'color-mix(in srgb, var(--sidebar-foreground) 72%, transparent)',
+  '.group[data-collapsible="icon"] &': {
+    padding: '0.5rem 0',
+    justifyContent: 'center',
+    borderRadius: '0.75rem'
+  },
+  '&[data-active="true"]': {
+    color: 'var(--sidebar-foreground)'
   }
 } as const
 
@@ -157,12 +177,105 @@ export function AppSidebar({
   const projectsCountLabel = toBadgeLabel(projectsCount)
   const calendarUndoneCountLabel = toBadgeLabel(calendarUndoneCount)
   const welcomeName = profileName.trim() || 'there'
+  const [openSections, setOpenSections] =
+    useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
+
   const renderShortcut = (shortcut: string): ReactElement => (
     <>
       <span className="text-[12px] leading-none">{shortcut.slice(0, 1)}</span>
       <span className="text-[11px] leading-none">{shortcut.slice(1)}</span>
     </>
   )
+  const toggleSection = (sectionId: SidebarSection['id']): void => {
+    setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }))
+  }
+
+  const renderBadge = (pageId: AppPage): ReactElement | null => {
+    if (pageId === 'notes' && notesCount > 0) {
+      return <SidebarMenuBadge>{notesCountLabel}</SidebarMenuBadge>
+    }
+
+    if (pageId === 'projects' && projectsCount > 0) {
+      return <SidebarMenuBadge>{projectsCountLabel}</SidebarMenuBadge>
+    }
+
+    if (pageId === 'calendar' && calendarUndoneCount > 0) {
+      return <SidebarMenuBadge>{calendarUndoneCountLabel}</SidebarMenuBadge>
+    }
+
+    return null
+  }
+
+  const renderSection = (section: SidebarSection): ReactElement => {
+    const isOpen = openSections[section.id]
+    const activeInSection = section.items.some((item) => item.id === activePage)
+    const ChevronIcon = isOpen ? ChevronDown : ChevronRight
+
+    return (
+      <SidebarGroup
+        key={section.id}
+        className="sidebar-section-group px-3 py-2"
+        style={
+          {
+            '--sidebar-section-icon-color':
+              'color-mix(in srgb, var(--sidebar-foreground) 82%, transparent)'
+          } as CSSProperties
+        }
+      >
+        <ButtonBase
+          className="sidebar-section-trigger"
+          data-active={activeInSection}
+          data-open={isOpen}
+          onClick={() => toggleSection(section.id)}
+          disabled={isLocked}
+          title={section.label}
+          sx={SIDEBAR_SECTION_BUTTON_SX}
+          data-no-ripple
+        >
+          <span className="sidebar-section-icon">
+            <section.icon size={14} strokeWidth={2} />
+          </span>
+          <span className="sidebar-section-label">{section.label}</span>
+          <ChevronIcon
+            size={13}
+            strokeWidth={2.2}
+            className="sidebar-section-chevron ml-auto shrink-0"
+          />
+        </ButtonBase>
+        <SidebarGroupContent
+          className="pt-0.5 group-data-[collapsible=icon]:hidden"
+          hidden={!isOpen}
+        >
+          <div className="sidebar-section-stack">
+            <span className="sidebar-section-rail" aria-hidden="true" />
+            <SidebarMenu className="sidebar-section-items">
+              {section.items.map((page) => (
+                <SidebarMenuItem key={page.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activePage === page.id}
+                    onClick={() => onChange(page.id)}
+                    tooltip={page.label}
+                  >
+                    <ButtonBase
+                      className="sidebar-menu-card sidebar-menu-card-nested"
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isLocked}
+                    >
+                      <span>{page.label}</span>
+                    </ButtonBase>
+                  </SidebarMenuButton>
+                  {renderBadge(page.id)}
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </div>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )
+  }
+
   return (
     <Sidebar
       collapsible={collapsible}
@@ -177,10 +290,10 @@ export function AppSidebar({
             className="h-11 w-11 shrink-0 rounded-lg border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
           />
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
-            <p className="text-sm font-semibold tracking-[0.12em] text-sidebar-foreground/70">
+            <p className="sidebar-brand-shimmer text-sm font-semibold tracking-[0.12em] text-sidebar-foreground/70">
               XINGULARITY
             </p>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-sidebar-foreground/45">
+            <p className="sidebar-brand-shimmer sidebar-brand-shimmer-subtle text-[11px] uppercase tracking-[0.3em] text-sidebar-foreground/45">
               Workspace
             </p>
           </div>
@@ -203,10 +316,9 @@ export function AppSidebar({
           type="button"
           onClick={onOpenSearchPalette}
           disabled={isLocked}
-          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)]/60 px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] hover:bg-[var(--panel)]/80"
+          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)]"
           style={{
-            borderColor: 'var(--accent-line)',
-            backgroundColor: 'var(--accent-soft)'
+            borderColor: 'var(--accent-line)'
           }}
           aria-label="Open command palette"
           title="Open command palette"
@@ -219,132 +331,7 @@ export function AppSidebar({
       </div>
       <SidebarSeparator />
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Board</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {BOARD_PAGES.map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    onClick={() => onChange(page.id)}
-                    tooltip={page.label}
-                  >
-                    <ButtonBase
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isLocked}
-                    >
-                      <page.icon size={17} strokeWidth={2} />
-                      <span>{page.label}</span>
-                      {page.id === 'notes' || page.id === 'projects' || page.id === 'calendar' ? (
-                        <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                          {renderShortcut(page.shortcut ?? '')}
-                        </Kbd>
-                      ) : null}
-                    </ButtonBase>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Home</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {HOME_PAGES.map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    onClick={() => onChange(page.id)}
-                    tooltip={page.label}
-                  >
-                    <ButtonBase
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isLocked}
-                    >
-                      <page.icon size={17} strokeWidth={2} />
-                      <span>{page.label}</span>
-                    </ButtonBase>
-                  </SidebarMenuButton>
-                  {page.id === 'notes' && notesCount > 0 ? (
-                    <SidebarMenuBadge>{notesCountLabel}</SidebarMenuBadge>
-                  ) : null}
-                  {page.id === 'projects' && projectsCount > 0 ? (
-                    <SidebarMenuBadge>{projectsCountLabel}</SidebarMenuBadge>
-                  ) : null}
-                  {page.id === 'calendar' && calendarUndoneCount > 0 ? (
-                    <SidebarMenuBadge>{calendarUndoneCountLabel}</SidebarMenuBadge>
-                  ) : null}
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Finance</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {FINANCE_PAGES.map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    onClick={() => onChange(page.id)}
-                    tooltip={page.label}
-                  >
-                    <ButtonBase
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isLocked}
-                    >
-                      <page.icon size={17} strokeWidth={2} />
-                      <span>{page.label}</span>
-                    </ButtonBase>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Automations</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {DOCUMENT_PAGES.map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    onClick={() => onChange(page.id)}
-                    tooltip={page.label}
-                  >
-                    <ButtonBase
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isLocked}
-                    >
-                      <page.icon size={17} strokeWidth={2} />
-                      <span>{page.label}</span>
-                    </ButtonBase>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+      <SidebarContent>{SIDEBAR_SECTIONS.map(renderSection)}</SidebarContent>
 
       <SidebarSeparator />
       <SidebarFooter>
@@ -357,14 +344,14 @@ export function AppSidebar({
               tooltip={SETTINGS_PAGE.label}
             >
               <ButtonBase
+                className="sidebar-menu-card"
                 data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
                 sx={SIDEBAR_MENU_BUTTON_SX}
                 disabled={isLocked}
               >
-                <SETTINGS_PAGE.icon size={17} strokeWidth={2} />
                 <span>{SETTINGS_PAGE.label}</span>
-                <Kbd className="ml-1 shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                  {renderShortcut(SETTINGS_PAGE.shortcut)}
+                <Kbd className="ml-auto shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
+                  {renderShortcut(SETTINGS_PAGE.shortcut ?? '')}
                 </Kbd>
               </ButtonBase>
             </SidebarMenuButton>

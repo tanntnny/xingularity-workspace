@@ -339,7 +339,7 @@ export function CalendarTaskList({
   const totalItems = tasks.length + milestonesCount + subtasksCount
 
   return (
-    <div className="flex h-full flex-col gap-2.5 overflow-auto p-3">
+    <div className="flex h-full flex-col gap-2.5 overflow-auto">
       <div className="flex flex-wrap items-center gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -482,9 +482,9 @@ export function CalendarTaskList({
                     <button
                       type="button"
                       onClick={() => onToggle(task.id)}
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                         task.completed
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
                           : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
                       }`}
                       title={task.completed ? 'Mark as pending' : 'Mark as complete'}
@@ -831,7 +831,7 @@ export function CalendarTaskList({
                   }}
                   className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                     item.completed
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
                       : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
                   }`}
                   title={item.completed ? 'Mark as pending' : 'Mark as complete'}

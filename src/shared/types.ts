@@ -91,7 +91,35 @@ export interface AppErrorEvent {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high'
-export type CalendarTaskType = 'meeting' | 'assignment' | 'review' | 'personal' | 'other'
+export const CALENDAR_TASK_TYPE_VALUES = [
+  'meeting',
+  'assignment',
+  'review',
+  'personal',
+  'call',
+  'deep-work',
+  'errand',
+  'follow-up',
+  'other'
+] as const
+
+export type CalendarTaskType = (typeof CALENDAR_TASK_TYPE_VALUES)[number]
+
+export const CALENDAR_TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'assignment', label: 'Assignment' },
+  { value: 'review', label: 'Review' },
+  { value: 'personal', label: 'Personal' },
+  { value: 'call', label: 'Call' },
+  { value: 'deep-work', label: 'Deep Work' },
+  { value: 'errand', label: 'Errand' },
+  { value: 'follow-up', label: 'Follow-up' },
+  { value: 'other', label: 'Other' }
+]
+
+export function formatCalendarTaskType(taskType: CalendarTaskType): string {
+  return CALENDAR_TASK_TYPE_OPTIONS.find((option) => option.value === taskType)?.label ?? taskType
+}
 
 export interface TaskReminder {
   id: string

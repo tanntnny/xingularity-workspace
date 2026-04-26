@@ -112,22 +112,36 @@
     --glass-workspace-blur: 12px;
     --glass-header-blur: 10px;
     --glass-border-alpha: 0.48;
-    --sidebar-glass-overlay: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-sidebar-alpha));
+    --sidebar-glass-overlay: rgba(
+      var(--panel-r),
+      var(--panel-g),
+      var(--panel-b),
+      var(--glass-sidebar-alpha)
+    );
     --sidebar-glass-opacity: 1;
     --glass-sidebar-shadow: linear-gradient(to right, rgba(0, 0, 0, 0.045) 0%, transparent 100%);
-    --glass-right-panel-shadow: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.045) 100%);
+    --glass-right-panel-shadow: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(0, 0, 0, 0.045) 100%
+    );
     --workspace-vibrancy-shell-alpha: var(--glass-sidebar-alpha);
     --workspace-vibrancy-shell-blur: var(--glass-sidebar-blur);
     --workspace-vibrancy-panel-alpha: var(--glass-sidebar-alpha);
     --workspace-vibrancy-panel-2-alpha: var(--glass-sidebar-alpha);
     --workspace-vibrancy-panel-3-alpha: var(--glass-sidebar-alpha);
-    --command-palette-overlay-bg: radial-gradient(
+    --command-palette-overlay-bg:
+      radial-gradient(
         circle at top,
-        color-mix(in srgb, var(--accent-soft) 34%, transparent),
-        transparent 44%
+        color-mix(in srgb, var(--accent-soft) 28%, transparent),
+        transparent 42%
       ),
-      rgba(255, 255, 255, 0.16);
-    --command-palette-panel-bg: rgba(255, 255, 255, 0.9);
+      rgba(7, 7, 10, 0.44);
+    --command-palette-panel-bg: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.76) 0%,
+      rgba(255, 255, 255, 0.66) 100%
+    );
     --command-palette-preview-bg: color-mix(in srgb, var(--accent-soft) 18%, transparent);
     --command-palette-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.74), 0 28px 90px rgba(15, 23, 42, 0.12),
@@ -217,16 +231,26 @@
       --glass-workspace-blur: 14px;
       --glass-header-blur: 12px;
       --glass-border-alpha: 0.38;
-      --sidebar-glass-overlay: rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-sidebar-alpha));
+      --sidebar-glass-overlay: rgba(
+        var(--panel-r),
+        var(--panel-g),
+        var(--panel-b),
+        var(--glass-sidebar-alpha)
+      );
       --sidebar-glass-opacity: 1;
       --glass-sidebar-shadow: linear-gradient(to right, rgba(0, 0, 0, 0.06) 0%, transparent 100%);
-      --glass-right-panel-shadow: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.06) 100%);
+      --glass-right-panel-shadow: linear-gradient(
+        to right,
+        transparent 0%,
+        rgba(0, 0, 0, 0.06) 100%
+      );
       --workspace-vibrancy-shell-alpha: var(--glass-sidebar-alpha);
       --workspace-vibrancy-shell-blur: var(--glass-sidebar-blur);
       --workspace-vibrancy-panel-alpha: var(--glass-sidebar-alpha);
       --workspace-vibrancy-panel-2-alpha: var(--glass-sidebar-alpha);
       --workspace-vibrancy-panel-3-alpha: var(--glass-sidebar-alpha);
-      --command-palette-overlay-bg: radial-gradient(
+      --command-palette-overlay-bg:
+        radial-gradient(
           circle at top,
           color-mix(in srgb, var(--accent-soft) 28%, transparent),
           transparent 42%
@@ -286,26 +310,6 @@
 
   .tab-menu-item {
     flex: 0 0 auto;
-  }
-
-  .tab-menu-item + .tab-menu-item {
-    position: relative;
-  }
-
-  .tab-menu-item + .tab-menu-item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    height: 1rem;
-    width: 1px;
-    transform: translateY(-50%);
-    background: var(--line);
-  }
-
-  .tab-menu-item[data-active='true']::before,
-  .tab-menu-item[data-active='true'] + .tab-menu-item::before {
-    opacity: 0;
   }
 
   .tab-menu-spacer {
@@ -420,6 +424,21 @@
     transform: translate3d(0, 0, 0);
   }
 
+  .right-panel-stagger-item {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    animation: right-panel-stagger-in 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: var(--right-panel-stagger-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  @keyframes right-panel-stagger-in {
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
   .workspace-divider {
     border-color: color-mix(in srgb, var(--line) 82%, transparent);
   }
@@ -481,6 +500,209 @@
     border-color: var(--accent);
   }
 
+  .sidebar-menu-card {
+    display: flex;
+    width: 100%;
+    min-height: 100%;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: color-mix(in srgb, var(--sidebar-foreground) 60%, transparent);
+    font-weight: 400;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      transform 120ms ease,
+      filter 120ms ease;
+  }
+
+  .sidebar-menu-card[data-active='true'],
+  .sidebar-menu-card.is-active {
+    background:
+      linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end))
+        padding-box,
+      linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end))
+        border-box;
+    color: var(--sidebar-foreground);
+    font-weight: 500;
+  }
+
+  .sidebar-menu-card:hover,
+  .sidebar-menu-card:focus-visible {
+    border-color: var(--accent);
+  }
+
+  .sidebar-section-trigger {
+    position: relative;
+    display: flex;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .sidebar-section-trigger[data-active='true'] {
+    background: transparent;
+  }
+
+  .sidebar-section-icon {
+    display: inline-flex;
+    height: 1rem;
+    width: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--sidebar-section-icon-color);
+    flex-shrink: 0;
+  }
+
+  .sidebar-section-label {
+    font-size: 0.63rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--sidebar-foreground) 72%, transparent);
+  }
+
+  .sidebar-section-chevron {
+    color: color-mix(in srgb, var(--sidebar-foreground) 48%, transparent);
+    transition:
+      transform 160ms ease,
+      color 160ms ease;
+  }
+
+  .sidebar-section-trigger[data-open='true'] .sidebar-section-chevron {
+    color: color-mix(in srgb, var(--sidebar-foreground) 72%, transparent);
+  }
+
+  .sidebar-section-stack {
+    position: relative;
+  }
+
+  .sidebar-section-rail {
+    position: absolute;
+    left: 0.84rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--sidebar-section-icon-color) 50%, transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .sidebar-section-items {
+    gap: 0;
+    margin-left: 0.12rem;
+  }
+
+  .sidebar-section-items > [data-sidebar='menu-item'] {
+    z-index: 1;
+  }
+
+  .sidebar-menu-card-nested {
+    position: relative;
+    justify-content: space-between;
+    min-height: auto;
+    gap: 0.6rem;
+    padding: 0.5rem 0.9rem 0.5rem 1.54rem;
+    color: color-mix(in srgb, var(--sidebar-foreground) 70%, transparent);
+    z-index: 1;
+  }
+
+  .sidebar-menu-card-nested[data-active='true']::before {
+    content: '';
+    position: absolute;
+    left: 0.67rem;
+    top: 0.34rem;
+    bottom: 0.34rem;
+    width: 1.5px;
+    background: color-mix(in srgb, var(--accent) 100%, transparent);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .right-panel-menu-card {
+    align-items: stretch;
+    border-color: var(--sidebar-border);
+    color: var(--text);
+    min-height: auto;
+  }
+
+  button:not([data-no-ripple]) {
+    cursor: pointer;
+    isolation: isolate;
+    overflow: hidden;
+    position: relative;
+  }
+
+  button:not([data-no-ripple])::after {
+    content: '';
+    position: absolute;
+    left: var(--ripple-x, 50%);
+    top: var(--ripple-y, 50%);
+    z-index: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 34%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0);
+  }
+
+  button.right-panel-menu-card:hover,
+  [role='button'].right-panel-menu-card:hover {
+    border-color: var(--accent);
+  }
+
+  .group[data-collapsible='icon'] .sidebar-section-trigger {
+    justify-content: center;
+  }
+
+  .group[data-collapsible='icon'] .sidebar-section-label,
+  .group[data-collapsible='icon'] .sidebar-section-chevron,
+  .group[data-collapsible='icon'] .sidebar-section-items {
+    display: none;
+  }
+
+  button:not([data-no-ripple]) > *:not(.sidebar-menu-rail) {
+    position: relative;
+    z-index: 1;
+  }
+
+  button.right-panel-menu-card:active,
+  [role='button'].right-panel-menu-card:active {
+    transform: scale(0.985);
+    filter: brightness(0.98);
+  }
+
+  button:not([data-no-ripple]).is-rippling::after {
+    animation: rightPanelCardRipple 520ms ease-out;
+  }
+
+  .table-no-ripple-scope button:not([data-no-ripple]) {
+    isolation: initial;
+    overflow: visible;
+  }
+
+  .table-no-ripple-scope button:not([data-no-ripple])::after {
+    content: none;
+  }
+
+  @keyframes rightPanelCardRipple {
+    0% {
+      opacity: 0.58;
+      transform: translate(-50%, -50%) scale(0);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(36);
+    }
+  }
+
   .dialog-glass-overlay {
     background:
       radial-gradient(
@@ -495,13 +717,81 @@
 
   .dialog-glass-surface {
     background-color: rgba(var(--panel-r), var(--panel-g), var(--panel-b), 0.46);
-    border: 1px solid rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha));
+    border: 1px solid
+      rgba(var(--panel-r), var(--panel-g), var(--panel-b), var(--glass-border-alpha));
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.08),
       0 28px 90px rgba(0, 0, 0, 0.28),
       0 0 0 1px color-mix(in srgb, var(--accent-line) 12%, transparent);
     -webkit-backdrop-filter: saturate(160%) blur(var(--glass-sidebar-blur));
     backdrop-filter: saturate(160%) blur(var(--glass-sidebar-blur));
+  }
+
+  .drawer-glass-overlay {
+    background:
+      radial-gradient(
+        circle at top,
+        color-mix(in srgb, var(--accent-soft) 28%, transparent),
+        transparent 42%
+      ),
+      rgba(7, 7, 10, 0.4);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    backdrop-filter: blur(10px) saturate(120%);
+  }
+
+  .drawer-glass-overlay[data-state='open'] {
+    animation: drawerOverlayIn 220ms ease-out;
+  }
+
+  .drawer-glass-overlay[data-state='closed'] {
+    animation: drawerOverlayOut 180ms ease-in forwards;
+  }
+
+  .drawer-glass-content {
+    background: linear-gradient(
+      180deg,
+      rgba(var(--panel-r), var(--panel-g), var(--panel-b), 0.76) 0%,
+      rgba(var(--panel-r), var(--panel-g), var(--panel-b), 0.68) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 28px 90px rgba(0, 0, 0, 0.24),
+      0 0 0 1px color-mix(in srgb, var(--accent-line) 12%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 2px));
+    backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 2px));
+    will-change: transform, opacity;
+  }
+
+  .drawer-glass-content[data-state='open'].drawer-glass-content-right {
+    animation: drawerContentInRight 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .drawer-glass-content[data-state='closed'].drawer-glass-content-right {
+    animation: drawerContentOutRight 220ms ease-in forwards;
+  }
+
+  .drawer-glass-content[data-state='open'].drawer-glass-content-left {
+    animation: drawerContentInLeft 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .drawer-glass-content[data-state='closed'].drawer-glass-content-left {
+    animation: drawerContentOutLeft 220ms ease-in forwards;
+  }
+
+  .drawer-glass-content[data-state='open'].drawer-glass-content-top {
+    animation: drawerContentInTop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .drawer-glass-content[data-state='closed'].drawer-glass-content-top {
+    animation: drawerContentOutTop 220ms ease-in forwards;
+  }
+
+  .drawer-glass-content[data-state='open'].drawer-glass-content-bottom {
+    animation: drawerContentInBottom 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .drawer-glass-content[data-state='closed'].drawer-glass-content-bottom {
+    animation: drawerContentOutBottom 220ms ease-in forwards;
   }
 }
 
@@ -602,6 +892,12 @@ main[data-workspace-vibrancy='on'] .document-workspace-main-surface {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+main[data-workspace-vibrancy='on'] .document-workspace-main-surface.excalidraw-workspace-main {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
 main[data-workspace-vibrancy='on'] .document-workspace-panel-surface {
   position: relative;
   isolation: isolate;
@@ -643,7 +939,9 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 }
 
 [data-focus-mode='true'] [data-sidebar='sidebar']::before,
-[data-focus-mode='true'] main[data-workspace-vibrancy='on'] .document-workspace-panel-surface::before {
+[data-focus-mode='true']
+  main[data-workspace-vibrancy='on']
+  .document-workspace-panel-surface::before {
   display: none;
 }
 
@@ -658,6 +956,15 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
   .dialog-glass-surface {
     background-color: rgb(var(--panel-r), var(--panel-g), var(--panel-b));
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+  }
+
+  .drawer-glass-overlay {
+    background: rgba(7, 7, 10, 0.62);
+  }
+
+  .drawer-glass-content {
+    background: rgb(var(--panel-r), var(--panel-g), var(--panel-b));
     box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
   }
 
@@ -677,11 +984,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   }
 
   main[data-workspace-vibrancy='on'] .document-workspace-panel-surface {
-    background-color: rgb(
-      var(--panel-r),
-      var(--panel-g),
-      var(--panel-b)
-    );
+    background-color: rgb(var(--panel-r), var(--panel-g), var(--panel-b));
   }
 }
 
@@ -765,6 +1068,16 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   padding: 2px;
 }
 
+.calendar-full .fc .fc-daygrid-day-bg {
+  inset: 0;
+}
+
+.calendar-full .fc .fc-daygrid-day-bg .fc-highlight {
+  inset: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .calendar-full .fc .fc-daygrid-day-top {
   justify-content: flex-start;
 }
@@ -826,6 +1139,26 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   border-color: color-mix(in srgb, #22c55e 36%, var(--line));
 }
 
+.calendar-full .fc .beacon-task-event.beacon-task-call {
+  background: color-mix(in srgb, #06b6d4 14%, var(--panel));
+  border-color: color-mix(in srgb, #06b6d4 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-deep-work {
+  background: color-mix(in srgb, #f43f5e 14%, var(--panel));
+  border-color: color-mix(in srgb, #f43f5e 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-errand {
+  background: color-mix(in srgb, #84cc16 14%, var(--panel));
+  border-color: color-mix(in srgb, #84cc16 36%, var(--line));
+}
+
+.calendar-full .fc .beacon-task-event.beacon-task-follow-up {
+  background: color-mix(in srgb, #14b8a6 14%, var(--panel));
+  border-color: color-mix(in srgb, #14b8a6 36%, var(--line));
+}
+
 .calendar-full .fc .beacon-task-event.beacon-task-other {
   background: color-mix(in srgb, #64748b 14%, var(--panel));
   border-color: color-mix(in srgb, #64748b 36%, var(--line));
@@ -845,13 +1178,85 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   background: color-mix(in srgb, var(--accent-soft) 36%, transparent);
 }
 
-.calendar-full .fc .fc-daygrid-event-harness:hover .beacon-task-inner {
+.calendar-full .fc .fc-daygrid-event-harness:hover .beacon-task-inner,
+.calendar-task-card-shell:hover .beacon-task-inner {
   filter: brightness(0.98);
+}
+
+.calendar-full .fc .fc-event-mirror,
+.fc-event-mirror.calendar-task-card-shell,
+.calendar-task-drag-preview {
+  border-radius: 7px;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.2);
+  cursor: grabbing;
+  opacity: 0.98 !important;
+}
+
+.fc-event-mirror.calendar-task-card-shell,
+.calendar-task-drag-preview {
+  background: var(--calendar-task-card-bg, var(--panel)) !important;
+  border-color: var(--calendar-task-card-border, var(--line)) !important;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.calendar-full .fc .fc-event-mirror .beacon-task-inner,
+.fc-event-mirror.calendar-task-card-shell .beacon-task-inner,
+.calendar-task-drag-preview .beacon-task-inner {
+  min-height: 40px;
+}
+
+[data-unscheduled-task-list='true'][data-calendar-drag-over='true'] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+[data-unscheduled-drop-zone='true'][data-calendar-drag-over='true'] {
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.calendar-task-drag-preview {
+  z-index: 9999;
 }
 
 .page-transition {
   animation: pageFadeSlide 280ms cubic-bezier(0.25, 0.1, 0.25, 1);
   will-change: opacity, transform;
+}
+
+.sidebar-brand-shimmer {
+  color: transparent;
+  background-image: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--sidebar-foreground) 58%, transparent) 0%,
+    color-mix(in srgb, var(--sidebar-foreground) 72%, transparent) 36%,
+    color-mix(in srgb, white 88%, var(--sidebar-foreground) 12%) 50%,
+    color-mix(in srgb, var(--sidebar-foreground) 72%, transparent) 64%,
+    color-mix(in srgb, var(--sidebar-foreground) 58%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 140% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: sidebarBrandShimmer 7.2s linear infinite;
+}
+
+.sidebar-brand-shimmer-subtle {
+  animation-duration: 8.4s;
+  opacity: 0.82;
+}
+
+@keyframes sidebarBrandShimmer {
+  0%,
+  14% {
+    background-position: 140% 50%;
+  }
+
+  32%,
+  100% {
+    background-position: -80% 50%;
+  }
 }
 
 .command-palette-overlay {
@@ -860,8 +1265,10 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 }
 
 .command-palette-panel {
-  background-color: var(--command-palette-panel-bg) !important;
+  background: var(--command-palette-panel-bg) !important;
   box-shadow: var(--command-palette-shadow) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 4px));
+  backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 4px));
   transform-origin: top center;
   animation: commandPalettePanelIn 240ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform, filter;
@@ -870,6 +1277,122 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .command-palette-preview {
   background: var(--command-palette-preview-bg) !important;
   animation: commandPalettePreviewIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes drawerOverlayIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawerOverlayOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawerContentInRight {
+  from {
+    opacity: 0;
+    transform: translateX(24px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes drawerContentOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(24px) scale(0.985);
+  }
+}
+
+@keyframes drawerContentInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-24px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes drawerContentOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-24px) scale(0.985);
+  }
+}
+
+@keyframes drawerContentInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes drawerContentOutTop {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.985);
+  }
+}
+
+@keyframes drawerContentInBottom {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes drawerContentOutBottom {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(24px) scale(0.985);
+  }
 }
 
 @keyframes commandPaletteOverlayIn {
@@ -922,28 +1445,108 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 @media (prefers-reduced-motion: reduce) {
   .page-transition,
+  .sidebar-brand-shimmer,
   .command-palette-overlay,
   .command-palette-panel,
-  .command-palette-preview {
+  .command-palette-preview,
+  .drawer-glass-overlay,
+  .drawer-glass-content {
     animation: none !important;
   }
 
   .command-palette-panel,
-  .command-palette-preview {
+  .command-palette-preview,
+  .drawer-glass-content {
     transform: none !important;
     filter: none !important;
   }
 
   .scroll-reveal-item,
-  .scroll-reveal-item[data-revealed='true'] {
+  .scroll-reveal-item[data-revealed='true'],
+  .right-panel-stagger-item {
     opacity: 1 !important;
     transform: none !important;
     transition: none !important;
+    animation: none !important;
   }
 }
 
 .calendar-full .fc .fc-daygrid-event-dot {
   display: none;
+}
+
+.calendar-task-card-shell {
+  --calendar-task-card-bg: var(--panel);
+  --calendar-task-card-border: var(--line);
+  background: var(--calendar-task-card-bg);
+  border-color: var(--calendar-task-card-border);
+  border-radius: 7px;
+  transition:
+    box-shadow 160ms ease,
+    filter 160ms ease;
+}
+
+.calendar-full .fc .fc-event.calendar-task-card-shell {
+  background: var(--calendar-task-card-bg);
+  border-color: var(--calendar-task-card-border);
+  cursor: grab;
+}
+
+.calendar-full .fc .fc-event.calendar-task-card-shell:active {
+  cursor: grabbing;
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-meeting {
+  --calendar-task-card-bg: color-mix(in srgb, #3b82f6 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #3b82f6 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-assignment {
+  --calendar-task-card-bg: color-mix(in srgb, #f59e0b 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #f59e0b 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-review {
+  --calendar-task-card-bg: color-mix(in srgb, #8b5cf6 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #8b5cf6 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-personal {
+  --calendar-task-card-bg: color-mix(in srgb, #22c55e 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #22c55e 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-call {
+  --calendar-task-card-bg: color-mix(in srgb, #06b6d4 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #06b6d4 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-deep-work {
+  --calendar-task-card-bg: color-mix(in srgb, #f43f5e 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #f43f5e 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-errand {
+  --calendar-task-card-bg: color-mix(in srgb, #84cc16 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #84cc16 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-follow-up {
+  --calendar-task-card-bg: color-mix(in srgb, #14b8a6 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #14b8a6 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-other {
+  --calendar-task-card-bg: color-mix(in srgb, #64748b 14%, var(--panel));
+  --calendar-task-card-border: color-mix(in srgb, #64748b 36%, var(--line));
+}
+
+.calendar-task-card-shell.beacon-task-event.beacon-task-completed {
+  opacity: 0.65;
+}
+
+.calendar-task-card-shell:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 .beacon-task-surface {
@@ -968,6 +1571,26 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .beacon-task-surface.beacon-task-event.beacon-task-personal {
   background: color-mix(in srgb, #22c55e 14%, var(--panel));
   border-color: color-mix(in srgb, #22c55e 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-call {
+  background: color-mix(in srgb, #06b6d4 14%, var(--panel));
+  border-color: color-mix(in srgb, #06b6d4 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-deep-work {
+  background: color-mix(in srgb, #f43f5e 14%, var(--panel));
+  border-color: color-mix(in srgb, #f43f5e 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-errand {
+  background: color-mix(in srgb, #84cc16 14%, var(--panel));
+  border-color: color-mix(in srgb, #84cc16 36%, var(--line));
+}
+
+.beacon-task-surface.beacon-task-event.beacon-task-follow-up {
+  background: color-mix(in srgb, #14b8a6 14%, var(--panel));
+  border-color: color-mix(in srgb, #14b8a6 36%, var(--line));
 }
 
 .beacon-task-surface.beacon-task-event.beacon-task-other {
@@ -1057,6 +1680,11 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 .note-milkdown-editor .ProseMirror h1 {
   font-size: 1.625rem;
+  margin-top: 1.1rem !important;
+}
+
+.note-milkdown-editor .ProseMirror > h1:first-child {
+  margin-top: 0 !important;
 }
 
 .note-milkdown-editor .ProseMirror h2 {
@@ -1414,12 +2042,69 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   padding-left: 1.4rem !important;
 }
 
+.note-milkdown-editor .ProseMirror .note-callout,
+.note-milkdown-editor .ProseMirror blockquote.note-callout {
+  --note-callout-border: color-mix(in srgb, var(--accent) 44%, transparent);
+  --note-callout-foreground: color-mix(in srgb, var(--accent) 78%, var(--text));
+  --note-callout-surface: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid var(--note-callout-border);
+  border-left-width: 1px;
+  border-radius: 4px !important;
+  background: var(--note-callout-surface);
+  color: var(--note-callout-foreground);
+  margin: 0.35rem 0 !important;
+  padding: 0.75rem 0.85rem !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.note-milkdown-editor .ProseMirror .note-callout.note-callout-info,
+.note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-info {
+  --note-callout-border: color-mix(in srgb, #3b82f6 58%, transparent);
+  --note-callout-foreground: color-mix(in srgb, #3b82f6 82%, var(--text));
+  --note-callout-surface: color-mix(in srgb, #3b82f6 18%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror .note-callout.note-callout-success,
+.note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-success {
+  --note-callout-border: color-mix(in srgb, #22c55e 58%, transparent);
+  --note-callout-foreground: color-mix(in srgb, #22c55e 82%, var(--text));
+  --note-callout-surface: color-mix(in srgb, #22c55e 18%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror .note-callout.note-callout-warning,
+.note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-warning {
+  --note-callout-border: color-mix(in srgb, #f59e0b 60%, transparent);
+  --note-callout-foreground: color-mix(in srgb, #f59e0b 84%, var(--text));
+  --note-callout-surface: color-mix(in srgb, #f59e0b 18%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror .note-callout.note-callout-danger,
+.note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-danger {
+  --note-callout-border: color-mix(in srgb, #ef4444 58%, transparent);
+  --note-callout-foreground: color-mix(in srgb, #ef4444 82%, var(--text));
+  --note-callout-surface: color-mix(in srgb, #ef4444 17%, transparent);
+}
+
+.note-milkdown-editor .ProseMirror blockquote.note-callout p,
+.note-milkdown-editor .ProseMirror blockquote.note-callout li,
+.note-milkdown-editor .ProseMirror blockquote.note-callout strong,
+.note-milkdown-editor .ProseMirror blockquote.note-callout em,
+.note-milkdown-editor .ProseMirror blockquote.note-callout code,
+.note-milkdown-editor .ProseMirror blockquote.note-callout a {
+  color: inherit;
+  margin: 0 !important;
+}
+
+.note-milkdown-editor .ProseMirror .note-callout-marker-hidden {
+  display: none;
+}
+
 .note-milkdown-editor .ProseMirror blockquote::before {
   content: none !important;
 }
 
 .note-milkdown-editor .ProseMirror hr {
-  border-color: var(--line);
+  border-color: var(--accent-line);
 }
 
 .note-milkdown-editor .ProseMirror table {
@@ -1491,6 +2176,313 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 .note-milkdown-editor .ProseMirror ::selection {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.excalidraw-app-shell .excalidraw,
+.excalidraw {
+  --ui-font: var(--app-font-family);
+  --color-primary: var(--accent);
+  --color-primary-hover: color-mix(in srgb, var(--accent) 82%, var(--panel));
+  --color-primary-light: color-mix(in srgb, var(--accent-soft) 90%, var(--panel));
+  --color-primary-darker: color-mix(in srgb, var(--accent) 88%, #000 12%);
+  --color-primary-darkest: color-mix(in srgb, var(--accent) 74%, #000 26%);
+  --color-brand-hover: var(--accent-line);
+  --color-brand-active: var(--accent);
+  --color-surface-lowest: color-mix(in srgb, var(--panel) 78%, transparent);
+  --color-surface-low: color-mix(in srgb, var(--panel) 70%, transparent);
+  --color-surface-mid: color-mix(in srgb, var(--accent-soft) 28%, var(--panel));
+  --color-surface-high: color-mix(in srgb, var(--accent-soft) 44%, var(--panel));
+  --color-surface-primary-container: color-mix(in srgb, var(--accent-soft) 92%, var(--panel));
+  --color-on-primary-container: var(--accent);
+  --island-bg-color: color-mix(in srgb, var(--panel) 76%, transparent);
+  --popup-bg-color: color-mix(in srgb, var(--panel) 82%, transparent);
+  --popup-secondary-bg-color: color-mix(in srgb, var(--accent-soft) 36%, var(--panel));
+  --popup-text-color: var(--text);
+  --text-primary-color: var(--text);
+  --icon-fill-color: var(--muted);
+  --default-bg-color: transparent;
+  --default-border-color: color-mix(in srgb, var(--accent-line) 22%, var(--line));
+  --sidebar-border-color: color-mix(in srgb, var(--accent-line) 18%, var(--line));
+  --sidebar-bg-color: color-mix(in srgb, var(--panel) 78%, transparent);
+  --sidebar-shadow: none;
+  --input-bg-color: color-mix(in srgb, var(--panel) 88%, transparent);
+  --input-border-color: color-mix(in srgb, var(--accent-line) 24%, var(--line));
+  --input-label-color: var(--muted);
+  --button-hover-bg: color-mix(in srgb, var(--accent-soft) 68%, transparent);
+  --button-hover-border: color-mix(in srgb, var(--accent-line) 48%, var(--line));
+  --button-hover-color: var(--text);
+  --button-active-bg: color-mix(in srgb, var(--accent-soft) 86%, var(--panel));
+  --button-active-border: var(--accent-line);
+  --button-gray-1: color-mix(in srgb, var(--accent-soft) 36%, var(--panel));
+  --button-gray-2: color-mix(in srgb, var(--accent-soft) 74%, var(--panel));
+  --button-gray-3: color-mix(in srgb, var(--accent-soft) 88%, var(--panel));
+  --button-selected-bg: color-mix(in srgb, var(--accent-soft) 82%, var(--panel));
+  --button-selected-border: color-mix(in srgb, var(--accent-line) 64%, var(--line));
+  --button-selected-hover-bg: color-mix(in srgb, var(--accent-soft) 92%, var(--panel));
+  --focus-highlight-color: color-mix(in srgb, var(--accent-line) 42%, transparent);
+  --select-highlight-color: var(--accent);
+  --scrollbar-thumb: color-mix(in srgb, var(--accent-line) 42%, var(--line));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 58%, var(--line));
+  --link-color: var(--accent);
+  --shadow-island:
+    0 22px 54px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent-line) 14%, transparent);
+}
+
+.excalidraw-app-shell .excalidraw {
+  background: transparent;
+}
+
+.excalidraw-tool-eraser .excalidraw__canvas,
+.excalidraw-tool-eraser .excalidraw__canvas canvas,
+.excalidraw-tool-eraser canvas {
+  cursor: crosshair !important;
+}
+
+.excalidraw .Island,
+.excalidraw .App-menu__left,
+.excalidraw .App-mobile-menu,
+.excalidraw .mobile-misc-tools-container,
+.excalidraw .dropdown-menu,
+.excalidraw .color-picker,
+.excalidraw .picker-content,
+.excalidraw .popover {
+  backdrop-filter: blur(18px);
+}
+
+.excalidraw .Island,
+.excalidraw .App-menu__left,
+.excalidraw .App-mobile-menu,
+.excalidraw .mobile-misc-tools-container,
+.excalidraw .dropdown-menu,
+.excalidraw .dropdown-menu .dropdown-menu-container,
+.excalidraw .color-picker,
+.excalidraw .picker-content,
+.excalidraw .popover,
+.excalidraw .help-icon,
+.excalidraw .main-menu-trigger,
+.excalidraw .scroll-back-to-content {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 88%, transparent) 0%,
+      color-mix(in srgb, var(--panel) 74%, transparent) 100%
+    ) !important;
+  border-color: color-mix(in srgb, var(--accent-line) 18%, var(--line)) !important;
+  box-shadow: none !important;
+}
+
+.excalidraw .main-menu-trigger,
+.excalidraw .help-icon,
+.excalidraw .App-toolbar-container .Island,
+.excalidraw .App-menu__left,
+.excalidraw .App-mobile-menu,
+.excalidraw .dropdown-menu,
+.excalidraw .dropdown-menu .dropdown-menu-container,
+.excalidraw .color-picker,
+.excalidraw .popover,
+.excalidraw .picker-content {
+  box-shadow: none !important;
+}
+
+.excalidraw .main-menu-trigger::before,
+.excalidraw .main-menu-trigger::after,
+.excalidraw .help-icon::before,
+.excalidraw .help-icon::after,
+.excalidraw .Island::before,
+.excalidraw .Island::after,
+.excalidraw .dropdown-menu::before,
+.excalidraw .dropdown-menu::after,
+.excalidraw .dropdown-menu .dropdown-menu-container::before,
+.excalidraw .dropdown-menu .dropdown-menu-container::after,
+.excalidraw .color-picker::before,
+.excalidraw .color-picker::after,
+.excalidraw .popover::before,
+.excalidraw .popover::after {
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.excalidraw .App-toolbar-container .Island,
+.excalidraw .main-menu-trigger,
+.excalidraw .help-icon,
+.excalidraw .dropdown-menu .dropdown-menu-container,
+.excalidraw .color-picker,
+.excalidraw .popover {
+  background-color: color-mix(in srgb, var(--panel) 72%, transparent) !important;
+  background-image: none !important;
+}
+
+.excalidraw .App-toolbar-container .Island,
+.excalidraw .App-menu__left,
+.excalidraw .App-mobile-menu,
+.excalidraw .dropdown-menu,
+.excalidraw .dropdown-menu .dropdown-menu-container,
+.excalidraw .color-picker,
+.excalidraw .popover,
+.excalidraw .picker-content,
+.excalidraw .main-menu-trigger,
+.excalidraw .help-icon,
+.excalidraw .scroll-back-to-content {
+  outline: none !important;
+  filter: none !important;
+}
+
+.excalidraw .App-menu__left,
+.excalidraw .App-mobile-menu {
+  --button-bg: color-mix(in srgb, var(--accent-soft) 18%, var(--panel));
+  --button-hover-bg: color-mix(in srgb, var(--accent-soft) 58%, transparent);
+  --button-border: color-mix(in srgb, var(--accent-line) 18%, var(--line));
+  --button-color: var(--text);
+}
+
+.excalidraw.theme--dark.excalidraw .App-menu__left,
+.excalidraw.theme--dark.excalidraw .App-mobile-menu {
+  --button-bg: color-mix(in srgb, var(--accent-soft) 22%, var(--panel));
+  --button-hover-bg: color-mix(in srgb, var(--accent-soft) 44%, transparent);
+}
+
+.excalidraw .ToolIcon__label,
+.excalidraw .welcome-screen-center__heading,
+.excalidraw .welcome-screen-menu-item,
+.excalidraw .scroll-back-to-content,
+.excalidraw .dropdown-menu-item {
+  color: var(--text-primary-color);
+}
+
+.excalidraw .ToolIcon__icon:hover,
+.excalidraw .ToolIcon_type_button.ToolIcon--selected,
+.excalidraw .ToolIcon_type_button.ToolIcon--selected:active,
+.excalidraw .ToolIcon_type_floating .ToolIcon__icon,
+.excalidraw .ToolIcon_type_floating .ToolIcon__icon:hover,
+.excalidraw .main-menu-trigger,
+.excalidraw .help-icon,
+.excalidraw button.standalone.active,
+.excalidraw button.standalone.active:hover {
+  color: var(--accent);
+}
+
+.excalidraw .ToolIcon_type_button.ToolIcon--selected,
+.excalidraw .ToolIcon_type_button.ToolIcon--selected:active,
+.excalidraw button.standalone.active,
+.excalidraw button.standalone.active:hover,
+.excalidraw .excalidraw-eye-dropper-trigger.selected {
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--panel)) !important;
+  border-color: color-mix(in srgb, var(--accent-line) 56%, var(--line)) !important;
+}
+
+.excalidraw .ToolIcon .ToolIcon_type_radio:checked + .ToolIcon__icon,
+.excalidraw .ToolIcon .ToolIcon_type_checkbox:checked + .ToolIcon__icon,
+.excalidraw .color-picker__button.active .color-picker__button-outline,
+.excalidraw .color-input-container:focus-within,
+.excalidraw .color-picker__input-label:focus-within,
+.excalidraw .main-menu-trigger:active,
+.excalidraw .help-icon:active,
+.excalidraw .scroll-back-to-content:active {
+  box-shadow: 0 0 0 1px var(--accent-line);
+}
+
+.excalidraw .color-picker__button:hover::after,
+.excalidraw .welcome-screen-menu-item:active,
+.excalidraw input[type='text']:focus,
+.excalidraw textarea:not(.excalidraw-wysiwyg):focus {
+  border-color: var(--accent-line);
+}
+
+.excalidraw .zoom-actions,
+.excalidraw .undo-redo-buttons,
+.excalidraw .eraser-buttons,
+.excalidraw .sidebar-trigger,
+.excalidraw .buttonList label,
+.excalidraw .buttonList button,
+.excalidraw .buttonList .zIndexButton,
+.excalidraw .dropdown-menu .dropdown-menu-item,
+.excalidraw .dropdown-select__language,
+.excalidraw .sidebar__header__buttons button {
+  background: color-mix(in srgb, var(--accent-soft) 18%, var(--panel)) !important;
+  color: var(--text) !important;
+  border-color: color-mix(in srgb, var(--accent-line) 18%, var(--line)) !important;
+  box-shadow: none !important;
+}
+
+.excalidraw .zoom-actions,
+.excalidraw .undo-redo-buttons,
+.excalidraw .eraser-buttons {
+  border: 1px solid color-mix(in srgb, var(--accent-line) 18%, var(--line));
+  backdrop-filter: blur(18px);
+}
+
+.excalidraw .zoom-button,
+.excalidraw .undo-redo-buttons button,
+.excalidraw .eraser-buttons button,
+.excalidraw .reset-zoom-button,
+.excalidraw .sidebar-trigger,
+.excalidraw .buttonList label,
+.excalidraw .buttonList button,
+.excalidraw .buttonList .zIndexButton,
+.excalidraw .sidebar__header__buttons button {
+  background: color-mix(in srgb, var(--accent-soft) 18%, var(--panel)) !important;
+  color: var(--text) !important;
+}
+
+.excalidraw .zoom-button:hover,
+.excalidraw .undo-redo-buttons button:hover,
+.excalidraw .eraser-buttons button:hover,
+.excalidraw .reset-zoom-button:hover,
+.excalidraw .sidebar-trigger:hover,
+.excalidraw .buttonList label:hover,
+.excalidraw .buttonList button:hover,
+.excalidraw .buttonList .zIndexButton:hover,
+.excalidraw .dropdown-select__language:hover,
+.excalidraw .sidebar__header__buttons button:hover,
+.excalidraw .dropdown-menu .dropdown-menu-item:hover {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent) !important;
+  color: var(--text) !important;
+}
+
+.excalidraw .zoom-button:active,
+.excalidraw .undo-redo-buttons button:active,
+.excalidraw .eraser-buttons button:active,
+.excalidraw .reset-zoom-button:active,
+.excalidraw .sidebar-trigger:active,
+.excalidraw .buttonList label:active,
+.excalidraw .buttonList button:active,
+.excalidraw .buttonList .zIndexButton:active,
+.excalidraw .dropdown-menu .dropdown-menu-item:active {
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--panel)) !important;
+  border-color: var(--accent-line) !important;
+}
+
+.excalidraw .sidebar-trigger.active,
+.excalidraw .buttonList input[type='radio']:checked + .ToolIcon__icon,
+.excalidraw .buttonList .ToolIcon_type_radio:checked + .ToolIcon__icon,
+.excalidraw .buttonList .ToolIcon_type_checkbox:checked + .ToolIcon__icon,
+.excalidraw .dropdown-menu .dropdown-menu-item--selected,
+.excalidraw .dropdown-menu.manual-hover .dropdown-menu-item--selected,
+.excalidraw .excalidraw-button.active,
+.excalidraw .zoom-button.active,
+.excalidraw button.standalone.active {
+  background: color-mix(in srgb, var(--accent-soft) 84%, var(--panel)) !important;
+  color: var(--accent) !important;
+  border-color: color-mix(in srgb, var(--accent-line) 56%, var(--line)) !important;
+}
+
+.excalidraw .zoom-button svg,
+.excalidraw .undo-redo-buttons button svg,
+.excalidraw .eraser-buttons button svg,
+.excalidraw .reset-zoom-button svg,
+.excalidraw .sidebar-trigger svg,
+.excalidraw .dropdown-menu .dropdown-menu-item svg,
+.excalidraw .buttonList label svg,
+.excalidraw .buttonList button svg,
+.excalidraw .buttonList .zIndexButton svg {
+  color: currentColor !important;
+}
+
+.excalidraw .reset-zoom-button,
+.excalidraw .dropdown-menu .dropdown-menu-item__shortcut,
+.excalidraw .sidebar-trigger__label-element {
+  color: var(--text) !important;
 }
 
 .note-milkdown-editor .milkdown-toolbar,

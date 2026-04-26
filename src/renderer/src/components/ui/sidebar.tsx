@@ -352,13 +352,13 @@ SidebarRail.displayName = 'SidebarRail'
 const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<'main'>>(
   ({ className, ...props }, ref) => {
     return (
-        <main
-          ref={ref}
-          className={cn(
-            'relative flex min-h-svh flex-1 flex-col bg-transparent',
-            'peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow',
-            className
-          )}
+      <main
+        ref={ref}
+        className={cn(
+          'relative flex min-h-svh flex-1 flex-col bg-transparent',
+          'peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow',
+          className
+        )}
         {...props}
       />
     )
@@ -449,7 +449,7 @@ const SidebarGroup = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'
       <div
         ref={ref}
         data-sidebar="group"
-        className={cn('relative flex w-full min-w-0 flex-col p-2 gap-2', className)}
+        className={cn('relative flex w-full min-w-0 flex-col p-1', className)}
         {...props}
       />
     )
@@ -655,11 +655,9 @@ const SidebarMenuBadge = React.forwardRef<HTMLDivElement, React.ComponentProps<'
       ref={ref}
       data-sidebar="menu-badge"
       className={cn(
-        'pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground',
-        'peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground',
-        'peer-data-[size=sm]/menu-button:top-1',
-        'peer-data-[size=default]/menu-button:top-1.5',
-        'peer-data-[size=lg]/menu-button:top-2.5',
+        'pointer-events-none absolute right-3 top-1/2 z-10 flex min-w-5 -translate-y-1/2 select-none items-center justify-center px-1 text-xs font-medium tabular-nums',
+        'bg-transparent text-[color:color-mix(in_srgb,var(--sidebar-foreground)_82%,transparent)]',
+        'peer-hover/menu-button:text-[var(--accent)] peer-data-[active=true]/menu-button:text-[var(--sidebar-foreground)]',
         'group-data-[collapsible=icon]:hidden',
         className
       )}

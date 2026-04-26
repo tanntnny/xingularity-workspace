@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'e
 import { z } from 'zod'
 import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
 import { IPC_CHANNELS } from '../shared/ipc'
+import { CALENDAR_TASK_TYPE_VALUES } from '../shared/types'
 import { VaultRuntime } from './runtime'
 
 const notePathSchema = z.string().min(1).max(512)
@@ -123,7 +124,7 @@ const calendarTaskSchema = z.object({
   completed: z.boolean(),
   createdAt: z.string().min(1).max(64),
   priority: z.enum(['low', 'medium', 'high']),
-  taskType: z.enum(['meeting', 'assignment', 'review', 'personal', 'other']).optional(),
+  taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(taskReminderSchema).max(10),
   time: z
     .string()

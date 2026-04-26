@@ -95,7 +95,7 @@ export function NotesTreeView({
 }: NotesTreeViewProps): ReactElement {
   const treeRef = useRef<TreeApi<NoteTreeNode> | null>(null)
   const lastSyncedSelectionKeyRef = useRef<string>('')
-  const { ref: containerRef, height } = useElementSize()
+  const { ref: sizeContainerRef, height } = useElementSize()
   const [editingId, setEditingId] = useState<string | null>(null)
   const autoScrollFrameRef = useRef<number | null>(null)
   const dragClientYRef = useRef<number | null>(null)
@@ -351,7 +351,7 @@ export function NotesTreeView({
 
   return (
     <div
-      ref={containerRef}
+      ref={sizeContainerRef}
       className="h-full min-h-0 p-2"
       data-testid="notes-tree-view"
       onKeyDownCapture={(event) => {

@@ -3,6 +3,7 @@ import { createRandomProjectIcon } from '../shared/projectIcons'
 import { upsertTagsInMarkdown } from '../shared/noteTags'
 import {
   AppSettings,
+  CALENDAR_TASK_TYPE_VALUES,
   CalendarTask,
   Project,
   ProjectMilestone,
@@ -192,7 +193,7 @@ const calendarTaskCreateSchema = z.object({
   endDate: isoDateSchema.optional(),
   time: timeSchema.optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
-  taskType: z.enum(['meeting', 'assignment', 'review', 'personal', 'other']).optional(),
+  taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(reminderSchema).max(10).optional(),
   completed: z.boolean().optional()
 })
@@ -206,10 +207,7 @@ const calendarTaskUpdateSchema = z
     endDate: isoDateSchema.nullable().optional(),
     time: timeSchema.nullable().optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
-    taskType: z
-      .enum(['meeting', 'assignment', 'review', 'personal', 'other'])
-      .nullable()
-      .optional(),
+    taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
     completed: z.boolean().optional()
   })
@@ -613,7 +611,7 @@ export class AgentToolsService {
         time: input.time,
         completed: input.completed ?? false,
         createdAt: new Date().toISOString(),
-        priority: input.priority ?? 'medium',
+        priority: input.priority ?? 'low',
         taskType: input.taskType ?? 'assignment',
         reminders: input.reminders ?? []
       }

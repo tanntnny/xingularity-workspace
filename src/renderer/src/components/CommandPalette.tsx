@@ -14,7 +14,6 @@ import {
   FolderKanban,
   GitBranch,
   LayoutDashboard,
-  LayoutGrid,
   PenTool,
   Plus
 } from 'lucide-react'
@@ -30,7 +29,6 @@ import {
   CommandSeparator,
   CommandShortcut
 } from './ui/command'
-import { GRID_PAGE_ENABLED } from '../lib/featureFlags'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export interface CommandPaletteSearchResult {
@@ -50,7 +48,6 @@ type CommandPalettePage =
   | 'notes'
   | 'projects'
   | 'subscriptions'
-  | 'grid'
   | 'excalidraw'
   | 'calendar'
   | 'weeklyPlan'
@@ -316,16 +313,6 @@ export function CommandPalette({
         onSelect: () => onOpenPage('subscriptions'),
         icon: CreditCard
       },
-      ...(GRID_PAGE_ENABLED
-        ? [
-            {
-              value: '>go grid',
-              label: 'Go to Grid',
-              onSelect: () => onOpenPage('grid'),
-              icon: LayoutGrid
-            }
-          ]
-        : []),
       {
         value: '>go excalidraw',
         label: 'Go to Excalidraw',

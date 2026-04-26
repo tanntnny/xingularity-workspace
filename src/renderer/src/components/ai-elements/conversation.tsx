@@ -89,7 +89,7 @@ export function ConversationEmptyState({
   return (
     <div
       className={cn(
-        'workspace-subtle-surface flex h-full flex-col items-center justify-center gap-3 rounded-3xl border-dashed px-6 py-10 text-center',
+        'workspace-subtle-surface flex h-full flex-col items-center justify-center gap-3 rounded-lg border-dashed px-6 py-10 text-center',
         className
       )}
       {...props}
@@ -114,7 +114,7 @@ export function ConversationScrollButton({
     <button
       type="button"
       className={cn(
-        'workspace-subtle-control absolute bottom-4 right-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--text)] transition hover:text-[var(--accent)]',
+        'workspace-subtle-control absolute bottom-4 right-4 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--text)] transition hover:text-[var(--accent)]',
         className
       )}
       onClick={() => context?.scrollToBottom()}

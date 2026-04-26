@@ -1,7 +1,5 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Background,
-  BackgroundVariant,
   ReactFlow,
   ReactFlowProvider,
   useViewport
@@ -260,16 +258,7 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
         panOnScroll
         panOnDrag
         proOptions={{ hideAttribution: true }}
-      >
-        <Background
-          id="knowledge-background"
-          color="var(--accent)"
-          gap={48}
-          size={1.8}
-          style={{ opacity: 0.24 }}
-          variant={BackgroundVariant.Dots}
-        />
-      </ReactFlow>
+      />
       {hasGraphNodes ? (
         <svg
           ref={svgRef}

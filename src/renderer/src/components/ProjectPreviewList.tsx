@@ -153,7 +153,7 @@ export function ProjectPreviewList({
           <ProjectSection
             title="In-Progress Projects"
             icon={<Flag size={16} aria-hidden="true" />}
-            description={`${inProgressProjects.length} active projects still moving forward`}
+            description={`${inProgressProjects.length} active projects`}
             emptyLabel="No in-progress projects found"
             projects={inProgressProjects}
             selectedProjectId={selectedProjectId}
@@ -170,7 +170,7 @@ export function ProjectPreviewList({
           <ProjectSection
             title="Done Projects"
             icon={<Sparkles size={16} aria-hidden="true" />}
-            description={`${doneProjects.length} completed projects kept for reference`}
+            description={`${doneProjects.length} completed projects kept`}
             emptyLabel="No done projects found"
             projects={doneProjects}
             selectedProjectId={selectedProjectId}
@@ -279,11 +279,8 @@ function ProjectSection({
             <button
               type="button"
               ref={revealProps.ref}
-              className={`${revealProps.className} flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                selectedProjectId === project.id
-                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                  : 'workspace-subtle-control border-[var(--line)]'
-              }`}
+              data-active={selectedProjectId === project.id}
+              className={`${revealProps.className} sidebar-menu-card right-panel-menu-card flex-col gap-1.5 px-3 py-2.5 text-left`}
               style={revealProps.style}
               onClick={() => onSelect(project.id)}
               onContextMenu={

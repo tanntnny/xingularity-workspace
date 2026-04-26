@@ -13,6 +13,10 @@ const TASK_TYPE_COLORS: Record<CalendarTaskType, string> = {
   assignment: '#f59e0b',
   review: '#8b5cf6',
   personal: '#22c55e',
+  call: '#06b6d4',
+  'deep-work': '#f43f5e',
+  errand: '#84cc16',
+  'follow-up': '#14b8a6',
   other: '#64748b'
 }
 

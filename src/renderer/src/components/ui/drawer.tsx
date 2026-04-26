@@ -18,10 +18,7 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn(
-      'fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-      className
-    )}
+    className={cn('drawer-glass-overlay fixed inset-0 z-50', className)}
     {...props}
   />
 ))
@@ -36,20 +33,14 @@ const DrawerContent = React.forwardRef<
   DrawerContentProps
 >(({ className, children, side = 'right', style, ...props }, ref) => {
   const sideClasses: Record<NonNullable<DrawerContentProps['side']>, string> = {
-    right:
-      'inset-y-0 right-0 h-full w-full border-l data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right',
-    left:
-      'inset-y-0 left-0 h-full w-full border-r data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left',
-    top:
-      'inset-x-0 top-0 w-full max-h-[90vh] border-b data-[state=open]:slide-in-from-top data-[state=closed]:slide-out-to-top',
-    bottom:
-      'inset-x-0 bottom-0 w-full max-h-[90vh] border-t data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom'
+    right: 'drawer-glass-content-right inset-y-0 right-0 h-full w-full border-l',
+    left: 'drawer-glass-content-left inset-y-0 left-0 h-full w-full border-r',
+    top: 'drawer-glass-content-top inset-x-0 top-0 w-full max-h-[90vh] border-b',
+    bottom: 'drawer-glass-content-bottom inset-x-0 bottom-0 w-full max-h-[90vh] border-t'
   }
 
   const dimensionStyle: React.CSSProperties =
-    side === 'left' || side === 'right'
-      ? { width: 'min(var(--drawer-width, 640px), 100vw)' }
-      : {}
+    side === 'left' || side === 'right' ? { width: 'min(var(--drawer-width, 640px), 100vw)' } : {}
 
   return (
     <DrawerPortal>
@@ -57,16 +48,14 @@ const DrawerContent = React.forwardRef<
       <DrawerPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed z-50 flex flex-col border-[var(--line-strong)] bg-[var(--panel)] shadow-[0_20px_60px_rgba(0,0,0,0.35)] duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out',
+          'drawer-glass-content fixed z-50 flex flex-col border-[var(--line-strong)]',
           sideClasses[side],
           className
         )}
         style={{ ...dimensionStyle, ...style }}
         {...props}
       >
-        <div className="relative flex h-full flex-col">
-          {children}
-        </div>
+        <div className="relative flex h-full flex-col">{children}</div>
         <DrawerPrimitive.Close className="absolute right-4 top-4 rounded-full border border-transparent p-1 text-[var(--muted)] transition-colors hover:border-[var(--line)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
@@ -74,7 +63,7 @@ const DrawerContent = React.forwardRef<
       </DrawerPrimitive.Content>
     </DrawerPortal>
   )
-});
+})
 DrawerContent.displayName = DrawerPrimitive.Content.displayName
 
 const DrawerHeader = ({

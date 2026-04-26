@@ -1,4 +1,4 @@
-import { ReactElement, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { ReactElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   BookOpen,
   CalendarClock,
@@ -11,7 +11,8 @@ import {
   Trash2,
   XCircle,
   AlertCircle,
-  Eye
+  Eye,
+  SlidersHorizontal
 } from 'lucide-react'
 import type { RendererVaultApi } from '../../../shared/types'
 import type {
@@ -56,6 +57,7 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
+import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -241,6 +243,16 @@ export function SchedulesPage({
   const [newDraft, setNewDraft] = useState<Partial<ScheduleJob> & { id?: string }>(emptyJob())
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const revealItemIds = useMemo(
+    () => ['schedule-panel-section', ...jobs.map((job) => `schedule:${job.id}`)],
+    [jobs]
+  )
+  const { containerRef: panelRevealRef, getRevealItemProps } = useStaggeredScrollReveal(
+    revealItemIds,
+    {
+      resetKey: revealItemIds.join('|')
+    }
+  )
 
   const schedules = vaultApi?.schedules
 
@@ -544,6 +556,18 @@ export function SchedulesPage({
                     icon={<BookOpen size={18} />}
                   />
                   <WorkspaceActionButton
+                    onClick={() => {
+                      if (selectedJobId) {
+                        handleOpenEditDrawer(selectedJobId)
+                      }
+                    }}
+                    disabled={!selectedJobId}
+                    active={isEditDrawerOpen}
+                    title="Open schedule drawer"
+                    aria-label="Open schedule drawer"
+                    icon={<SlidersHorizontal size={18} />}
+                  />
+                  <WorkspaceActionButton
                     onClick={() => void handleRunNow()}
                     disabled={!canRunNow}
                     title="Run now"
@@ -759,63 +783,72 @@ export function SchedulesPage({
               </WorkspaceHeaderActions>
             }
           />
-          <DocumentWorkspacePanelContent>
-            <WorkspacePanelSection className="p-3">
-              <WorkspacePanelSectionHeader
-                icon={<CalendarClock size={16} aria-hidden="true" />}
-                heading="Schedules"
-                description={`${jobs.length} jobs configured${selectedJobId ? ' · select one to edit' : ''}`}
-              />
-              {jobs.length === 0 ? (
-                <div className="p-1 text-sm text-[var(--muted)]">
-                  No schedules yet. Click + to create one.
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {jobs.map((job) => {
-                    const isActive = selectedJobId === job.id
-                    return (
-                      <button
-                        key={job.id}
-                        type="button"
-                        onClick={() => handleOpenEditDrawer(job.id)}
-                        className={`flex flex-col gap-2 rounded-xl border px-3 py-3 text-left shadow-sm transition-colors ${
-                          isActive
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                            : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-[var(--text)]">
-                              {job.name}
-                            </p>
-                            <p className="text-xs text-[var(--muted)]">
-                              {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
-                            </p>
-                          </div>
-                          <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                              job.enabled ? 'bg-green-500' : 'bg-[var(--muted)]'
-                            }`}
-                            title={job.enabled ? 'Enabled' : 'Disabled'}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                          {statusIcon(job.lastStatus)}
-                          <span>{statusLabel(job.lastStatus)}</span>
-                        </div>
-                        {job.nextRunAt && (
-                          <div className="text-xs text-[var(--muted)]">
-                            Next run {formatNextRun(job.nextRunAt)}
-                          </div>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </WorkspacePanelSection>
+          <DocumentWorkspacePanelContent ref={panelRevealRef} className="p-3">
+            {(() => {
+              const revealProps = getRevealItemProps('schedule-panel-section')
+              return (
+                <WorkspacePanelSection
+                  ref={revealProps.ref}
+                  style={revealProps.style}
+                  className={revealProps.className}
+                >
+                  <WorkspacePanelSectionHeader
+                    icon={<CalendarClock size={16} aria-hidden="true" />}
+                    heading="Schedules"
+                    description={`${jobs.length} jobs configured${selectedJobId ? ' · select one to edit' : ''}`}
+                  />
+                  {jobs.length === 0 ? (
+                    <div className="p-1 text-sm text-[var(--muted)]">
+                      No schedules yet. Click + to create one.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {jobs.map((job) => {
+                        const isActive = selectedJobId === job.id
+                        const itemRevealProps = getRevealItemProps(`schedule:${job.id}`)
+                        return (
+                          <button
+                            key={job.id}
+                            ref={itemRevealProps.ref}
+                            style={itemRevealProps.style}
+                            type="button"
+                            onClick={() => setSelectedJobId(job.id)}
+                            data-active={isActive}
+                            className={`${itemRevealProps.className} sidebar-menu-card right-panel-menu-card flex-col gap-2 px-3 py-3 text-left`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[var(--text)]">
+                                  {job.name}
+                                </p>
+                                <p className="text-xs text-[var(--muted)]">
+                                  {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
+                                </p>
+                              </div>
+                              <span
+                                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                  job.enabled ? 'bg-green-500' : 'bg-[var(--muted)]'
+                                }`}
+                                title={job.enabled ? 'Enabled' : 'Disabled'}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                              {statusIcon(job.lastStatus)}
+                              <span>{statusLabel(job.lastStatus)}</span>
+                            </div>
+                            {job.nextRunAt && (
+                              <div className="text-xs text-[var(--muted)]">
+                                Next run {formatNextRun(job.nextRunAt)}
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </WorkspacePanelSection>
+              )
+            })()}
           </DocumentWorkspacePanelContent>
         </DocumentWorkspacePanel>
       </DocumentWorkspace>

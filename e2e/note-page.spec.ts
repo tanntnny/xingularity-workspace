@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -91,13 +91,13 @@ declare global {
   }
 }
 
-async function createFixtureVault(alphaContent: string): Promise<string> {
+async function createFixtureVault(alphaContent: string, alphaTags: string[] = []): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   await fs.writeFile(
     path.join(rootPath, 'notes', 'alpha.md'),
-    serializeStoredNoteDocument(createStoredNoteDocumentFromText(alphaContent)),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText(alphaContent, alphaTags)),
     'utf-8'
   )
   await fs.writeFile(
@@ -170,9 +170,17 @@ async function launchWithFixture(vaultRoot: string): Promise<{
     )
     .toBe('enabled')
   await notesPageButton.click()
-  await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+  await expectNotePanelReady(page)
 
   return { electronApp, page }
+}
+
+function getNotePanelToggle(page: Page): Locator {
+  return page.getByTestId('note-panel-toggle:tree').or(page.getByTestId('note-panel-toggle'))
+}
+
+async function expectNotePanelReady(page: Page): Promise<void> {
+  await expect(getNotePanelToggle(page)).toBeVisible({ timeout: 20_000 })
 }
 
 async function getCurrentNoteSnapshot(page: Page): Promise<NoteSnapshot> {
@@ -200,9 +208,9 @@ async function readNoteDocumentFromVault(
 }
 
 async function openNote(page: Page, relPath: string): Promise<void> {
-  const treeToggle = page.getByTestId('note-panel-toggle:tree')
-  if ((await treeToggle.getAttribute('data-state')) === 'on') {
-    const treeRow = page.getByTestId(`note-tree-row:${relPath}`)
+  const treeRow = page.getByTestId(`note-tree-row:${relPath}`)
+  const treeRowVisible = await treeRow.isVisible().catch(() => false)
+  if (treeRowVisible) {
     await expect(treeRow).toBeVisible({ timeout: 20_000 })
     await treeRow.click()
   } else {
@@ -428,7 +436,7 @@ test.describe('note page block editor switching', () => {
         .toContain('Switch page save latest')
 
       await page.getByTestId('sidebar-page:notes').click()
-      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await expectNotePanelReady(page)
       await openNote(page, 'alpha.md')
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
@@ -502,7 +510,7 @@ test.describe('note page block editor switching', () => {
       await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
 
       await page.getByTestId('sidebar-page:notes').click()
-      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await expectNotePanelReady(page)
 
       await expect
         .poll(() => getVisibleNoteBlocks(page), { timeout: 15_000 })
@@ -552,7 +560,7 @@ test.describe('note page block editor switching', () => {
         .toContain('Shortcut page save latest')
 
       await pressAppShortcut(page, '1')
-      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await expectNotePanelReady(page)
       await openNote(page, 'alpha.md')
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
@@ -599,6 +607,59 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('saves callout edits before tag search unmounts the editor', async () => {
+    const vaultRoot = await createFixtureVault('', ['alpha'])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await replaceEditorContent(page, ['> [!NOTE] Tag search keeps callout save'])
+
+      await page.getByRole('button', { name: 'Search tag alpha' }).click()
+      await expect(page.getByText('alpha.md')).toBeVisible({ timeout: 15_000 })
+
+      await page
+        .getByRole('button', { name: /alpha\.md/ })
+        .first()
+        .click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Tag search keeps callout save')
+
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.md'), { timeout: 15_000 })
+        .toContain('Tag search keeps callout save')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('does not reload the current note from cache when selecting it again', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await replaceEditorContent(page, ['Same note click keeps body'])
+      await page.keyboard.type(' latest')
+
+      await page.getByTestId('note-tree-row:alpha.md').click()
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Same note click keeps body latest')
+
+      await dispatchPageHide(page)
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.md'), { timeout: 15_000 })
+        .toContain('Same note click keeps body latest')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('keeps latest edit when switching pages back and forth quickly', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -619,7 +680,7 @@ test.describe('note page block editor switching', () => {
         .toContain('Back and forth save latest')
 
       await pressAppShortcut(page, '1')
-      await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+      await expectNotePanelReady(page)
       await openNote(page, 'alpha.md')
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })

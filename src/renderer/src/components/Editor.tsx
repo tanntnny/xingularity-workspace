@@ -8,6 +8,7 @@ import {
   useState
 } from 'react'
 import { editorViewCtx, prosePluginsCtx } from '@milkdown/kit/core'
+import type { Node as ProseNode } from '@milkdown/prose/model'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { linkSchema } from '@milkdown/kit/preset/commonmark'
@@ -26,6 +27,7 @@ import {
   parseNoteMentionHref
 } from '../../../shared/noteMentions'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
+import { hasNoteCalloutBodyText, resolveNoteCallout } from '../lib/noteCallouts'
 import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
 import { extractNoteOutlineFromMarkdown, type NoteOutlineItem } from '../lib/noteOutline'
 import { cn } from '../lib/utils'
@@ -127,6 +129,7 @@ function selectionTouchesTextblock(
 }
 
 const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
+const noteCalloutPluginKey = new PluginKey('note-callout')
 
 function inlineLatexPreviewPlugin(): Plugin {
   return new Plugin({
@@ -227,6 +230,97 @@ function inlineLatexPreviewPlugin(): Plugin {
       }
     }
   })
+}
+
+function noteCalloutPlugin(): Plugin {
+  return new Plugin({
+    key: noteCalloutPluginKey,
+    props: {
+      decorations(state) {
+        const decorations: Decoration[] = []
+        const { from: selectionFrom, to: selectionTo } = state.selection
+
+        state.doc.descendants((node, pos) => {
+          if (node.type.name !== 'blockquote') {
+            return true
+          }
+
+          const firstTextblockInfo = getFirstTextblockInfo(node, pos)
+
+          if (!firstTextblockInfo) {
+            return false
+          }
+
+          const callout = resolveNoteCallout(firstTextblockInfo.text)
+
+          decorations.push(
+            Decoration.node(pos, pos + node.nodeSize, {
+              class: cn('note-callout', `note-callout-${callout.variant}`)
+            })
+          )
+
+          const shouldShowMarker = selectionTouchesTextblock(
+            selectionFrom,
+            selectionTo,
+            firstTextblockInfo.contentStart,
+            firstTextblockInfo.contentEnd
+          )
+          const shouldHideMarker =
+            callout.marker &&
+            hasNoteCalloutBodyText(
+              node.textBetween(0, node.content.size, '\n', '\0'),
+              callout.marker
+            )
+
+          if (shouldHideMarker && !shouldShowMarker) {
+            decorations.push(
+              Decoration.inline(
+                firstTextblockInfo.contentStart,
+                firstTextblockInfo.contentStart + callout.marker.length,
+                { class: 'note-callout-marker-hidden' }
+              )
+            )
+          }
+
+          return false
+        })
+
+        return DecorationSet.create(state.doc, decorations)
+      }
+    }
+  })
+}
+
+function getFirstTextblockInfo(
+  node: ProseNode,
+  pos: number
+): {
+  contentEnd: number
+  contentStart: number
+  text: string
+} | null {
+  let info: {
+    contentEnd: number
+    contentStart: number
+    text: string
+  } | null = null
+
+  node.descendants((child, childPos) => {
+    if (!child.isTextblock) {
+      return true
+    }
+
+    const nodeStart = pos + childPos + 1
+    info = {
+      contentStart: nodeStart + 1,
+      contentEnd: nodeStart + child.content.size + 1,
+      text: child.textBetween(0, child.content.size, '\n', '\0')
+    }
+
+    return false
+  })
+
+  return info
 }
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
@@ -504,7 +598,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     })
 
     editor.editor.config((ctx) => {
-      ctx.update(prosePluginsCtx, (plugins) => [...plugins, inlineLatexPreviewPlugin()])
+      ctx.update(prosePluginsCtx, (plugins) => [
+        ...plugins,
+        inlineLatexPreviewPlugin(),
+        noteCalloutPlugin()
+      ])
     })
 
     editor.on((api) => {

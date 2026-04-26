@@ -3,15 +3,7 @@ import { Check, Trash2 } from 'lucide-react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import {
-  Draggable,
-  DropArg,
-  EventDragStartArg,
-  EventDragStopArg,
-  EventResizeDoneArg,
-  EventResizeStartArg,
-  EventResizeStopArg
-} from '@fullcalendar/interaction'
+import { Draggable, DropArg, EventDragStopArg, EventResizeDoneArg } from '@fullcalendar/interaction'
 import {
   DayCellMountArg,
   EventApi,
@@ -19,10 +11,16 @@ import {
   EventMountArg,
   EventHoveringArg
 } from '@fullcalendar/core'
-import { CalendarTask, CalendarTaskType, TaskReminder } from '../../../shared/types'
+import {
+  CALENDAR_TASK_TYPE_OPTIONS,
+  CalendarTask,
+  CalendarTaskType,
+  TaskPriority,
+  TaskReminder
+} from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
-import { TaskContextMenu, TASK_TYPE_OPTIONS } from './TaskContextMenu'
-import { FloatingHoverCard } from './ui/floating-hover-card'
+import { TaskContextMenu } from './TaskContextMenu'
+import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { Input } from './ui/input'
 import {
   buildCalendarEvents,
@@ -30,6 +28,7 @@ import {
   normalizeCalendarTasks
 } from '../lib/calendarTasks'
 import { toIsoDate } from '../lib/calendarDate'
+import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import {
   Dialog,
   DialogContent,
@@ -51,6 +50,7 @@ interface CalendarMonthViewProps {
   onToggleTask?: (taskId: string) => void
   onDeleteTask?: (taskId: string) => void
   onRenameTask?: (taskId: string, newTitle: string) => void
+  onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
   onUpdateTaskReminders?: (taskId: string, reminders: TaskReminder[]) => void
@@ -70,6 +70,7 @@ export function CalendarMonthView({
   onToggleTask,
   onDeleteTask,
   onRenameTask,
+  onUpdateTaskPriority,
   onUpdateTaskType,
   onUpdateTaskTime,
   onUpdateTaskReminders,
@@ -94,6 +95,7 @@ export function CalendarMonthView({
   const contextMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const contextMenuNonceRef = useRef(0)
   const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
+  const unscheduledDragCleanupRef = useRef<(() => void) | null>(null)
 
   const normalizedTasks = useMemo(() => normalizeCalendarTasks(tasks), [tasks])
   const tasksById = useMemo(
@@ -129,6 +131,7 @@ export function CalendarMonthView({
 
   useEffect(() => {
     return () => {
+      unscheduledDragCleanupRef.current?.()
       dayCellListenerMapRef.current.forEach((handler, el) => {
         el.removeEventListener('dblclick', handler)
       })
@@ -286,6 +289,8 @@ export function CalendarMonthView({
   }
 
   const handleEventDragStop = (dragInfo: EventDragStopArg): void => {
+    unscheduledDragCleanupRef.current?.()
+    unscheduledDragCleanupRef.current = null
     setIsInteracting(false)
 
     const source = String(dragInfo.event.extendedProps.source ?? 'task')
@@ -310,17 +315,19 @@ export function CalendarMonthView({
     }
   }
 
-  const handleEventDragStart = (_dragInfo: EventDragStartArg): void => {
+  const handleEventDragStart = (): void => {
+    unscheduledDragCleanupRef.current?.()
+    unscheduledDragCleanupRef.current = trackUnscheduledDragHover()
     setIsInteracting(true)
     setHoveredTaskCard(null)
   }
 
-  const handleEventResizeStart = (_resizeInfo: EventResizeStartArg): void => {
+  const handleEventResizeStart = (): void => {
     setIsInteracting(true)
     setHoveredTaskCard(null)
   }
 
-  const handleEventResizeStop = (_resizeInfo: EventResizeStopArg): void => {
+  const handleEventResizeStop = (): void => {
     setIsInteracting(false)
   }
 
@@ -334,7 +341,7 @@ export function CalendarMonthView({
       return
     }
 
-    const { x, y } = getTooltipPositionFromMouse(
+    const { x, y } = getCalendarTaskHoverPosition(
       hoverInfo.jsEvent.clientX,
       hoverInfo.jsEvent.clientY
     )
@@ -377,7 +384,7 @@ export function CalendarMonthView({
       if (!task) {
         return
       }
-      const { x, y } = getTooltipPositionFromMouse(event.clientX, event.clientY)
+      const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
       setHoveredTaskCard((current) => {
         if (!current || current.task.id !== task.id) {
           return {
@@ -415,11 +422,12 @@ export function CalendarMonthView({
     })
   }
 
-  const editingTask = editingTaskId ? tasksById[editingTaskId] ?? null : null
+  const editingTask = editingTaskId ? (tasksById[editingTaskId] ?? null) : null
   const handleCloseEditor = (): void => setEditingTaskId(null)
   const safeToggleTask = onToggleTask ?? (() => undefined)
   const safeDeleteTask = onDeleteTask ?? (() => undefined)
   const safeRenameTask = onRenameTask ?? (() => undefined)
+  const safeUpdateTaskPriority = onUpdateTaskPriority ?? (() => undefined)
   const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
   const safeUpdateTaskTime = onUpdateTaskTime ?? (() => undefined)
   const safeRescheduleTask = onRescheduleTask ?? (() => undefined)
@@ -483,6 +491,7 @@ export function CalendarMonthView({
           droppable
           eventResizableFromStart
           fixedMirrorParent={mirrorParent}
+          dragRevertDuration={0}
           eventDragMinDistance={8}
           eventDisplay="block"
           dayMaxEventRows={false}
@@ -534,9 +543,10 @@ export function CalendarMonthView({
             }
             const task = tasksById[arg.event.id]
             if (!task) {
-              return ['beacon-task-event', 'beacon-task-assignment']
+              return ['calendar-task-card-shell', 'beacon-task-event', 'beacon-task-assignment']
             }
             return [
+              'calendar-task-card-shell',
               'beacon-task-event',
               `beacon-task-${task.taskType || 'assignment'}`,
               task.completed ? 'beacon-task-completed' : ''
@@ -563,7 +573,7 @@ export function CalendarMonthView({
                         <span
                           className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
                             isCompleted
-                              ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
                               : 'workspace-subtle-control border-[var(--line-strong)]'
                           }`}
                         >
@@ -598,6 +608,7 @@ export function CalendarMonthView({
           onToggle={safeToggleTask}
           onDelete={safeDeleteTask}
           onRename={safeRenameTask}
+          onUpdatePriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
           onUpdateTime={safeUpdateTaskTime}
           onUpdateReminders={onUpdateTaskReminders ?? (() => undefined)}
@@ -616,30 +627,18 @@ export function CalendarMonthView({
         </TaskContextMenu>
       ) : null}
       {hoveredTaskCard ? (
-        <FloatingHoverCard x={hoveredTaskCard.x} y={hoveredTaskCard.y} className="w-72">
-              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
-                {hoveredTaskCard.task.title}
-              </div>
-              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-                <span>{hoveredTaskCard.task.completed ? 'Completed' : 'Pending'}</span>
-                <span>{hoveredTaskCard.task.time || 'No time'}</span>
-              </div>
-              <div className="mt-2 text-xs text-[var(--muted)]">
-                Date: {hoveredTaskCard.task.date}
-              </div>
-              <div className="mt-1 text-xs text-[var(--muted)]">
-                Type: {hoveredTaskCard.task.taskType || 'assignment'}
-              </div>
-              {(hoveredTaskCard.task.reminders || []).some((reminder) => reminder.enabled) && (
-                <div className="mt-1 text-xs text-[var(--muted)]">Reminders enabled</div>
-              )}
-        </FloatingHoverCard>
+        <CalendarTaskHoverCard
+          task={hoveredTaskCard.task}
+          x={hoveredTaskCard.x}
+          y={hoveredTaskCard.y}
+        />
       ) : null}
       {editingTask ? (
         <TaskEditDialog
           task={editingTask}
           onClose={handleCloseEditor}
           onRename={safeRenameTask}
+          onUpdateTaskPriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
           onUpdateTaskTime={safeUpdateTaskTime}
           onRescheduleTask={safeRescheduleTask}
@@ -654,22 +653,25 @@ interface TaskEditDialogProps {
   task: CalendarTask
   onClose: () => void
   onRename: (taskId: string, title: string) => void
+  onUpdateTaskPriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTaskTime: (taskId: string, time: string | undefined) => void
   onRescheduleTask: (taskId: string, date: string | undefined) => void
   onDelete: (taskId: string) => void
 }
 
-function TaskEditDialog({
+export function TaskEditDialog({
   task,
   onClose,
   onRename,
+  onUpdateTaskPriority,
   onUpdateTaskType,
   onUpdateTaskTime,
   onRescheduleTask,
   onDelete
 }: TaskEditDialogProps): ReactElement {
   const [title, setTitle] = useState(task.title)
+  const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
   const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
   const [date, setDate] = useState(task.date ?? '')
   const [time, setTime] = useState(task.time ?? '')
@@ -677,11 +679,12 @@ function TaskEditDialog({
 
   useEffect(() => {
     setTitle(task.title)
+    setPriority(task.priority ?? 'low')
     setTaskType(task.taskType ?? 'assignment')
     setDate(task.date ?? '')
     setTime(task.time ?? '')
     skipAutoSaveRef.current = false
-  }, [task.id, task.title, task.taskType, task.date, task.time])
+  }, [task.id, task.title, task.priority, task.taskType, task.date, task.time])
 
   const handleAutoSave = (): void => {
     if (skipAutoSaveRef.current) {
@@ -691,6 +694,9 @@ function TaskEditDialog({
     const trimmedTitle = title.trim()
     if (trimmedTitle && trimmedTitle !== task.title) {
       onRename(task.id, trimmedTitle)
+    }
+    if ((task.priority ?? 'low') !== priority) {
+      onUpdateTaskPriority(task.id, priority)
     }
     if ((task.taskType ?? 'assignment') !== taskType) {
       onUpdateTaskType(task.id, taskType)
@@ -723,7 +729,7 @@ function TaskEditDialog({
         }
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
           <DialogDescription>Update task details without leaving the calendar.</DialogDescription>
@@ -742,6 +748,20 @@ function TaskEditDialog({
           </div>
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Priority
+            </label>
+            <select
+              value={priority}
+              onChange={(event) => setPriority(event.target.value as TaskPriority)}
+              className="workspace-subtle-control mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Type
             </label>
             <select
@@ -749,7 +769,7 @@ function TaskEditDialog({
               onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
               className="workspace-subtle-control mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
             >
-              {TASK_TYPE_OPTIONS.map((option) => (
+              {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -801,6 +821,59 @@ function addIsoDays(date: Date, days: number): Date {
   return next
 }
 
+function setUnscheduledDragState(isActive: boolean): void {
+  const unscheduledContainer = document.querySelector<HTMLElement>(
+    '[data-unscheduled-task-list="true"]'
+  )
+  const unscheduledDropZone = document.querySelector<HTMLElement>(
+    '[data-unscheduled-drop-zone="true"]'
+  )
+
+  if (unscheduledContainer) {
+    unscheduledContainer.dataset.calendarDragOver = isActive ? 'true' : 'false'
+  }
+
+  if (unscheduledDropZone) {
+    unscheduledDropZone.dataset.calendarDragOver = isActive ? 'true' : 'false'
+  }
+}
+
+function trackUnscheduledDragHover(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return () => undefined
+  }
+
+  const updateDragState = (clientX: number, clientY: number): void => {
+    const unscheduledContainer = document.querySelector<HTMLElement>(
+      '[data-unscheduled-task-list="true"]'
+    )
+    if (!unscheduledContainer) {
+      return
+    }
+
+    const rect = unscheduledContainer.getBoundingClientRect()
+    const isInside =
+      clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+
+    setUnscheduledDragState(isInside)
+  }
+
+  const handlePointerMove = (event: PointerEvent | MouseEvent | DragEvent): void => {
+    updateDragState(event.clientX, event.clientY)
+  }
+
+  window.addEventListener('pointermove', handlePointerMove, true)
+  window.addEventListener('mousemove', handlePointerMove, true)
+  window.addEventListener('dragover', handlePointerMove, true)
+
+  return () => {
+    window.removeEventListener('pointermove', handlePointerMove, true)
+    window.removeEventListener('mousemove', handlePointerMove, true)
+    window.removeEventListener('dragover', handlePointerMove, true)
+    setUnscheduledDragState(false)
+  }
+}
+
 function buildCalendarSyncSignature(event: CalendarEventInput): string {
   return JSON.stringify({
     source: event.extendedProps.source,
@@ -811,6 +884,8 @@ function buildCalendarSyncSignature(event: CalendarEventInput): string {
     startEditable: event.startEditable ?? true,
     durationEditable: event.durationEditable ?? true,
     taskId: event.extendedProps.taskId ?? '',
+    taskType: event.extendedProps.taskType ?? '',
+    priority: event.extendedProps.priority ?? '',
     projectId: event.extendedProps.projectId ?? '',
     projectName: event.extendedProps.projectName ?? '',
     completed: event.extendedProps.completed ?? false,
@@ -834,22 +909,4 @@ function hasCalendarEventChanged(
     (currentEvent.endStr ?? '') !== (nextEvent.end ?? '') ||
     String(currentEvent.extendedProps.syncSignature ?? '') !== syncSignature
   )
-}
-
-function getTooltipPositionFromMouse(clientX: number, clientY: number): { x: number; y: number } {
-  const tooltipWidth = 256
-  const tooltipHeight = 140
-  const margin = 12
-  const cursorOffset = 14
-
-  const x = Math.max(
-    margin,
-    Math.min(clientX + cursorOffset, window.innerWidth - tooltipWidth - margin)
-  )
-  const y = Math.max(
-    margin,
-    Math.min(clientY + cursorOffset, window.innerHeight - tooltipHeight - margin)
-  )
-
-  return { x, y }
 }

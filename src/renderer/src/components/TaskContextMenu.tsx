@@ -1,6 +1,24 @@
 import { cloneElement, ReactElement, useState } from 'react'
-import { Bell, BellRing, Calendar, Check, Clock3, Pencil, Target, Trash2, X } from 'lucide-react'
-import { CalendarTask, CalendarTaskType, NativeMenuItemDescriptor, TaskReminder } from '../../../shared/types'
+import {
+  Bell,
+  BellRing,
+  Calendar,
+  Check,
+  Clock3,
+  Flag,
+  Pencil,
+  Target,
+  Trash2,
+  X
+} from 'lucide-react'
+import {
+  CALENDAR_TASK_TYPE_OPTIONS,
+  CalendarTask,
+  CalendarTaskType,
+  NativeMenuItemDescriptor,
+  TaskPriority,
+  TaskReminder
+} from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,6 +47,7 @@ interface TaskContextMenuProps {
   onToggle: (taskId: string) => void
   onDelete: (taskId: string) => void
   onRename: (taskId: string, newTitle: string) => void
+  onUpdatePriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTime: (taskId: string, time: string | undefined) => void
   onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
@@ -39,19 +58,17 @@ interface TaskContextMenuProps {
   }>
 }
 
-export const TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
-  { value: 'meeting', label: 'Meeting' },
-  { value: 'assignment', label: 'Assignment' },
-  { value: 'review', label: 'Review' },
-  { value: 'personal', label: 'Personal' },
-  { value: 'other', label: 'Other' }
-]
-
 const QUICK_TIME_OPTIONS = [
   { label: '9:00 AM', value: '09:00' },
   { label: '12:00 PM', value: '12:00' },
   { label: '3:00 PM', value: '15:00' },
   { label: '6:00 PM', value: '18:00' }
+]
+
+const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' }
 ]
 
 export function TaskContextMenu({
@@ -60,6 +77,7 @@ export function TaskContextMenu({
   onToggle,
   onDelete,
   onRename,
+  onUpdatePriority,
   onUpdateTaskType,
   onUpdateTime,
   onUpdateReminders,
@@ -111,9 +129,7 @@ export function TaskContextMenu({
     onRename(task.id, nextTitle)
   }
 
-  const handleNativeContextMenu = async (
-    event: React.MouseEvent<HTMLElement>
-  ): Promise<void> => {
+  const handleNativeContextMenu = async (event: React.MouseEvent<HTMLElement>): Promise<void> => {
     event.preventDefault()
 
     const items: NativeMenuItemDescriptor[] = [
@@ -125,11 +141,21 @@ export function TaskContextMenu({
       {
         type: 'submenu',
         label: 'Set type',
-        submenu: TASK_TYPE_OPTIONS.map((taskType) => ({
+        submenu: CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => ({
           id: `type:${taskType.value}`,
           type: 'checkbox',
           label: taskType.label,
           checked: (task.taskType || 'assignment') === taskType.value
+        }))
+      },
+      {
+        type: 'submenu',
+        label: 'Set priority',
+        submenu: TASK_PRIORITY_OPTIONS.map((priority) => ({
+          id: `priority:${priority.value}`,
+          type: 'checkbox',
+          label: priority.label,
+          checked: (task.priority || 'low') === priority.value
         }))
       },
       {
@@ -169,6 +195,10 @@ export function TaskContextMenu({
     }
     if (actionId.startsWith('type:')) {
       onUpdateTaskType(task.id, actionId.slice('type:'.length) as CalendarTaskType)
+      return
+    }
+    if (actionId.startsWith('priority:')) {
+      onUpdatePriority(task.id, actionId.slice('priority:'.length) as TaskPriority)
       return
     }
     if (actionId.startsWith('time:')) {
@@ -218,95 +248,110 @@ export function TaskContextMenu({
       {useNativeMenus ? (
         triggerChild
       ) : (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>{triggerChild}</ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onClick={() => onToggle(task.id)}>
-            <Check className="mr-2 h-4 w-4" />
-            {task.completed ? 'Mark as pending' : 'Mark as complete'}
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={handleRename}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Target className="mr-2 h-4 w-4" />
-              Set type
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {TASK_TYPE_OPTIONS.map((taskType) => (
-                <ContextMenuItem
-                  key={taskType.value}
-                  onClick={() => onUpdateTaskType(task.id, taskType.value)}
-                >
-                  {taskType.label}
-                  {(task.taskType || 'assignment') === taskType.value && (
-                    <Check className="ml-auto h-4 w-4" />
-                  )}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Clock3 className="mr-2 h-4 w-4" />
-              Set time
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {QUICK_TIME_OPTIONS.map((option) => (
-                <ContextMenuItem
-                  key={option.value}
-                  onClick={() => onUpdateTime(task.id, option.value)}
-                >
-                  {option.label}
-                  {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
-                </ContextMenuItem>
-              ))}
-              <ContextMenuItem
-                onClick={() => {
-                  setTimeInputValue(task.time ?? '')
-                  setIsTimeDialogOpen(true)
-                }}
-              >
-                Custom time...
-              </ContextMenuItem>
-              <ContextMenuItem onClick={() => onUpdateTime(task.id, undefined)}>
-                Clear time
-              </ContextMenuItem>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuItem
-            onClick={() => {
-              setIsReminderDialogOpen(true)
-            }}
-          >
-            <Bell className="mr-2 h-4 w-4" />
-            Manage reminders
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          {task.date ? (
-            <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
-              <Calendar className="mr-2 h-4 w-4" />
-              Move to unscheduled
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{triggerChild}</ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => onToggle(task.id)}>
+              <Check className="mr-2 h-4 w-4" />
+              {task.completed ? 'Mark as pending' : 'Mark as complete'}
             </ContextMenuItem>
-          ) : (
-            <ContextMenuItem onClick={() => onScheduleTask(task.id, selectedDate)}>
-              <Calendar className="mr-2 h-4 w-4" />
-              Schedule to {selectedDate}
+            <ContextMenuItem onClick={handleRename}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Rename
             </ContextMenuItem>
-          )}
-          <ContextMenuDestructiveItem
-            onClick={() => onDelete(task.id)}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-            <ContextMenuShortcut keys={['cmd', 'backspace']} />
-          </ContextMenuDestructiveItem>
-        </ContextMenuContent>
-      </ContextMenu>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Target className="mr-2 h-4 w-4" />
+                Set type
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => (
+                  <ContextMenuItem
+                    key={taskType.value}
+                    onClick={() => onUpdateTaskType(task.id, taskType.value)}
+                  >
+                    {taskType.label}
+                    {(task.taskType || 'assignment') === taskType.value && (
+                      <Check className="ml-auto h-4 w-4" />
+                    )}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Flag className="mr-2 h-4 w-4" />
+                Set priority
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {TASK_PRIORITY_OPTIONS.map((priority) => (
+                  <ContextMenuItem
+                    key={priority.value}
+                    onSelect={() => onUpdatePriority(task.id, priority.value)}
+                  >
+                    {priority.label}
+                    {(task.priority || 'low') === priority.value && (
+                      <Check className="ml-auto h-4 w-4" />
+                    )}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Clock3 className="mr-2 h-4 w-4" />
+                Set time
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {QUICK_TIME_OPTIONS.map((option) => (
+                  <ContextMenuItem
+                    key={option.value}
+                    onClick={() => onUpdateTime(task.id, option.value)}
+                  >
+                    {option.label}
+                    {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
+                  </ContextMenuItem>
+                ))}
+                <ContextMenuItem
+                  onClick={() => {
+                    setTimeInputValue(task.time ?? '')
+                    setIsTimeDialogOpen(true)
+                  }}
+                >
+                  Custom time...
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onUpdateTime(task.id, undefined)}>
+                  Clear time
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+            <ContextMenuItem
+              onClick={() => {
+                setIsReminderDialogOpen(true)
+              }}
+            >
+              <Bell className="mr-2 h-4 w-4" />
+              Manage reminders
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            {task.date ? (
+              <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Move to unscheduled
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem onClick={() => onScheduleTask(task.id, selectedDate)}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Schedule to {selectedDate}
+              </ContextMenuItem>
+            )}
+            <ContextMenuDestructiveItem onClick={() => onDelete(task.id)}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+              <ContextMenuShortcut keys={['cmd', 'backspace']} />
+            </ContextMenuDestructiveItem>
+          </ContextMenuContent>
+        </ContextMenu>
       )}
 
       <Dialog open={isTimeDialogOpen} onOpenChange={setIsTimeDialogOpen}>

@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow
 } from '../components/ui/table'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 interface SubscriptionsPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -128,6 +129,40 @@ type TreemapHoverCard =
       x: number
       y: number
     } & TreemapCategoryNode)
+
+interface SubscriptionTablePreferences {
+  statusFilter: 'all' | SubscriptionStatus
+  categoryFilter: string | null
+  sortField: SortField
+  sortDirection: SortDirection
+}
+
+const defaultSubscriptionTablePreferences: SubscriptionTablePreferences = {
+  statusFilter: 'all',
+  categoryFilter: null,
+  sortField: 'amount',
+  sortDirection: 'desc'
+}
+
+function isSubscriptionTablePreferences(value: unknown): value is SubscriptionTablePreferences {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ((value as { statusFilter?: unknown }).statusFilter === 'all' ||
+      STATUS_OPTIONS.includes(
+        (value as { statusFilter?: SubscriptionStatus }).statusFilter as SubscriptionStatus
+      )) &&
+    (typeof (value as { categoryFilter?: unknown }).categoryFilter === 'string' ||
+      (value as { categoryFilter?: unknown }).categoryFilter === null) &&
+    ((value as { sortField?: unknown }).sortField === 'name' ||
+      (value as { sortField?: unknown }).sortField === 'category' ||
+      (value as { sortField?: unknown }).sortField === 'amount' ||
+      (value as { sortField?: unknown }).sortField === 'nextRenewalAt' ||
+      (value as { sortField?: unknown }).sortField === 'status') &&
+    ((value as { sortDirection?: unknown }).sortDirection === 'asc' ||
+      (value as { sortDirection?: unknown }).sortDirection === 'desc')
+  )
+}
 
 function emptyDraft(): ModalDraft {
   return {
@@ -390,7 +425,7 @@ function TreemapCard({
 
   if (!records.length) {
     return (
-      <div className="workspace-subtle-surface rounded-[24px]">
+      <div className="workspace-subtle-surface rounded-lg">
         <div className="border-b border-[var(--line)] px-5 py-4">
           <div className="mb-4 border-t border-[var(--line)]" />
           <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
@@ -451,7 +486,7 @@ function TreemapCard({
 
   return (
     <>
-      <div className="workspace-subtle-surface overflow-hidden rounded-[24px] px-5 shadow-[0_18px_60px_rgba(5,10,18,0.12)]">
+      <div className="workspace-subtle-surface overflow-hidden rounded-lg px-5 shadow-[0_18px_60px_rgba(5,10,18,0.12)]">
         <div className="border-b border-[var(--line)] py-4">
           <div className="mb-4 border-t border-[var(--line)]" />
           <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
@@ -609,7 +644,7 @@ function TreemapCard({
                   y={node.y0}
                   width={width}
                   height={height}
-                  rx={14}
+                  rx={8}
                   fill={fill}
                   stroke={isSelected ? '#ffffff' : 'rgba(255,255,255,0.12)'}
                   strokeWidth={isSelected ? 2.5 : 1}
@@ -670,46 +705,46 @@ function TreemapCard({
       </div>
       {hoverCard ? (
         <FloatingHoverCard x={hoverCard.x} y={hoverCard.y} className="w-72">
-              {hoverCard.kind === 'record' ? (
-                <>
-                  <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
-                    {hoverCard.name}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-                    <span>{hoverCard.category}</span>
-                    <span>{hoverCard.status}</span>
-                  </div>
-                  <div className="mt-2 text-xs text-[var(--muted)]">
-                    Monthly: {formatCurrency(hoverCard.value)}
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">
-                    Billing: {formatCurrency(hoverCard.amount)} / {hoverCard.billingCycle}
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">
-                    Renewal: {formatRenewalLabel(hoverCard.nextRenewalAt)}
-                  </div>
-                  {hoverCard.provider ? (
-                    <div className="mt-1 text-xs text-[var(--muted)]">
-                      Provider: {hoverCard.provider}
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
-                    {hoverCard.category}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-                    <span>
-                      {hoverCard.count} subscription{hoverCard.count === 1 ? '' : 's'}
-                    </span>
-                    <span>Category</span>
-                  </div>
-                  <div className="mt-2 text-xs text-[var(--muted)]">
-                    Total monthly: {formatCurrency(hoverCard.value)}
-                  </div>
-                </>
-              )}
+          {hoverCard.kind === 'record' ? (
+            <>
+              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
+                {hoverCard.name}
+              </div>
+              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                <span>{hoverCard.category}</span>
+                <span>{hoverCard.status}</span>
+              </div>
+              <div className="mt-2 text-xs text-[var(--muted)]">
+                Monthly: {formatCurrency(hoverCard.value)}
+              </div>
+              <div className="mt-1 text-xs text-[var(--muted)]">
+                Billing: {formatCurrency(hoverCard.amount)} / {hoverCard.billingCycle}
+              </div>
+              <div className="mt-1 text-xs text-[var(--muted)]">
+                Renewal: {formatRenewalLabel(hoverCard.nextRenewalAt)}
+              </div>
+              {hoverCard.provider ? (
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Provider: {hoverCard.provider}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
+                {hoverCard.category}
+              </div>
+              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                <span>
+                  {hoverCard.count} subscription{hoverCard.count === 1 ? '' : 's'}
+                </span>
+                <span>Category</span>
+              </div>
+              <div className="mt-2 text-xs text-[var(--muted)]">
+                Total monthly: {formatCurrency(hoverCard.value)}
+              </div>
+            </>
+          )}
         </FloatingHoverCard>
       ) : null}
     </>
@@ -720,14 +755,16 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
   const subscriptionsApi = vaultApi?.subscriptions
   const [records, setRecords] = useState<SubscriptionRecord[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'all' | SubscriptionStatus>('all')
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
-  const [sortField, setSortField] = useState<SortField>('amount')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [tablePreferences, setTablePreferences] = usePersistentState<SubscriptionTablePreferences>(
+    'beacon:subscriptions:table-preferences',
+    defaultSubscriptionTablePreferences,
+    { validate: isSubscriptionTablePreferences }
+  )
   const [draft, setDraft] = useState<ModalDraft>(emptyDraft())
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const { statusFilter, categoryFilter, sortField, sortDirection } = tablePreferences
 
   useEffect(() => {
     if (!subscriptionsApi) {
@@ -897,14 +934,18 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
 
   const toggleSort = (field: SortField): void => {
     if (sortField === field) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+      setTablePreferences((current) => ({
+        ...current,
+        sortDirection: current.sortDirection === 'asc' ? 'desc' : 'asc'
+      }))
       return
     }
 
-    setSortField(field)
-    setSortDirection(
-      field === 'name' || field === 'category' || field === 'status' ? 'asc' : 'desc'
-    )
+    setTablePreferences((current) => ({
+      ...current,
+      sortField: field,
+      sortDirection: field === 'name' || field === 'category' || field === 'status' ? 'asc' : 'desc'
+    }))
   }
 
   const kpiCards = [
@@ -936,7 +977,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
             {kpiCards.map((card) => (
               <div
                 key={card.label}
-                className="workspace-subtle-surface rounded-2xl border border-[var(--line)] px-4 py-4"
+                className="workspace-subtle-surface rounded-lg border border-[var(--line)] px-4 py-4"
               >
                 <div className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
                   <card.icon size={16} />
@@ -951,7 +992,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         </section>
 
         {isLoading ? (
-          <div className="workspace-subtle-surface rounded-3xl px-6 py-8 text-sm text-[var(--muted)]">
+          <div className="workspace-subtle-surface rounded-lg px-6 py-8 text-sm text-[var(--muted)]">
             Loading subscriptions…
           </div>
         ) : (
@@ -964,14 +1005,18 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 statusFilter={statusFilter}
                 activeCategory={categoryFilter}
                 onOpenCreate={openCreateModal}
-                onChangeStatusFilter={setStatusFilter}
-                onSelectCategory={setCategoryFilter}
+                onChangeStatusFilter={(value) =>
+                  setTablePreferences((current) => ({ ...current, statusFilter: value }))
+                }
+                onSelectCategory={(value) =>
+                  setTablePreferences((current) => ({ ...current, categoryFilter: value }))
+                }
                 onSelectRecord={setSelectedId}
               />
             </section>
 
             <section>
-              <div className="workspace-subtle-surface rounded-[24px] p-5">
+              <div className="workspace-subtle-surface rounded-lg p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-[var(--text)]">

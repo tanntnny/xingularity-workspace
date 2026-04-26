@@ -259,11 +259,8 @@ function NoteSection({
               type="button"
               ref={revealProps.ref}
               data-testid={`note-preview:${note.relPath}`}
-              className={`${revealProps.className} flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
-                isSelected
-                  ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                  : 'workspace-subtle-control border-[var(--line)]'
-              }`}
+              data-active={isSelected}
+              className={`${revealProps.className} sidebar-menu-card right-panel-menu-card items-start gap-2 px-3 py-2 text-left`}
               style={revealProps.style}
               onClick={() => onOpen(note.relPath)}
               onContextMenu={
