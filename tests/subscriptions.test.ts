@@ -127,7 +127,7 @@ describe('SubscriptionsService', () => {
     const vaultRoot = trackTempRoot(
       await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-subscriptions-'))
     )
-    await fs.mkdir(path.join(vaultRoot, 'notes'), { recursive: true })
+    await fs.mkdir(path.join(vaultRoot, 'notebooks'), { recursive: true })
     await fs.mkdir(path.join(vaultRoot, 'attachments'), { recursive: true })
 
     const service = new SubscriptionsService()
@@ -154,7 +154,7 @@ describe('SubscriptionsService', () => {
     expect(analytics.reviewCount).toBe(0)
 
     const persistedRaw = await fs.readFile(
-      path.join(vaultRoot, '.xingularity', 'subscriptions.json'),
+      path.join(vaultRoot, 'subscriptions', 'data.json'),
       'utf-8'
     )
     const persisted = JSON.parse(persistedRaw) as Array<{ id: string; status: string }>

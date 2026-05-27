@@ -229,11 +229,21 @@ Current storage split:
 
 Vault-backed content:
 
-- `notes/**/*.md`
+- `notebooks/**/*.md`
 - `attachments/**`
-- `.appmeta/vault.json`
-- `.appmeta/filemap.json`
-- `.appmeta/index.sqlite`
+- `settings.json`
+- `projects/index.json`
+- `calendar/tasks.json`
+- `weekly-plan/state.json`
+- `subscriptions/data.json`
+- `schedules/jobs.json`
+- `schedules/runs.json`
+- `agent/chats.json`
+- `agent/runs.json`
+- `generative-ui/artifacts.json`
+- `.xingularity/vault.json`
+- `.xingularity/filemap.json`
+- `.xingularity/index.sqlite`
 
 App-managed state:
 
@@ -245,7 +255,4 @@ App-managed state:
 - schedules and run records
 - agent chat sessions and run history
 
-Vault app data:
-
-- `.xingularity/weekly-plan.json`
-- `.xingularity/subscriptions.json`
+Internal vault metadata and caches stay under `.xingularity/`.

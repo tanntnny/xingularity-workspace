@@ -1,8 +1,14 @@
 import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { ScheduleJob, ScheduleRunRecord } from '../shared/scheduleTypes'
-import { ensureVaultAppDir, getVaultAppDir } from './vaultData'
+import {
+  getLegacyVaultScheduleJobsPath,
+  getLegacyVaultScheduleRunsPath,
+  getVaultScheduleJobsPath,
+  getVaultScheduleRunsPath
+} from './vaultData'
 
 const MAX_RUNS_PER_JOB = 100
 
@@ -11,18 +17,24 @@ export class ScheduleStore {
   private readonly runsPath: string
   private readonly legacyJobsPath: string
   private readonly legacyRunsPath: string
+  private readonly deviceLegacyJobsPath: string
+  private readonly deviceLegacyRunsPath: string
 
   constructor(vaultRoot: string) {
-    void ensureVaultAppDir(vaultRoot)
-    const baseDir = getVaultAppDir(vaultRoot)
-    this.jobsPath = path.join(baseDir, 'schedule-jobs.json')
-    this.runsPath = path.join(baseDir, 'schedule-runs.json')
-    this.legacyJobsPath = path.join(app.getPath('userData'), 'schedule-jobs.json')
-    this.legacyRunsPath = path.join(app.getPath('userData'), 'schedule-runs.json')
+    this.jobsPath = getVaultScheduleJobsPath(vaultRoot)
+    this.runsPath = getVaultScheduleRunsPath(vaultRoot)
+    this.legacyJobsPath = getLegacyVaultScheduleJobsPath(vaultRoot)
+    this.legacyRunsPath = getLegacyVaultScheduleRunsPath(vaultRoot)
+    this.deviceLegacyJobsPath = path.join(app.getPath('userData'), 'schedule-jobs.json')
+    this.deviceLegacyRunsPath = path.join(app.getPath('userData'), 'schedule-runs.json')
   }
 
   async readJobs(): Promise<ScheduleJob[]> {
-    return this.readJsonFile<ScheduleJob[]>(this.jobsPath, this.legacyJobsPath, [])
+    return this.readJsonFile<ScheduleJob[]>(
+      this.jobsPath,
+      [this.legacyJobsPath, this.deviceLegacyJobsPath],
+      []
+    )
   }
 
   async writeJobs(jobs: ScheduleJob[]): Promise<void> {
@@ -48,7 +60,11 @@ export class ScheduleStore {
   }
 
   async readRuns(): Promise<ScheduleRunRecord[]> {
-    return this.readJsonFile<ScheduleRunRecord[]>(this.runsPath, this.legacyRunsPath, [])
+    return this.readJsonFile<ScheduleRunRecord[]>(
+      this.runsPath,
+      [this.legacyRunsPath, this.deviceLegacyRunsPath],
+      []
+    )
   }
 
   async writeRuns(runs: ScheduleRunRecord[]): Promise<void> {
@@ -57,7 +73,9 @@ export class ScheduleStore {
 
   async readRunsForJob(jobId: string): Promise<ScheduleRunRecord[]> {
     const all = await this.readRuns()
-    return all.filter((r) => r.jobId === jobId).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    return all
+      .filter((r) => r.jobId === jobId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   }
 
   async upsertRun(run: ScheduleRunRecord): Promise<void> {
@@ -81,11 +99,7 @@ export class ScheduleStore {
     return all.find((r) => r.id === runId) ?? null
   }
 
-  private async readJsonFile<T>(
-    filePath: string,
-    legacyPath: string,
-    fallback: T
-  ): Promise<T> {
+  private async readJsonFile<T>(filePath: string, legacyPaths: string[], fallback: T): Promise<T> {
     try {
       const raw = await fs.readFile(filePath, 'utf-8')
       return JSON.parse(raw) as T
@@ -94,23 +108,26 @@ export class ScheduleStore {
         console.error('Failed to read schedule store:', error)
       }
 
-      try {
-        const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
-        const parsed = JSON.parse(legacyRaw) as T
-        await this.writeJsonFile(filePath, parsed)
-        return parsed
-      } catch (legacyError) {
-        if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
-          console.error('Failed to read legacy schedule store:', legacyError)
+      for (const legacyPath of legacyPaths) {
+        try {
+          const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
+          const parsed = JSON.parse(legacyRaw) as T
+          await this.writeJsonFile(filePath, parsed)
+          return parsed
+        } catch (legacyError) {
+          if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.error('Failed to read legacy schedule store:', legacyError)
+          }
         }
-        return fallback
       }
+
+      return fallback
     }
   }
 
   private async writeJsonFile(filePath: string, data: unknown): Promise<void> {
     const dir = path.dirname(filePath)
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`
+    const tmp = `${filePath}.tmp-${process.pid}-${randomUUID()}`
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
     await fs.rename(tmp, filePath)

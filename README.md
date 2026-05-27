@@ -1,8 +1,8 @@
 # Xingularity
 
-Xingularity is a local-first Electron desktop workspace for notes, projects, calendar planning, weekly reviews, automation schedules, and agent-assisted workflows.
+Xingularity is a local-first Electron desktop workspace for notebooks, projects, calendar planning, weekly reviews, automation schedules, and agent-assisted workflows.
 
-The app keeps note content and attachments inside a user-selected vault on disk while app-level state such as projects, tasks, weekly plans, schedules, and chat history is managed through the desktop runtime.
+The app keeps user-facing workspace data inside a user-selected vault on disk. The vault is organized around page domains such as notebooks, projects, calendar, weekly plan, schedules, and agent history, while internal metadata and indexes stay under `.xingularity/`.
 
 ## Current Product Scope
 
@@ -40,19 +40,46 @@ When a vault is created or opened, Xingularity ensures this structure exists:
 
 ```text
 <vault-root>/
-  notes/
+  notebooks/
+  projects/
+    index.json
+  calendar/
+    tasks.json
+  weekly-plan/
+    state.json
+  subscriptions/
+    data.json
+  schedules/
+    jobs.json
+    runs.json
+  agent/
+    chats.json
+    runs.json
+  generative-ui/
+    artifacts.json
   attachments/
-  .appmeta/
+  settings.json
+  .xingularity/
     vault.json
+    migrations.json
     filemap.json
     index.sqlite
 ```
 
-- `notes/`: Markdown note files
+- `notebooks/`: Markdown notebook files
+- `projects/index.json`: project records and icon overrides
+- `calendar/tasks.json`: scheduled and unscheduled calendar tasks
+- `weekly-plan/state.json`: weekly planning state
+- `subscriptions/data.json`: subscription records
+- `schedules/jobs.json` and `schedules/runs.json`: automation definitions and run history
+- `agent/chats.json` and `agent/runs.json`: chat sessions and agent run history
+- `generative-ui/artifacts.json`: saved generated UI artifacts
 - `attachments/`: imported files and pasted images
-- `.appmeta/vault.json`: vault metadata
-- `.appmeta/filemap.json`: note identity and indexing metadata
-- `.appmeta/index.sqlite`: local SQLite FTS search index
+- `settings.json`: vault-scoped UI and workspace settings
+- `.xingularity/vault.json`: vault metadata
+- `.xingularity/migrations.json`: legacy-layout migration markers
+- `.xingularity/filemap.json`: note identity and indexing metadata
+- `.xingularity/index.sqlite`: local SQLite FTS search index
 
 ### App-managed state
 
@@ -67,6 +94,8 @@ App settings and higher-level workspace state include:
 - weekly plan data
 - schedules and run history
 - agent chat sessions and agent run history
+
+Legacy vaults are migrated forward on open. Old `notes/` content is copied into `notebooks/`, old `.appmeta/` metadata is copied into `.xingularity/`, and older `.xingularity/*.json` page stores are rewritten into the visible page-aligned paths above.
 
 ## Notes
 

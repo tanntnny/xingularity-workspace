@@ -289,7 +289,7 @@ describe('GenerativeUiArtifactStore', () => {
   it('falls back to an empty list for invalid JSON', async () => {
     const { root, store } = await makeStore()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const filePath = path.join(root, '.xingularity', 'generative-ui-artifacts.json')
+    const filePath = path.join(root, 'generative-ui', 'artifacts.json')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, '{ invalid', 'utf-8')
 

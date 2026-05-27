@@ -2,7 +2,7 @@
 
 ## Architecture
 - Renderer talks to `weeklyPlan` methods on the preload API which proxy to validated IPC handlers under `WEEKLY_PLAN_CHANNELS`.
-- Main process routes the events through `WeeklyPlanService` which persists JSON per vault via `WeeklyPlanStore` at `.xingularity/weekly-plan.json`.
+- Main process routes the events through `WeeklyPlanService` which persists JSON per vault via `WeeklyPlanStore` at `weekly-plan/state.json`.
 - State shape mirrors `WeeklyPlanState` in `src/shared/types.ts` (weeks, priorities, reviews) to keep IPC payloads and persistence aligned.
 
 ## Renderer

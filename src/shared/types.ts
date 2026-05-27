@@ -5,6 +5,8 @@ export type Maybe<T> = T | null
 
 export interface VaultInfo {
   rootPath: string
+  notebooksPath: string
+  // Compatibility alias for older renderer/main call sites.
   notesPath: string
   attachmentsPath: string
 }

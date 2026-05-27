@@ -41,7 +41,7 @@ class MockRuntime {
   private readonly ready: Promise<void>
 
   constructor(rootPath: string) {
-    const notesRoot = path.join(rootPath, 'notes')
+    const notesRoot = path.join(rootPath, 'notebooks')
     const attachmentsRoot = path.join(rootPath, 'attachments')
     this.fileService = new FileService(notesRoot, attachmentsRoot, () => {})
     this.ready = Promise.all([
@@ -64,19 +64,19 @@ class MockRuntime {
     return this.settings
   }
 
-  listNotes() {
+  listNotes(): ReturnType<FileService['listNotes']> {
     return this.ready.then(() => this.fileService.listNotes())
   }
 
-  readNote(relPath: string) {
+  readNote(relPath: string): ReturnType<FileService['readNote']> {
     return this.ready.then(() => this.fileService.readNote(relPath))
   }
 
-  createNote(name: string) {
+  createNote(name: string): ReturnType<FileService['createNote']> {
     return this.ready.then(() => this.fileService.createNote(name))
   }
 
-  writeNote(relPath: string, content: string) {
+  writeNote(relPath: string, content: string): ReturnType<FileService['writeNote']> {
     return this.ready.then(() => this.fileService.writeNote(relPath, content))
   }
 }
@@ -140,7 +140,9 @@ describe('ScheduleService action application', () => {
         allDay: true,
         extendedProps: {
           source: 'task',
-          taskId: settings.calendarTasks[0].id
+          taskId: settings.calendarTasks[0].id,
+          taskType: 'assignment',
+          priority: 'high'
         }
       }
     ])

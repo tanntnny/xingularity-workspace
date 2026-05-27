@@ -7,7 +7,7 @@ SQLite was chosen over a pure JS index because this app is local-first and must 
 - FTS5 gives efficient full-text search on disk without loading the full corpus in memory.
 - Querying title/body/tags is straightforward and fast.
 - Index durability and crash safety are better than ad-hoc JSON index files.
-- The data remains local and portable inside `.appmeta/index.sqlite`.
+- The data remains local and portable inside `.xingularity/index.sqlite`.
 
 ## Markdown rendering choice
 
@@ -19,7 +19,7 @@ SQLite was chosen over a pure JS index because this app is local-first and must 
 
 ## Watcher and debounce strategy
 
-- `chokidar` watches `notes/` for `add`, `change`, `unlink`.
+- `chokidar` watches `notebooks/` for `add`, `change`, `unlink`.
 - Events are debounced per path (`~180ms`) to absorb write bursts.
 - Internal writes are marked in-memory with timestamps.
 - Watch events matching recent internal writes (window ~1200ms) are ignored to reduce write-loop double indexing.

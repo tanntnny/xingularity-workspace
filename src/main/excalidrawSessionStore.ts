@@ -1,9 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { ExcalidrawSession, ExcalidrawSessionScene } from '../shared/types'
-import { ensureVaultAppDir, getVaultAppDir } from './vaultData'
-
-const FILE_NAME = 'excalidraw-sessions.json'
+import { getVaultExcalidrawSessionsPath } from './vaultData'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -73,16 +72,13 @@ function normalizeSessions(value: unknown): ExcalidrawSession[] {
 }
 
 export class ExcalidrawSessionStore {
-  private readonly vaultRoot: string
   private readonly filePath: string
 
   constructor(vaultRoot: string) {
-    this.vaultRoot = vaultRoot
-    this.filePath = path.join(getVaultAppDir(vaultRoot), FILE_NAME)
+    this.filePath = getVaultExcalidrawSessionsPath(vaultRoot)
   }
 
   async listSessions(): Promise<ExcalidrawSession[]> {
-    await ensureVaultAppDir(this.vaultRoot)
     try {
       const raw = await fs.readFile(this.filePath, 'utf-8')
       return normalizeSessions(JSON.parse(raw))
@@ -109,8 +105,8 @@ export class ExcalidrawSessionStore {
   }
 
   private async writeSessions(sessions: ExcalidrawSession[]): Promise<void> {
-    await ensureVaultAppDir(this.vaultRoot)
-    const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true })
+    const tempPath = `${this.filePath}.tmp-${process.pid}-${randomUUID()}`
     await fs.writeFile(tempPath, JSON.stringify(sessions, null, 2), 'utf-8')
     await fs.rename(tempPath, this.filePath)
   }

@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createRandomProjectIcon } from '../shared/projectIcons'
@@ -11,7 +12,14 @@ import {
   ProjectMilestone,
   ProjectSubtask
 } from '../shared/types'
-import { ensureVaultAppDir } from './vaultData'
+import {
+  getLegacyVaultCalendarTasksPath,
+  getLegacyVaultProjectsPath,
+  getLegacyVaultSettingsPath,
+  getVaultCalendarTasksPath,
+  getVaultProjectsPath,
+  getVaultSettingsPath
+} from './vaultData'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -439,9 +447,6 @@ function toggleFavoriteGlobalVault(settings: GlobalSettings, rootPath: string): 
 
 export class SettingsStore {
   private readonly globalSettingsPath: string
-  private static readonly CORE_SETTINGS_FILE = 'settings.json'
-  private static readonly PROJECTS_FILE = 'projects.json'
-  private static readonly TASKS_FILE = 'tasks.json'
 
   constructor() {
     this.globalSettingsPath = path.join(app.getPath('userData'), 'settings.json')
@@ -490,29 +495,50 @@ export class SettingsStore {
   // ── Vault-specific settings ───────────────────────────────────────────────
 
   async readVault(vaultRoot: string): Promise<AppSettings> {
-    const settingsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.CORE_SETTINGS_FILE)
-    const projectsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.PROJECTS_FILE)
-    const tasksPath = await this.getVaultDataPath(vaultRoot, SettingsStore.TASKS_FILE)
+    const settingsPath = getVaultSettingsPath(vaultRoot)
+    const legacySettingsPath = getLegacyVaultSettingsPath(vaultRoot)
+    const projectsPath = getVaultProjectsPath(vaultRoot)
+    const legacyProjectsPath = getLegacyVaultProjectsPath(vaultRoot)
+    const tasksPath = getVaultCalendarTasksPath(vaultRoot)
+    const legacyTasksPath = getLegacyVaultCalendarTasksPath(vaultRoot)
 
     try {
-      const [coreParsed, projectsData, tasksData] = await Promise.all([
+      const [
+        coreParsed,
+        legacyCoreParsed,
+        projectsData,
+        legacyProjectsData,
+        tasksData,
+        legacyTasksData
+      ] = await Promise.all([
         this.readJsonFile<VaultCoreSettings>(settingsPath),
+        this.readJsonFile<VaultCoreSettings>(legacySettingsPath),
         this.readJsonFile<VaultProjectsData>(projectsPath),
-        this.readJsonFile<VaultTasksData>(tasksPath)
+        this.readJsonFile<VaultProjectsData>(legacyProjectsPath),
+        this.readJsonFile<VaultTasksData>(tasksPath),
+        this.readJsonFile<VaultTasksData>(legacyTasksPath)
       ])
 
+      const resolvedCore = coreParsed ?? legacyCoreParsed
+      const resolvedProjects = projectsData ?? legacyProjectsData
+      const resolvedTasks = tasksData ?? legacyTasksData
+
       const needsSplitMigration =
+        coreParsed === null ||
         projectsData === null ||
         tasksData === null ||
-        Boolean(coreParsed?.projects) ||
-        Boolean(coreParsed?.projectIcons) ||
-        Boolean(coreParsed?.calendarTasks)
+        legacyCoreParsed !== null ||
+        legacyProjectsData !== null ||
+        legacyTasksData !== null ||
+        Boolean(resolvedCore?.projects) ||
+        Boolean(resolvedCore?.projectIcons) ||
+        Boolean(resolvedCore?.calendarTasks)
 
       const merged = normalizeSettings({
-        ...(coreParsed ?? {}),
-        projects: projectsData?.projects ?? coreParsed?.projects,
-        projectIcons: projectsData?.projectIcons ?? coreParsed?.projectIcons,
-        calendarTasks: tasksData?.calendarTasks ?? coreParsed?.calendarTasks,
+        ...(resolvedCore ?? {}),
+        projects: resolvedProjects?.projects ?? resolvedCore?.projects,
+        projectIcons: resolvedProjects?.projectIcons ?? resolvedCore?.projectIcons,
+        calendarTasks: resolvedTasks?.calendarTasks ?? resolvedCore?.calendarTasks,
         lastVaultPath: vaultRoot
       })
 
@@ -571,15 +597,10 @@ export class SettingsStore {
     }
   }
 
-  private async getVaultDataPath(vaultRoot: string, fileName: string): Promise<string> {
-    const dir = await ensureVaultAppDir(vaultRoot)
-    return path.join(dir, fileName)
-  }
-
   private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
-    const corePath = await this.getVaultDataPath(vaultRoot, SettingsStore.CORE_SETTINGS_FILE)
-    const projectsPath = await this.getVaultDataPath(vaultRoot, SettingsStore.PROJECTS_FILE)
-    const tasksPath = await this.getVaultDataPath(vaultRoot, SettingsStore.TASKS_FILE)
+    const corePath = getVaultSettingsPath(vaultRoot)
+    const projectsPath = getVaultProjectsPath(vaultRoot)
+    const tasksPath = getVaultCalendarTasksPath(vaultRoot)
 
     const coreSettings: VaultCoreSettings = {
       isSidebarCollapsed: settings.isSidebarCollapsed,
@@ -625,7 +646,7 @@ export class SettingsStore {
 
   private async writeJsonFile(filePath: string, data: unknown): Promise<void> {
     const dir = path.dirname(filePath)
-    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`
+    const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`
     await fs.mkdir(dir, { recursive: true })
     await this.backupExistingFile(filePath)
     await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')

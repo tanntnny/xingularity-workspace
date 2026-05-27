@@ -1,9 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { WeeklyPlanState } from '../../shared/types'
-import { ensureVaultAppDir, getVaultAppDir } from '../vaultData'
-
-const FILE_NAME = 'weekly-plan.json'
+import { getLegacyVaultWeeklyPlanPath, getVaultWeeklyPlanPath } from '../vaultData'
 
 function defaultState(): WeeklyPlanState {
   return {
@@ -23,32 +22,35 @@ function normalizeState(parsed: Partial<WeeklyPlanState>): WeeklyPlanState {
 }
 
 export class WeeklyPlanStore {
-  private readonly vaultRoot: string
   private readonly filePath: string
+  private readonly legacyFilePath: string
 
   constructor(vaultRoot: string) {
-    this.vaultRoot = vaultRoot
-    this.filePath = path.join(getVaultAppDir(vaultRoot), FILE_NAME)
+    this.filePath = getVaultWeeklyPlanPath(vaultRoot)
+    this.legacyFilePath = getLegacyVaultWeeklyPlanPath(vaultRoot)
   }
 
   async read(): Promise<WeeklyPlanState> {
-    await ensureVaultAppDir(this.vaultRoot)
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf-8')
-      return normalizeState(JSON.parse(raw) as Partial<WeeklyPlanState>)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[WeeklyPlanStore] Failed to read state', error)
-      }
-      const defaults = defaultState()
-      await this.write(defaults)
-      return defaults
+    const migrated = await this.readJsonFile(this.filePath)
+    if (migrated) {
+      return normalizeState(migrated)
     }
+
+    const legacy = await this.readJsonFile(this.legacyFilePath)
+    if (legacy) {
+      const normalized = normalizeState(legacy)
+      await this.write(normalized)
+      return normalized
+    }
+
+    const defaults = defaultState()
+    await this.write(defaults)
+    return defaults
   }
 
   async write(state: WeeklyPlanState): Promise<void> {
-    await ensureVaultAppDir(this.vaultRoot)
-    const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`
+    const tempPath = `${this.filePath}.tmp-${process.pid}-${randomUUID()}`
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true })
     await fs.writeFile(tempPath, JSON.stringify(state, null, 2), 'utf-8')
     await fs.rename(tempPath, this.filePath)
   }
@@ -58,5 +60,17 @@ export class WeeklyPlanStore {
     const next = updater(current)
     await this.write(next)
     return next
+  }
+
+  private async readJsonFile(filePath: string): Promise<Partial<WeeklyPlanState> | null> {
+    try {
+      const raw = await fs.readFile(filePath, 'utf-8')
+      return JSON.parse(raw) as Partial<WeeklyPlanState>
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[WeeklyPlanStore] Failed to read state', error)
+      }
+      return null
+    }
   }
 }

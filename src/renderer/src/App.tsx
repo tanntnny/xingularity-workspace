@@ -2661,7 +2661,7 @@ function App(): ReactElement {
     }
 
     const confirmed = window.confirm(
-      'Convert old BlockNote JSON notes in this vault to markdown? This rewrites detected .md files in notes/.'
+      'Convert old BlockNote JSON notes in this vault to markdown? This rewrites detected .md files in notebooks/.'
     )
     if (!confirmed) {
       return
@@ -2703,7 +2703,7 @@ function App(): ReactElement {
     }
 
     const confirmed = window.confirm(
-      'Normalize notes that still have tag frontmatter in the visible body? This rewrites the matching .md files in notes/.'
+      'Normalize notes that still have tag frontmatter in the visible body? This rewrites the matching .md files in notebooks/.'
     )
     if (!confirmed) {
       return
@@ -2745,7 +2745,7 @@ function App(): ReactElement {
     }
 
     const confirmed = window.confirm(
-      'Import legacy standalone Excalidraw sessions into notes/Imported Drawings as .excalidraw files? Existing legacy data will be kept.'
+      'Import legacy standalone Excalidraw sessions into notebooks/Imported Drawings as .excalidraw files? Existing legacy data will be kept.'
     )
     if (!confirmed) {
       return

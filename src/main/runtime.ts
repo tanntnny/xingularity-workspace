@@ -296,7 +296,7 @@ export class VaultRuntime {
     this.assertReady()
     await this.assertFolderCreationAllowed(relPath)
     const nextRelPath = await this.fileService!.createFolder(relPath)
-    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
     return nextRelPath
   }
 
@@ -343,7 +343,7 @@ export class VaultRuntime {
     this.assertReady()
     const result = await this.fileService!.migrateBlockNoteMarkdownNotes()
     if (result.converted > 0) {
-      await this.indexer!.rebuild(this.currentPaths!.notesPath)
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
     }
     return result
   }
@@ -359,7 +359,7 @@ export class VaultRuntime {
     this.assertReady()
     const result = await this.fileService!.migrateTaggedNoteBodyFrontmatter()
     if (result.converted > 0) {
-      await this.indexer!.rebuild(this.currentPaths!.notesPath)
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
     }
     return result
   }
@@ -381,7 +381,7 @@ export class VaultRuntime {
     this.assertReady()
     await this.assertPathMutationAllowed(oldPath, newPath)
     await this.fileService!.renamePath(oldPath, newPath)
-    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
   }
 
   async deleteNote(relPath: string): Promise<void> {
@@ -396,7 +396,7 @@ export class VaultRuntime {
     this.assertReady()
     await this.assertPathDeletionAllowed(relPath)
     const trashed = await this.createTrashService().moveEntryToTrash(relPath)
-    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
     this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
       trashed
     ])
@@ -418,7 +418,7 @@ export class VaultRuntime {
     for (const relPath of uniqueRelPaths) {
       trashedEntries.push(await trash.moveEntryToTrash(relPath))
     }
-    await this.indexer!.rebuild(this.currentPaths!.notesPath)
+    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
     this.pushFileDeleteHistory(
       uniqueRelPaths.length === 1 ? 'Delete item' : 'Delete items',
       trashedEntries
@@ -726,7 +726,7 @@ export class VaultRuntime {
       try {
         const preferredRelPath = withExcalidrawExtension(`Imported Drawings/${session.title}`)
         const relPath = await findAvailableExcalidrawRelPath(
-          this.currentPaths!.notesPath,
+          this.currentPaths!.notebooksPath,
           preferredRelPath
         )
 
@@ -1024,12 +1024,12 @@ export class VaultRuntime {
       ? await initializeVault(folderPath)
       : await validateVault(folderPath)
 
-    this.watcher = new VaultWatcher(this.currentPaths.notesPath, async (relPath, eventType) => {
+    this.watcher = new VaultWatcher(this.currentPaths.notebooksPath, async (relPath, eventType) => {
       await this.handleExternalEvent(relPath, eventType)
     })
 
     this.fileService = new FileService(
-      this.currentPaths.notesPath,
+      this.currentPaths.notebooksPath,
       this.currentPaths.attachmentsPath,
       (relPath) => this.watcher?.markInternalWrite(relPath)
     )
@@ -1045,7 +1045,7 @@ export class VaultRuntime {
     this.indexer = await initializeIndexerWithRetry(
       this.currentPaths.indexPath,
       this.currentPaths.fileMapPath,
-      this.currentPaths.notesPath
+      this.currentPaths.notebooksPath
     )
     this.watcher.start()
 
@@ -1287,13 +1287,13 @@ export class VaultRuntime {
     }
 
     if (changed) {
-      await this.indexer?.rebuild(this.currentPaths.notesPath)
+      await this.indexer?.rebuild(this.currentPaths.notebooksPath)
     }
   }
 
   private createTrashService(): TrashService {
     this.assertReady()
-    return new TrashService(this.currentPaths!.rootPath, this.currentPaths!.notesPath)
+    return new TrashService(this.currentPaths!.rootPath, this.currentPaths!.notebooksPath)
   }
 
   private pushFileDeleteHistory(label: string, initialEntries: TrashedEntry[]): void {
@@ -1314,7 +1314,7 @@ export class VaultRuntime {
           entry.activeRelPath = await this.createTrashService().restoreEntry(entry.trashedEntry)
           entry.trashedEntry = null
         }
-        await this.indexer!.rebuild(this.currentPaths!.notesPath)
+        await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
         return { notes: true }
       },
       redo: async () => {
@@ -1327,7 +1327,7 @@ export class VaultRuntime {
           entry.trashedEntry = await trash.moveEntryToTrash(entry.activeRelPath)
           entry.activeRelPath = entry.trashedEntry.originalRelPath
         }
-        await this.indexer!.rebuild(this.currentPaths!.notesPath)
+        await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
         return { notes: true }
       }
     })
@@ -1635,14 +1635,14 @@ async function resetIndexArtifacts(indexPath: string, fileMapPath: string): Prom
 async function initializeIndexerWithRetry(
   indexPath: string,
   fileMapPath: string,
-  notesPath: string
+  notebooksPath: string
 ): Promise<SqliteIndexer> {
   await resetIndexArtifacts(indexPath, fileMapPath)
 
   try {
     const indexer = new SqliteIndexer(indexPath, fileMapPath)
     await indexer.init()
-    await indexer.rebuild(notesPath)
+    await indexer.rebuild(notebooksPath)
     return indexer
   } catch (error) {
     if (!isSqliteCorruptionError(error)) {
@@ -1652,7 +1652,7 @@ async function initializeIndexerWithRetry(
     await resetIndexArtifacts(indexPath, fileMapPath)
     const indexer = new SqliteIndexer(indexPath, fileMapPath)
     await indexer.init()
-    await indexer.rebuild(notesPath)
+    await indexer.rebuild(notebooksPath)
     return indexer
   }
 }

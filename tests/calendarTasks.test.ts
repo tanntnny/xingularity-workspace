@@ -88,7 +88,9 @@ describe('buildCalendarEvents', () => {
         allDay: true,
         extendedProps: {
           source: 'task',
-          taskId: 'task-a'
+          taskId: 'task-a',
+          taskType: undefined,
+          priority: 'medium'
         }
       },
       {
@@ -99,7 +101,9 @@ describe('buildCalendarEvents', () => {
         allDay: true,
         extendedProps: {
           source: 'task',
-          taskId: 'task-b'
+          taskId: 'task-b',
+          taskType: undefined,
+          priority: 'medium'
         }
       }
     ])
@@ -139,8 +143,7 @@ describe('buildMilestoneCalendarEvents', () => {
           source: 'milestone',
           projectId: 'project-alpha',
           projectName: 'Project',
-          milestoneId: 'milestone-a'
-          ,
+          milestoneId: 'milestone-a',
           completed: false
         }
       }

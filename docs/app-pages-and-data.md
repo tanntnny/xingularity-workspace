@@ -26,11 +26,21 @@ The app uses two persistence models.
 
 User workspace content lives in a selected local vault:
 
-- `notes/**/*.md`
+- `notebooks/**/*.md`
 - `attachments/**`
-- `.appmeta/vault.json`
-- `.appmeta/filemap.json`
-- `.appmeta/index.sqlite`
+- `settings.json`
+- `projects/index.json`
+- `calendar/tasks.json`
+- `weekly-plan/state.json`
+- `subscriptions/data.json`
+- `schedules/jobs.json`
+- `schedules/runs.json`
+- `agent/chats.json`
+- `agent/runs.json`
+- `generative-ui/artifacts.json`
+- `.xingularity/vault.json`
+- `.xingularity/filemap.json`
+- `.xingularity/index.sqlite`
 
 This layer is responsible for:
 
@@ -55,10 +65,7 @@ Main app-managed domains:
 - agent chat sessions
 - agent run history
 
-Vault-scoped JSON stores currently include:
-
-- `.xingularity/weekly-plan.json`
-- `.xingularity/subscriptions.json`
+Internal vault metadata and caches stay under `.xingularity/`.
 
 ## Top-Level App Settings
 
@@ -95,6 +102,7 @@ Partial update payload used by the renderer to patch settings without resending 
 Paths that define the active vault:
 
 - `rootPath`
+- `notebooksPath`
 - `notesPath`
 - `attachmentsPath`
 

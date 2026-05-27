@@ -1,19 +1,37 @@
 # Xingularity User Guide
 
-Xingularity is a desktop workspace for notes, projects, planning, automations, and agent-assisted work. The current build is local-first: your note vault stays on disk on your machine, and the rest of the workspace runs inside the desktop app.
+Xingularity is a desktop workspace for notes, projects, planning, automations, and agent-assisted work. The current build is local-first: your vault stays on disk on your machine, and the rest of the workspace runs inside the desktop app.
 
 ## Getting Started
 
 ### Open Or Create A Vault
 
-Your vault stores note content and attachments. When you pick a vault location, Xingularity creates this structure if it does not already exist:
+Your vault stores notebook content, page-aligned structured data, and attachments. When you pick a vault location, Xingularity creates this structure if it does not already exist:
 
 ```text
 <your-vault>/
-  notes/
+  notebooks/
+  projects/
+    index.json
+  calendar/
+    tasks.json
+  weekly-plan/
+    state.json
+  subscriptions/
+    data.json
+  schedules/
+    jobs.json
+    runs.json
+  agent/
+    chats.json
+    runs.json
+  generative-ui/
+    artifacts.json
   attachments/
-  .appmeta/
+  settings.json
+  .xingularity/
     vault.json
+    migrations.json
     filemap.json
     index.sqlite
 ```
@@ -25,6 +43,14 @@ To change the vault location:
 3. Use `Change Vault Location`.
 
 On startup, the app attempts to restore the last opened vault automatically.
+
+If you open an older vault, Xingularity migrates it forward in place:
+
+- `notes/` is copied into `notebooks/`
+- legacy `.appmeta/` metadata is copied into `.xingularity/`
+- older hidden JSON page stores are rewritten into the visible page-aligned paths
+
+If both `notes/` and `notebooks/` already exist before migration, the app stops and reports a conflict instead of guessing which copy is canonical.
 
 ## Main Navigation
 
@@ -45,9 +71,9 @@ The sidebar also provides:
 - keyboard shortcut hints
 - badges for note, project, and incomplete task counts
 
-## Notes Workflow
+## Notebooks Workflow
 
-Use the Notes page when you want to write, search, or organize Markdown content.
+Use the Notebooks page when you want to write, search, or organize Markdown content.
 
 Available actions:
 
@@ -235,19 +261,18 @@ Settings is split into four tabs:
 
 Vault-backed files:
 
-- notes: `notes/**/*.md`
+- notebooks: `notebooks/**/*.md`
 - attachments: `attachments/**`
-- local index and vault metadata: `.appmeta/*`
+- vault-scoped settings: `settings.json`
+- projects: `projects/index.json`
+- calendar tasks: `calendar/tasks.json`
+- weekly plans: `weekly-plan/state.json`
+- schedules: `schedules/jobs.json`, `schedules/runs.json`
+- agent data: `agent/chats.json`, `agent/runs.json`
+- generative UI artifacts: `generative-ui/artifacts.json`
+- local index and vault metadata: `.xingularity/*`
 
-App-managed state:
-
-- profile and font preferences
-- project data
-- calendar tasks
-- weekly plan records
-- subscription records in `.xingularity/subscriptions.json`
-- schedules and run history
-- agent chat sessions and run history
+Subscription records live in `subscriptions/data.json`.
 
 ## Current Caveats
 
