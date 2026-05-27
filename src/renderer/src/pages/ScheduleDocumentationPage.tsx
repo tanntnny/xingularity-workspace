@@ -24,10 +24,10 @@ Schedules let you save automations and execute them manually or from a trigger.
 
 ## Renderer schedule API
 
-The renderer-facing schedule API is exposed as:
+The renderer-facing schedule API is exposed through the app platform adapter:
 
 \`\`\`ts
-vaultApi.schedules
+appPlatform.api?.schedules
 \`\`\`
 
 Available methods:
@@ -225,11 +225,11 @@ export function ScheduleDocumentationPage({
 
             <Section title="Renderer entry point">
               <p>
-                The schedule feature is available from the renderer through the Electron bridge.
+                The schedule feature is available from the renderer through the platform adapter.
               </p>
               <CodeBlock
                 language="ts"
-                code={`const schedules = window.vaultApi?.schedules
+                code={`const schedules = appPlatform.api?.schedules
 
 const jobs = await schedules.listJobs()
 const runs = await schedules.listRuns(jobId)`}

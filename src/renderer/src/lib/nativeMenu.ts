@@ -1,9 +1,13 @@
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import type { NativeMenuItemDescriptor, NativeMenuPosition } from '../../../shared/types'
+import type {
+  NativeMenuItemDescriptor,
+  NativeMenuPosition,
+  RendererVaultApi
+} from '../../../shared/types'
+import { getRendererVaultApi } from '../platform'
 
-function getUiApi() {
-  return (window as Window & { vaultApi?: { ui?: { platform?: string; showNativeMenu?: unknown } } })
-    .vaultApi?.ui
+function getUiApi(): RendererVaultApi['ui'] | undefined {
+  return getRendererVaultApi()?.ui
 }
 
 export function canUseNativeMenus(): boolean {

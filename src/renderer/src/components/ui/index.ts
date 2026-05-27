@@ -12,6 +12,9 @@ export type { BadgeProps } from './badge'
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
 
 export { Label } from './label'
+export { Kbd, Shortcut } from './kbd'
+export type { ShortcutKey } from './kbd'
+export { Pallete, PalleteInput, PalleteSearchBar } from './pallete'
 
 export {
   Command,
@@ -99,8 +102,7 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuRadioGroup,
-  isDeleteShortcut
+  ContextMenuRadioGroup
 } from './context-menu'
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'
@@ -179,5 +181,3 @@ export {
   WorkspaceHeaderActionDivider,
   WorkspaceActionButton
 } from './document-workspace'
-
-export { Kbd } from './kbd'

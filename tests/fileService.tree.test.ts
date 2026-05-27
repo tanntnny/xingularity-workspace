@@ -4,6 +4,10 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FileService } from '../src/main/fileService'
 import {
+  createEmptyExcalidrawFileDocument,
+  serializeStoredExcalidrawFileDocument
+} from '../src/shared/excalidrawFile'
+import {
   createStoredNoteDocumentFromText,
   serializeStoredNoteDocument
 } from '../src/shared/noteDocument'
@@ -49,6 +53,10 @@ describe('FileService tree operations', () => {
       path.join(notesDir, 'alpha', 'nested', 'child-note.md'),
       serializeStoredNoteDocument(createStoredNoteDocumentFromText('# Child\n'))
     )
+    await fs.writeFile(
+      path.join(notesDir, 'diagram.excalidraw'),
+      serializeStoredExcalidrawFileDocument(createEmptyExcalidrawFileDocument())
+    )
     await fs.writeFile(path.join(notesDir, 'ignored.txt'), 'ignore me')
 
     const tree = await service.listTree()
@@ -56,7 +64,8 @@ describe('FileService tree operations', () => {
     expect(tree.map((node) => `${node.kind}:${node.name}`)).toEqual([
       'folder:alpha',
       'folder:empty-folder',
-      'note:root-note.md'
+      'note:root-note.md',
+      'excalidraw:diagram.excalidraw'
     ])
 
     const alphaFolder = tree[0]
@@ -88,12 +97,34 @@ describe('FileService tree operations', () => {
     await service.createFolder('projects')
     const notePath = await service.createNoteAtPath('projects/today.md')
     expect(notePath).toBe('projects/today.md')
+    const drawingPath = await service.createExcalidrawFileAtPath('projects/sketch.excalidraw')
+    expect(drawingPath).toBe('projects/sketch.excalidraw')
 
     await service.renamePath('projects', 'archive')
     await expect(fs.stat(path.join(notesDir, 'archive', 'today.md'))).resolves.toBeTruthy()
+    await expect(fs.stat(path.join(notesDir, 'archive', 'sketch.excalidraw'))).resolves.toBeTruthy()
 
     await service.deletePath('archive')
     await expect(fs.stat(path.join(notesDir, 'archive'))).rejects.toThrow()
+  })
+
+  it('reads and writes .excalidraw files', async () => {
+    const { service } = await makeService()
+    const relPath = await service.createExcalidrawFileAtPath('canvas.excalidraw')
+    const initial = await service.readExcalidrawFileDocument(relPath)
+
+    expect(initial.scene.elements).toEqual([])
+
+    await service.writeExcalidrawFileDocument(relPath, {
+      version: 1,
+      scene: {
+        ...initial.scene,
+        elements: [{ id: 'shape-1', type: 'rectangle' }]
+      }
+    })
+
+    const saved = await service.readExcalidrawFileDocument(relPath)
+    expect(saved.scene.elements).toEqual([{ id: 'shape-1', type: 'rectangle' }])
   })
 
   it('migrates legacy xnote JSON documents to markdown files', async () => {

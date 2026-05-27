@@ -12,9 +12,9 @@ import {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger,
-  isDeleteShortcut
+  ContextMenuTrigger
 } from './ui/context-menu'
+import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 interface FileTreeProps {

@@ -8,7 +8,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator
 } from './ui/breadcrumb'
-import type { AppPage } from './AppSidebar'
+import type { AppPage } from '../navigation'
 
 interface TopBarProps {
   activePage: AppPage
@@ -21,23 +21,23 @@ interface TopBarProps {
 const PAGE_LABELS: Record<AppPage, string> = {
   dashboard: 'Dashboard',
   knowledge: 'Knowledge',
-  notes: 'Notes',
+  notes: 'Notebooks',
   projects: 'Projects',
   subscriptions: 'Subscriptions',
-  excalidraw: 'Excalidraw',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   settings: 'Settings',
   schedules: 'Schedules',
   scheduleDocs: 'Schedule API Guide',
-  agentHistory: 'Agent Chat'
+  agentHistory: 'Agent Chat',
+  generativeUi: 'Generative UI'
 }
 
 const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
   dashboard: 'Board',
   knowledge: 'Board',
-  excalidraw: 'Board',
-  subscriptions: 'Finance'
+  subscriptions: 'Finance',
+  generativeUi: 'Automations'
 }
 
 export function TopBar({

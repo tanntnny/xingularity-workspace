@@ -15,10 +15,20 @@ import { ensureVaultAppDir } from './vaultData'
 
 interface GlobalSettings {
   lastVaultPath: string | null
+  savedVaults: SavedVaultRecord[]
 }
 
-interface VaultCoreSettings
-  extends Omit<AppSettings, 'projects' | 'projectIcons' | 'calendarTasks'> {
+interface SavedVaultRecord {
+  rootPath: string
+  addedAt: string
+  lastOpenedAt: string | null
+  isFavorite: boolean
+}
+
+interface VaultCoreSettings extends Omit<
+  AppSettings,
+  'projects' | 'projectIcons' | 'calendarTasks'
+> {
   projects?: Project[]
   projectIcons?: Record<string, AppSettings['projectIcons'][string]>
   calendarTasks?: CalendarTask[]
@@ -168,7 +178,8 @@ function normalizeProjectSubtask(input: unknown): ProjectSubtask | null {
   }
 
   const candidate = input as Partial<ProjectSubtask>
-  const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
+  const title =
+    typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
   const createdAt =
     typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
       ? candidate.createdAt
@@ -181,14 +192,20 @@ function normalizeProjectSubtask(input: unknown): ProjectSubtask | null {
   return {
     id: candidate.id,
     title,
-    description: typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
+    description:
+      typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
     completed: Boolean(candidate.completed),
     priority:
-      candidate.priority === 'low' || candidate.priority === 'medium' || candidate.priority === 'high'
+      candidate.priority === 'low' ||
+      candidate.priority === 'medium' ||
+      candidate.priority === 'high'
         ? candidate.priority
         : undefined,
     createdAt,
-    dueDate: typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : undefined
+    dueDate:
+      typeof candidate.dueDate === 'string' && candidate.dueDate.trim()
+        ? candidate.dueDate
+        : undefined
   }
 }
 
@@ -198,9 +215,12 @@ function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
   }
 
   const candidate = input as Partial<ProjectMilestone>
-  const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
+  const title =
+    typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
   const dueDate =
-    typeof candidate.dueDate === 'string' && candidate.dueDate.trim() ? candidate.dueDate : undefined
+    typeof candidate.dueDate === 'string' && candidate.dueDate.trim()
+      ? candidate.dueDate
+      : undefined
 
   if (!title || typeof candidate.id !== 'string' || !candidate.id.trim()) {
     return null
@@ -209,11 +229,14 @@ function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
   return {
     id: candidate.id,
     title,
-    description: typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
+    description:
+      typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
     collapsed: typeof candidate.collapsed === 'boolean' ? candidate.collapsed : undefined,
     dueDate,
     priority:
-      candidate.priority === 'low' || candidate.priority === 'medium' || candidate.priority === 'high'
+      candidate.priority === 'low' ||
+      candidate.priority === 'medium' ||
+      candidate.priority === 'high'
         ? candidate.priority
         : undefined,
     status:
@@ -237,7 +260,8 @@ function normalizeProject(input: unknown): Project[] {
   }
 
   const candidate = input as Partial<Project>
-  const name = typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : null
+  const name =
+    typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : null
   if (!name || typeof candidate.id !== 'string' || !candidate.id.trim()) {
     return []
   }
@@ -247,7 +271,9 @@ function normalizeProject(input: unknown): Project[] {
         .map((milestone) => normalizeProjectMilestone(milestone))
         .filter((milestone): milestone is ProjectMilestone => milestone !== null)
     : []
-  const completedMilestones = milestones.filter((milestone) => milestone.status === 'completed').length
+  const completedMilestones = milestones.filter(
+    (milestone) => milestone.status === 'completed'
+  ).length
   const progress =
     typeof candidate.progress === 'number' && Number.isFinite(candidate.progress)
       ? Math.max(0, Math.min(100, candidate.progress))
@@ -260,7 +286,10 @@ function normalizeProject(input: unknown): Project[] {
       id: candidate.id,
       name,
       summary: typeof candidate.summary === 'string' ? candidate.summary.trim() : '',
-      folderPath: typeof candidate.folderPath === 'string' && candidate.folderPath.trim() ? candidate.folderPath : undefined,
+      folderPath:
+        typeof candidate.folderPath === 'string' && candidate.folderPath.trim()
+          ? candidate.folderPath
+          : undefined,
       status:
         candidate.status === 'on-track' ||
         candidate.status === 'at-risk' ||
@@ -292,6 +321,122 @@ function isLegacyAppSettings(value: unknown): value is AppSettings {
   )
 }
 
+function normalizeSavedVaultRecord(input: unknown): SavedVaultRecord | null {
+  if (typeof input !== 'object' || input === null) {
+    return null
+  }
+
+  const candidate = input as Partial<SavedVaultRecord>
+  const rootPath =
+    typeof candidate.rootPath === 'string' && candidate.rootPath.trim().length > 0
+      ? path.resolve(candidate.rootPath)
+      : null
+
+  if (!rootPath) {
+    return null
+  }
+
+  return {
+    rootPath,
+    addedAt:
+      typeof candidate.addedAt === 'string' && candidate.addedAt.trim().length > 0
+        ? candidate.addedAt
+        : new Date().toISOString(),
+    lastOpenedAt:
+      typeof candidate.lastOpenedAt === 'string' && candidate.lastOpenedAt.trim().length > 0
+        ? candidate.lastOpenedAt
+        : null,
+    isFavorite: candidate.isFavorite === true
+  }
+}
+
+function normalizeGlobalSettings(parsed: Partial<GlobalSettings>): GlobalSettings {
+  const normalizedVaults = Array.isArray(parsed.savedVaults)
+    ? parsed.savedVaults
+        .map((item) => normalizeSavedVaultRecord(item))
+        .filter((item): item is SavedVaultRecord => item !== null)
+    : []
+  const savedVaults = new Map<string, SavedVaultRecord>()
+
+  for (const record of normalizedVaults) {
+    const existing = savedVaults.get(record.rootPath)
+    if (
+      !existing ||
+      (record.lastOpenedAt ?? '') > (existing.lastOpenedAt ?? '') ||
+      record.addedAt > existing.addedAt
+    ) {
+      savedVaults.set(record.rootPath, record)
+    }
+  }
+
+  const lastVaultPath =
+    typeof parsed.lastVaultPath === 'string' && parsed.lastVaultPath.trim().length > 0
+      ? path.resolve(parsed.lastVaultPath)
+      : null
+
+  if (lastVaultPath && !savedVaults.has(lastVaultPath)) {
+    savedVaults.set(lastVaultPath, {
+      rootPath: lastVaultPath,
+      addedAt: new Date().toISOString(),
+      lastOpenedAt: null,
+      isFavorite: false
+    })
+  }
+
+  return {
+    lastVaultPath,
+    savedVaults: Array.from(savedVaults.values())
+  }
+}
+
+function rememberGlobalVault(settings: GlobalSettings, rootPath: string): GlobalSettings {
+  const nextRootPath = path.resolve(rootPath)
+  const now = new Date().toISOString()
+  const existing = settings.savedVaults.find((item) => item.rootPath === nextRootPath)
+
+  return normalizeGlobalSettings({
+    lastVaultPath: nextRootPath,
+    savedVaults: [
+      ...settings.savedVaults.filter((item) => item.rootPath !== nextRootPath),
+      {
+        rootPath: nextRootPath,
+        addedAt: existing?.addedAt ?? now,
+        lastOpenedAt: now,
+        isFavorite: existing?.isFavorite === true
+      }
+    ]
+  })
+}
+
+function forgetGlobalVault(settings: GlobalSettings, rootPath: string): GlobalSettings {
+  const nextRootPath = path.resolve(rootPath)
+
+  return normalizeGlobalSettings({
+    lastVaultPath: settings.lastVaultPath === nextRootPath ? null : settings.lastVaultPath,
+    savedVaults: settings.savedVaults.filter((item) => item.rootPath !== nextRootPath)
+  })
+}
+
+function toggleFavoriteGlobalVault(settings: GlobalSettings, rootPath: string): GlobalSettings {
+  const nextRootPath = path.resolve(rootPath)
+  const existing = settings.savedVaults.find((item) => item.rootPath === nextRootPath)
+
+  if (!existing) {
+    return settings
+  }
+
+  return normalizeGlobalSettings({
+    lastVaultPath: settings.lastVaultPath,
+    savedVaults: [
+      ...settings.savedVaults.filter((item) => item.rootPath !== nextRootPath),
+      {
+        ...existing,
+        isFavorite: !existing.isFavorite
+      }
+    ]
+  })
+}
+
 export class SettingsStore {
   private readonly globalSettingsPath: string
   private static readonly CORE_SETTINGS_FILE = 'settings.json'
@@ -309,21 +454,37 @@ export class SettingsStore {
       const raw = await fs.readFile(this.globalSettingsPath, 'utf-8')
       const parsed = JSON.parse(raw) as GlobalSettings | AppSettings
       if (isLegacyAppSettings(parsed)) {
-        return { lastVaultPath: parsed.lastVaultPath ?? null }
+        return normalizeGlobalSettings({ lastVaultPath: parsed.lastVaultPath ?? null })
       }
-      return {
-        lastVaultPath: parsed?.lastVaultPath ?? null
-      }
+      return normalizeGlobalSettings(parsed)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('Failed to read global settings:', error)
       }
-      return { lastVaultPath: null }
+      return normalizeGlobalSettings({})
     }
   }
 
   async writeGlobal(next: GlobalSettings): Promise<void> {
-    await this.writeJsonFile(this.globalSettingsPath, next)
+    await this.writeJsonFile(this.globalSettingsPath, normalizeGlobalSettings(next))
+  }
+
+  async rememberVault(rootPath: string): Promise<GlobalSettings> {
+    const next = rememberGlobalVault(await this.readGlobal(), rootPath)
+    await this.writeGlobal(next)
+    return next
+  }
+
+  async forgetVault(rootPath: string): Promise<GlobalSettings> {
+    const next = forgetGlobalVault(await this.readGlobal(), rootPath)
+    await this.writeGlobal(next)
+    return next
+  }
+
+  async toggleFavoriteVault(rootPath: string): Promise<GlobalSettings> {
+    const next = toggleFavoriteGlobalVault(await this.readGlobal(), rootPath)
+    await this.writeGlobal(next)
+    return next
   }
 
   // ── Vault-specific settings ───────────────────────────────────────────────
@@ -369,7 +530,7 @@ export class SettingsStore {
       if (legacy) {
         const migrated = normalizeSettings({ ...legacy, lastVaultPath: vaultRoot })
         await this.persistVaultFiles(vaultRoot, migrated)
-        await this.writeGlobal({ lastVaultPath: legacy.lastVaultPath ?? vaultRoot })
+        await this.rememberVault(legacy.lastVaultPath ?? vaultRoot)
         return migrated
       }
 

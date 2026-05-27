@@ -17,7 +17,12 @@ const api: RendererVaultApi = {
   vault: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.vaultOpen),
     create: () => ipcRenderer.invoke(IPC_CHANNELS.vaultCreate),
-    restoreLast: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRestoreLast)
+    restoreLast: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRestoreLast),
+    listSaved: () => ipcRenderer.invoke(IPC_CHANNELS.vaultListSaved),
+    switchSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultSwitchSaved, rootPath),
+    toggleFavoriteSaved: (rootPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultToggleFavoriteSaved, rootPath),
+    removeSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultRemoveSaved, rootPath)
   },
   desktop: {
     chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),
@@ -28,11 +33,17 @@ const api: RendererVaultApi = {
     listTree: () => ipcRenderer.invoke(IPC_CHANNELS.listNoteTree),
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
     readNoteDocument: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNoteDocument, relPath),
+    readExcalidrawFileDocument: (relPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.readExcalidrawFileDocument, relPath),
     writeNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.writeNote, relPath, content),
     writeNoteDocument: (relPath, document): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.writeNoteDocument, relPath, document),
+    writeExcalidrawFileDocument: (relPath, document): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.writeExcalidrawFileDocument, relPath, document),
     createNote: (name) => ipcRenderer.invoke(IPC_CHANNELS.createNote, name),
     createNoteAtPath: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createNoteAtPath, relPath),
+    createExcalidrawFileAtPath: (relPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.createExcalidrawFileAtPath, relPath),
     createNoteWithTags: (name, tags) =>
       ipcRenderer.invoke(IPC_CHANNELS.createNoteWithTags, name, tags),
     createFolder: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.createFolder, relPath),
@@ -84,7 +95,13 @@ const api: RendererVaultApi = {
     listSessions: () => ipcRenderer.invoke(IPC_CHANNELS.excalidrawListSessions),
     saveSession: (session) => ipcRenderer.invoke(IPC_CHANNELS.excalidrawSaveSession, session),
     deleteSession: (sessionId) =>
-      ipcRenderer.invoke(IPC_CHANNELS.excalidrawDeleteSession, sessionId)
+      ipcRenderer.invoke(IPC_CHANNELS.excalidrawDeleteSession, sessionId),
+    importLegacySessions: () => ipcRenderer.invoke(IPC_CHANNELS.excalidrawImportLegacySessions)
+  },
+  generativeUi: {
+    listArtifacts: () => ipcRenderer.invoke(IPC_CHANNELS.generativeUiListArtifacts),
+    saveArtifact: (input) => ipcRenderer.invoke(IPC_CHANNELS.generativeUiSaveArtifact, input),
+    deleteArtifact: (id) => ipcRenderer.invoke(IPC_CHANNELS.generativeUiDeleteArtifact, id)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),

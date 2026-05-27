@@ -1,4 +1,5 @@
 import type { ProfileColor } from './profileColors'
+import type { GenerativeUiArtifact, SavedGenerativeUiArtifact } from './generativeUi'
 
 export type Maybe<T> = T | null
 
@@ -67,12 +68,21 @@ export interface NoteTreeFolder extends NoteTreeEntryBase {
   children: NoteTreeNode[]
 }
 
-export interface NoteTreeFile extends NoteTreeEntryBase {
+interface NoteTreeFileBase extends NoteTreeEntryBase {
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteTreeFile extends NoteTreeFileBase {
   kind: 'note'
   note: NoteListItem
 }
 
-export type NoteTreeNode = NoteTreeFolder | NoteTreeFile
+export interface NoteTreeExcalidrawFile extends NoteTreeFileBase {
+  kind: 'excalidraw'
+}
+
+export type NoteTreeNode = NoteTreeFolder | NoteTreeFile | NoteTreeExcalidrawFile
 
 export interface SearchResult {
   id: string
@@ -250,6 +260,11 @@ export interface ExcalidrawSession {
   title: string
   createdAt: string
   updatedAt: string
+  scene: ExcalidrawSessionScene
+}
+
+export interface StoredExcalidrawFileDocument {
+  version: 1
   scene: ExcalidrawSessionScene
 }
 
@@ -655,6 +670,26 @@ export interface VaultOpenResult {
   notes: NoteListItem[]
 }
 
+export interface SavedVaultSummary {
+  rootPath: string
+  name: string
+  addedAt: string
+  lastOpenedAt: Maybe<string>
+  isFavorite: boolean
+  isAvailable: boolean
+}
+
+export interface SavedVaultState {
+  currentVaultPath: Maybe<string>
+  vaults: SavedVaultSummary[]
+}
+
+export interface VaultRemoveResult {
+  removedPath: string
+  state: SavedVaultState
+  activation: Maybe<VaultOpenResult>
+}
+
 export interface CompleteNoteWithAiInput {
   notePath: string
   noteContent: string
@@ -824,6 +859,21 @@ export interface NoteBodyFrontmatterMigrationResult {
   }>
 }
 
+export interface LegacyExcalidrawImportResult {
+  imported: Array<{
+    sourceId: string
+    relPath: string
+  }>
+  skipped: Array<{
+    sourceId: string
+    reason: string
+  }>
+  failed: Array<{
+    sourceId: string
+    error: string
+  }>
+}
+
 export interface RendererVaultApi {
   ui: {
     platform: string
@@ -836,6 +886,10 @@ export interface RendererVaultApi {
     open: () => Promise<Maybe<VaultOpenResult>>
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
+    listSaved: () => Promise<SavedVaultState>
+    switchSaved: (rootPath: string) => Promise<VaultOpenResult>
+    toggleFavoriteSaved: (rootPath: string) => Promise<SavedVaultState>
+    removeSaved: (rootPath: string) => Promise<VaultRemoveResult>
   }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>
@@ -846,10 +900,16 @@ export interface RendererVaultApi {
     listTree: () => Promise<NoteTreeNode[]>
     readNote: (relPath: string) => Promise<string>
     readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
+    readExcalidrawFileDocument: (relPath: string) => Promise<StoredExcalidrawFileDocument>
     writeNote: (relPath: string, content: string) => Promise<void>
     writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
+    writeExcalidrawFileDocument: (
+      relPath: string,
+      document: StoredExcalidrawFileDocument
+    ) => Promise<void>
     createNote: (name: string) => Promise<string>
     createNoteAtPath: (relPath: string) => Promise<string>
+    createExcalidrawFileAtPath: (relPath: string) => Promise<string>
     createNoteWithTags: (name: string, tags: string[]) => Promise<string>
     createFolder: (relPath: string) => Promise<string>
     importNotes: () => Promise<NoteImportResult>
@@ -890,6 +950,15 @@ export interface RendererVaultApi {
     listSessions: () => Promise<ExcalidrawSession[]>
     saveSession: (session: ExcalidrawSession) => Promise<ExcalidrawSession>
     deleteSession: (sessionId: string) => Promise<void>
+    importLegacySessions: () => Promise<LegacyExcalidrawImportResult>
+  }
+  generativeUi: {
+    listArtifacts: () => Promise<SavedGenerativeUiArtifact[]>
+    saveArtifact: (input: {
+      artifact: GenerativeUiArtifact
+      id?: string
+    }) => Promise<SavedGenerativeUiArtifact>
+    deleteArtifact: (id: string) => Promise<void>
   }
   settings: {
     get: () => Promise<AppSettings>

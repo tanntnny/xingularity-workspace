@@ -1,5 +1,5 @@
 export interface NoteTreeSelectionEntry {
-  kind: 'note' | 'folder'
+  kind: 'note' | 'excalidraw' | 'folder'
   relPath: string
 }
 

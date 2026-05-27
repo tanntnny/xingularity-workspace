@@ -1,9 +1,9 @@
 import * as React from 'react'
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
-import { Check, ChevronRight, Circle, Command } from 'lucide-react'
+import { Check, ChevronRight, Circle } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
-import { Kbd } from './kbd'
+import { Shortcut, type ShortcutKey } from './kbd'
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -181,79 +181,16 @@ const ContextMenuSeparator = React.forwardRef<
 ))
 ContextMenuSeparator.displayName = ContextMenuPrimitive.Separator.displayName
 
-type ContextMenuShortcutKey =
-  | 'cmd'
-  | 'backspace'
-  | 'delete'
-  | 'shift'
-  | 'option'
-  | 'ctrl'
-  | string
-
-const renderShortcutKey = (key: ContextMenuShortcutKey): React.ReactElement => {
-  const normalized = key.toLowerCase()
-
-  if (normalized === 'cmd') {
-    return (
-      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
-        <Command className="h-3 w-3" />
-      </Kbd>
-    )
-  }
-
-  if (normalized === 'backspace') {
-    return (
-      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
-        ⌫
-      </Kbd>
-    )
-  }
-
-  if (normalized === 'delete') {
-    return (
-      <Kbd key={key} className="h-5 min-w-[1.25rem] px-1">
-        ⌦
-      </Kbd>
-    )
-  }
-
-  if (normalized === 'shift') {
-    return <Kbd key={key}>Shift</Kbd>
-  }
-
-  if (normalized === 'option') {
-    return <Kbd key={key}>Opt</Kbd>
-  }
-
-  if (normalized === 'ctrl') {
-    return <Kbd key={key}>Ctrl</Kbd>
-  }
-
-  return <Kbd key={key}>{key}</Kbd>
-}
-
 const ContextMenuShortcut = ({
   keys,
   className,
-  children,
   ...props
 }: React.HTMLAttributes<HTMLSpanElement> & {
-  keys?: ContextMenuShortcutKey[]
-}): React.ReactElement => {
-  return (
-    <span
-      className={cn('ml-auto flex items-center gap-1 text-xs text-[var(--muted)]', className)}
-      {...props}
-    >
-      {keys?.length ? keys.map((key) => renderShortcutKey(key)) : children}
-    </span>
-  )
+  keys?: readonly ShortcutKey[]
+}): React.ReactElement | null => {
+  return <Shortcut keys={keys} className={cn('ml-auto shrink-0', className)} {...props} />
 }
 ContextMenuShortcut.displayName = 'ContextMenuShortcut'
-
-function isDeleteShortcut(event: { metaKey: boolean; key: string }): boolean {
-  return event.metaKey && (event.key === 'Backspace' || event.key === 'Delete')
-}
 
 export {
   ContextMenu,
@@ -271,6 +208,5 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuRadioGroup,
-  isDeleteShortcut
+  ContextMenuRadioGroup
 }

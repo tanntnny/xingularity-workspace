@@ -1,4 +1,4 @@
-import { type CSSProperties, ReactElement, useState } from 'react'
+import { type CSSProperties, ReactElement, useMemo, useState } from 'react'
 import { ButtonBase } from '@mui/material'
 import {
   Bot,
@@ -22,22 +22,9 @@ import {
   SidebarMenuButton,
   SidebarSeparator
 } from './ui/sidebar'
-import { Kbd } from './ui/kbd'
+import { Shortcut, type ShortcutKey } from './ui/kbd'
 import appLogo from '../../../../assets/workspace_letter.png'
-
-export type AppPage =
-  | 'dashboard'
-  | 'knowledge'
-  | 'notes'
-  | 'projects'
-  | 'subscriptions'
-  | 'excalidraw'
-  | 'weeklyPlan'
-  | 'calendar'
-  | 'settings'
-  | 'schedules'
-  | 'scheduleDocs'
-  | 'agentHistory'
+import { ALL_APP_PAGES, type AppPage } from '../navigation'
 
 interface AppSidebarProps {
   activePage: AppPage
@@ -48,7 +35,9 @@ interface AppSidebarProps {
   projectsCount: number
   calendarUndoneCount: number
   profileName: string
+  activeVaultPath?: string | null
   isLocked?: boolean
+  availablePages?: readonly AppPage[]
   className?: string
   collapsible?: 'offcanvas' | 'icon' | 'none'
 }
@@ -56,7 +45,7 @@ interface AppSidebarProps {
 type SidebarPageItem = {
   id: AppPage
   label: string
-  shortcut?: string
+  shortcut?: readonly ShortcutKey[]
 }
 
 type SidebarSection = {
@@ -66,35 +55,30 @@ type SidebarSection = {
   items: SidebarPageItem[]
 }
 
-const EXCALIDRAW_PAGE: SidebarPageItem = {
-  id: 'excalidraw',
-  label: 'Excalidraw'
-}
-
 const BOARD_PAGES: SidebarPageItem[] = [
-  { id: 'dashboard', label: 'Dashboard', shortcut: '⌘D' },
-  { id: 'knowledge', label: 'Knowledge', shortcut: '⌘K' },
-  EXCALIDRAW_PAGE
+  { id: 'dashboard', label: 'Dashboard', shortcut: ['cmd', 'd'] },
+  { id: 'knowledge', label: 'Knowledge', shortcut: ['cmd', 'k'] }
 ]
 
 const HOME_PAGES: SidebarPageItem[] = [
-  { id: 'notes', label: 'Notes', shortcut: '⌘1' },
-  { id: 'projects', label: 'Projects', shortcut: '⌘2' },
-  { id: 'calendar', label: 'Calendar', shortcut: '⌘3' },
-  { id: 'weeklyPlan', label: 'Weekly Plan', shortcut: '⌘4' }
+  { id: 'notes', label: 'Notebooks', shortcut: ['cmd', '1'] },
+  { id: 'projects', label: 'Projects', shortcut: ['cmd', '2'] },
+  { id: 'calendar', label: 'Calendar', shortcut: ['cmd', '3'] },
+  { id: 'weeklyPlan', label: 'Weekly Plan', shortcut: ['cmd', '4'] }
 ]
 
 const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscriptions' }]
 
 const DOCUMENT_PAGES: SidebarPageItem[] = [
-  { id: 'schedules', label: 'Schedules', shortcut: '⌘5' },
-  { id: 'agentHistory', label: 'Agent Chat', shortcut: '⌘I' }
+  { id: 'schedules', label: 'Schedules', shortcut: ['cmd', '5'] },
+  { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] },
+  { id: 'generativeUi', label: 'Generative UI' }
 ]
 
 const SETTINGS_PAGE: SidebarPageItem = {
   id: 'settings',
   label: 'Settings',
-  shortcut: '⌘,'
+  shortcut: ['cmd', ',']
 }
 
 const SIDEBAR_SECTIONS: SidebarSection[] = [
@@ -168,24 +152,22 @@ export function AppSidebar({
   projectsCount,
   calendarUndoneCount,
   profileName,
+  activeVaultPath = null,
   isLocked = false,
+  availablePages = ALL_APP_PAGES,
   className,
   collapsible = 'icon'
 }: AppSidebarProps): ReactElement {
+  const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
   const notesCountLabel = toBadgeLabel(notesCount)
   const projectsCountLabel = toBadgeLabel(projectsCount)
   const calendarUndoneCountLabel = toBadgeLabel(calendarUndoneCount)
   const welcomeName = profileName.trim() || 'there'
+  const sidebarVaultLabel = isLocked ? 'Select vault' : (activeVaultPath ?? 'No vault selected')
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
 
-  const renderShortcut = (shortcut: string): ReactElement => (
-    <>
-      <span className="text-[12px] leading-none">{shortcut.slice(0, 1)}</span>
-      <span className="text-[11px] leading-none">{shortcut.slice(1)}</span>
-    </>
-  )
   const toggleSection = (sectionId: SidebarSection['id']): void => {
     setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }))
   }
@@ -206,10 +188,15 @@ export function AppSidebar({
     return null
   }
 
-  const renderSection = (section: SidebarSection): ReactElement => {
+  const renderSection = (section: SidebarSection): ReactElement | null => {
+    const visibleItems = section.items.filter((item) => availablePageSet.has(item.id))
     const isOpen = openSections[section.id]
-    const activeInSection = section.items.some((item) => item.id === activePage)
+    const activeInSection = visibleItems.some((item) => item.id === activePage)
     const ChevronIcon = isOpen ? ChevronDown : ChevronRight
+
+    if (visibleItems.length === 0) {
+      return null
+    }
 
     return (
       <SidebarGroup
@@ -249,7 +236,7 @@ export function AppSidebar({
           <div className="sidebar-section-stack">
             <span className="sidebar-section-rail" aria-hidden="true" />
             <SidebarMenu className="sidebar-section-items">
-              {section.items.map((page) => (
+              {visibleItems.map((page) => (
                 <SidebarMenuItem key={page.id}>
                   <SidebarMenuButton
                     asChild
@@ -308,7 +295,9 @@ export function AppSidebar({
             </p>
             <div className="flex items-center gap-1.5 pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
-              <span>Status: {isLocked ? 'Select vault' : 'Synced'}</span>
+              <span className="min-w-0 truncate" title={sidebarVaultLabel}>
+                {sidebarVaultLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -324,40 +313,50 @@ export function AppSidebar({
           title="Open command palette"
         >
           <Search size={15} className="shrink-0 opacity-70" style={{ color: 'var(--accent)' }} />
-          <span className="min-w-0 flex-1 text-sm text-sidebar-foreground/70">
+          <span className="min-w-0 flex-1 whitespace-nowrap text-sm text-sidebar-foreground/70">
             Command palette...
           </span>
+          <Shortcut keys={['cmd', 'p']} className="ml-auto shrink-0" />
         </button>
       </div>
       <SidebarSeparator />
 
-      <SidebarContent>{SIDEBAR_SECTIONS.map(renderSection)}</SidebarContent>
+      <SidebarContent>
+        {SIDEBAR_SECTIONS.filter((section) =>
+          section.items.some((item) => availablePageSet.has(item.id))
+        ).map(renderSection)}
+      </SidebarContent>
 
-      <SidebarSeparator />
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={activePage === SETTINGS_PAGE.id}
-              onClick={() => onChange(SETTINGS_PAGE.id)}
-              tooltip={SETTINGS_PAGE.label}
-            >
-              <ButtonBase
-                className="sidebar-menu-card"
-                data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
-                sx={SIDEBAR_MENU_BUTTON_SX}
-                disabled={isLocked}
-              >
-                <span>{SETTINGS_PAGE.label}</span>
-                <Kbd className="ml-auto shrink-0 gap-0.5 group-data-[collapsible=icon]:hidden">
-                  {renderShortcut(SETTINGS_PAGE.shortcut ?? '')}
-                </Kbd>
-              </ButtonBase>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      {availablePageSet.has(SETTINGS_PAGE.id) ? (
+        <>
+          <SidebarSeparator />
+          <SidebarFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={activePage === SETTINGS_PAGE.id}
+                  onClick={() => onChange(SETTINGS_PAGE.id)}
+                  tooltip={SETTINGS_PAGE.label}
+                >
+                  <ButtonBase
+                    className="sidebar-menu-card"
+                    data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
+                    sx={SIDEBAR_MENU_BUTTON_SX}
+                    disabled={isLocked}
+                  >
+                    <span>{SETTINGS_PAGE.label}</span>
+                    <Shortcut
+                      keys={SETTINGS_PAGE.shortcut}
+                      className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
+                    />
+                  </ButtonBase>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </>
+      ) : null}
     </Sidebar>
   )
 }

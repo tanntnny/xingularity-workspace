@@ -5,10 +5,10 @@ import { TaskEditDialog } from './CalendarMonthView'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
-import { isDeleteShortcut } from './ui/context-menu'
 import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
+import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 interface UnscheduledTaskListProps {
   tasks: CalendarTask[]

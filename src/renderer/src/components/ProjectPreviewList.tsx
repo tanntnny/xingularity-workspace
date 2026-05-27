@@ -15,10 +15,10 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
-  ContextMenuTrigger,
-  isDeleteShortcut
+  ContextMenuTrigger
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { cn } from '../lib/utils'

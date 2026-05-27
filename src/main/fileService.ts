@@ -2,6 +2,14 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import {
+  createEmptyExcalidrawFileDocument,
+  EXCALIDRAW_FILE_EXTENSION,
+  isExcalidrawPath,
+  parseStoredExcalidrawFileDocument,
+  serializeStoredExcalidrawFileDocument,
+  stripNotebookFileExtension
+} from '../shared/excalidrawFile'
+import {
   createEmptyNoteDocument,
   createStoredNoteDocumentFromMarkdown,
   createStoredNoteDocumentFromText,
@@ -28,9 +36,11 @@ import {
   ImportedNoteResult,
   BlockNoteMigrationResult,
   NoteListItem,
+  NoteTreeExcalidrawFile,
   NoteTreeFile,
   NoteTreeFolder,
   NoteTreeNode,
+  StoredExcalidrawFileDocument,
   StoredNoteDocument
 } from '../shared/types'
 
@@ -68,6 +78,13 @@ export class FileService {
     return parseStoredNoteDocument(raw)
   }
 
+  async readExcalidrawFileDocument(relPathInput: string): Promise<StoredExcalidrawFileDocument> {
+    const relPath = sanitizeExcalidrawPath(relPathInput)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    const raw = await fs.readFile(absolutePath, 'utf-8')
+    return parseStoredExcalidrawFileDocument(raw)
+  }
+
   async writeNote(relPathInput: string, content: string): Promise<void> {
     const relPath = sanitizeNotePath(relPathInput)
     const existing = await this.readNoteDocument(relPath)
@@ -79,6 +96,17 @@ export class FileService {
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
     await fs.writeFile(absolutePath, serializeStoredNoteDocument(document), 'utf-8')
+    this.onInternalWrite(relPath)
+  }
+
+  async writeExcalidrawFileDocument(
+    relPathInput: string,
+    document: StoredExcalidrawFileDocument
+  ): Promise<void> {
+    const relPath = sanitizeExcalidrawPath(relPathInput)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.writeFile(absolutePath, serializeStoredExcalidrawFileDocument(document), 'utf-8')
     this.onInternalWrite(relPath)
   }
 
@@ -94,6 +122,19 @@ export class FileService {
     await fs.writeFile(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument()), {
       flag: 'wx'
     })
+    this.onInternalWrite(relPath)
+    return relPath
+  }
+
+  async createExcalidrawFileAtPath(relPathInput: string): Promise<string> {
+    const relPath = sanitizeExcalidrawPath(relPathInput)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.writeFile(
+      absolutePath,
+      serializeStoredExcalidrawFileDocument(createEmptyExcalidrawFileDocument()),
+      { flag: 'wx' }
+    )
     this.onInternalWrite(relPath)
     return relPath
   }
@@ -374,6 +415,15 @@ export function sanitizeNotePath(input: string): string {
   return normalized
 }
 
+export function sanitizeExcalidrawPath(input: string): string {
+  const parsed = notePathSchema.parse(input)
+  const normalized = sanitizeEntryPath(parsed)
+  if (!isExcalidrawPath(normalized)) {
+    throw new Error(`Only ${EXCALIDRAW_FILE_EXTENSION} drawings are supported`)
+  }
+  return normalized
+}
+
 export function sanitizeEntryPath(input: string): string {
   const parsed = genericPathSchema.parse(input)
   return assertSafeRelativePath(parsed)
@@ -482,6 +532,7 @@ async function listTreeNodes(root: string, currentDir: string): Promise<NoteTree
   const entries = await fs.readdir(currentDir, { withFileTypes: true })
   const folders: NoteTreeFolder[] = []
   const notes: NoteTreeFile[] = []
+  const drawings: NoteTreeExcalidrawFile[] = []
 
   for (const entry of entries) {
     const absolutePath = path.join(currentDir, entry.name)
@@ -505,14 +556,30 @@ async function listTreeNodes(root: string, currentDir: string): Promise<NoteTree
         kind: 'note',
         relPath: note.relPath,
         name: note.name,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
         note
+      })
+      continue
+    }
+
+    if (entry.isFile() && isExcalidrawPath(entry.name)) {
+      const stats = await fs.stat(absolutePath)
+      drawings.push({
+        id: `excalidraw:${relPath}`,
+        kind: 'excalidraw',
+        relPath,
+        name: entry.name,
+        createdAt: stats.birthtime.toISOString(),
+        updatedAt: stats.mtime.toISOString()
       })
     }
   }
 
   folders.sort((left, right) => left.name.localeCompare(right.name))
   notes.sort((left, right) => left.name.localeCompare(right.name))
-  return [...folders, ...notes]
+  drawings.sort((left, right) => left.name.localeCompare(right.name))
+  return [...folders, ...notes, ...drawings]
 }
 
 async function readNoteTreeFile(root: string, absolutePath: string): Promise<NoteListItem> {
@@ -543,6 +610,27 @@ async function findAvailableNoteRelPath(root: string, preferredRelPath: string):
   while (await fileExists(joinSafe(root, nextRelPath))) {
     nextRelPath = normalizeRelativePath(
       `${baseDir === '.' ? '' : `${baseDir}/`}${baseName}-${suffix}${NOTE_FILE_EXTENSION}`
+    )
+    suffix += 1
+  }
+
+  return nextRelPath
+}
+
+export async function findAvailableExcalidrawRelPath(
+  root: string,
+  preferredRelPath: string
+): Promise<string> {
+  const baseDir = path.dirname(preferredRelPath)
+  const baseName = path.basename(stripNotebookFileExtension(preferredRelPath))
+  let nextRelPath = normalizeRelativePath(
+    `${baseDir === '.' ? '' : `${baseDir}/`}${baseName}${EXCALIDRAW_FILE_EXTENSION}`
+  )
+  let suffix = 2
+
+  while (await fileExists(joinSafe(root, nextRelPath))) {
+    nextRelPath = normalizeRelativePath(
+      `${baseDir === '.' ? '' : `${baseDir}/`}${baseName}-${suffix}${EXCALIDRAW_FILE_EXTENSION}`
     )
     suffix += 1
   }

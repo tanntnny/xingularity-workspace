@@ -10,7 +10,6 @@ import type { NoteOutlineItem } from '../lib/noteOutline'
 
 interface EditorPageProps {
   editorRef?: RefObject<NoteEditorHandle | null>
-  editorSessionKey: number
   initialContent?: string | null
   notePath: string
   tags: string[]
@@ -31,7 +30,6 @@ interface EditorPageProps {
 
 export function EditorPage({
   editorRef,
-  editorSessionKey,
   initialContent,
   notePath,
   tags,
@@ -132,7 +130,6 @@ export function EditorPage({
       <div className="relative px-8 pb-8 h-full">
         <Editor
           ref={editorRef}
-          key={`${notePath}:${editorSessionKey}`}
           initialContent={initialContent}
           onDirty={onDirty}
           onSnapshotChange={onSnapshotChange}

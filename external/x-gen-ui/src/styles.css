@@ -1,0 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Sora:wght@600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #172033;
+  background: #eef2e6;
+  font-family: "Instrument Sans", ui-sans-serif, system-ui;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+.cm-editor {
+  min-height: 420px;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.react-flow__node {
+  border-radius: 12px;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  padding: 8px 12px;
+  font-weight: 700;
+}

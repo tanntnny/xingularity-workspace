@@ -27,11 +27,11 @@ import {
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
-import { isDeleteShortcut } from '../components/ui/context-menu'
 import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
+import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 type ExcalidrawTheme = typeof THEME.LIGHT | typeof THEME.DARK
 type ExcalidrawApi = Parameters<NonNullable<ComponentProps<typeof Excalidraw>['excalidrawAPI']>>[0]

@@ -18,6 +18,7 @@ import {
   FolderOpen,
   FolderPlus,
   MoreHorizontal,
+  PenTool,
   Pencil,
   Trash2
 } from 'lucide-react'
@@ -29,7 +30,7 @@ import {
   type NodeApi
 } from 'react-arborist'
 import { createPortal } from 'react-dom'
-import { stripNoteExtension } from '../../../shared/noteDocument'
+import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import type { NativeMenuItemDescriptor, NoteTreeNode } from '../../../shared/types'
 import {
   ContextMenu,
@@ -71,8 +72,13 @@ interface NotesTreeViewProps {
   onSelectionChange: (entries: NoteTreeSelection) => void
   onOpenNote: (relPath: string) => void
   onCreateNote: (parentDir: string) => void
+  onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
-  onRenamePath: (relPath: string, nextName: string, kind: 'note' | 'folder') => void
+  onRenamePath: (
+    relPath: string,
+    nextName: string,
+    kind: 'note' | 'excalidraw' | 'folder'
+  ) => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
 }
@@ -88,6 +94,7 @@ export function NotesTreeView({
   onSelectionChange,
   onOpenNote,
   onCreateNote,
+  onCreateExcalidraw,
   onCreateFolder,
   onRenamePath,
   onDeleteEntries,
@@ -289,7 +296,9 @@ export function NotesTreeView({
     }
 
     const label =
-      previewEntry.kind === 'folder' ? previewEntry.name : stripNoteExtension(previewEntry.name)
+      previewEntry.kind === 'folder'
+        ? previewEntry.name
+        : stripNotebookFileExtension(previewEntry.name)
 
     return createPortal(
       <div className="pointer-events-none fixed inset-0 z-[200]">
@@ -303,6 +312,8 @@ export function NotesTreeView({
           <div className="flex items-center gap-2 text-sm text-[var(--text)]">
             {previewEntry.kind === 'folder' ? (
               <Folder className="h-4 w-4 shrink-0 text-[var(--accent)]" strokeWidth={1.9} />
+            ) : previewEntry.kind === 'excalidraw' ? (
+              <PenTool className="h-4 w-4 shrink-0 text-[var(--muted)]" strokeWidth={1.9} />
             ) : (
               <FileText className="h-4 w-4 shrink-0 text-[var(--muted)]" strokeWidth={1.9} />
             )}
@@ -320,7 +331,7 @@ export function NotesTreeView({
   if (tree.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-sm text-[var(--muted)]">
-        No notes or folders yet
+        No notebooks or folders yet
       </div>
     )
   }
@@ -418,7 +429,7 @@ export function NotesTreeView({
             onSelectionChange(nextSelection)
           }}
           onActivate={(node) => {
-            if (node.data.kind === 'note') {
+            if (node.data.kind !== 'folder') {
               onOpenNote(node.data.relPath)
               return
             }
@@ -429,7 +440,7 @@ export function NotesTreeView({
               return false
             }
 
-            if (parentNode.data.kind === 'note') {
+            if (parentNode.data.kind !== 'folder') {
               return true
             }
 
@@ -463,6 +474,7 @@ export function NotesTreeView({
               {...props}
               isEditing={editingId === props.node.id}
               onCreateNote={onCreateNote}
+              onCreateExcalidraw={onCreateExcalidraw}
               onCreateFolder={onCreateFolder}
               onCancelEditing={() => setEditingId(null)}
               onCommitRename={(value) => {
@@ -487,6 +499,7 @@ function TreeNode({
   dragHandle,
   isEditing,
   onCreateNote,
+  onCreateExcalidraw,
   onCreateFolder,
   onCancelEditing,
   onCommitRename,
@@ -497,6 +510,7 @@ function TreeNode({
 }: NodeRendererProps<NoteTreeNode> & {
   isEditing: boolean
   onCreateNote: (parentDir: string) => void
+  onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
   onCancelEditing: () => void
   onCommitRename: (value: string) => void
@@ -505,7 +519,12 @@ function TreeNode({
   useNativeMenus: boolean
   treeRef: RefObject<TreeApi<NoteTreeNode> | null>
 }): ReactElement {
-  const parentDir = node.data.kind === 'folder' ? node.data.relPath : node.data.note.dir
+  const parentDir =
+    node.data.kind === 'folder'
+      ? node.data.relPath
+      : node.data.relPath.includes('/')
+        ? node.data.relPath.slice(0, node.data.relPath.lastIndexOf('/'))
+        : ''
   const isFolder = node.data.kind === 'folder'
   const isProtected = Boolean(node.data.isProtected)
   const canCreateChildren = !isProtected || node.data.protectionKind === 'project-folder'
@@ -571,6 +590,13 @@ function TreeNode({
         return
       }
       onCreateNote(parentDir)
+      return
+    }
+    if (actionId === 'create-excalidraw') {
+      if (!canCreateChildren) {
+        return
+      }
+      onCreateExcalidraw(parentDir)
       return
     }
     if (actionId === 'create-folder') {
@@ -728,13 +754,13 @@ function TreeNode({
               <Folder className={cn(TREE_ICON_CLASS, 'text-[var(--accent)]')} strokeWidth={1.9} />
             )
           ) : (
-            <FileText className={cn(TREE_ICON_CLASS, 'text-[var(--muted)]')} strokeWidth={1.9} />
+            renderTreeFileIcon(node.data.kind)
           )}
           {isEditing ? (
             <TreeNodeInput node={node} onCancel={onCancelEditing} onCommit={onCommitRename} />
           ) : (
             <span className="block min-w-0 flex-1 truncate">
-              {isFolder ? node.data.name : stripNoteExtension(node.data.name)}
+              {isFolder ? node.data.name : stripNotebookFileExtension(node.data.name)}
             </span>
           )}
           {!isEditing && !isProtected ? (
@@ -747,8 +773,8 @@ function TreeNode({
                   event.stopPropagation()
                 }}
                 onClick={(event) => void handleNativeMenuButtonClick(event)}
-                title={`Open ${isFolder ? 'folder' : 'note'} menu`}
-                aria-label={`Open ${isFolder ? 'folder' : 'note'} menu for ${stripNoteExtension(node.data.name)}`}
+                title={`Open ${getTreeNodeKindLabel(node.data.kind)} menu`}
+                aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
@@ -765,8 +791,8 @@ function TreeNode({
                     onClick={(event) => {
                       event.stopPropagation()
                     }}
-                    title={`Open ${isFolder ? 'folder' : 'note'} menu`}
-                    aria-label={`Open ${isFolder ? 'folder' : 'note'} menu for ${stripNoteExtension(node.data.name)}`}
+                    title={`Open ${getTreeNodeKindLabel(node.data.kind)} menu`}
+                    aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
@@ -791,6 +817,21 @@ function TreeNode({
                       >
                         <FileText className="mr-2 h-4 w-4" />
                         New note
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={TREE_DROPDOWN_ITEM_CLASS}
+                        onPointerDownCapture={(event) =>
+                          handleDropdownMenuAction(event, 'create-excalidraw')
+                        }
+                        onClick={(event) => handleDropdownMenuAction(event, 'create-excalidraw')}
+                        onKeyDown={(event) =>
+                          handleDropdownMenuKeyDown(event, 'create-excalidraw')
+                        }
+                      >
+                        <PenTool className="mr-2 h-4 w-4" />
+                        New drawing
                       </button>
                       <button
                         type="button"
@@ -853,6 +894,10 @@ function TreeNode({
             <ContextMenuItem onSelect={() => handleMenuAction('create-note')}>
               <FileText className="mr-2 h-4 w-4" />
               New note
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => handleMenuAction('create-excalidraw')}>
+              <PenTool className="mr-2 h-4 w-4" />
+              New drawing
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => handleMenuAction('create-folder')}>
               <FolderPlus className="mr-2 h-4 w-4" />
@@ -924,7 +969,7 @@ function TreeNodeInput({
       type="text"
       data-testid={`note-tree-input:${node.data.relPath}`}
       defaultValue={
-        node.data.kind === 'folder' ? node.data.name : stripNoteExtension(node.data.name)
+        node.data.kind === 'folder' ? node.data.name : stripNotebookFileExtension(node.data.name)
       }
       className="h-7 flex-1 border border-[var(--accent-line)] bg-[var(--panel)] px-2 text-sm outline-none"
       onFocus={(event) => event.currentTarget.select()}
@@ -972,7 +1017,7 @@ function resolveNodeById(nodes: NoteTreeNode[], id: string): NoteTreeNode | null
   return null
 }
 
-function toTreeId(kind: 'note' | 'folder', relPath: string): string {
+function toTreeId(kind: 'note' | 'excalidraw' | 'folder', relPath: string): string {
   return `${kind}:${relPath}`
 }
 
@@ -999,6 +1044,7 @@ function buildNotesTreeMenuItems(
   if (canCreateChildren) {
     items.push(
       { id: 'create-note', label: 'New note' },
+      { id: 'create-excalidraw', label: 'New drawing' },
       { id: 'create-folder', label: 'New folder' }
     )
   }
@@ -1015,4 +1061,24 @@ function buildNotesTreeMenuItems(
   }
 
   return items
+}
+
+function renderTreeFileIcon(kind: NoteTreeNode['kind']): ReactElement {
+  if (kind === 'excalidraw') {
+    return <PenTool className={cn(TREE_ICON_CLASS, 'text-[var(--muted)]')} strokeWidth={1.9} />
+  }
+
+  return <FileText className={cn(TREE_ICON_CLASS, 'text-[var(--muted)]')} strokeWidth={1.9} />
+}
+
+function getTreeNodeKindLabel(kind: NoteTreeNode['kind']): string {
+  if (kind === 'folder') {
+    return 'folder'
+  }
+
+  if (kind === 'excalidraw') {
+    return 'drawing'
+  }
+
+  return 'note'
 }

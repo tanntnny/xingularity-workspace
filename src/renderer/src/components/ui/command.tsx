@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { type DialogProps } from '@radix-ui/react-dialog'
 import { Command as CommandPrimitive } from 'cmdk'
-import { Search } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
-import { Dialog, DialogContent } from './dialog'
+import { Shortcut, type ShortcutKey } from './kbd'
+import { Pallete, PalleteSearchBar, palleteInputClassName } from './pallete'
 
 const Command = React.forwardRef<
   React.ComponentRef<typeof CommandPrimitive>,
@@ -23,35 +23,30 @@ Command.displayName = CommandPrimitive.displayName
 
 const CommandDialog = ({ children, ...props }: DialogProps): React.ReactElement => {
   return (
-    <Dialog {...props}>
-      <DialogContent className="overflow-hidden border-[color:color-mix(in_srgb,var(--accent-line)_24%,var(--line))] p-0">
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-[var(--muted-foreground)] [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[data-cmdk-input-wrapper]_svg]:h-5 [&_[data-cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
-          {children}
-        </Command>
-      </DialogContent>
-    </Dialog>
+    <Pallete {...props} aria-label="Command dialog">
+      <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-[var(--muted-foreground)] [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[data-cmdk-input-wrapper]_svg]:h-5 [&_[data-cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+        {children}
+      </Command>
+    </Pallete>
   )
 }
 
 const CommandInput = React.forwardRef<
   React.ComponentRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
-  <div
-    className="bg-[color:color-mix(in_srgb,var(--accent-soft)_36%,transparent)] flex items-center border-b border-[color:color-mix(in_srgb,var(--accent-line)_22%,var(--line))] px-3"
-    data-cmdk-input-wrapper=""
-  >
-    <Search className="mr-2 h-4 w-4 shrink-0 text-[var(--accent)] opacity-75" />
-    <CommandPrimitive.Input
-      ref={ref}
-      className={cn(
-        'flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-[var(--muted-foreground)] disabled:cursor-not-allowed disabled:opacity-50',
-        className
-      )}
-      {...props}
-    />
-  </div>
-))
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input> & {
+    bare?: boolean
+  }
+>(({ className, bare = false, ...props }, ref) => {
+  const input = (
+    <CommandPrimitive.Input ref={ref} className={cn(palleteInputClassName, className)} {...props} />
+  )
+
+  if (bare) {
+    return input
+  }
+
+  return <PalleteSearchBar data-cmdk-input-wrapper="">{input}</PalleteSearchBar>
+})
 
 CommandInput.displayName = CommandPrimitive.Input.displayName
 
@@ -125,12 +120,17 @@ const CommandItem = React.forwardRef<
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
 const CommandShortcut = ({
+  keys,
   className,
   ...props
-}: React.HTMLAttributes<HTMLSpanElement>): React.ReactElement => {
+}: React.HTMLAttributes<HTMLSpanElement> & {
+  keys?: readonly ShortcutKey[]
+}): React.ReactElement | null => {
   return (
-    <span
-      className={cn('ml-auto text-xs tracking-widest text-[var(--muted-foreground)]', className)}
+    <Shortcut
+      keys={keys}
+      className={cn('ml-auto shrink-0', className)}
+      keyClassName="[&_svg]:h-2.5 [&_svg]:w-2.5"
       {...props}
     />
   )

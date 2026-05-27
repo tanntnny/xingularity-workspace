@@ -38,7 +38,7 @@ test.describe('vault gate', () => {
       await expect(page.getByTestId('vault-required-page')).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Select a vault first' })).toBeVisible()
       await expect(page.getByTestId('vault-required-open')).toBeVisible()
-      await expect(page.getByTestId('vault-required-create')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Manage Vaults' })).toBeVisible()
 
       await expect(page.getByRole('button', { name: 'Open command palette' })).toBeDisabled()
       await expect(page.getByTestId('sidebar-page:dashboard')).toBeDisabled()

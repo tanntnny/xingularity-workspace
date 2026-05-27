@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronRight, Circle } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
+import { Shortcut, type ShortcutKey } from './kbd'
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 
@@ -161,10 +162,22 @@ const DropdownMenuSeparator = React.forwardRef<
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
 
 const DropdownMenuShortcut = ({
+  keys,
+  children,
   className,
   ...props
-}: React.HTMLAttributes<HTMLSpanElement>): React.ReactElement => {
-  return <span className={cn('ml-auto text-xs tracking-widest opacity-60', className)} {...props} />
+}: React.HTMLAttributes<HTMLSpanElement> & {
+  keys?: readonly ShortcutKey[]
+}): React.ReactElement => {
+  if (keys?.length) {
+    return <Shortcut keys={keys} className={cn('ml-auto shrink-0', className)} {...props} />
+  }
+
+  return (
+    <span className={cn('ml-auto text-xs tracking-widest opacity-60', className)} {...props}>
+      {children}
+    </span>
+  )
 }
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut'
 

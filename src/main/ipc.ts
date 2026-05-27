@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
+import { GenerativeUiArtifactSchema } from '../shared/generativeUi'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { CALENDAR_TASK_TYPE_VALUES } from '../shared/types'
 import { VaultRuntime } from './runtime'
@@ -90,12 +91,20 @@ const excalidrawSceneSchema = z.object({
   appState: z.record(z.string(), z.unknown()).nullable().optional(),
   files: z.record(z.string(), z.unknown()).optional()
 })
+const excalidrawFileDocumentSchema = z.object({
+  version: z.literal(1),
+  scene: excalidrawSceneSchema
+})
 const excalidrawSessionSchema = z.object({
   id: z.string().min(1).max(200),
   title: z.string().min(1).max(200),
   createdAt: z.string().min(1).max(100),
   updatedAt: z.string().min(1).max(100),
   scene: excalidrawSceneSchema
+})
+const generativeUiSaveArtifactSchema = z.object({
+  id: z.string().min(1).max(200).optional(),
+  artifact: GenerativeUiArtifactSchema
 })
 const approveToolInputSchema = z.object({
   requestId: z.string().min(1).max(200).optional(),
@@ -317,6 +326,22 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.restoreLast()
   })
 
+  ipcMain.handle(IPC_CHANNELS.vaultListSaved, async () => {
+    return runtime.listSavedVaults()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.vaultSwitchSaved, async (_event, rootPath: unknown) => {
+    return runtime.switchSavedVault(genericPathSchema.parse(rootPath))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.vaultToggleFavoriteSaved, async (_event, rootPath: unknown) => {
+    return runtime.toggleFavoriteSavedVault(genericPathSchema.parse(rootPath))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.vaultRemoveSaved, async (_event, rootPath: unknown) => {
+    return runtime.removeSavedVault(genericPathSchema.parse(rootPath))
+  })
+
   ipcMain.handle(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
     return runtime.chooseDirectory(directoryTitleSchema.parse(title))
   })
@@ -341,6 +366,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.readNoteDocument(notePathSchema.parse(relPath))
   })
 
+  ipcMain.handle(IPC_CHANNELS.readExcalidrawFileDocument, async (_event, relPath: unknown) => {
+    return runtime.readExcalidrawFileDocument(notePathSchema.parse(relPath))
+  })
+
   ipcMain.handle(IPC_CHANNELS.writeNote, async (_event, relPath: unknown, content: unknown) => {
     await runtime.writeNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
@@ -355,12 +384,26 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
   )
 
+  ipcMain.handle(
+    IPC_CHANNELS.writeExcalidrawFileDocument,
+    async (_event, relPath: unknown, document: unknown) => {
+      await runtime.writeExcalidrawFileDocument(
+        notePathSchema.parse(relPath),
+        excalidrawFileDocumentSchema.parse(document)
+      )
+    }
+  )
+
   ipcMain.handle(IPC_CHANNELS.createNote, async (_event, name: unknown) => {
     return runtime.createNote(noteNameSchema.parse(name))
   })
 
   ipcMain.handle(IPC_CHANNELS.createNoteAtPath, async (_event, relPath: unknown) => {
     return runtime.createNoteAtPath(notePathSchema.parse(relPath))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.createExcalidrawFileAtPath, async (_event, relPath: unknown) => {
+    return runtime.createExcalidrawFileAtPath(notePathSchema.parse(relPath))
   })
 
   ipcMain.handle(IPC_CHANNELS.createNoteWithTags, async (_event, name: unknown, tags: unknown) => {
@@ -460,6 +503,22 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   ipcMain.handle(IPC_CHANNELS.excalidrawDeleteSession, async (_event, sessionId: unknown) => {
     return runtime.deleteExcalidrawSession(sessionIdSchema.parse(sessionId))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.excalidrawImportLegacySessions, async () => {
+    return runtime.importLegacyExcalidrawSessions()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.generativeUiListArtifacts, async () => {
+    return runtime.listGenerativeUiArtifacts()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.generativeUiSaveArtifact, async (_event, input: unknown) => {
+    return runtime.saveGenerativeUiArtifact(generativeUiSaveArtifactSchema.parse(input))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.generativeUiDeleteArtifact, async (_event, id: unknown) => {
+    await runtime.deleteGenerativeUiArtifact(sessionIdSchema.parse(id))
   })
 
   ipcMain.handle(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {

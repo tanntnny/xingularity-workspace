@@ -167,8 +167,8 @@
       --workspace-main-panel-b: 0;
       --workspace-main-panel-alpha: 0.62;
 
-      --line: #18191c;
-      --line-strong: #474747;
+      --line: #2b2d31;
+      --line-strong: #565b63;
 
       --text: #ffffff;
       --muted: #b5b5b5;
@@ -322,7 +322,10 @@
   }
 
   .settings-tab-menu-item {
-    min-width: 7.5rem;
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
   }
 
   .project-tab-menu {
@@ -330,7 +333,10 @@
   }
 
   .project-tab-menu-item {
-    min-width: 8.5rem;
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
   }
 
   .note-editor-shell {
@@ -1408,13 +1414,13 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 @keyframes commandPalettePanelIn {
   from {
     opacity: 0;
-    transform: translateY(-18px) scale(0.97);
+    transform: translateX(-50%) translateY(-18px) scale(0.97);
     filter: blur(10px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(-50%) translateY(0) scale(1);
     filter: blur(0);
   }
 }
@@ -1648,6 +1654,27 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   font-size: 0.9375rem;
   line-height: 1.3;
   padding: 0 2rem 50vh 2rem !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+.note-milkdown-editor .ProseMirror,
+.note-milkdown-editor .ProseMirror p,
+.note-milkdown-editor .ProseMirror li,
+.note-milkdown-editor .ProseMirror td,
+.note-milkdown-editor .ProseMirror th,
+.note-milkdown-editor .ProseMirror h1,
+.note-milkdown-editor .ProseMirror h2,
+.note-milkdown-editor .ProseMirror h3,
+.note-milkdown-editor .ProseMirror h4,
+.note-milkdown-editor .ProseMirror h5,
+.note-milkdown-editor .ProseMirror h6,
+.note-milkdown-editor .ProseMirror strong,
+.note-milkdown-editor .ProseMirror b,
+.note-milkdown-editor .ProseMirror em,
+.note-milkdown-editor .ProseMirror i,
+.note-milkdown-editor .ProseMirror li::marker {
+  color: var(--text);
+  -webkit-text-fill-color: currentColor;
 }
 
 .note-milkdown-editor .ProseMirror-focused {
@@ -1675,7 +1702,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   margin: 0.35rem 0 !important;
   font-weight: 600 !important;
   letter-spacing: 0;
-  color: color-mix(in srgb, var(--accent) 80%, var(--panel));
+  color: var(--text);
 }
 
 .note-milkdown-editor .ProseMirror h1 {
@@ -2059,30 +2086,30 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-info,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-info {
-  --note-callout-border: color-mix(in srgb, #3b82f6 58%, transparent);
-  --note-callout-foreground: color-mix(in srgb, #3b82f6 82%, var(--text));
-  --note-callout-surface: color-mix(in srgb, #3b82f6 18%, transparent);
+  --note-callout-border: var(--tag-0-line);
+  --note-callout-foreground: var(--tag-0-text);
+  --note-callout-surface: var(--tag-0-bg);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-success,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-success {
-  --note-callout-border: color-mix(in srgb, #22c55e 58%, transparent);
-  --note-callout-foreground: color-mix(in srgb, #22c55e 82%, var(--text));
-  --note-callout-surface: color-mix(in srgb, #22c55e 18%, transparent);
+  --note-callout-border: var(--tag-1-line);
+  --note-callout-foreground: var(--tag-1-text);
+  --note-callout-surface: var(--tag-1-bg);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-warning,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-warning {
-  --note-callout-border: color-mix(in srgb, #f59e0b 60%, transparent);
-  --note-callout-foreground: color-mix(in srgb, #f59e0b 84%, var(--text));
-  --note-callout-surface: color-mix(in srgb, #f59e0b 18%, transparent);
+  --note-callout-border: var(--tag-2-line);
+  --note-callout-foreground: var(--tag-2-text);
+  --note-callout-surface: var(--tag-2-bg);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-danger,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-danger {
-  --note-callout-border: color-mix(in srgb, #ef4444 58%, transparent);
-  --note-callout-foreground: color-mix(in srgb, #ef4444 82%, var(--text));
-  --note-callout-surface: color-mix(in srgb, #ef4444 17%, transparent);
+  --note-callout-border: color-mix(in srgb, var(--danger) 48%, var(--line));
+  --note-callout-foreground: var(--text);
+  --note-callout-surface: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .note-milkdown-editor .ProseMirror blockquote.note-callout p,
@@ -2262,12 +2289,11 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .excalidraw .help-icon,
 .excalidraw .main-menu-trigger,
 .excalidraw .scroll-back-to-content {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel) 88%, transparent) 0%,
-      color-mix(in srgb, var(--panel) 74%, transparent) 100%
-    ) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 88%, transparent) 0%,
+    color-mix(in srgb, var(--panel) 74%, transparent) 100%
+  ) !important;
   border-color: color-mix(in srgb, var(--accent-line) 18%, var(--line)) !important;
   box-shadow: none !important;
 }
@@ -2497,4 +2523,60 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .note-milkdown-editor button,
 .note-milkdown-editor [role='button'] {
   border-radius: 4px;
+}
+
+.generative-ui-preview {
+  color: var(--text);
+}
+
+.generative-ui-preview .bg-white,
+.generative-ui-preview .bg-slate-50,
+.generative-ui-preview .bg-slate-100 {
+  background-color: color-mix(in srgb, var(--panel) 62%, transparent) !important;
+}
+
+.generative-ui-preview .bg-slate-950 {
+  background-color: color-mix(in srgb, var(--accent) 88%, var(--text)) !important;
+}
+
+.generative-ui-preview .text-slate-950,
+.generative-ui-preview .text-slate-900,
+.generative-ui-preview .text-slate-800,
+.generative-ui-preview .text-slate-700 {
+  color: var(--text) !important;
+}
+
+.generative-ui-preview .text-slate-600,
+.generative-ui-preview .text-slate-500,
+.generative-ui-preview .text-slate-400,
+.generative-ui-preview .text-slate-300,
+.generative-ui-preview .fill-slate-500 {
+  color: var(--muted) !important;
+  fill: var(--muted) !important;
+}
+
+.generative-ui-preview .border-slate-100,
+.generative-ui-preview .border-slate-200,
+.generative-ui-preview .border-slate-300,
+.generative-ui-preview .border-white,
+.generative-ui-preview .border-white\/70 {
+  border-color: color-mix(in srgb, var(--line) 86%, transparent) !important;
+}
+
+.generative-ui-preview .shadow-sm,
+.generative-ui-preview [class*='shadow-'] {
+  box-shadow: none !important;
+}
+
+.generative-ui-preview table thead,
+.generative-ui-preview .react-flow__node {
+  background-color: color-mix(in srgb, var(--accent-soft) 32%, var(--panel)) !important;
+  color: var(--text) !important;
+}
+
+.generative-ui-preview .react-flow__pane,
+.generative-ui-preview .react-flow__renderer,
+.generative-ui-preview .react-flow__zoompane,
+.generative-ui-preview .react-flow__viewport {
+  background: transparent !important;
 }

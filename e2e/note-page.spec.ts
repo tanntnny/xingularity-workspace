@@ -1101,6 +1101,47 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('opens slash completion and applies block commands', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+
+      await page.keyboard.type('/h2')
+      await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-slash-completion')).toHaveCount(0)
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('')
+
+      await page.keyboard.type('/h2')
+      await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('Heading from slash')
+      await page.keyboard.press('Enter')
+
+      await page.keyboard.type('/bullet')
+      await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('Bullet from slash')
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('## Heading from slash')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('- Bullet from slash')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('keeps inserted blank lines when switching notes', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)

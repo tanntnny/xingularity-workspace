@@ -10,8 +10,13 @@ import type { Messages as MistralChatMessage } from '@mistralai/mistralai/models
 import { AgentChatStore } from './agentChatStore'
 import { AgentHistoryStore } from './agentHistoryStore'
 import { ExcalidrawSessionStore } from './excalidrawSessionStore'
-import { FileService, sanitizeNotePath } from './fileService'
+import { GenerativeUiArtifactStore } from './generativeUiArtifactStore'
+import { FileService, findAvailableExcalidrawRelPath, sanitizeNotePath } from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
+import {
+  createEmptyExcalidrawFileDocument,
+  withExcalidrawExtension
+} from '../shared/excalidrawFile'
 import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
 import { getProjectProtectionKind } from '../shared/projectFolders'
 import { generateProjectTag } from '../shared/noteTags'
@@ -47,13 +52,18 @@ import {
   NoteImportResult,
   Project,
   ProjectMilestone,
+  SavedVaultState,
   SearchResult,
   StoredNoteDocument,
+  VaultRemoveResult,
   VaultOpenResult,
   HistoryOperationResult,
   HistoryStatus,
-  ExcalidrawSession
+  LegacyExcalidrawImportResult,
+  ExcalidrawSession,
+  StoredExcalidrawFileDocument
 } from '../shared/types'
+import type { GenerativeUiArtifact, SavedGenerativeUiArtifact } from '../shared/generativeUi'
 
 export class VaultRuntime {
   private currentPaths: VaultPaths | null = null
@@ -103,6 +113,57 @@ export class VaultRuntime {
     }
   }
 
+  async listSavedVaults(): Promise<SavedVaultState> {
+    return this.buildSavedVaultState()
+  }
+
+  async switchSavedVault(rootPath: string): Promise<VaultOpenResult> {
+    return this.enqueueActivation(
+      (): Promise<VaultOpenResult> => this.activateVault(rootPath, false)
+    )
+  }
+
+  async toggleFavoriteSavedVault(rootPath: string): Promise<SavedVaultState> {
+    const global = await this.settings.toggleFavoriteVault(path.resolve(rootPath))
+    return this.buildSavedVaultState(global)
+  }
+
+  async removeSavedVault(rootPath: string): Promise<VaultRemoveResult> {
+    const resolvedRootPath = path.resolve(rootPath)
+    const removedCurrentVault = this.currentPaths?.rootPath === resolvedRootPath
+    const global = await this.settings.forgetVault(resolvedRootPath)
+
+    if (!removedCurrentVault) {
+      return {
+        removedPath: resolvedRootPath,
+        state: await this.buildSavedVaultState(global),
+        activation: null
+      }
+    }
+
+    const nextVault = await this.findMostRecentAvailableVault(global.savedVaults)
+    if (nextVault) {
+      const activation = await this.enqueueActivation(
+        (): Promise<VaultOpenResult> => this.activateVault(nextVault.rootPath, false)
+      )
+      return {
+        removedPath: resolvedRootPath,
+        state: await this.buildSavedVaultState(),
+        activation
+      }
+    }
+
+    await this.enqueueActivation(async (): Promise<void> => {
+      await this.closeCurrentVault()
+    })
+
+    return {
+      removedPath: resolvedRootPath,
+      state: await this.buildSavedVaultState(global),
+      activation: null
+    }
+  }
+
   assertReady(): void {
     if (!this.currentPaths || !this.fileService || !this.indexer) {
       throw new Error('No vault is open')
@@ -146,6 +207,11 @@ export class VaultRuntime {
     return this.fileService!.readNoteDocument(relPath)
   }
 
+  async readExcalidrawFileDocument(relPath: string): Promise<StoredExcalidrawFileDocument> {
+    this.assertReady()
+    return this.fileService!.readExcalidrawFileDocument(relPath)
+  }
+
   async writeNote(relPath: string, content: string): Promise<void> {
     this.assertReady()
     await this.fileService!.writeNote(relPath, content)
@@ -167,6 +233,14 @@ export class VaultRuntime {
       content: serializeStoredNoteDocument(document),
       updatedAt: new Date().toISOString()
     })
+  }
+
+  async writeExcalidrawFileDocument(
+    relPath: string,
+    document: StoredExcalidrawFileDocument
+  ): Promise<void> {
+    this.assertReady()
+    await this.fileService!.writeExcalidrawFileDocument(relPath, document)
   }
 
   async createNote(name: string): Promise<string> {
@@ -196,6 +270,13 @@ export class VaultRuntime {
       updatedAt: new Date().toISOString()
     })
     return nextRelPath
+  }
+
+  async createExcalidrawFileAtPath(relPath: string): Promise<string> {
+    this.assertReady()
+    const normalizedPath = withExcalidrawExtension(relPath)
+    await this.assertFileCreationAllowed(normalizedPath)
+    return this.fileService!.createExcalidrawFileAtPath(normalizedPath)
   }
 
   async createNoteWithTags(name: string, tags: string[]): Promise<string> {
@@ -632,6 +713,61 @@ export class VaultRuntime {
     await this.getExcalidrawSessionStore().deleteSession(sessionId)
   }
 
+  async importLegacyExcalidrawSessions(): Promise<LegacyExcalidrawImportResult> {
+    this.assertReady()
+    const sessions = await this.getExcalidrawSessionStore().listSessions()
+    const result: LegacyExcalidrawImportResult = {
+      imported: [],
+      skipped: [],
+      failed: []
+    }
+
+    for (const session of sessions) {
+      try {
+        const preferredRelPath = withExcalidrawExtension(`Imported Drawings/${session.title}`)
+        const relPath = await findAvailableExcalidrawRelPath(
+          this.currentPaths!.notesPath,
+          preferredRelPath
+        )
+
+        await this.fileService!.createExcalidrawFileAtPath(relPath)
+        await this.fileService!.writeExcalidrawFileDocument(relPath, {
+          version: 1,
+          scene: session.scene ?? createEmptyExcalidrawFileDocument().scene
+        })
+        result.imported.push({
+          sourceId: session.id,
+          relPath
+        })
+      } catch (error) {
+        result.failed.push({
+          sourceId: session.id,
+          error: String(error)
+        })
+      }
+    }
+
+    return result
+  }
+
+  async listGenerativeUiArtifacts(): Promise<SavedGenerativeUiArtifact[]> {
+    this.assertReady()
+    return this.getGenerativeUiArtifactStore().listArtifacts()
+  }
+
+  async saveGenerativeUiArtifact(input: {
+    artifact: GenerativeUiArtifact
+    id?: string
+  }): Promise<SavedGenerativeUiArtifact> {
+    this.assertReady()
+    return this.getGenerativeUiArtifactStore().saveArtifact(input)
+  }
+
+  async deleteGenerativeUiArtifact(id: string): Promise<void> {
+    this.assertReady()
+    await this.getGenerativeUiArtifactStore().deleteArtifact(id)
+  }
+
   async approveAgentChatTool(input: {
     requestId?: string
     stepId: string
@@ -914,7 +1050,7 @@ export class VaultRuntime {
     this.watcher.start()
 
     console.log('[VaultRuntime] persist global last vault', this.currentPaths.rootPath)
-    await this.settings.writeGlobal({ lastVaultPath: this.currentPaths.rootPath })
+    await this.settings.rememberVault(this.currentPaths.rootPath)
     this.notifyVaultChange(this.currentPaths)
     return {
       info: toInfo(this.currentPaths),
@@ -960,6 +1096,103 @@ export class VaultRuntime {
       } catch (error) {
         console.error('[VaultRuntime] vault listener failed', error)
       }
+    }
+  }
+
+  private async buildSavedVaultState(global?: {
+    lastVaultPath: string | null
+    savedVaults: Array<{
+      rootPath: string
+      addedAt: string
+      lastOpenedAt: string | null
+      isFavorite: boolean
+    }>
+  }): Promise<SavedVaultState> {
+    const nextGlobal = global ?? (await this.settings.readGlobal())
+    const currentVaultPath = this.currentPaths?.rootPath ?? null
+    const vaults = await Promise.all(
+      nextGlobal.savedVaults.map(async (savedVault) => ({
+        rootPath: savedVault.rootPath,
+        name: path.basename(savedVault.rootPath) || savedVault.rootPath,
+        addedAt: savedVault.addedAt,
+        lastOpenedAt: savedVault.lastOpenedAt,
+        isFavorite: savedVault.isFavorite === true,
+        isAvailable: await this.isSavedVaultAvailable(savedVault.rootPath)
+      }))
+    )
+
+    vaults.sort((left, right) => {
+      const leftIsCurrent = left.rootPath === currentVaultPath
+      const rightIsCurrent = right.rootPath === currentVaultPath
+      if (leftIsCurrent !== rightIsCurrent) {
+        return leftIsCurrent ? -1 : 1
+      }
+
+      if (left.isFavorite !== right.isFavorite) {
+        return left.isFavorite ? -1 : 1
+      }
+
+      const leftLastOpened = left.lastOpenedAt ?? ''
+      const rightLastOpened = right.lastOpenedAt ?? ''
+      if (leftLastOpened !== rightLastOpened) {
+        return rightLastOpened.localeCompare(leftLastOpened)
+      }
+
+      if (left.addedAt !== right.addedAt) {
+        return right.addedAt.localeCompare(left.addedAt)
+      }
+
+      return left.name.localeCompare(right.name)
+    })
+
+    return {
+      currentVaultPath,
+      vaults
+    }
+  }
+
+  private async findMostRecentAvailableVault(
+    savedVaults: Array<{
+      rootPath: string
+      addedAt: string
+      lastOpenedAt: string | null
+      isFavorite: boolean
+    }>
+  ): Promise<{
+    rootPath: string
+    addedAt: string
+    lastOpenedAt: string | null
+    isFavorite: boolean
+  } | null> {
+    const orderedVaults = [...savedVaults].sort((left, right) => {
+      if (left.isFavorite !== right.isFavorite) {
+        return left.isFavorite ? -1 : 1
+      }
+
+      const leftLastOpened = left.lastOpenedAt ?? ''
+      const rightLastOpened = right.lastOpenedAt ?? ''
+      if (leftLastOpened !== rightLastOpened) {
+        return rightLastOpened.localeCompare(leftLastOpened)
+      }
+
+      return right.addedAt.localeCompare(left.addedAt)
+    })
+
+    for (const savedVault of orderedVaults) {
+      if (await this.isSavedVaultAvailable(savedVault.rootPath)) {
+        return savedVault
+      }
+    }
+
+    return null
+  }
+
+  private async isSavedVaultAvailable(rootPath: string): Promise<boolean> {
+    try {
+      await fs.access(rootPath)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -1133,6 +1366,10 @@ export class VaultRuntime {
     void relPath
   }
 
+  private async assertFileCreationAllowed(relPath: string): Promise<void> {
+    void relPath
+  }
+
   private async assertPathMutationAllowed(oldPath: string, newPath: string): Promise<void> {
     void oldPath
     this.assertNoteCreationAllowed(newPath)
@@ -1152,6 +1389,10 @@ export class VaultRuntime {
 
   private getExcalidrawSessionStore(): ExcalidrawSessionStore {
     return new ExcalidrawSessionStore(this.getCurrentVaultRoot())
+  }
+
+  private getGenerativeUiArtifactStore(): GenerativeUiArtifactStore {
+    return new GenerativeUiArtifactStore(this.getCurrentVaultRoot())
   }
 
   private async recordAgentRun(run: AgentRunRecord): Promise<void> {

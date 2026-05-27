@@ -12,10 +12,11 @@ import {
   Clock,
   FileText,
   FolderKanban,
+  FolderOpen,
   GitBranch,
   LayoutDashboard,
-  PenTool,
-  Plus
+  Plus,
+  Sparkles
 } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
@@ -29,7 +30,9 @@ import {
   CommandSeparator,
   CommandShortcut
 } from './ui/command'
+import { Pallete, PalleteSearchBar } from './ui/pallete'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
+import { filterCommandPaletteCommands } from '../lib/commandPaletteCommands'
 
 export interface CommandPaletteSearchResult {
   id: string
@@ -48,10 +51,10 @@ type CommandPalettePage =
   | 'notes'
   | 'projects'
   | 'subscriptions'
-  | 'excalidraw'
   | 'calendar'
   | 'weeklyPlan'
   | 'schedules'
+  | 'generativeUi'
   | 'settings'
 
 interface CommandPaletteProps {
@@ -70,7 +73,10 @@ interface CommandPaletteProps {
   onOpenNote: (relPath: string) => void
   onOpenProject: (projectId: string) => void
   onOpenPage: (page: CommandPalettePage) => void
+  onManageVaults?: () => void
 }
+
+type CommandPaletteShortcutKey = 'cmd' | 'Enter' | string
 
 export function CommandPalette({
   open,
@@ -87,10 +93,11 @@ export function CommandPalette({
   onRunAiPrompt,
   onOpenNote,
   onOpenProject,
-  onOpenPage
+  onOpenPage,
+  onManageVaults
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
-    'mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--accent-line)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_72%,var(--panel))] text-[var(--accent)] transition-colors group-data-[selected=true]:border-[var(--accent-line)] group-data-[selected=true]:bg-[color:color-mix(in_srgb,var(--accent-soft)_92%,var(--panel))] group-data-[selected=true]:text-[var(--accent)]'
+    'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)] transition-colors group-data-[selected=true]:text-[var(--accent)]'
   const [query, setQuery] = useState('')
   const [hoveredResult, setHoveredResult] = useState<CommandPaletteSearchResult | null>(null)
   const [isWaitingForSearch, setIsWaitingForSearch] = useState(false)
@@ -210,17 +217,6 @@ export function CommandPalette({
     }
   }, [open, isAiMode, isCommandMode, searchQuery, searchableQuery, onQueryChange])
 
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && open) {
-        onClose()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
-
   // Get recent notes
   const recentNotes = useMemo(() => {
     const explicitlyRecentNotes = recentNotePaths
@@ -278,78 +274,105 @@ export function CommandPalette({
       {
         value: '>new note',
         label: 'New Note',
-        shortcut: '⌘N',
+        shortcutKeys: ['cmd', 'N'] as CommandPaletteShortcutKey[],
         onSelect: () => onCreate(),
+        keywords: ['create', 'add', 'note'],
         icon: Plus
       },
       {
         value: '>go dashboard',
         label: 'Go to Dashboard',
         onSelect: () => onOpenPage('dashboard'),
+        keywords: ['home', 'overview', 'start'],
         icon: LayoutDashboard
       },
       {
         value: '>go knowledge',
         label: 'Go to Knowledge',
-        shortcut: '⌘K',
+        shortcutKeys: ['cmd', 'K'] as CommandPaletteShortcutKey[],
         onSelect: () => onOpenPage('knowledge'),
+        keywords: ['graph', 'knowledge base'],
         icon: GitBranch
       },
       {
         value: '>go notes',
-        label: 'Go to Notes',
+        label: 'Go to Notebooks',
         onSelect: () => onOpenPage('notes'),
+        keywords: ['notes', 'notebooks', 'docs'],
         icon: FileText
       },
       {
         value: '>go projects',
         label: 'Go to Projects',
         onSelect: () => onOpenPage('projects'),
+        keywords: ['project', 'workspace'],
         icon: FolderKanban
       },
       {
         value: '>go subscriptions',
         label: 'Go to Subscriptions',
         onSelect: () => onOpenPage('subscriptions'),
+        keywords: ['billing', 'payments'],
         icon: CreditCard
-      },
-      {
-        value: '>go excalidraw',
-        label: 'Go to Excalidraw',
-        onSelect: () => onOpenPage('excalidraw'),
-        icon: PenTool
       },
       {
         value: '>go calendar',
         label: 'Go to Calendar',
         onSelect: () => onOpenPage('calendar'),
+        keywords: ['dates', 'events', 'schedule'],
         icon: FolderKanban
       },
       {
         value: '>go weekly plan',
         label: 'Go to Weekly Plan',
         onSelect: () => onOpenPage('weeklyPlan'),
+        keywords: ['week', 'planning'],
         icon: FolderKanban
       },
       {
         value: '>go schedules',
         label: 'Go to Schedules',
         onSelect: () => onOpenPage('schedules'),
+        keywords: ['schedule', 'timeline'],
         icon: FolderKanban
+      },
+      {
+        value: '>go generative ui',
+        label: 'Go to Generative UI',
+        onSelect: () => onOpenPage('generativeUi'),
+        keywords: ['ai', 'generate', 'ui'],
+        icon: Sparkles
       },
       {
         value: '>go settings',
         label: 'Go to Settings',
         onSelect: () => onOpenPage('settings'),
+        keywords: ['preferences', 'config'],
         icon: FolderKanban
-      }
+      },
+      ...(onManageVaults
+        ? [
+            {
+              value: '>manage vaults',
+              label: 'Manage Vaults',
+              onSelect: () => onManageVaults(),
+              keywords: ['vault', 'storage', 'folders'],
+              icon: FolderOpen
+            }
+          ]
+        : [])
     ],
-    [onCreate, onOpenPage]
+    [onCreate, onManageVaults, onOpenPage]
+  )
+
+  const filteredCommandItems = useMemo(
+    () => filterCommandPaletteCommands(commandItems, searchQuery),
+    [commandItems, searchQuery]
   )
 
   const revealItemIds = useMemo(() => {
     if (isCommandMode) {
-      return commandItems.map((item) => `command:${item.value}`)
+      return filteredCommandItems.map((item) => `command:${item.value}`)
     }
 
     if (isAiMode) {
@@ -372,8 +395,8 @@ export function CommandPalette({
     ids.push(...filteredNotes.map((note) => `note:${note.relPath}`))
     return ids
   }, [
-    commandItems,
     filteredNotes,
+    filteredCommandItems,
     isAiMode,
     isCommandMode,
     noteResults,
@@ -411,7 +434,7 @@ export function CommandPalette({
       kind: 'note' as const
     }))
 
-    const commandResults = commandItems.map((item) => ({
+    const commandResults = filteredCommandItems.map((item) => ({
       id: item.value,
       kind: 'project' as const,
       title: item.label,
@@ -420,7 +443,7 @@ export function CommandPalette({
     }))
 
     return [...searchResults, ...recentNoteItems, ...noteItems, ...commandResults]
-  }, [commandItems, filteredNotes, recentNotes, searchResults])
+  }, [filteredCommandItems, filteredNotes, recentNotes, searchResults])
 
   const handleSelect = useCallback(
     (value: string) => {
@@ -453,19 +476,17 @@ export function CommandPalette({
 
   const passthroughCommandFilter = useCallback(() => 1, [])
 
-  if (!open) {
-    return null
-  }
-
   return (
-    <div
-      className="dialog-glass-overlay command-palette-overlay fixed inset-0 z-50 grid place-items-start pt-[18vh]"
-      onClick={onClose}
+    <Pallete
+      open={open}
+      aria-label="Command palette"
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose()
+        }
+      }}
     >
-      <div
-        className="dialog-glass-surface command-palette-panel mx-auto flex w-[min(720px,92vw)] overflow-hidden rounded-lg border-[var(--accent)]"
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="flex flex-1 overflow-hidden">
         <Command
           shouldFilter={false}
           filter={passthroughCommandFilter}
@@ -475,18 +496,21 @@ export function CommandPalette({
             setHoveredResult(result)
           }}
         >
-          <CommandInput
-            ref={inputRef}
-            placeholder={
-              isCommandMode
-                ? 'Type a command...'
-                : isAiMode
-                  ? 'Ask AI to continue the current note...'
-                  : 'Search names, aliases, paths... use @ for body'
-            }
-            value={query}
-            onValueChange={setQuery}
-          />
+          <PalleteSearchBar data-cmdk-input-wrapper="">
+            <CommandInput
+              bare
+              ref={inputRef}
+              placeholder={
+                isCommandMode
+                  ? 'Type a command...'
+                  : isAiMode
+                    ? 'Ask AI to continue the current note...'
+                    : 'Search names, aliases, paths... use @ for body'
+              }
+              value={query}
+              onValueChange={setQuery}
+            />
+          </PalleteSearchBar>
           <CommandList ref={containerRef} className="max-h-[360px]">
             <CommandEmpty>
               {isCommandMode
@@ -504,7 +528,7 @@ export function CommandPalette({
 
             {isCommandMode ? (
               <CommandGroup heading="Commands">
-                {commandItems.map((item) => {
+                {filteredCommandItems.map((item) => {
                   const Icon = item.icon
                   const revealProps = getRevealItemProps(`command:${item.value}`)
                   return (
@@ -514,13 +538,14 @@ export function CommandPalette({
                       className={`group ${revealProps.className ?? ''}`}
                       style={revealProps.style}
                       value={item.value}
+                      keywords={item.keywords}
                       onSelect={handleSelect}
                     >
                       <div className={paletteItemIconClass}>
                         <Icon className="h-4 w-4" />
                       </div>
                       <span>{item.label}</span>
-                      {item.shortcut ? <CommandShortcut>{item.shortcut}</CommandShortcut> : null}
+                      {item.shortcutKeys ? <CommandShortcut keys={item.shortcutKeys} /> : null}
                     </CommandItem>
                   )
                 })}
@@ -555,7 +580,7 @@ export function CommandPalette({
                             : 'Open a note first to send its content to Mistral.'}
                         </div>
                       </div>
-                      <CommandShortcut>{aiLoading ? '...' : 'Enter'}</CommandShortcut>
+                      <CommandShortcut keys={[aiLoading ? '...' : 'Enter']} />
                     </CommandItem>
                   )
                 })()}
@@ -576,7 +601,7 @@ export function CommandPalette({
                         <Plus className="h-4 w-4" />
                       </div>
                       <span>New Note</span>
-                      <CommandShortcut>⌘N</CommandShortcut>
+                      <CommandShortcut keys={['cmd', 'N']} />
                     </CommandItem>
                   )
                 })()}
@@ -760,6 +785,6 @@ export function CommandPalette({
           </div>
         )}
       </div>
-    </div>
+    </Pallete>
   )
 }

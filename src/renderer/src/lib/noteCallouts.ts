@@ -13,7 +13,8 @@ const CALLOUT_VARIANT_BY_TYPE: Record<string, Exclude<NoteCalloutVariant, 'neutr
   succes: 'success',
   success: 'success',
   warning: 'warning',
-  danger: 'danger'
+  danger: 'danger',
+  error: 'danger'
 }
 
 export function parseNoteCallout(text: string): NoteCalloutMatch | null {

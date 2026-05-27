@@ -16,14 +16,16 @@ interface SettingsPageProps {
   profileColor: ProfileColor
   workspaceVibrancyEnabled: boolean
   vaultLocation: string | null
+  savedVaultCount: number
   onSaveProfile: (name: string) => void
   onSaveMistralApiKey: (apiKey: string) => void
   onSelectFont: (fontFamily: string) => void
   onSelectProfileColor: (color: ProfileColor) => void
   onToggleWorkspaceVibrancy: (enabled: boolean) => void
-  onChangeVaultLocation: () => void
+  onManageVaults: () => void
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
+  onImportLegacyExcalidrawSessions: () => void
 }
 
 export function SettingsPage({
@@ -34,14 +36,16 @@ export function SettingsPage({
   profileColor,
   workspaceVibrancyEnabled,
   vaultLocation,
+  savedVaultCount,
   onSaveProfile,
   onSaveMistralApiKey,
   onSelectFont,
   onSelectProfileColor,
   onToggleWorkspaceVibrancy,
-  onChangeVaultLocation,
+  onManageVaults,
   onMigrateBlockNoteNotes,
-  onMigrateTaggedNoteBodyFrontmatter
+  onMigrateTaggedNoteBodyFrontmatter,
+  onImportLegacyExcalidrawSessions
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
@@ -145,22 +149,26 @@ export function SettingsPage({
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
             <p className="w-full text-sm text-[var(--muted)]">
-              Review where your local vault lives and change it when you want to work from a
-              different folder.
+              Manage the local workspace vaults saved on this device and switch between them when
+              you want to work from a different folder.
             </p>
           </div>
 
-          <div className="grid w-full gap-1.5" aria-label="Vault location">
-            <span className="text-sm text-[var(--muted)]">Vault Location</span>
+          <div className="grid w-full gap-1.5" aria-label="Vault storage">
+            <span className="text-sm text-[var(--muted)]">Active Vault</span>
             <div className="workspace-subtle-control w-full break-words rounded-lg border border-[var(--line)] p-2.5 text-sm text-[var(--text)]">
               {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
             </div>
+            <span className="text-xs text-[var(--muted)]">
+              Saved locally on this device: {savedVaultCount} vault
+              {savedVaultCount === 1 ? '' : 's'}
+            </span>
             <button
               type="button"
               className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
-              onClick={onChangeVaultLocation}
+              onClick={onManageVaults}
             >
-              Change Vault Location
+              Manage Vaults
             </button>
           </div>
 
@@ -182,6 +190,13 @@ export function SettingsPage({
               onClick={onMigrateTaggedNoteBodyFrontmatter}
             >
               Normalize tagged note bodies
+            </button>
+            <button
+              type="button"
+              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
+              onClick={onImportLegacyExcalidrawSessions}
+            >
+              Import legacy Excalidraw drawings
             </button>
           </div>
         </div>

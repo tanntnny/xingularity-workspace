@@ -38,6 +38,14 @@ describe('parseNoteCallout', () => {
     })
   })
 
+  it('maps error callouts to the danger variant', () => {
+    expect(parseNoteCallout('[!ERROR]\nBody')).toEqual({
+      marker: '[!ERROR]\n',
+      rawType: 'ERROR',
+      variant: 'danger'
+    })
+  })
+
   it('accepts marker-only callouts without body text', () => {
     expect(parseNoteCallout('[!SUCCESS]')).toEqual({
       marker: '[!SUCCESS]',
