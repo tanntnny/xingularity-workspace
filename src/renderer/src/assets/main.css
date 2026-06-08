@@ -1614,6 +1614,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 .note-milkdown-editor,
 .note-milkdown-editor .milkdown {
+  --note-editor-code-block-border: var(--text);
   min-height: 60vh;
   height: 100%;
   background: transparent;
@@ -1812,7 +1813,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 }
 
 .note-milkdown-editor .ProseMirror pre {
-  border: 1px solid var(--accent);
+  border: 1px solid var(--note-editor-code-block-border) !important;
   border-radius: 4px !important;
   background: transparent !important;
   color: var(--text);
@@ -1831,7 +1832,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   position: relative;
   overflow: hidden;
   margin: 0.35rem 0;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--note-editor-code-block-border) !important;
   border-radius: 4px !important;
   background: transparent !important;
   color: var(--text);
@@ -2131,7 +2132,11 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 }
 
 .note-milkdown-editor .ProseMirror hr {
-  border-color: var(--accent-line);
+  background-color: var(--note-editor-code-block-border) !important;
+}
+
+.note-milkdown-editor .ProseMirror hr.ProseMirror-selectednode {
+  background-color: var(--note-editor-code-block-border) !important;
 }
 
 .note-milkdown-editor .ProseMirror table {

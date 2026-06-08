@@ -1,4 +1,4 @@
-import { ReactElement, RefObject, useState } from 'react'
+import { ReactElement, RefObject, useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
@@ -26,6 +26,7 @@ interface EditorPageProps {
   titleEditToken?: number
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
+  vimModeEnabled: boolean
 }
 
 export function EditorPage({
@@ -45,17 +46,35 @@ export function EditorPage({
   onRename,
   titleEditToken = 0,
   onOutlineChange,
-  onJumpToHeadingChange
+  onJumpToHeadingChange,
+  vimModeEnabled
 }: EditorPageProps): ReactElement {
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTagValue, setNewTagValue] = useState('')
+  const tagInputRef = useRef<HTMLInputElement | null>(null)
+  const isSubmittingTagRef = useRef(false)
 
   const currentName = stripNoteExtension(notePath).split('/').pop() || ''
+
+  useEffect(() => {
+    if (!isAddingTag) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      editorRef?.current?.blur()
+      tagInputRef.current?.focus()
+      isSubmittingTagRef.current = false
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [editorRef, isAddingTag, tags.length])
 
   const handleAddTag = (): void => {
     const nextTag = newTagValue.trim()
     if (!nextTag) return
 
+    isSubmittingTagRef.current = true
     void onAddTag(nextTag)
     setNewTagValue('')
     setIsAddingTag(true)
@@ -87,10 +106,14 @@ export function EditorPage({
             />
           ))}
           {isAddingTag ? (
-            <div className="inline-flex items-center gap-1.5">
+            <div key="note-tag-input" className="inline-flex items-center gap-1.5">
               <input
+                ref={tagInputRef}
                 type="text"
                 value={newTagValue}
+                onFocus={() => {
+                  editorRef?.current?.blur()
+                }}
                 onChange={(e) => setNewTagValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -103,12 +126,12 @@ export function EditorPage({
                   }
                 }}
                 onBlur={() => {
-                  if (newTagValue.trim()) {
-                    handleAddTag()
-                  } else {
-                    setIsAddingTag(false)
-                    setNewTagValue('')
+                  if (isSubmittingTagRef.current) {
+                    return
                   }
+
+                  setIsAddingTag(false)
+                  setNewTagValue('')
                 }}
                 placeholder="tag name"
                 autoFocus
@@ -118,7 +141,10 @@ export function EditorPage({
           ) : (
             <button
               type="button"
-              onClick={() => setIsAddingTag(true)}
+              onClick={() => {
+                editorRef?.current?.blur()
+                setIsAddingTag(true)
+              }}
               className="workspace-subtle-control inline-flex items-center justify-center rounded-md border border-dashed border-[var(--line)] p-1"
               title="Add tag"
             >
@@ -140,6 +166,7 @@ export function EditorPage({
           onOpenNoteLink={onOpenNoteLink}
           onOutlineChange={onOutlineChange}
           onJumpToHeadingChange={onJumpToHeadingChange}
+          vimModeEnabled={vimModeEnabled}
         />
       </div>
     </div>

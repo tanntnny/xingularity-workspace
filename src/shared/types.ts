@@ -294,6 +294,7 @@ export interface AppSettings {
   }
   fontFamily: string
   workspaceVibrancyEnabled: boolean
+  editorVimModeEnabled: boolean
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
@@ -311,6 +312,7 @@ export interface AppSettingsUpdate {
   }
   fontFamily?: string
   workspaceVibrancyEnabled?: boolean
+  editorVimModeEnabled?: boolean
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]

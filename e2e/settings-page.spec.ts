@@ -30,6 +30,11 @@ async function createFixtureVault(): Promise<string> {
   return rootPath
 }
 
+async function readVaultSettings(vaultRoot: string): Promise<Record<string, unknown>> {
+  const raw = await fs.readFile(path.join(vaultRoot, 'settings.json'), 'utf-8')
+  return JSON.parse(raw) as Record<string, unknown>
+}
+
 async function launchWithFixture(vaultRoot: string): Promise<{
   electronApp: ElectronApplication
   page: Page
@@ -76,6 +81,7 @@ test.describe('settings page', () => {
       await expect(page.getByRole('radio', { name: 'Profile' })).toBeVisible()
       await expect(page.getByRole('radio', { name: 'Workspace' })).toBeVisible()
       await expect(page.getByRole('radio', { name: 'Appearance' })).toBeVisible()
+      await expect(page.getByRole('radio', { name: 'Editor' })).toBeVisible()
       await expect(page.getByRole('radio', { name: 'Agent' })).toBeVisible()
       await expect(page.getByRole('radio', { name: 'Notification' })).toHaveCount(0)
 
@@ -100,6 +106,17 @@ test.describe('settings page', () => {
       await expect(page.getByText('App Font', { exact: true })).toBeVisible()
       await expect(page.getByText('The quick brown fox jumps over the lazy dog.')).toBeVisible()
       await expect(page.getByText('Active Vault')).toHaveCount(0)
+
+      await page.getByRole('radio', { name: 'Editor' }).click()
+      await expect(page.getByRole('heading', { name: 'Editor' })).toBeVisible()
+      await expect(page.getByText('Vim Mode', { exact: true })).toBeVisible()
+      const vimModeSwitch = page.getByRole('switch', { name: 'Toggle Vim mode' })
+      await expect(vimModeSwitch).toHaveAttribute('aria-checked', 'false')
+      await vimModeSwitch.click()
+      await expect(vimModeSwitch).toHaveAttribute('aria-checked', 'true')
+      await expect
+        .poll(async () => (await readVaultSettings(vaultRoot)).editorVimModeEnabled)
+        .toBe(true)
 
       await page.getByRole('radio', { name: 'Agent' }).click()
       await expect(page.getByRole('heading', { name: 'Agent' })).toBeVisible()

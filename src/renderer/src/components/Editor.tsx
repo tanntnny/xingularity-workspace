@@ -52,6 +52,7 @@ import {
   getNoteSlashCommands,
   type NoteSlashCommandId
 } from '../lib/noteSlashMenu'
+import { createNoteVimModePlugin, type NoteVimMode } from '../lib/noteVimMode'
 import { cn } from '../lib/utils'
 
 interface EditorProps {
@@ -65,6 +66,7 @@ interface EditorProps {
   onOpenNoteLink?: (target: string) => void
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
+  vimModeEnabled: boolean
 }
 
 export interface NoteEditorHandle {
@@ -369,7 +371,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     currentNotePath,
     onOpenNoteLink,
     onOutlineChange,
-    onJumpToHeadingChange
+    onJumpToHeadingChange,
+    vimModeEnabled
   }: EditorProps,
   ref
 ): ReactElement {
@@ -381,11 +384,15 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const editorReadyRef = useRef(false)
   const notesRef = useRef(notes)
   const currentNotePathRef = useRef(currentNotePath)
+  const mentionPickerRef = useRef<MentionPickerState | null>(null)
+  const slashPickerRef = useRef<SlashPickerState | null>(null)
+  const vimModeEnabledRef = useRef(vimModeEnabled)
   const [isEditorVisible, setIsEditorVisible] = useState(false)
   const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [slashPicker, setSlashPicker] = useState<SlashPickerState | null>(null)
   const [activeSlashIndex, setActiveSlashIndex] = useState(0)
+  const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const hasFocusIntentRef = useRef(false)
   const onDirtyRef = useRef(onDirty)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
@@ -438,6 +445,18 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   useEffect(() => {
     onJumpToHeadingChange?.(null)
   }, [onJumpToHeadingChange])
+
+  useEffect(() => {
+    mentionPickerRef.current = mentionPicker
+  }, [mentionPicker])
+
+  useEffect(() => {
+    slashPickerRef.current = slashPicker
+  }, [slashPicker])
+
+  useEffect(() => {
+    vimModeEnabledRef.current = vimModeEnabled
+  }, [vimModeEnabled])
 
   const syncContent = useCallback((nextContent: string, dirty: boolean): void => {
     if (contentRef.current === nextContent) {
@@ -863,7 +882,13 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       ctx.update(prosePluginsCtx, (plugins) => [
         ...plugins,
         inlineLatexPreviewPlugin(),
-        noteCalloutPlugin()
+        noteCalloutPlugin(),
+        createNoteVimModePlugin({
+          isEnabled: () => vimModeEnabledRef.current,
+          shouldIgnoreKeyDown: () =>
+            Boolean(mentionPickerRef.current?.open || slashPickerRef.current?.open),
+          onModeChange: setVimMode
+        })
       ])
     })
 
@@ -1143,6 +1168,14 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         hasFocusIntentRef.current = true
       }}
     >
+      {vimModeEnabled ? (
+        <div
+          className="pointer-events-none absolute right-3 top-3 z-30 rounded-md border border-[var(--line)] bg-[var(--popover)] px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[var(--muted)] shadow-sm"
+          data-testid="note-vim-mode-badge"
+        >
+          {vimMode}
+        </div>
+      ) : null}
       <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
       {slashPicker?.open ? (
         <div

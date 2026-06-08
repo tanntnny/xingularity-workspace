@@ -271,6 +271,7 @@ const settingsUpdateSchema = z.object({
     .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
   workspaceVibrancyEnabled: z.boolean().optional(),
+  editorVimModeEnabled: z.boolean().optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
   projects: z.array(projectSchema).max(100).optional(),

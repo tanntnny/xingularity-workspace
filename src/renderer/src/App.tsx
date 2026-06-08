@@ -345,6 +345,7 @@ function App(): ReactElement {
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
   const workspaceVibrancyEnabled = useVaultStore((state) => state.settings.workspaceVibrancyEnabled)
+  const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
   const profileName = useVaultStore((state) => state.settings.profile.name)
   const profileColor = useVaultStore((state) => state.settings.profile.color)
   const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
@@ -1812,6 +1813,20 @@ function App(): ReactElement {
       const nextSettings = await vaultApi.settings.update({ workspaceVibrancyEnabled: enabled })
       setSettings(nextSettings)
       pushToast('success', enabled ? 'Workspace vibrancy enabled' : 'Workspace vibrancy disabled')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateEditorVimMode = async (enabled: boolean): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({ editorVimModeEnabled: enabled })
+      setSettings(nextSettings)
+      pushToast('success', enabled ? 'Vim mode enabled' : 'Vim mode disabled')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -5555,6 +5570,7 @@ function App(): ReactElement {
                           }
                           onOutlineChange={setCurrentNoteOutline}
                           onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
+                          vimModeEnabled={editorVimModeEnabled}
                         />
                       ) : shouldRestoreLastOpenedNote ? (
                         <div className="p-5 text-sm text-[var(--muted)]">
@@ -5776,6 +5792,7 @@ function App(): ReactElement {
                         selectedFontFamily={fontFamily}
                         profileColor={profileColor}
                         workspaceVibrancyEnabled={workspaceVibrancyEnabled}
+                        editorVimModeEnabled={editorVimModeEnabled}
                         vaultLocation={vault?.rootPath ?? lastVaultPath}
                         savedVaultCount={savedVaultCount}
                         onSaveProfile={(name) => {
@@ -5792,6 +5809,9 @@ function App(): ReactElement {
                         }}
                         onToggleWorkspaceVibrancy={(enabled) => {
                           void updateWorkspaceVibrancy(enabled)
+                        }}
+                        onToggleEditorVimMode={(enabled) => {
+                          void updateEditorVimMode(enabled)
                         }}
                         onManageVaults={openVaultSwapper}
                         onMigrateBlockNoteNotes={() => {

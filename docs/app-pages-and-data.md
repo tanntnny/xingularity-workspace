@@ -44,9 +44,10 @@ User workspace content lives in a selected local vault:
 
 This layer is responsible for:
 
-- note files
+- notebook files
 - folder structure
 - attachments
+- page-aligned workspace records
 - note indexing and search metadata
 
 ### App-managed structured state
@@ -66,6 +67,13 @@ Main app-managed domains:
 - agent run history
 
 Internal vault metadata and caches stay under `.xingularity/`.
+
+Legacy vault behavior:
+
+- older `notes/` roots are copied into `notebooks/`
+- older `.appmeta/` metadata is copied into `.xingularity/`
+- older hidden JSON stores are read once and persisted into the visible page-aligned paths
+- if both `notes/` and `notebooks/` already exist before migration, vault open fails with a conflict instead of merging automatically
 
 ## Top-Level App Settings
 
@@ -103,7 +111,7 @@ Paths that define the active vault:
 
 - `rootPath`
 - `notebooksPath`
-- `notesPath`
+- `notesPath` (compatibility alias to `notebooksPath`)
 - `attachmentsPath`
 
 ### `VaultOpenResult`

@@ -1142,6 +1142,51 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('supports core Vim mode without intercepting slash completion', async () => {
+    const vaultRoot = await createFixtureVault('')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('abc')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('abc')
+
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await page.keyboard.press('h')
+      await page.keyboard.press('j')
+      await page.keyboard.press('k')
+      await page.keyboard.press('l')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('abc')
+
+      await page.keyboard.press('i')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A')
+      await page.keyboard.press('Backspace')
+
+      await page.keyboard.type('/h2')
+      await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-slash-completion')).toHaveCount(0)
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('keeps inserted blank lines when switching notes', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)

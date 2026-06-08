@@ -143,6 +143,17 @@ const SIDEBAR_SECTION_BUTTON_SX = {
   }
 } as const
 
+function getVaultDisplayName(activeVaultPath: string | null): string {
+  if (!activeVaultPath) {
+    return 'No vault selected'
+  }
+
+  const normalized = activeVaultPath.replace(/[\\/]+$/g, '')
+  const segments = normalized.split(/[\\/]/)
+
+  return segments[segments.length - 1] || activeVaultPath
+}
+
 export function AppSidebar({
   activePage,
   onChange,
@@ -164,7 +175,8 @@ export function AppSidebar({
   const projectsCountLabel = toBadgeLabel(projectsCount)
   const calendarUndoneCountLabel = toBadgeLabel(calendarUndoneCount)
   const welcomeName = profileName.trim() || 'there'
-  const sidebarVaultLabel = isLocked ? 'Select vault' : (activeVaultPath ?? 'No vault selected')
+  const sidebarVaultTitle = isLocked ? 'Select vault' : (activeVaultPath ?? 'No vault selected')
+  const sidebarVaultLabel = isLocked ? 'Select vault' : getVaultDisplayName(activeVaultPath)
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
 
@@ -295,7 +307,7 @@ export function AppSidebar({
             </p>
             <div className="flex items-center gap-1.5 pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
-              <span className="min-w-0 truncate" title={sidebarVaultLabel}>
+              <span className="min-w-0 truncate" title={sidebarVaultTitle}>
                 {sidebarVaultLabel}
               </span>
             </div>

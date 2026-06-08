@@ -25,6 +25,7 @@ function createDefaultSettings(): AppSettings {
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
     workspaceVibrancyEnabled: true,
+    editorVimModeEnabled: false,
     calendarTasks: [],
     projectIcons: {},
     projects: [],

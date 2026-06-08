@@ -61,6 +61,23 @@ const TREE_AUTO_SCROLL_MAX_STEP = 18
 const TREE_DROP_TARGET_ROW_CLASS =
   'bg-[color-mix(in_srgb,var(--accent-soft)_94%,var(--panel))] text-[var(--text)] shadow-[inset_3px_0_0_var(--accent),inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_18%,transparent),0_0_18px_rgba(99,102,241,0.14)]'
 
+function renderTreeNodeLabel(label: string): ReactElement | string {
+  const match = label.match(/^(\d+\+?)(\s+.*)$/)
+
+  if (!match) {
+    return label
+  }
+
+  const [, prefix, remainder] = match
+
+  return (
+    <>
+      <span className="text-[var(--muted)]">{prefix}</span>
+      {remainder}
+    </>
+  )
+}
+
 interface NotesTreeViewProps {
   tree: NoteTreeNode[]
   searchTerm: string
@@ -760,7 +777,9 @@ function TreeNode({
             <TreeNodeInput node={node} onCancel={onCancelEditing} onCommit={onCommitRename} />
           ) : (
             <span className="block min-w-0 flex-1 truncate">
-              {isFolder ? node.data.name : stripNotebookFileExtension(node.data.name)}
+              {renderTreeNodeLabel(
+                isFolder ? node.data.name : stripNotebookFileExtension(node.data.name)
+              )}
             </span>
           )}
           {!isEditing && !isProtected ? (

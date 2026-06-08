@@ -179,6 +179,7 @@ function makeSettings(): AppSettings {
     ai: { mistralApiKey: '' },
     fontFamily: 'serif',
     workspaceVibrancyEnabled: true,
+    editorVimModeEnabled: false,
     calendarTasks: [],
     projectIcons: {},
     projects: [],

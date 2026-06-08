@@ -68,6 +68,7 @@ export function createDefaultAppSettings(): AppSettings {
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     workspaceVibrancyEnabled: true,
+    editorVimModeEnabled: false,
     calendarTasks: [],
     projectIcons: {},
     projects: [],
@@ -105,6 +106,10 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       typeof parsed.workspaceVibrancyEnabled === 'boolean'
         ? parsed.workspaceVibrancyEnabled
         : defaults.workspaceVibrancyEnabled,
+    editorVimModeEnabled:
+      typeof parsed.editorVimModeEnabled === 'boolean'
+        ? parsed.editorVimModeEnabled
+        : defaults.editorVimModeEnabled,
     calendarTasks: Array.isArray(parsed.calendarTasks)
       ? parsed.calendarTasks
       : defaults.calendarTasks,
@@ -445,6 +450,56 @@ function toggleFavoriteGlobalVault(settings: GlobalSettings, rootPath: string): 
   })
 }
 
+function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolean {
+  if (!settings) {
+    return false
+  }
+
+  if (typeof settings.lastOpenedNotePath === 'string' && settings.lastOpenedNotePath.trim()) {
+    return true
+  }
+
+  if (typeof settings.lastOpenedProjectId === 'string' && settings.lastOpenedProjectId.trim()) {
+    return true
+  }
+
+  if (Array.isArray(settings.favoriteNotePaths) && settings.favoriteNotePaths.length > 0) {
+    return true
+  }
+
+  if (Array.isArray(settings.favoriteProjectIds) && settings.favoriteProjectIds.length > 0) {
+    return true
+  }
+
+  if (typeof settings.profile?.name === 'string' && settings.profile.name.trim()) {
+    return true
+  }
+
+  if (Array.isArray(settings.gridBoard?.items) && settings.gridBoard.items.length > 0) {
+    return true
+  }
+
+  return false
+}
+
+function hasMaterialProjectsData(settings: VaultProjectsData | null): boolean {
+  if (!settings) {
+    return false
+  }
+
+  if (Array.isArray(settings.projects) && settings.projects.length > 0) {
+    return true
+  }
+
+  return Object.keys(settings.projectIcons ?? {}).length > 0
+}
+
+function hasMaterialTasksData(settings: VaultTasksData | null): boolean {
+  return Boolean(
+    settings && Array.isArray(settings.calendarTasks) && settings.calendarTasks.length > 0
+  )
+}
+
 export class SettingsStore {
   private readonly globalSettingsPath: string
 
@@ -519,9 +574,21 @@ export class SettingsStore {
         this.readJsonFile<VaultTasksData>(legacyTasksPath)
       ])
 
-      const resolvedCore = coreParsed ?? legacyCoreParsed
-      const resolvedProjects = projectsData ?? legacyProjectsData
-      const resolvedTasks = tasksData ?? legacyTasksData
+      const resolvedCore =
+        coreParsed === null ||
+        (!hasMaterialCoreSettingsData(coreParsed) && hasMaterialCoreSettingsData(legacyCoreParsed))
+          ? (legacyCoreParsed ?? coreParsed)
+          : coreParsed
+      const resolvedProjects =
+        projectsData === null ||
+        (!hasMaterialProjectsData(projectsData) && hasMaterialProjectsData(legacyProjectsData))
+          ? (legacyProjectsData ?? projectsData)
+          : projectsData
+      const resolvedTasks =
+        tasksData === null ||
+        (!hasMaterialTasksData(tasksData) && hasMaterialTasksData(legacyTasksData))
+          ? (legacyTasksData ?? tasksData)
+          : tasksData
 
       const needsSplitMigration =
         coreParsed === null ||
@@ -530,6 +597,9 @@ export class SettingsStore {
         legacyCoreParsed !== null ||
         legacyProjectsData !== null ||
         legacyTasksData !== null ||
+        resolvedCore !== coreParsed ||
+        resolvedProjects !== projectsData ||
+        resolvedTasks !== tasksData ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
         Boolean(resolvedCore?.calendarTasks)
@@ -613,6 +683,7 @@ export class SettingsStore {
       ai: settings.ai,
       fontFamily: settings.fontFamily,
       workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
+      editorVimModeEnabled: settings.editorVimModeEnabled,
       gridBoard: settings.gridBoard
     }
 

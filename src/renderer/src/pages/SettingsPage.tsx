@@ -15,6 +15,7 @@ interface SettingsPageProps {
   selectedFontFamily: string
   profileColor: ProfileColor
   workspaceVibrancyEnabled: boolean
+  editorVimModeEnabled: boolean
   vaultLocation: string | null
   savedVaultCount: number
   onSaveProfile: (name: string) => void
@@ -22,6 +23,7 @@ interface SettingsPageProps {
   onSelectFont: (fontFamily: string) => void
   onSelectProfileColor: (color: ProfileColor) => void
   onToggleWorkspaceVibrancy: (enabled: boolean) => void
+  onToggleEditorVimMode: (enabled: boolean) => void
   onManageVaults: () => void
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
@@ -35,6 +37,7 @@ export function SettingsPage({
   selectedFontFamily,
   profileColor,
   workspaceVibrancyEnabled,
+  editorVimModeEnabled,
   vaultLocation,
   savedVaultCount,
   onSaveProfile,
@@ -42,6 +45,7 @@ export function SettingsPage({
   onSelectFont,
   onSelectProfileColor,
   onToggleWorkspaceVibrancy,
+  onToggleEditorVimMode,
   onManageVaults,
   onMigrateBlockNoteNotes,
   onMigrateTaggedNoteBodyFrontmatter,
@@ -49,9 +53,9 @@ export function SettingsPage({
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
-  const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'appearance' | 'agent'>(
-    'profile'
-  )
+  const [activeTab, setActiveTab] = useState<
+    'profile' | 'workspace' | 'appearance' | 'editor' | 'agent'
+  >('profile')
 
   useEffect(() => {
     setProfileDraft(profileName)
@@ -95,7 +99,8 @@ export function SettingsPage({
     <section className="grid gap-3.5 p-5" aria-label="App settings">
       <h2 className="text-2xl font-bold">Settings</h2>
       <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-        Manage your identity, workspace storage, appearance, and AI connection settings.
+        Manage your identity, workspace storage, editor behavior, appearance, and AI connection
+        settings.
       </p>
 
       <TabMenu
@@ -112,6 +117,9 @@ export function SettingsPage({
         </TabMenuItem>
         <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="appearance">
           Appearance
+        </TabMenuItem>
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="editor">
+          Editor
         </TabMenuItem>
         <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="agent">
           Agent
@@ -300,6 +308,50 @@ export function SettingsPage({
           >
             The quick brown fox jumps over the lazy dog.
           </p>
+        </div>
+      ) : null}
+
+      {activeTab === 'editor' ? (
+        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
+          <div className="grid gap-1">
+            <h3 className="text-lg font-semibold text-[var(--text)]">Editor</h3>
+            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+              Tune note editing behavior for the main workspace editor.
+            </p>
+          </div>
+
+          <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--text)]">Vim Mode</p>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Use modal keyboard controls in notes, including normal and insert modes with
+                  common Vim motions.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={editorVimModeEnabled}
+                aria-label="Toggle Vim mode"
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-lg border transition-colors ${
+                  editorVimModeEnabled
+                    ? 'border-[var(--accent-line)]'
+                    : 'workspace-subtle-control border-[var(--line)]'
+                }`}
+                onClick={() => onToggleEditorVimMode(!editorVimModeEnabled)}
+              >
+                <span
+                  className={`inline-block h-6 w-6 rounded-lg bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
+                    editorVimModeEnabled ? 'translate-x-[1.45rem]' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Disabled by default. Press Escape in the note editor to enter normal mode.
+            </p>
+          </div>
         </div>
       ) : null}
 
