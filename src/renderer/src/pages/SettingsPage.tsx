@@ -1,11 +1,98 @@
 import { ReactElement, KeyboardEvent, useEffect, useState } from 'react'
 import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
 import type { ProfileColor } from '../../../shared/profileColors'
+import type {
+  NoteVimKeyMapping,
+  NoteVimMappingAction,
+  NoteVimMappingMode
+} from '../../../shared/types'
+import vimLogo from '../assets/vim-logo.svg'
 import { PROFILE_COLOR_OPTIONS } from '../lib/profileColors'
 
 export interface FontOption {
   label: string
   value: string
+}
+
+const EDITOR_VIM_MAPPING_MODES: Array<{ value: NoteVimMappingMode; label: string }> = [
+  { value: 'insert', label: 'Insert' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'visual', label: 'Visual' },
+  { value: 'visualLine', label: 'Visual Line' }
+]
+
+const INSERT_MODE_ACTIONS: Array<{ value: NoteVimMappingAction; label: string }> = [
+  { value: 'enterNormalMode', label: 'Enter normal mode' }
+]
+
+const NORMAL_MODE_ACTIONS: Array<{ value: NoteVimMappingAction; label: string }> = [
+  { value: 'enterInsertMode', label: 'Enter insert mode' },
+  { value: 'appendAfterCursor', label: 'Append after cursor' },
+  { value: 'appendLineEnd', label: 'Append at line end' },
+  { value: 'openLineBelow', label: 'Open line below' },
+  { value: 'openLineAbove', label: 'Open line above' },
+  { value: 'pasteAfterCursor', label: 'Paste after cursor' },
+  { value: 'pasteBeforeCursor', label: 'Paste before cursor' }
+]
+
+const VISUAL_MODE_ACTIONS: Array<{ value: NoteVimMappingAction; label: string }> = [
+  { value: 'enterNormalMode', label: 'Enter normal mode' },
+  { value: 'enterInsertMode', label: 'Enter insert mode' },
+  { value: 'deleteSelection', label: 'Delete selection' },
+  { value: 'yankSelection', label: 'Yank selection' }
+]
+
+function getEditorVimActionOptions(
+  mode: NoteVimMappingMode
+): Array<{ value: NoteVimMappingAction; label: string }> {
+  if (mode === 'insert') {
+    return INSERT_MODE_ACTIONS
+  }
+
+  if (mode === 'normal') {
+    return NORMAL_MODE_ACTIONS
+  }
+
+  return VISUAL_MODE_ACTIONS
+}
+
+function isEditorVimActionCompatible(
+  mode: NoteVimMappingMode,
+  action: NoteVimMappingAction
+): boolean {
+  return getEditorVimActionOptions(mode).some((option) => option.value === action)
+}
+
+function getEditorVimMappingErrors(mappings: NoteVimKeyMapping[]): Record<string, string[]> {
+  const errors: Record<string, string[]> = {}
+  const seen = new Map<string, string>()
+
+  for (const mapping of mappings) {
+    const rowErrors: string[] = []
+
+    if (!mapping.sequence.trim()) {
+      rowErrors.push('Sequence is required.')
+    } else if (!/^(?=.*\S)[\x20-\x7E]{1,8}$/.test(mapping.sequence)) {
+      rowErrors.push('Use 1-8 printable ASCII characters.')
+    }
+
+    if (!isEditorVimActionCompatible(mapping.mode, mapping.action)) {
+      rowErrors.push('Action is not available in this mode.')
+    }
+
+    const conflictKey = `${mapping.mode}:${mapping.sequence}`
+    const existingId = seen.get(conflictKey)
+    if (mapping.sequence && existingId && existingId !== mapping.id) {
+      rowErrors.push('Duplicate mode and sequence.')
+    }
+    seen.set(conflictKey, mapping.id)
+
+    if (rowErrors.length > 0) {
+      errors[mapping.id] = rowErrors
+    }
+  }
+
+  return errors
 }
 
 interface SettingsPageProps {
@@ -16,6 +103,7 @@ interface SettingsPageProps {
   profileColor: ProfileColor
   workspaceVibrancyEnabled: boolean
   editorVimModeEnabled: boolean
+  editorVimKeyMappings: NoteVimKeyMapping[]
   vaultLocation: string | null
   savedVaultCount: number
   onSaveProfile: (name: string) => void
@@ -24,6 +112,7 @@ interface SettingsPageProps {
   onSelectProfileColor: (color: ProfileColor) => void
   onToggleWorkspaceVibrancy: (enabled: boolean) => void
   onToggleEditorVimMode: (enabled: boolean) => void
+  onUpdateEditorVimKeyMappings: (mappings: NoteVimKeyMapping[]) => void
   onManageVaults: () => void
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
@@ -38,6 +127,7 @@ export function SettingsPage({
   profileColor,
   workspaceVibrancyEnabled,
   editorVimModeEnabled,
+  editorVimKeyMappings,
   vaultLocation,
   savedVaultCount,
   onSaveProfile,
@@ -46,6 +136,7 @@ export function SettingsPage({
   onSelectProfileColor,
   onToggleWorkspaceVibrancy,
   onToggleEditorVimMode,
+  onUpdateEditorVimKeyMappings,
   onManageVaults,
   onMigrateBlockNoteNotes,
   onMigrateTaggedNoteBodyFrontmatter,
@@ -53,6 +144,8 @@ export function SettingsPage({
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
+  const [vimMappingDrafts, setVimMappingDrafts] =
+    useState<NoteVimKeyMapping[]>(editorVimKeyMappings)
   const [activeTab, setActiveTab] = useState<
     'profile' | 'workspace' | 'appearance' | 'editor' | 'agent'
   >('profile')
@@ -64,6 +157,10 @@ export function SettingsPage({
   useEffect(() => {
     setMistralApiKeyDraft(mistralApiKey)
   }, [mistralApiKey])
+
+  useEffect(() => {
+    setVimMappingDrafts(editorVimKeyMappings)
+  }, [editorVimKeyMappings])
 
   const commitProfileName = (): void => {
     const trimmedName = profileDraft.trim()
@@ -93,6 +190,55 @@ export function SettingsPage({
     }
 
     onSaveMistralApiKey(mistralApiKeyDraft.trim())
+  }
+
+  const mappingErrors = getEditorVimMappingErrors(vimMappingDrafts)
+  const hasMappingErrors = Object.keys(mappingErrors).length > 0
+
+  const commitVimMappings = (nextMappings: NoteVimKeyMapping[]): void => {
+    if (Object.keys(getEditorVimMappingErrors(nextMappings)).length > 0) {
+      return
+    }
+
+    onUpdateEditorVimKeyMappings(nextMappings)
+  }
+
+  const updateVimMapping = (
+    mappingId: string,
+    update: Partial<Pick<NoteVimKeyMapping, 'mode' | 'sequence' | 'action'>>
+  ): void => {
+    const nextMappings = vimMappingDrafts.map((mapping) => {
+      if (mapping.id !== mappingId) {
+        return mapping
+      }
+
+      const nextMapping = { ...mapping, ...update }
+      if (update.mode && !isEditorVimActionCompatible(update.mode, nextMapping.action)) {
+        nextMapping.action = getEditorVimActionOptions(update.mode)[0]?.value ?? 'enterNormalMode'
+      }
+
+      return nextMapping
+    })
+    setVimMappingDrafts(nextMappings)
+    commitVimMappings(nextMappings)
+  }
+
+  const addVimMapping = (): void => {
+    setVimMappingDrafts((current) => [
+      ...current,
+      {
+        id: `vim-map-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        mode: 'insert',
+        sequence: '',
+        action: 'enterNormalMode'
+      }
+    ])
+  }
+
+  const removeVimMapping = (mappingId: string): void => {
+    const nextMappings = vimMappingDrafts.filter((mapping) => mapping.id !== mappingId)
+    setVimMappingDrafts(nextMappings)
+    commitVimMappings(nextMappings)
   }
 
   return (
@@ -323,10 +469,21 @@ export function SettingsPage({
           <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--text)]">Vim Mode</p>
+                <div className="inline-flex items-center gap-2" data-testid="vim-mode-setting">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]">
+                    <img
+                      src={vimLogo}
+                      alt=""
+                      aria-hidden="true"
+                      data-testid="vim-mode-setting-icon"
+                      className="h-4 w-4 shrink-0"
+                    />
+                  </span>
+                  <p className="text-sm font-semibold text-[var(--text)]">Vim Mode</p>
+                </div>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Use modal keyboard controls in notes, including normal and insert modes with
-                  common Vim motions.
+                  Use modal keyboard controls in notes, including insert, normal, and visual modes
+                  with common Vim motions.
                 </p>
               </div>
               <button
@@ -351,6 +508,120 @@ export function SettingsPage({
             <p className="text-xs text-[var(--muted)]">
               Disabled by default. Press Escape in the note editor to enter normal mode.
             </p>
+          </div>
+
+          <div className="workspace-subtle-surface grid gap-3 rounded-lg p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--text)]">Vim Key Mappings</p>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Add short key sequences such as <span className="font-mono">ij</span> to run core
+                  Vim mode actions.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="workspace-subtle-control rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+                onClick={addVimMapping}
+              >
+                Add Mapping
+              </button>
+            </div>
+
+            {vimMappingDrafts.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">
+                No custom mappings yet. Add one like insert / ij / Enter normal mode.
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {vimMappingDrafts.map((mapping) => {
+                  const rowErrors = mappingErrors[mapping.id] ?? []
+
+                  return (
+                    <div
+                      key={mapping.id}
+                      className="grid gap-2 rounded-lg border border-[var(--line)] p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(11rem,1.4fr)_auto]"
+                    >
+                      <label className="grid gap-1 text-xs text-[var(--muted)]">
+                        Mode
+                        <select
+                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
+                          value={mapping.mode}
+                          onChange={(event) =>
+                            updateVimMapping(mapping.id, {
+                              mode: event.target.value as NoteVimMappingMode
+                            })
+                          }
+                        >
+                          {EDITOR_VIM_MAPPING_MODES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="grid gap-1 text-xs text-[var(--muted)]">
+                        Sequence
+                        <input
+                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 font-mono text-sm text-[var(--text)]"
+                          value={mapping.sequence}
+                          maxLength={8}
+                          placeholder="ij"
+                          onChange={(event) =>
+                            updateVimMapping(mapping.id, { sequence: event.target.value })
+                          }
+                          spellCheck={false}
+                        />
+                      </label>
+
+                      <label className="grid gap-1 text-xs text-[var(--muted)]">
+                        Action
+                        <select
+                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
+                          value={mapping.action}
+                          onChange={(event) =>
+                            updateVimMapping(mapping.id, {
+                              action: event.target.value as NoteVimMappingAction
+                            })
+                          }
+                        >
+                          {getEditorVimActionOptions(mapping.mode).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        type="button"
+                        className="workspace-subtle-control self-end rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+                        onClick={() => removeVimMapping(mapping.id)}
+                      >
+                        Remove
+                      </button>
+
+                      {rowErrors.length > 0 ? (
+                        <p className="text-xs text-[var(--danger)] md:col-span-4">
+                          {rowErrors.join(' ')}
+                        </p>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {hasMappingErrors ? (
+              <p className="text-xs text-[var(--muted)]">
+                Fix mapping errors to save changes. Valid sequences use 1-8 printable characters.
+              </p>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">
+                Custom mappings override built-in Vim keys when the same sequence is used.
+              </p>
+            )}
           </div>
         </div>
       ) : null}

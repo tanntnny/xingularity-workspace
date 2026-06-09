@@ -36,7 +36,21 @@ describe('SettingsStore', () => {
           profile: { name: 'Amy', color: 'indigo' },
           fontFamily: 'Iowan',
           workspaceVibrancyEnabled: false,
-          editorVimModeEnabled: true
+          editorVimModeEnabled: true,
+          editorVimKeyMappings: [
+            {
+              id: 'escape-ij',
+              mode: 'insert',
+              sequence: 'ij',
+              action: 'enterNormalMode'
+            },
+            {
+              id: 'visual-yank',
+              mode: 'visual',
+              sequence: 'Y',
+              action: 'yankSelection'
+            }
+          ]
         },
         null,
         2
@@ -92,6 +106,20 @@ describe('SettingsStore', () => {
 
     expect(settings.profile.name).toBe('Amy')
     expect(settings.editorVimModeEnabled).toBe(true)
+    expect(settings.editorVimKeyMappings).toEqual([
+      {
+        id: 'escape-ij',
+        mode: 'insert',
+        sequence: 'ij',
+        action: 'enterNormalMode'
+      },
+      {
+        id: 'visual-yank',
+        mode: 'visual',
+        sequence: 'Y',
+        action: 'yankSelection'
+      }
+    ])
     expect(settings.projects).toHaveLength(1)
     expect(settings.calendarTasks).toHaveLength(1)
 

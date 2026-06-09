@@ -95,6 +95,30 @@ export interface SearchResult {
   snippet: string
 }
 
+export const NOTE_VIM_MAPPING_MODE_VALUES = ['insert', 'normal', 'visual', 'visualLine'] as const
+export type NoteVimMappingMode = (typeof NOTE_VIM_MAPPING_MODE_VALUES)[number]
+
+export const NOTE_VIM_MAPPING_ACTION_VALUES = [
+  'enterNormalMode',
+  'enterInsertMode',
+  'appendAfterCursor',
+  'appendLineEnd',
+  'openLineBelow',
+  'openLineAbove',
+  'pasteAfterCursor',
+  'pasteBeforeCursor',
+  'deleteSelection',
+  'yankSelection'
+] as const
+export type NoteVimMappingAction = (typeof NOTE_VIM_MAPPING_ACTION_VALUES)[number]
+
+export interface NoteVimKeyMapping {
+  id: string
+  mode: NoteVimMappingMode
+  sequence: string
+  action: NoteVimMappingAction
+}
+
 export interface AppErrorEvent {
   source: 'ipc' | 'main' | 'renderer'
   message: string
@@ -295,6 +319,7 @@ export interface AppSettings {
   fontFamily: string
   workspaceVibrancyEnabled: boolean
   editorVimModeEnabled: boolean
+  editorVimKeyMappings: NoteVimKeyMapping[]
   calendarTasks: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
@@ -313,6 +338,7 @@ export interface AppSettingsUpdate {
   fontFamily?: string
   workspaceVibrancyEnabled?: boolean
   editorVimModeEnabled?: boolean
+  editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]

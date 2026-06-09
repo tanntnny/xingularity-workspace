@@ -1658,6 +1658,30 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   -webkit-text-fill-color: currentColor;
 }
 
+.note-milkdown-editor[data-vim-mode='normal'] .ProseMirror {
+  caret-color: transparent !important;
+}
+
+.note-milkdown-editor .note-vim-block-cursor-char {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--panel) !important;
+  -webkit-text-fill-color: var(--panel) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 72%, var(--line));
+}
+
+.note-milkdown-editor .note-vim-block-cursor-empty {
+  display: inline-block;
+  width: 0.68em;
+  height: 1.15em;
+  margin-right: -0.68em;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 46%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 72%, var(--line));
+  pointer-events: none;
+}
+
 .note-milkdown-editor .ProseMirror,
 .note-milkdown-editor .ProseMirror p,
 .note-milkdown-editor .ProseMirror li,
@@ -1940,53 +1964,34 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   height: 12px !important;
 }
 
-.note-milkdown-editor .milkdown-code-block .codemirror-host,
-.note-milkdown-editor .milkdown-code-block .cm-editor,
-.note-milkdown-editor .milkdown-code-block .cm-editor *,
-.note-milkdown-editor .milkdown .milkdown-code-block .codemirror-host,
-.note-milkdown-editor .milkdown .milkdown-code-block .cm-editor {
+.note-milkdown-editor .milkdown-code-block .note-code-block-body,
+.note-milkdown-editor .milkdown-code-block .note-code-block-content,
+.note-milkdown-editor .milkdown-code-block .note-code-block-content * {
   background: transparent !important;
 }
 
-.note-milkdown-editor .milkdown-code-block .cm-editor {
+.note-milkdown-editor .milkdown-code-block .note-code-block-body {
+  margin: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0;
+  overflow: auto;
+}
+
+.note-milkdown-editor .milkdown-code-block .note-code-block-content {
+  display: block;
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.8125rem;
   line-height: 1.45;
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-focused {
+  min-height: 2.6rem;
+  padding: 0.75rem 0.85rem;
+  white-space: pre;
+  caret-color: var(--text);
   outline: none !important;
 }
 
-.note-milkdown-editor .milkdown-code-block .cm-scroller {
-  background: transparent !important;
-  overflow: auto;
-  font-family: inherit;
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-content {
-  background: transparent !important;
-  min-height: 2.6rem;
-  padding: 0.75rem 0.85rem !important;
-  caret-color: var(--accent);
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-line {
-  padding: 0 !important;
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-gutters {
-  display: none !important;
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-activeLine,
-.note-milkdown-editor .milkdown-code-block .cm-activeLineGutter {
-  background: transparent !important;
-}
-
-.note-milkdown-editor .milkdown-code-block .cm-selectionBackground,
-.note-milkdown-editor .milkdown-code-block .cm-content ::selection {
+.note-milkdown-editor .milkdown-code-block .note-code-block-content ::selection {
   background: color-mix(in srgb, var(--accent) 24%, transparent) !important;
 }
 
@@ -2073,8 +2078,9 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .note-milkdown-editor .ProseMirror .note-callout,
 .note-milkdown-editor .ProseMirror blockquote.note-callout {
   --note-callout-border: color-mix(in srgb, var(--accent) 44%, transparent);
-  --note-callout-foreground: color-mix(in srgb, var(--accent) 78%, var(--text));
+  --note-callout-foreground: var(--text);
   --note-callout-surface: color-mix(in srgb, var(--accent) 16%, transparent);
+  --note-callout-title-foreground: var(--accent);
   border: 1px solid var(--note-callout-border);
   border-left-width: 1px;
   border-radius: 4px !important;
@@ -2088,29 +2094,38 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-info,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-info {
   --note-callout-border: var(--tag-0-line);
-  --note-callout-foreground: var(--tag-0-text);
   --note-callout-surface: var(--tag-0-bg);
+  --note-callout-title-foreground: var(--tag-0-text);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-success,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-success {
   --note-callout-border: var(--tag-1-line);
-  --note-callout-foreground: var(--tag-1-text);
   --note-callout-surface: var(--tag-1-bg);
+  --note-callout-title-foreground: var(--tag-1-text);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-warning,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-warning {
   --note-callout-border: var(--tag-2-line);
-  --note-callout-foreground: var(--tag-2-text);
   --note-callout-surface: var(--tag-2-bg);
+  --note-callout-title-foreground: var(--tag-2-text);
 }
 
 .note-milkdown-editor .ProseMirror .note-callout.note-callout-danger,
 .note-milkdown-editor .ProseMirror blockquote.note-callout.note-callout-danger {
   --note-callout-border: color-mix(in srgb, var(--danger) 48%, var(--line));
-  --note-callout-foreground: var(--text);
   --note-callout-surface: color-mix(in srgb, var(--danger) 12%, transparent);
+  --note-callout-title-foreground: var(--danger);
+}
+
+.note-milkdown-editor .ProseMirror .note-callout-title {
+  color: var(--note-callout-title-foreground) !important;
+  -webkit-text-fill-color: var(--note-callout-title-foreground);
+  font-family:
+    'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, 'Times New Roman', serif;
+  font-size: 1.08em;
+  font-weight: 700 !important;
 }
 
 .note-milkdown-editor .ProseMirror blockquote.note-callout p,

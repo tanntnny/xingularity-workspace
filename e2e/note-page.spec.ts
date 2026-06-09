@@ -187,6 +187,31 @@ async function getCurrentNoteSnapshot(page: Page): Promise<NoteSnapshot> {
   return page.evaluate(() => window.__XINGULARITY_E2E__!.getCurrentNoteSnapshot())
 }
 
+async function getEditorSelectionState(page: Page): Promise<{
+  anchorInEditor: boolean
+  anchorOffset: number | null
+  anchorText: string
+  anchorTextLength: number | null
+}> {
+  return page.evaluate(() => {
+    const selection = window.getSelection()
+    const editorRoot = document.querySelector('[data-testid="note-block-editor"]')
+    const editable = editorRoot?.querySelector('[contenteditable="true"]')
+    const anchorNode = selection?.anchorNode ?? null
+    const anchorText =
+      anchorNode?.nodeType === Node.TEXT_NODE
+        ? (anchorNode.textContent ?? '')
+        : (anchorNode?.parentElement?.textContent ?? '')
+
+    return {
+      anchorInEditor: Boolean(anchorNode && editable?.contains(anchorNode)),
+      anchorOffset: selection?.anchorOffset ?? null,
+      anchorText,
+      anchorTextLength: anchorNode?.nodeType === Node.TEXT_NODE ? anchorText.length : null
+    }
+  })
+}
+
 async function getLastPageLeaveSaveDebug(page: Page): Promise<PageLeaveSaveDebug> {
   return page.evaluate(() => window.__XINGULARITY_E2E__!.getLastPageLeaveSaveDebug())
 }
@@ -236,6 +261,27 @@ async function replaceEditorContent(page: Page, lines: string[]): Promise<void> 
       await page.keyboard.press('Enter')
     }
   }
+}
+
+async function insertCodeBlockFromSlash(page: Page): Promise<void> {
+  const editor = page.locator('[data-testid="note-block-editor"] [contenteditable="true"]').first()
+  await editor.click()
+  await page.keyboard.type('/code')
+  await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+  await page.keyboard.press('Enter')
+  await expect(
+    page.locator('[data-testid="note-block-editor"] .milkdown-code-block').first()
+  ).toBeVisible({
+    timeout: 10_000
+  })
+}
+
+async function focusFirstCodeBlock(page: Page): Promise<void> {
+  const codeContent = page
+    .locator('[data-testid="note-block-editor"] .milkdown-code-block .note-code-block-content')
+    .first()
+  await expect(codeContent).toBeVisible({ timeout: 10_000 })
+  await codeContent.click({ position: { x: 6, y: 10 } })
 }
 
 async function renameCurrentOpenNote(page: Page, nextName: string): Promise<void> {
@@ -1142,11 +1188,111 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('creates slash code blocks that preserve fenced markdown and copy text', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await insertCodeBlockFromSlash(page)
+      await focusFirstCodeBlock(page)
+
+      await page.keyboard.type('const value = 42')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('console.log(value)')
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```\nconst value = 42\nconsole.log(value)\n```')
+
+      const copyButton = page
+        .locator('[data-testid="note-block-editor"] .milkdown-code-block .copy-button')
+        .first()
+      await expect(copyButton).toBeVisible()
+      await copyButton.click()
+
+      await expect
+        .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe('const value = 42\nconsole.log(value)')
+
+      await focusFirstCodeBlock(page)
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('return value')
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```\nconst value = 42\nconsole.log(value)\nreturn value\n```')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports Vim motions and edits inside code blocks', async () => {
+    const initialMarkdown = ['Before', '', '```ts', 'alpha', '```', '', 'After'].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('Before', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('j')
+      await page.keyboard.press('0')
+      await page.keyboard.press('i')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('z')
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```ts\nzalpha\n```')
+
+      await page.keyboard.press('x')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```ts\nzlpha\n```')
+
+      await page.keyboard.press('j')
+      await page.keyboard.press('i')
+      await page.keyboard.type('!')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('!After')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('supports core Vim mode without intercepting slash completion', async () => {
     const vaultRoot = await createFixtureVault('')
     await fs.writeFile(
       path.join(vaultRoot, 'settings.json'),
-      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      JSON.stringify(
+        {
+          editorVimModeEnabled: true,
+          editorVimKeyMappings: [
+            {
+              id: 'escape-ij',
+              mode: 'insert',
+              sequence: 'ij',
+              action: 'enterNormalMode'
+            }
+          ]
+        },
+        null,
+        2
+      ),
       'utf-8'
     )
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -1165,11 +1311,50 @@ test.describe('note page block editor switching', () => {
 
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect(page.getByTestId('note-vim-mode-badge-icon')).toBeVisible()
+      await expect(page.getByTestId('note-block-editor')).toHaveAttribute('data-vim-mode', 'normal')
+      await expect(
+        page.locator(
+          '[data-testid="note-block-editor"] .note-vim-block-cursor-char, [data-testid="note-block-editor"] .note-vim-block-cursor-empty'
+        )
+      ).toHaveCount(1)
+      const badgeMetrics = await page.getByTestId('note-vim-mode-badge').evaluate((node) => {
+        const element = node as HTMLElement
+        const rect = element.getBoundingClientRect()
+        return {
+          width: rect.width,
+          height: rect.height,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          scrollHeight: element.scrollHeight,
+          clientHeight: element.clientHeight,
+          whiteSpace: window.getComputedStyle(element).whiteSpace
+        }
+      })
+      expect(badgeMetrics.width).toBeGreaterThan(64)
+      expect(badgeMetrics.height).toBeGreaterThan(18)
+      expect(badgeMetrics.scrollWidth).toBeLessThanOrEqual(badgeMetrics.clientWidth + 1)
+      expect(badgeMetrics.scrollHeight).toBeLessThanOrEqual(badgeMetrics.clientHeight + 1)
+      expect(badgeMetrics.whiteSpace).toBe('nowrap')
       await page.keyboard.press('h')
       await page.keyboard.press('j')
       await page.keyboard.press('k')
       await page.keyboard.press('l')
       await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('abc')
+
+      await page.keyboard.press('i')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await expect(page.getByTestId('note-block-editor')).toHaveAttribute('data-vim-mode', 'insert')
+      await expect(
+        page.locator(
+          '[data-testid="note-block-editor"] .note-vim-block-cursor-char, [data-testid="note-block-editor"] .note-vim-block-cursor-empty'
+        )
+      ).toHaveCount(0)
+      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A')
+      await page.keyboard.press('Backspace')
+      await page.keyboard.type('xyij')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('xy')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
 
       await page.keyboard.press('i')
       await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
@@ -1181,6 +1366,325 @@ test.describe('note page block editor switching', () => {
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('note-slash-completion')).toHaveCount(0)
       await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps normal-mode h and l inside the current logical line', async () => {
+    const vaultRoot = await createFixtureVault('Alpha\nBeta\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+
+      await editorRoot.getByText('Alpha', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('$')
+      await page.keyboard.press('l')
+      const alphaCursor = await getEditorSelectionState(page)
+      expect(alphaCursor.anchorInEditor).toBe(true)
+      expect(alphaCursor.anchorText).toBe('Alpha')
+      expect(alphaCursor.anchorTextLength).not.toBeNull()
+      expect(alphaCursor.anchorOffset).toBe((alphaCursor.anchorTextLength ?? 1) - 1)
+
+      await page.keyboard.press('a')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('!')
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Alpha!\nBeta')
+
+      await editorRoot.getByText('Beta', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('0')
+      await page.keyboard.press('h')
+      const betaCursor = await getEditorSelectionState(page)
+      expect(betaCursor.anchorInEditor).toBe(true)
+      expect(betaCursor.anchorText).toBe('Beta')
+      expect(betaCursor.anchorOffset).toBe(0)
+
+      await page.keyboard.press('i')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('?')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('Alpha!\n?Beta')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves j and k symmetrically through plain blockquotes', async () => {
+    const vaultRoot = await createFixtureVault(
+      'Above paragraph\n\n> Quoted middle\n\nBelow paragraph\n'
+    )
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      await editorRoot.getByText('Quoted middle', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('j')
+      let cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorInEditor).toBe(true)
+      expect(cursor.anchorText).toBe('Below paragraph')
+
+      await page.keyboard.press('k')
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toBe('Quoted middle')
+
+      await page.keyboard.press('k')
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toBe('Above paragraph')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves j and k symmetrically through styled callouts', async () => {
+    const vaultRoot = await createFixtureVault(
+      'Above paragraph\n\n> [!NOTE] Callout title\n\nBelow paragraph\n'
+    )
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      await editorRoot.getByText('Callout title').click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('j')
+      let cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorInEditor).toBe(true)
+      expect(cursor.anchorText).toBe('Below paragraph')
+
+      await page.keyboard.press('k')
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toContain('Callout title')
+
+      await page.keyboard.press('k')
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toBe('Above paragraph')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('preserves a sticky column across repeated j and k moves', async () => {
+    const vaultRoot = await createFixtureVault(
+      'Alpha target zone\n\n> Short\n\nWider paragraph ending\n'
+    )
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      await editorRoot.getByText('Alpha target zone', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('0')
+      for (let index = 0; index < 10; index += 1) {
+        await page.keyboard.press('l')
+      }
+
+      const initialCursor = await getEditorSelectionState(page)
+      expect(initialCursor.anchorText).toBe('Alpha target zone')
+      expect(initialCursor.anchorOffset).toBe(10)
+
+      await page.keyboard.press('j')
+      await page.keyboard.press('j')
+      await page.keyboard.press('k')
+      await page.keyboard.press('k')
+
+      const finalCursor = await getEditorSelectionState(page)
+      expect(finalCursor.anchorText).toBe('Alpha target zone')
+      expect(finalCursor.anchorOffset).toBe(initialCursor.anchorOffset)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('treats wrapped content as one logical line for j and k', async () => {
+    const wrappedLine =
+      'This wrapped logical line is intentionally long so the note editor has to render it across multiple visual rows before the next real line begins. '.repeat(
+        4
+      )
+    const vaultRoot = await createFixtureVault(`${wrappedLine}\nBelow logical line\n`)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      const wrappedLineLocator = editorRoot.getByText(wrappedLine, { exact: true })
+      const wrappedMetrics = await wrappedLineLocator.evaluate((node) => {
+        const rect = (node as HTMLElement).getBoundingClientRect()
+        return {
+          height: rect.height
+        }
+      })
+      expect(wrappedMetrics.height).toBeGreaterThan(30)
+
+      await wrappedLineLocator.click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('j')
+      let cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorInEditor).toBe(true)
+      expect(cursor.anchorText).toBe('Below logical line')
+
+      await page.keyboard.press('k')
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toContain('This wrapped logical line is intentionally long')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports Vim visual character and line selections', async () => {
+    const vaultRoot = await createFixtureVault('')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+
+      await page.keyboard.type('abc')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('abc')
+
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('g')
+      await page.keyboard.press('g')
+      await page.keyboard.press('v')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('visual')
+      await expect(page.getByTestId('note-block-editor')).toHaveAttribute('data-vim-mode', 'visual')
+      await page.keyboard.press('l')
+      await page.keyboard.press('l')
+      await page.keyboard.press('d')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('')
+
+      await page.keyboard.press('i')
+      await page.keyboard.type('one')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('two')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toContain('two')
+
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('g')
+      await page.keyboard.press('g')
+      await page.keyboard.press('V')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('visualLine')
+      await expect(page.getByTestId('note-block-editor')).toHaveAttribute(
+        'data-vim-mode',
+        'visualLine'
+      )
+      await page.keyboard.press('j')
+      await page.keyboard.press('y')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toContain('one')
+      await expect
+        .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+        .toContain('one')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('dd removes the current line instead of leaving an empty block', async () => {
+    const vaultRoot = await createFixtureVault('Alpha\nBeta\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('Alpha', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('d')
+      await page.keyboard.press('d')
+
+      await expect
+        .poll(async () => {
+          const snapshot = await getCurrentNoteSnapshot(page)
+          return snapshot.content.replace(/\r\n/g, '\n').trim()
+        })
+        .toBe('Beta')
+
+      await expect
+        .poll(() => getVisibleNoteBlocks(page))
+        .toEqual([
+          {
+            type: 'paragraph',
+            text: 'Beta'
+          }
+        ])
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

@@ -8,7 +8,14 @@ import {
   useRef,
   useState
 } from 'react'
-import { commandsCtx, editorViewCtx, prosePluginsCtx } from '@milkdown/kit/core'
+import {
+  commandsCtx,
+  editorViewCtx,
+  parserCtx,
+  prosePluginsCtx,
+  schemaCtx,
+  serializerCtx
+} from '@milkdown/kit/core'
 import type { Node as ProseNode } from '@milkdown/prose/model'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
@@ -36,7 +43,7 @@ import '@milkdown/crepe/theme/nord.css'
 import katex from 'katex'
 import { Check, Link2 } from 'lucide-react'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
-import type { NoteListItem } from '../../../shared/types'
+import type { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
 import {
   createNoteMentionResolver,
   normalizeNoteMentionMarkdown,
@@ -44,7 +51,12 @@ import {
   parseNoteMentionHref
 } from '../../../shared/noteMentions'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
-import { hasNoteCalloutBodyText, resolveNoteCallout } from '../lib/noteCallouts'
+import {
+  getNoteCalloutTitleRange,
+  hasNoteCalloutBodyText,
+  joinNoteCalloutTextblocks,
+  resolveNoteCallout
+} from '../lib/noteCallouts'
 import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
 import { extractNoteOutlineFromMarkdown, type NoteOutlineItem } from '../lib/noteOutline'
 import {
@@ -52,6 +64,8 @@ import {
   getNoteSlashCommands,
   type NoteSlashCommandId
 } from '../lib/noteSlashMenu'
+import { resolveArrowReplacementForTextInput } from '../lib/noteArrowInputRules'
+import { registerNoteCodeBlockView } from '../lib/noteCodeBlockView'
 import { createNoteVimModePlugin, type NoteVimMode } from '../lib/noteVimMode'
 import { cn } from '../lib/utils'
 
@@ -67,6 +81,8 @@ interface EditorProps {
   onOutlineChange?: (items: NoteOutlineItem[]) => void
   onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
   vimModeEnabled: boolean
+  vimKeyMappings: NoteVimKeyMapping[]
+  onVimModeChange?: (mode: NoteVimMode) => void
 }
 
 export interface NoteEditorHandle {
@@ -168,6 +184,7 @@ function selectionTouchesTextblock(
 
 const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
 const noteCalloutPluginKey = new PluginKey('note-callout')
+const noteArrowInputPluginKey = new PluginKey('note-arrow-input')
 
 function inlineLatexPreviewPlugin(): Plugin {
   return new Plugin({
@@ -283,13 +300,13 @@ function noteCalloutPlugin(): Plugin {
             return true
           }
 
-          const firstTextblockInfo = getFirstTextblockInfo(node, pos)
+          const blockquoteInfo = getBlockquoteCalloutInfo(node, pos)
 
-          if (!firstTextblockInfo) {
+          if (!blockquoteInfo) {
             return false
           }
 
-          const callout = resolveNoteCallout(firstTextblockInfo.text)
+          const callout = resolveNoteCallout(blockquoteInfo.text)
 
           decorations.push(
             Decoration.node(pos, pos + node.nodeSize, {
@@ -297,24 +314,31 @@ function noteCalloutPlugin(): Plugin {
             })
           )
 
+          const titleRange = getNoteCalloutTitleRange(blockquoteInfo.text, callout.marker)
+          if (titleRange) {
+            decorations.push(
+              Decoration.inline(
+                blockquoteInfo.contentStart + titleRange.start,
+                blockquoteInfo.contentStart + titleRange.end,
+                { class: 'note-callout-title' }
+              )
+            )
+          }
+
           const shouldShowMarker = selectionTouchesTextblock(
             selectionFrom,
             selectionTo,
-            firstTextblockInfo.contentStart,
-            firstTextblockInfo.contentEnd
+            blockquoteInfo.contentStart,
+            blockquoteInfo.contentEnd
           )
           const shouldHideMarker =
-            callout.marker &&
-            hasNoteCalloutBodyText(
-              node.textBetween(0, node.content.size, '\n', '\0'),
-              callout.marker
-            )
+            callout.marker && hasNoteCalloutBodyText(blockquoteInfo.fullText, callout.marker)
 
           if (shouldHideMarker && !shouldShowMarker) {
             decorations.push(
               Decoration.inline(
-                firstTextblockInfo.contentStart,
-                firstTextblockInfo.contentStart + callout.marker.length,
+                blockquoteInfo.contentStart,
+                blockquoteInfo.contentStart + callout.marker.length,
                 { class: 'note-callout-marker-hidden' }
               )
             )
@@ -329,36 +353,98 @@ function noteCalloutPlugin(): Plugin {
   })
 }
 
-function getFirstTextblockInfo(
+function noteArrowInputPlugin(options?: { shouldIgnoreInput?: () => boolean }): Plugin {
+  const { shouldIgnoreInput } = options ?? {}
+
+  return new Plugin({
+    key: noteArrowInputPluginKey,
+    props: {
+      handleTextInput(view, from, to, text) {
+        if (shouldIgnoreInput?.() || text.length === 0) {
+          return false
+        }
+
+        const $from = view.state.doc.resolve(from)
+        const $to = view.state.doc.resolve(to)
+        if (!$from.sameParent($to) || !$from.parent.isTextblock) {
+          return false
+        }
+
+        const blockStart = $from.start()
+        const replacementPlan = resolveArrowReplacementForTextInput({
+          textBeforeCursor: $from.parent.textBetween(0, from - blockStart, '\n', '\0'),
+          insertedText: text,
+          isCodeText: $from.parent.type.spec.code === true
+        })
+        if (!replacementPlan) {
+          return false
+        }
+
+        view.dispatch(
+          view.state.tr.insertText(
+            replacementPlan.replacement,
+            Math.max(blockStart, from - replacementPlan.deletePreviousTextLength),
+            to
+          )
+        )
+        return true
+      }
+    }
+  })
+}
+
+function getBlockquoteCalloutInfo(
   node: ProseNode,
   pos: number
 ): {
   contentEnd: number
   contentStart: number
+  fullText: string
   text: string
 } | null {
-  let info: {
+  let firstTextblockInfo: {
     contentEnd: number
     contentStart: number
     text: string
   } | null = null
+  const textblocks: string[] = []
 
   node.descendants((child, childPos) => {
     if (!child.isTextblock) {
       return true
     }
 
+    const text = child.textBetween(0, child.content.size, '\n', '\0')
+    textblocks.push(text)
+
     const nodeStart = pos + childPos + 1
-    info = {
-      contentStart: nodeStart + 1,
-      contentEnd: nodeStart + child.content.size + 1,
-      text: child.textBetween(0, child.content.size, '\n', '\0')
+    if (!firstTextblockInfo) {
+      firstTextblockInfo = {
+        contentStart: nodeStart + 1,
+        contentEnd: nodeStart + child.content.size + 1,
+        text
+      }
     }
 
     return false
   })
 
-  return info
+  if (!firstTextblockInfo) {
+    return null
+  }
+
+  const firstTextblock = firstTextblockInfo as {
+    contentEnd: number
+    contentStart: number
+    text: string
+  }
+
+  return {
+    contentEnd: firstTextblock.contentEnd,
+    contentStart: firstTextblock.contentStart,
+    text: firstTextblock.text,
+    fullText: joinNoteCalloutTextblocks(textblocks)
+  }
 }
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
@@ -372,7 +458,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     onOpenNoteLink,
     onOutlineChange,
     onJumpToHeadingChange,
-    vimModeEnabled
+    vimModeEnabled,
+    vimKeyMappings,
+    onVimModeChange
   }: EditorProps,
   ref
 ): ReactElement {
@@ -387,6 +475,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const mentionPickerRef = useRef<MentionPickerState | null>(null)
   const slashPickerRef = useRef<SlashPickerState | null>(null)
   const vimModeEnabledRef = useRef(vimModeEnabled)
+  const vimKeyMappingsRef = useRef(vimKeyMappings)
+  const onVimModeChangeRef = useRef(onVimModeChange)
   const [isEditorVisible, setIsEditorVisible] = useState(false)
   const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
@@ -457,6 +547,14 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   useEffect(() => {
     vimModeEnabledRef.current = vimModeEnabled
   }, [vimModeEnabled])
+
+  useEffect(() => {
+    vimKeyMappingsRef.current = vimKeyMappings
+  }, [vimKeyMappings])
+
+  useEffect(() => {
+    onVimModeChangeRef.current = onVimModeChange
+  }, [onVimModeChange])
 
   const syncContent = useCallback((nextContent: string, dirty: boolean): void => {
     if (contentRef.current === nextContent) {
@@ -863,7 +961,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       defaultValue: initialValue,
       features: {
         [CrepeFeature.BlockEdit]: false,
-        [CrepeFeature.CodeMirror]: true,
+        [CrepeFeature.CodeMirror]: false,
         [CrepeFeature.Cursor]: false,
         [CrepeFeature.LinkTooltip]: true,
         [CrepeFeature.Latex]: false
@@ -879,15 +977,27 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     })
 
     editor.editor.config((ctx) => {
+      registerNoteCodeBlockView(ctx)
       ctx.update(prosePluginsCtx, (plugins) => [
         ...plugins,
         inlineLatexPreviewPlugin(),
         noteCalloutPlugin(),
         createNoteVimModePlugin({
           isEnabled: () => vimModeEnabledRef.current,
+          getKeyMappings: () => vimKeyMappingsRef.current,
+          getParser: () => ctx.get(parserCtx),
+          getSchema: () => ctx.get(schemaCtx),
+          getSerializer: () => ctx.get(serializerCtx),
           shouldIgnoreKeyDown: () =>
             Boolean(mentionPickerRef.current?.open || slashPickerRef.current?.open),
-          onModeChange: setVimMode
+          onModeChange: (mode) => {
+            setVimMode(mode)
+            onVimModeChangeRef.current?.(mode)
+          }
+        }),
+        noteArrowInputPlugin({
+          shouldIgnoreInput: () =>
+            Boolean(mentionPickerRef.current?.open || slashPickerRef.current?.open)
         })
       ])
     })
@@ -1159,6 +1269,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   return (
     <div
       data-testid="note-block-editor"
+      data-vim-mode={vimModeEnabled ? vimMode : undefined}
       className="note-milkdown-editor relative h-full min-h-[60vh]"
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
       onFocusCapture={() => {
@@ -1168,14 +1279,6 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         hasFocusIntentRef.current = true
       }}
     >
-      {vimModeEnabled ? (
-        <div
-          className="pointer-events-none absolute right-3 top-3 z-30 rounded-md border border-[var(--line)] bg-[var(--popover)] px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[var(--muted)] shadow-sm"
-          data-testid="note-vim-mode-badge"
-        >
-          {vimMode}
-        </div>
-      ) : null}
       <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
       {slashPicker?.open ? (
         <div

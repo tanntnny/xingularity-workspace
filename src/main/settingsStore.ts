@@ -8,6 +8,9 @@ import {
   AppSettings,
   AppSettingsUpdate,
   CalendarTask,
+  NOTE_VIM_MAPPING_ACTION_VALUES,
+  NOTE_VIM_MAPPING_MODE_VALUES,
+  NoteVimKeyMapping,
   Project,
   ProjectMilestone,
   ProjectSubtask
@@ -51,6 +54,60 @@ interface VaultTasksData {
   calendarTasks: CalendarTask[]
 }
 
+function isNoteVimMappingMode(value: unknown): value is NoteVimKeyMapping['mode'] {
+  return NOTE_VIM_MAPPING_MODE_VALUES.includes(value as NoteVimKeyMapping['mode'])
+}
+
+function isNoteVimMappingAction(value: unknown): value is NoteVimKeyMapping['action'] {
+  return NOTE_VIM_MAPPING_ACTION_VALUES.includes(value as NoteVimKeyMapping['action'])
+}
+
+function isValidNoteVimSequence(value: string): boolean {
+  return value.trim().length > 0 && value.length <= 8 && /^[\x20-\x7E]+$/.test(value)
+}
+
+function normalizeEditorVimKeyMappings(value: unknown): NoteVimKeyMapping[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const mappings: NoteVimKeyMapping[] = []
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+
+    const candidate = item as Partial<NoteVimKeyMapping>
+    const id = typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id : randomUUID()
+    const sequence = typeof candidate.sequence === 'string' ? candidate.sequence : ''
+
+    if (
+      !isNoteVimMappingMode(candidate.mode) ||
+      !isNoteVimMappingAction(candidate.action) ||
+      !isValidNoteVimSequence(sequence)
+    ) {
+      continue
+    }
+
+    const key = `${candidate.mode}:${sequence}`
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    mappings.push({
+      id,
+      mode: candidate.mode,
+      sequence,
+      action: candidate.action
+    })
+  }
+
+  return mappings
+}
+
 export function createDefaultAppSettings(): AppSettings {
   return {
     isSidebarCollapsed: false,
@@ -69,6 +126,7 @@ export function createDefaultAppSettings(): AppSettings {
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
     workspaceVibrancyEnabled: true,
     editorVimModeEnabled: false,
+    editorVimKeyMappings: [],
     calendarTasks: [],
     projectIcons: {},
     projects: [],
@@ -110,6 +168,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       typeof parsed.editorVimModeEnabled === 'boolean'
         ? parsed.editorVimModeEnabled
         : defaults.editorVimModeEnabled,
+    editorVimKeyMappings: normalizeEditorVimKeyMappings(parsed.editorVimKeyMappings),
     calendarTasks: Array.isArray(parsed.calendarTasks)
       ? parsed.calendarTasks
       : defaults.calendarTasks,
@@ -684,6 +743,7 @@ export class SettingsStore {
       fontFamily: settings.fontFamily,
       workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
       editorVimModeEnabled: settings.editorVimModeEnabled,
+      editorVimKeyMappings: settings.editorVimKeyMappings,
       gridBoard: settings.gridBoard
     }
 

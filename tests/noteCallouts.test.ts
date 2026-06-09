@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getNoteCalloutTitleRange,
   hasNoteCalloutBodyText,
+  joinNoteCalloutTextblocks,
   parseNoteCallout,
   resolveNoteCallout
 } from '../src/renderer/src/lib/noteCallouts'
@@ -80,6 +82,16 @@ describe('parseNoteCallout', () => {
     })
   })
 
+  it('keeps parsing the callout marker when later paragraphs are joined into the body', () => {
+    expect(
+      parseNoteCallout(joinNoteCalloutTextblocks(['[!WARNING] Warning test', 'Body text']))
+    ).toEqual({
+      marker: '[!WARNING] ',
+      rawType: 'WARNING',
+      variant: 'warning'
+    })
+  })
+
   it('does not convert marker-like text without a separator into a callout', () => {
     expect(parseNoteCallout('[!INFO]Body')).toBeNull()
   })
@@ -106,5 +118,50 @@ describe('hasNoteCalloutBodyText', () => {
 
   it('detects body text after marker-only callout syntax', () => {
     expect(hasNoteCalloutBodyText('[!warning]\nTanny', '[!warning]')).toBe(true)
+  })
+
+  it('detects body text in later quoted paragraphs after a blank line', () => {
+    const text = joinNoteCalloutTextblocks(['[!warning] Warning test', 'Body text'])
+    expect(hasNoteCalloutBodyText(text, '[!warning] ')).toBe(true)
+  })
+})
+
+describe('getNoteCalloutTitleRange', () => {
+  it('returns the same-line title range after the marker', () => {
+    expect(getNoteCalloutTitleRange('[!INFO] Quick note', '[!INFO] ')).toEqual({
+      start: 8,
+      end: 18
+    })
+  })
+
+  it('stops the title range before the first hard break in the textblock', () => {
+    expect(getNoteCalloutTitleRange('[!INFO] Quick note\nBody', '[!INFO] ')).toEqual({
+      start: 8,
+      end: 18
+    })
+  })
+
+  it('does not create a title range when the marker is on its own line', () => {
+    expect(getNoteCalloutTitleRange('[!INFO]\nBody', '[!INFO]\n')).toBeNull()
+  })
+})
+
+describe('joinNoteCalloutTextblocks', () => {
+  it('preserves paragraph breaks between quoted textblocks', () => {
+    expect(joinNoteCalloutTextblocks(['[!WARNING] Warning test', 'Body text'])).toBe(
+      '[!WARNING] Warning test\n\nBody text'
+    )
+  })
+
+  it('keeps later marker-like text inside the same body text', () => {
+    expect(
+      joinNoteCalloutTextblocks(['[!NOTE] Title', 'First paragraph', '[!WARNING] stays in body'])
+    ).toBe('[!NOTE] Title\n\nFirst paragraph\n\n[!WARNING] stays in body')
+  })
+
+  it('supports escaped markers with multiline body content', () => {
+    expect(joinNoteCalloutTextblocks(['\\[!warning] Warning test', 'Body text'])).toBe(
+      '\\[!warning] Warning test\n\nBody text'
+    )
   })
 })

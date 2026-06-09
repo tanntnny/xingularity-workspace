@@ -180,6 +180,7 @@ function makeSettings(): AppSettings {
     fontFamily: 'serif',
     workspaceVibrancyEnabled: true,
     editorVimModeEnabled: false,
+    editorVimKeyMappings: [],
     calendarTasks: [],
     projectIcons: {},
     projects: [],

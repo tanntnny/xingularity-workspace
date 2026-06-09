@@ -3,7 +3,11 @@ import { z } from 'zod'
 import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
 import { GenerativeUiArtifactSchema } from '../shared/generativeUi'
 import { IPC_CHANNELS } from '../shared/ipc'
-import { CALENDAR_TASK_TYPE_VALUES } from '../shared/types'
+import {
+  CALENDAR_TASK_TYPE_VALUES,
+  NOTE_VIM_MAPPING_ACTION_VALUES,
+  NOTE_VIM_MAPPING_MODE_VALUES
+} from '../shared/types'
 import { VaultRuntime } from './runtime'
 
 const notePathSchema = z.string().min(1).max(512)
@@ -256,6 +260,17 @@ const gridBoardStateSchema = z.object({
   items: z.array(gridBoardItemSchema).max(500)
 })
 
+const noteVimKeyMappingSchema = z.object({
+  id: z.string().min(1).max(120),
+  mode: z.enum(NOTE_VIM_MAPPING_MODE_VALUES),
+  sequence: z
+    .string()
+    .min(1)
+    .max(8)
+    .regex(/^(?=.*\S)[\x20-\x7E]+$/),
+  action: z.enum(NOTE_VIM_MAPPING_ACTION_VALUES)
+})
+
 const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
@@ -272,6 +287,7 @@ const settingsUpdateSchema = z.object({
   fontFamily: z.string().min(1).max(200).optional(),
   workspaceVibrancyEnabled: z.boolean().optional(),
   editorVimModeEnabled: z.boolean().optional(),
+  editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
   projects: z.array(projectSchema).max(100).optional(),

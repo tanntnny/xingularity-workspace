@@ -35,6 +35,7 @@ import {
   CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CreateWeeklyPlanWeekInput,
+  NoteVimKeyMapping,
   NoteListItem,
   NoteImportResult,
   NoteTreeNode,
@@ -346,6 +347,7 @@ function App(): ReactElement {
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
   const workspaceVibrancyEnabled = useVaultStore((state) => state.settings.workspaceVibrancyEnabled)
   const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
+  const editorVimKeyMappings = useVaultStore((state) => state.settings.editorVimKeyMappings)
   const profileName = useVaultStore((state) => state.settings.profile.name)
   const profileColor = useVaultStore((state) => state.settings.profile.color)
   const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
@@ -1827,6 +1829,22 @@ function App(): ReactElement {
       const nextSettings = await vaultApi.settings.update({ editorVimModeEnabled: enabled })
       setSettings(nextSettings)
       pushToast('success', enabled ? 'Vim mode enabled' : 'Vim mode disabled')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateEditorVimKeyMappings = async (
+    editorVimKeyMappings: NoteVimKeyMapping[]
+  ): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({ editorVimKeyMappings })
+      setSettings(nextSettings)
+      pushToast('success', 'Vim key mappings updated')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -5571,6 +5589,7 @@ function App(): ReactElement {
                           onOutlineChange={setCurrentNoteOutline}
                           onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
                           vimModeEnabled={editorVimModeEnabled}
+                          vimKeyMappings={editorVimKeyMappings}
                         />
                       ) : shouldRestoreLastOpenedNote ? (
                         <div className="p-5 text-sm text-[var(--muted)]">
@@ -5793,6 +5812,7 @@ function App(): ReactElement {
                         profileColor={profileColor}
                         workspaceVibrancyEnabled={workspaceVibrancyEnabled}
                         editorVimModeEnabled={editorVimModeEnabled}
+                        editorVimKeyMappings={editorVimKeyMappings}
                         vaultLocation={vault?.rootPath ?? lastVaultPath}
                         savedVaultCount={savedVaultCount}
                         onSaveProfile={(name) => {
@@ -5812,6 +5832,9 @@ function App(): ReactElement {
                         }}
                         onToggleEditorVimMode={(enabled) => {
                           void updateEditorVimMode(enabled)
+                        }}
+                        onUpdateEditorVimKeyMappings={(mappings) => {
+                          void updateEditorVimKeyMappings(mappings)
                         }}
                         onManageVaults={openVaultSwapper}
                         onMigrateBlockNoteNotes={() => {

@@ -26,6 +26,7 @@ function createDefaultSettings(): AppSettings {
     fontFamily: 'Inter',
     workspaceVibrancyEnabled: true,
     editorVimModeEnabled: false,
+    editorVimKeyMappings: [],
     calendarTasks: [],
     projectIcons: {},
     projects: [],

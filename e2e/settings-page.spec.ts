@@ -110,6 +110,7 @@ test.describe('settings page', () => {
       await page.getByRole('radio', { name: 'Editor' }).click()
       await expect(page.getByRole('heading', { name: 'Editor' })).toBeVisible()
       await expect(page.getByText('Vim Mode', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('vim-mode-setting-icon')).toBeVisible()
       const vimModeSwitch = page.getByRole('switch', { name: 'Toggle Vim mode' })
       await expect(vimModeSwitch).toHaveAttribute('aria-checked', 'false')
       await vimModeSwitch.click()
@@ -117,6 +118,38 @@ test.describe('settings page', () => {
       await expect
         .poll(async () => (await readVaultSettings(vaultRoot)).editorVimModeEnabled)
         .toBe(true)
+      await page.getByRole('button', { name: 'Add Mapping' }).click()
+      await page.getByPlaceholder('ij').fill('ij')
+      await expect
+        .poll(async () => (await readVaultSettings(vaultRoot)).editorVimKeyMappings)
+        .toEqual([
+          {
+            id: expect.any(String),
+            mode: 'insert',
+            sequence: 'ij',
+            action: 'enterNormalMode'
+          }
+        ])
+      await page.getByRole('button', { name: 'Add Mapping' }).click()
+      await page.getByLabel('Mode').nth(1).selectOption('visual')
+      await page.getByPlaceholder('ij').nth(1).fill('Y')
+      await page.getByLabel('Action').nth(1).selectOption('yankSelection')
+      await expect
+        .poll(async () => (await readVaultSettings(vaultRoot)).editorVimKeyMappings)
+        .toEqual([
+          {
+            id: expect.any(String),
+            mode: 'insert',
+            sequence: 'ij',
+            action: 'enterNormalMode'
+          },
+          {
+            id: expect.any(String),
+            mode: 'visual',
+            sequence: 'Y',
+            action: 'yankSelection'
+          }
+        ])
 
       await page.getByRole('radio', { name: 'Agent' }).click()
       await expect(page.getByRole('heading', { name: 'Agent' })).toBeVisible()
