@@ -65,11 +65,14 @@ export function getNoteCalloutTitleRange(
   text: string,
   marker: string
 ): NoteCalloutTitleRange | null {
-  if (!marker || marker.includes('\n')) {
-    return null
+  let start = 0
+
+  if (!marker) {
+    start = 0
+  } else {
+    start = marker.length
   }
 
-  const start = marker.length
   const lineBreakIndex = text.indexOf('\n', start)
   const end = lineBreakIndex === -1 ? text.length : lineBreakIndex
 

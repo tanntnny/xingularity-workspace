@@ -1,5 +1,4 @@
 import { type CSSProperties, ReactElement, useMemo, useState } from 'react'
-import { ButtonBase } from '@mui/material'
 import {
   Bot,
   ChevronDown,
@@ -22,6 +21,7 @@ import {
   SidebarMenuButton,
   SidebarSeparator
 } from './ui/sidebar'
+import { Pressable } from './ui'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
 import appLogo from '../../../../assets/workspace_letter.png'
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
@@ -221,7 +221,7 @@ export function AppSidebar({
           } as CSSProperties
         }
       >
-        <ButtonBase
+        <Pressable
           className="sidebar-section-trigger"
           data-active={activeInSection}
           data-open={isOpen}
@@ -240,7 +240,7 @@ export function AppSidebar({
             strokeWidth={2.2}
             className="sidebar-section-chevron ml-auto shrink-0"
           />
-        </ButtonBase>
+        </Pressable>
         <SidebarGroupContent
           className="pt-0.5 group-data-[collapsible=icon]:hidden"
           hidden={!isOpen}
@@ -253,17 +253,18 @@ export function AppSidebar({
                   <SidebarMenuButton
                     asChild
                     isActive={activePage === page.id}
+                    showLeadingRail
                     onClick={() => onChange(page.id)}
                     tooltip={page.label}
                   >
-                    <ButtonBase
+                    <Pressable
                       className="sidebar-menu-card sidebar-menu-card-nested"
                       data-testid={`sidebar-page:${page.id}`}
                       sx={SIDEBAR_MENU_BUTTON_SX}
                       disabled={isLocked}
                     >
                       <span>{page.label}</span>
-                    </ButtonBase>
+                    </Pressable>
                   </SidebarMenuButton>
                   {renderBadge(page.id)}
                 </SidebarMenuItem>
@@ -351,7 +352,7 @@ export function AppSidebar({
                   onClick={() => onChange(SETTINGS_PAGE.id)}
                   tooltip={SETTINGS_PAGE.label}
                 >
-                  <ButtonBase
+                  <Pressable
                     className="sidebar-menu-card"
                     data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
                     sx={SIDEBAR_MENU_BUTTON_SX}
@@ -362,7 +363,7 @@ export function AppSidebar({
                       keys={SETTINGS_PAGE.shortcut}
                       className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
                     />
-                  </ButtonBase>
+                  </Pressable>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

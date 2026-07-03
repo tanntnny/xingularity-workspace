@@ -6,6 +6,8 @@ import type {
   WeeklyPlanPriority,
   WeeklyPlanWeek
 } from '../../../shared/types'
+import { Button } from '../components/ui'
+import { WorkspaceEmptyState, WorkspaceSectionCard } from '../components/workspace'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { formatWeekRange } from '../lib/weeklyPlan'
@@ -126,7 +128,7 @@ export function DashboardPage({
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <section className={`${cardClass} p-6`}>
+          <WorkspaceSectionCard>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-semibold text-[var(--text)]">Active Project Status</h2>
@@ -134,14 +136,15 @@ export function DashboardPage({
                   Open work only. Completed projects stay on the Projects page.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={onOpenProjects}
-                className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
+                variant="outline"
+                className="workspace-subtle-control inline-flex gap-1 border-[var(--line)]"
               >
                 <span>All projects</span>
                 <ArrowRight size={15} />
-              </button>
+              </Button>
             </div>
 
             {activeProjects.length ? (
@@ -191,17 +194,17 @@ export function DashboardPage({
                 })}
               </div>
             ) : (
-              <EmptyState
+              <WorkspaceEmptyState
                 icon={<CircleCheckBig size={18} className="text-[var(--accent)]" />}
-                title="No active projects"
+                heading="No active projects"
                 description="Everything is marked complete. Create a new project or reopen one from Projects."
                 actionLabel="Open projects"
                 onAction={onOpenProjects}
               />
             )}
-          </section>
+          </WorkspaceSectionCard>
 
-          <section className={`${cardClass} p-6`}>
+          <WorkspaceSectionCard>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-semibold text-[var(--text)]">Today Focus</h2>
@@ -209,14 +212,15 @@ export function DashboardPage({
                   Top 3 priorities from the current weekly plan.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={onOpenWeeklyPlan}
-                className="workspace-subtle-control inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
+                variant="outline"
+                className="workspace-subtle-control inline-flex gap-1 border-[var(--line)]"
               >
                 <span>Weekly plan</span>
                 <ArrowRight size={15} />
-              </button>
+              </Button>
             </div>
 
             {weeklyPlanLoading ? (
@@ -224,17 +228,17 @@ export function DashboardPage({
                 Loading weekly plan priorities…
               </div>
             ) : !weeklyPlanReady ? (
-              <EmptyState
+              <WorkspaceEmptyState
                 icon={<AlertTriangle size={18} className="text-[var(--accent)]" />}
-                title="Weekly Plan unavailable"
+                heading="Weekly Plan unavailable"
                 description="Update or restart Beacon to enable weekly-plan-backed focus."
                 actionLabel="Open Weekly Plan"
                 onAction={onOpenWeeklyPlan}
               />
             ) : !currentWeek ? (
-              <EmptyState
+              <WorkspaceEmptyState
                 icon={<Target size={18} className="text-[var(--accent)]" />}
-                title="No current week"
+                heading="No current week"
                 description="Create a week plan that covers today to surface focus priorities here."
                 actionLabel="Open Weekly Plan"
                 onAction={onOpenWeeklyPlan}
@@ -272,15 +276,15 @@ export function DashboardPage({
                 })}
               </div>
             ) : (
-              <EmptyState
+              <WorkspaceEmptyState
                 icon={<Target size={18} className="text-[var(--accent)]" />}
-                title="No priorities for this week"
+                heading="No priorities for this week"
                 description="Add priorities in Weekly Plan to turn the dashboard into a daily focus view."
                 actionLabel="Open Weekly Plan"
                 onAction={onOpenWeeklyPlan}
               />
             )}
-          </section>
+          </WorkspaceSectionCard>
         </div>
       </div>
     </div>
@@ -303,38 +307,6 @@ function MetricCard({
         {value}
       </div>
       <p className="mt-2 text-sm workspace-meta">Active projects in this state.</p>
-    </div>
-  )
-}
-
-function EmptyState({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction
-}: {
-  icon: ReactElement
-  title: string
-  description: string
-  actionLabel: string
-  onAction: () => void
-}): ReactElement {
-  return (
-    <div className="mt-5 rounded-lg border border-dashed border-[var(--line)] px-4 py-6">
-      <div className="flex items-center gap-2 text-[var(--text)]">
-        {icon}
-        <p className="font-medium">{title}</p>
-      </div>
-      <p className="mt-2 text-sm workspace-meta">{description}</p>
-      <button
-        type="button"
-        onClick={onAction}
-        className="workspace-subtle-control mt-4 inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium"
-      >
-        <span>{actionLabel}</span>
-        <ArrowRight size={15} />
-      </button>
     </div>
   )
 }

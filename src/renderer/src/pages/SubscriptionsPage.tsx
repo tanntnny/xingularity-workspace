@@ -16,6 +16,7 @@ import type {
 } from '../../../shared/types'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
+import { Field } from '../components/ui/field'
 import {
   Drawer,
   DrawerClose,
@@ -27,6 +28,7 @@ import {
 } from '../components/ui/drawer'
 import { Input } from '../components/ui/input'
 import { FloatingHoverCard } from '../components/ui/floating-hover-card'
+import { Select } from '../components/ui/select'
 import {
   SortableTableHead,
   Table,
@@ -36,6 +38,7 @@ import {
   TableHeader,
   TableRow
 } from '../components/ui/table'
+import { Textarea } from '../components/ui/textarea'
 import { usePersistentState } from '../hooks/usePersistentState'
 
 interface SubscriptionsPageProps {
@@ -434,7 +437,7 @@ function TreemapCard({
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <select
+              <Select
                 aria-label="Status filter"
                 value={statusFilter}
                 onChange={(event) =>
@@ -448,8 +451,8 @@ function TreemapCard({
                     {status}
                   </option>
                 ))}
-              </select>
-              <select
+              </Select>
+              <Select
                 aria-label="Category filter"
                 value={activeCategory ?? 'all'}
                 onChange={(event) =>
@@ -465,7 +468,7 @@ function TreemapCard({
                     {category}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <Button onClick={onOpenCreate} className="gap-2 self-start">
               <Plus size={14} />
@@ -495,7 +498,7 @@ function TreemapCard({
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <select
+              <Select
                 aria-label="Status filter"
                 value={statusFilter}
                 onChange={(event) =>
@@ -509,8 +512,8 @@ function TreemapCard({
                     {status}
                   </option>
                 ))}
-              </select>
-              <select
+              </Select>
+              <Select
                 aria-label="Category filter"
                 value={activeCategory ?? 'all'}
                 onChange={(event) =>
@@ -526,7 +529,7 @@ function TreemapCard({
                     {category}
                   </option>
                 ))}
-              </select>
+              </Select>
               {statusFilter !== 'all' || activeCategory ? (
                 <Button
                   variant="ghost"
@@ -1190,8 +1193,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Name</span>
+              <Field label="Name" className="text-sm">
                 <Input
                   value={draft.name}
                   onChange={(event) => {
@@ -1199,9 +1201,8 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, name: value }))
                   }}
                 />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Provider</span>
+              </Field>
+              <Field label="Provider" className="text-sm">
                 <Input
                   value={draft.provider}
                   onChange={(event) => {
@@ -1209,16 +1210,14 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, provider: value }))
                   }}
                 />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Category</span>
-                <select
+              </Field>
+              <Field label="Category" className="text-sm">
+                <Select
                   value={draft.category}
                   onChange={(event) => {
                     const value = event.currentTarget.value
                     setDraft((current) => ({ ...current, category: value }))
                   }}
-                  className="h-9 rounded-lg border border-[var(--input)] bg-transparent px-3 text-sm"
                 >
                   <option value="">Select category</option>
                   {categoryOptions.map((option) => (
@@ -1226,10 +1225,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                       {option}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Amount</span>
+                </Select>
+              </Field>
+              <Field label="Amount" className="text-sm">
                 <Input
                   type="number"
                   min="0"
@@ -1240,28 +1238,25 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, amount: value }))
                   }}
                 />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Billing cycle</span>
-                <select
+              </Field>
+              <Field label="Billing cycle" className="text-sm">
+                <Select
                   value={draft.billingCycle}
                   onChange={(event) => {
                     const value = event.currentTarget
                       .value as CreateSubscriptionInput['billingCycle']
                     setDraft((current) => ({ ...current, billingCycle: value }))
                   }}
-                  className="h-9 rounded-lg border border-[var(--input)] bg-transparent px-3 text-sm"
                 >
                   {BILLING_CYCLE_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
-                </select>
-              </label>
+                </Select>
+              </Field>
               {draft.billingCycle === 'custom' ? (
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span>Billing interval months</span>
+                <Field label="Billing interval months" className="text-sm">
                   <Input
                     type="number"
                     min="1"
@@ -1272,10 +1267,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                       setDraft((current) => ({ ...current, billingIntervalMonths: value }))
                     }}
                   />
-                </label>
+                </Field>
               ) : null}
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Next renewal</span>
+              <Field label="Next renewal" className="text-sm">
                 <Input
                   type="date"
                   value={draft.nextRenewalAt}
@@ -1284,43 +1278,38 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, nextRenewalAt: value }))
                   }}
                 />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Status</span>
-                <select
+              </Field>
+              <Field label="Status" className="text-sm">
+                <Select
                   value={draft.status}
                   onChange={(event) => {
                     const value = event.currentTarget.value as SubscriptionStatus
                     setDraft((current) => ({ ...current, status: value }))
                   }}
-                  className="h-9 rounded-lg border border-[var(--input)] bg-transparent px-3 text-sm"
                 >
                   {STATUS_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Review flag</span>
-                <select
+                </Select>
+              </Field>
+              <Field label="Review flag" className="text-sm">
+                <Select
                   value={draft.reviewFlag}
                   onChange={(event) => {
                     const value = event.currentTarget.value as SubscriptionReviewFlag
                     setDraft((current) => ({ ...current, reviewFlag: value }))
                   }}
-                  className="h-9 rounded-lg border border-[var(--input)] bg-transparent px-3 text-sm"
                 >
                   {REVIEW_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span>Last used</span>
+                </Select>
+              </Field>
+              <Field label="Last used" className="text-sm">
                 <Input
                   type="date"
                   value={draft.lastUsedAt}
@@ -1329,9 +1318,8 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, lastUsedAt: value }))
                   }}
                 />
-              </label>
-              <label className="md:col-span-2 flex flex-col gap-1.5 text-sm">
-                <span>Tags</span>
+              </Field>
+              <Field label="Tags" className="text-sm md:col-span-2">
                 <Input
                   value={draft.tags}
                   onChange={(event) => {
@@ -1340,19 +1328,17 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                   placeholder="team, ai, annual"
                 />
-              </label>
-              <label className="md:col-span-2 flex flex-col gap-1.5 text-sm">
-                <span>Notes</span>
-                <textarea
+              </Field>
+              <Field label="Notes" className="text-sm md:col-span-2">
+                <Textarea
                   value={draft.notes}
                   onChange={(event) => {
                     const value = event.currentTarget.value
                     setDraft((current) => ({ ...current, notes: value }))
                   }}
                   rows={4}
-                  className="min-h-[112px] rounded-lg border border-[var(--input)] bg-transparent px-3 py-2 text-sm"
                 />
-              </label>
+              </Field>
             </div>
           </div>
           <DrawerFooter className="justify-between border-t border-[var(--line)] pt-4">

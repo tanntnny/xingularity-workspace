@@ -564,6 +564,7 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<'button'> & {
     asChild?: boolean
     isActive?: boolean
+    showLeadingRail?: boolean
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
@@ -571,10 +572,12 @@ const SidebarMenuButton = React.forwardRef<
     {
       asChild = false,
       isActive = false,
+      showLeadingRail = false,
       variant = 'default',
       size = 'default',
       tooltip,
       className,
+      style,
       ...props
     },
     ref
@@ -588,7 +591,22 @@ const SidebarMenuButton = React.forwardRef<
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        className={cn(
+          sidebarMenuButtonVariants({ variant, size }),
+          showLeadingRail &&
+            "relative before:pointer-events-none before:absolute before:bottom-[0.34rem] before:left-[0.67rem] before:top-[0.34rem] before:w-[1.5px] before:rounded-full before:bg-[var(--sidebar-menu-rail-color)] before:content-[''] data-[active=true]:before:bg-[var(--sidebar-menu-rail-active-color)] group-data-[collapsible=icon]:before:hidden",
+          className
+        )}
+        style={
+          showLeadingRail
+            ? ({
+                '--sidebar-menu-rail-color':
+                  'color-mix(in srgb, var(--sidebar-section-icon-color, var(--sidebar-border)) 52%, transparent)',
+                '--sidebar-menu-rail-active-color': 'var(--accent)',
+                ...style
+              } as React.CSSProperties)
+            : style
+        }
         {...props}
       />
     )

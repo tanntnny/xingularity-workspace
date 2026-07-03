@@ -13,6 +13,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
+  Copy,
   Download,
   Funnel,
   Keyboard,
@@ -28,7 +29,6 @@ import {
   Target,
   FolderOpen,
   ChevronUp,
-  List,
   Star
 } from 'lucide-react'
 import {
@@ -148,6 +148,7 @@ import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
 import { useStaggeredScrollReveal } from './hooks/useStaggeredScrollReveal'
+import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -171,7 +172,6 @@ import {
   getWeekPriorities
 } from './lib/weeklyPlan'
 import { shiftIsoMonthClamped } from './lib/calendarDate'
-import type { NoteOutlineItem } from './lib/noteOutline'
 import {
   getPrimaryNoteTreeSelectionEntry,
   normalizeNoteTreeSelection,
@@ -397,7 +397,6 @@ function App(): ReactElement {
   const [calendarBulkScope, setCalendarBulkScope] =
     useState<(typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']>('day')
   const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
-  const [currentNoteOutline, setCurrentNoteOutline] = useState<NoteOutlineItem[]>([])
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
   const [currentExcalidrawPath, setCurrentExcalidrawPath] = useState<string | null>(null)
@@ -418,9 +417,6 @@ function App(): ReactElement {
       }
     }
   }, [accentCssVars])
-  const [jumpToNoteHeading, setJumpToNoteHeading] = useState<((blockId: string) => void) | null>(
-    null
-  )
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntries, setSelectedNoteTreeEntries] = useState<NoteTreeSelection>([])
@@ -812,12 +808,6 @@ function App(): ReactElement {
       )
     })
   }, [currentNotePath, notes])
-  useEffect(() => {
-    if (!noteIsOpen) {
-      setCurrentNoteOutline([])
-      setJumpToNoteHeading(null)
-    }
-  }, [noteIsOpen, currentNotePath])
   const currentNoteTags = currentNoteTagsState
 
   const resetCurrentNoteEditorSession = useCallback((): void => {
@@ -1647,110 +1637,35 @@ function App(): ReactElement {
     [pushToast, refreshAfterHistoryOperation, vaultApi]
   )
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!hasVault) {
-        return
-      }
-
-      const isModifierPressed = event.metaKey || event.ctrlKey
-      const isSearchPalette =
-        isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
-      if (isSearchPalette) {
-        event.preventDefault()
-        setCommandPaletteInitialQuery('')
-        setCommandPaletteOpen(true)
-        return
-      }
-
-      const isCommandPalette =
-        isModifierPressed && event.shiftKey && event.key.toLowerCase() === 'p'
-      if (isCommandPalette) {
-        event.preventDefault()
-        setCommandPaletteInitialQuery('>')
-        setCommandPaletteOpen(true)
-        return
-      }
-
-      const isRightPanelShortcut = event.altKey && event.key.toLowerCase() === 'b'
-      if (isRightPanelShortcut) {
-        if (!hasRightPanel) {
-          return
-        }
-        event.preventDefault()
-        setIsRightPanelCollapsed((current) => !current)
-        return
-      }
-
-      if (!isModifierPressed) {
-        return
-      }
-
-      const target = event.target
-      const isTypingTarget = isEditableWorkspaceUndoTarget(target)
-      const isFocusModeShortcut =
-        isModifierPressed && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f'
-
-      if (isFocusModeShortcut) {
-        event.preventDefault()
-        setIsFocusMode((current) => !current)
-        return
-      }
-
-      const isUndoShortcut =
-        isModifierPressed && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'z'
-      const isRedoShortcut =
-        isModifierPressed && !event.altKey && event.shiftKey && event.key.toLowerCase() === 'z'
-
-      if ((isUndoShortcut || isRedoShortcut) && !isTypingTarget) {
-        event.preventDefault()
-        void runHistoryOperation(isUndoShortcut ? 'undo' : 'redo')
-        return
-      }
-
-      const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
-      const pageByCode: Partial<Record<string, AppPage>> = {
-        Digit1: 'notes',
-        Digit2: 'projects',
-        Digit3: 'calendar',
-        Digit4: 'weeklyPlan',
-        Digit5: 'schedules',
-        KeyI: 'agentHistory',
-        Comma: 'settings'
-      }
-      const pageByKey: Partial<Record<string, AppPage>> = {
-        '1': 'notes',
-        '2': 'projects',
-        '3': 'calendar',
-        '4': 'weeklyPlan',
-        '5': 'schedules',
-        i: 'agentHistory',
-        ',': 'settings'
-      }
-      const nextPage = pageByKey[normalizedKey] ?? pageByCode[event.code]
-      if (nextPage && isPageAvailable(platform, nextPage)) {
-        event.preventDefault()
-        void navigateToPage(nextPage)
-        return
-      }
-
-      if (isTypingTarget) {
-        return
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown, { capture: true })
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [
+  useWorkspaceShellShortcuts({
+    enabled: hasVault,
     hasRightPanel,
-    hasVault,
-    navigateToPage,
-    platform,
-    runHistoryOperation,
-    setCommandPaletteInitialQuery,
-    setCommandPaletteOpen,
-    setIsFocusMode
-  ])
+    onOpenSearchPalette: () => {
+      setCommandPaletteInitialQuery('')
+      setCommandPaletteOpen(true)
+    },
+    onOpenCommandPalette: () => {
+      setCommandPaletteInitialQuery('>')
+      setCommandPaletteOpen(true)
+    },
+    onToggleRightPanel: () => {
+      setIsRightPanelCollapsed((current) => !current)
+    },
+    onToggleFocusMode: () => {
+      setIsFocusMode((current) => !current)
+    },
+    onRunUndo: () => {
+      void runHistoryOperation('undo')
+    },
+    onRunRedo: () => {
+      void runHistoryOperation('redo')
+    },
+    onNavigateToPage: (page) => {
+      void navigateToPage(page as AppPage)
+    },
+    isPageAvailable: (page) => isPageAvailable(platform, page as AppPage),
+    isTypingTarget: isEditableWorkspaceUndoTarget
+  })
 
   useEffect(() => {
     const previousActivePage = previousActivePageRef.current
@@ -2443,7 +2358,6 @@ function App(): ReactElement {
     resetCurrentNoteEditorSession()
     setCurrentNoteTagsState([])
     setCurrentNoteContent('')
-    setCurrentNoteOutline([])
     setCurrentNoteEditorDraft(null)
     setSearchQuery('')
     setSearchResults([])
@@ -3265,6 +3179,20 @@ function App(): ReactElement {
         return
       }
       pushToast('success', `Note exported to ${exportedPath}`)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const copyCurrentNoteMarkdown = async (): Promise<void> => {
+    if (!currentNotePath) {
+      return
+    }
+
+    try {
+      await flushCurrentNote({ force: true })
+      await navigator.clipboard.writeText(currentNoteContentRef.current)
+      pushToast('success', 'Raw markdown copied')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -5234,37 +5162,14 @@ function App(): ReactElement {
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          {currentNoteOutline.length > 0 && jumpToNoteHeading ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceActionButton
-                                  title="Navigate headings"
-                                  aria-label="Navigate headings"
-                                  icon={<List size={18} />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="max-h-80 w-72 overflow-y-auto"
-                              >
-                                {currentNoteOutline.map((item) => (
-                                  <DropdownMenuItem
-                                    key={item.id}
-                                    onSelect={() => jumpToNoteHeading(item.id)}
-                                    className="text-[var(--text)]"
-                                    style={{
-                                      paddingLeft: `${0.75 + Math.max(0, item.level - 1) * 0.75}rem`
-                                    }}
-                                  >
-                                    <span className="mr-2 text-xs text-[var(--muted)]">
-                                      H{item.level}
-                                    </span>
-                                    <span className="truncate">{item.label}</span>
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
+                          <WorkspaceActionButton
+                            onClick={() => {
+                              void copyCurrentNoteMarkdown()
+                            }}
+                            title="Copy Raw Markdown"
+                            aria-label="Copy Raw Markdown"
+                            icon={<Copy size={18} />}
+                          />
                           <WorkspaceActionButton
                             onClick={() => {
                               void exportCurrentNote()
@@ -5586,8 +5491,6 @@ function App(): ReactElement {
                               ? noteTitleEditTarget.token
                               : 0
                           }
-                          onOutlineChange={setCurrentNoteOutline}
-                          onJumpToHeadingChange={(next) => setJumpToNoteHeading(() => next)}
                           vimModeEnabled={editorVimModeEnabled}
                           vimKeyMappings={editorVimKeyMappings}
                         />

@@ -1651,6 +1651,163 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('supports Vim change operators in plain text', async () => {
+    const vaultRoot = await createFixtureVault('alpha beta gamma\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('alpha beta gamma', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('c')
+      await page.keyboard.press('e')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('omega')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('omega beta gamma')
+
+      await page.keyboard.press('w')
+      await page.keyboard.press('d')
+      await page.keyboard.press('e')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('omega  gamma')
+
+      await page.keyboard.press('w')
+      await page.keyboard.press('C')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('delta')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(
+          async () => (await getCurrentNoteSnapshot(page)).content.replace(/\r\n/g, '\n').trim(),
+          {
+            timeout: 15_000
+          }
+        )
+        .toBe('omega  delta')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports Vim change operators inside code blocks', async () => {
+    const initialMarkdown = ['Before', '', '```ts', 'alpha beta', '```'].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('alpha beta', { exact: true }).click({ position: { x: 6, y: 10 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('c')
+      await page.keyboard.press('e')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('omega')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```ts\nomega beta\n```')
+
+      await page.keyboard.press('w')
+      await page.keyboard.press('C')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('tail')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```ts\nomega tail\n```')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports Vim change in visual character and line modes', async () => {
+    const vaultRoot = await createFixtureVault('')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+
+      await page.keyboard.type('abc')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('abc')
+
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('g')
+      await page.keyboard.press('g')
+      await page.keyboard.press('v')
+      await page.keyboard.press('l')
+      await page.keyboard.press('l')
+      await page.keyboard.press('c')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('Z')
+      await page.keyboard.press('Escape')
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('Z')
+
+      await page.keyboard.press('i')
+      await page.keyboard.type('one')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('two')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('three')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('three')
+
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('g')
+      await page.keyboard.press('g')
+      await page.keyboard.press('V')
+      await page.keyboard.press('j')
+      await page.keyboard.press('c')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+      await page.keyboard.type('replacement')
+      await page.keyboard.press('Escape')
+      await expect
+        .poll(
+          async () => (await getCurrentNoteSnapshot(page)).content.replace(/\r\n/g, '\n').trim(),
+          {
+            timeout: 15_000
+          }
+        )
+        .toBe('replacement\nthree')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('dd removes the current line instead of leaving an empty block', async () => {
     const vaultRoot = await createFixtureVault('Alpha\nBeta\n')
     await fs.writeFile(
@@ -1685,6 +1842,46 @@ test.describe('note page block editor switching', () => {
             text: 'Beta'
           }
         ])
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('O opens a new line above and places the cursor in the inserted line', async () => {
+    const vaultRoot = await createFixtureVault('Alpha\nBeta\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('Beta', { exact: true }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('O')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
+
+      let cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorInEditor).toBe(true)
+      expect(cursor.anchorText).toBe('')
+      expect(cursor.anchorOffset).toBe(0)
+
+      await page.keyboard.type('Inserted above')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content.replace(/\r\n/g, '\n'), {
+          timeout: 15_000
+        })
+        .toBe('Alpha\nInserted above\nBeta')
+
+      cursor = await getEditorSelectionState(page)
+      expect(cursor.anchorText).toBe('Inserted above')
+      expect(cursor.anchorOffset).toBe('Inserted above'.length)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

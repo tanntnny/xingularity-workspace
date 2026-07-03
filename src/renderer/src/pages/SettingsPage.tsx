@@ -1,5 +1,5 @@
 import { ReactElement, KeyboardEvent, useEffect, useState } from 'react'
-import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
+import { Field, Input, Select, Switch, TabMenu, TabMenuItem } from '../components/ui'
 import type { ProfileColor } from '../../../shared/profileColors'
 import type {
   NoteVimKeyMapping,
@@ -281,9 +281,12 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid w-full gap-1.5" aria-label="Profile settings">
-            <span className="text-sm text-[var(--muted)]">Profile Name</span>
-            <input
+          <Field
+            label="Profile Name"
+            description="Press Enter or click away to save."
+            aria-label="Profile settings"
+          >
+            <Input
               type="text"
               maxLength={100}
               value={profileDraft}
@@ -291,10 +294,9 @@ export function SettingsPage({
               onChange={(event) => setProfileDraft(event.target.value)}
               onBlur={commitProfileName}
               onKeyDown={onProfileInputKeyDown}
-              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
+              className="workspace-subtle-control h-auto w-full rounded-lg border border-[var(--line)] p-2.5"
             />
-            <span className="text-xs text-[var(--muted)]">Press Enter or click away to save.</span>
-          </div>
+          </Field>
         </div>
       ) : null}
 
@@ -374,24 +376,11 @@ export function SettingsPage({
                   surfaces.
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={workspaceVibrancyEnabled}
-                aria-label="Toggle workspace vibrancy"
-                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-lg border transition-colors ${
-                  workspaceVibrancyEnabled
-                    ? 'border-[var(--accent-line)]'
-                    : 'workspace-subtle-control border-[var(--line)]'
-                }`}
-                onClick={() => onToggleWorkspaceVibrancy(!workspaceVibrancyEnabled)}
-              >
-                <span
-                  className={`inline-block h-6 w-6 rounded-lg bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
-                    workspaceVibrancyEnabled ? 'translate-x-[1.45rem]' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <Switch
+                checked={workspaceVibrancyEnabled}
+                onChange={(_event, checked) => onToggleWorkspaceVibrancy(checked)}
+                inputProps={{ 'aria-label': 'Toggle workspace vibrancy' }}
+              />
             </div>
             <p className="text-xs text-[var(--muted)]">
               Keeps the global sidebar glassy and extends the effect through the workspace shell.
@@ -432,9 +421,8 @@ export function SettingsPage({
             </p>
           </div>
 
-          <label className="grid w-full gap-1.5" htmlFor="font-family-select">
-            <span className="text-sm text-[var(--muted)]">App Font</span>
-            <select
+          <Field label="App Font" htmlFor="font-family-select">
+            <Select
               id="font-family-select"
               className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
               value={selectedFontFamily}
@@ -445,8 +433,8 @@ export function SettingsPage({
                   {option.label}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Field>
 
           <p
             className="workspace-subtle-surface w-full rounded-lg p-3.5"
@@ -486,24 +474,11 @@ export function SettingsPage({
                   with common Vim motions.
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={editorVimModeEnabled}
-                aria-label="Toggle Vim mode"
-                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-lg border transition-colors ${
-                  editorVimModeEnabled
-                    ? 'border-[var(--accent-line)]'
-                    : 'workspace-subtle-control border-[var(--line)]'
-                }`}
-                onClick={() => onToggleEditorVimMode(!editorVimModeEnabled)}
-              >
-                <span
-                  className={`inline-block h-6 w-6 rounded-lg bg-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition-transform ${
-                    editorVimModeEnabled ? 'translate-x-[1.45rem]' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <Switch
+                checked={editorVimModeEnabled}
+                onChange={(_event, checked) => onToggleEditorVimMode(checked)}
+                inputProps={{ 'aria-label': 'Toggle Vim mode' }}
+              />
             </div>
             <p className="text-xs text-[var(--muted)]">
               Disabled by default. Press Escape in the note editor to enter normal mode.
@@ -542,9 +517,8 @@ export function SettingsPage({
                       key={mapping.id}
                       className="grid gap-2 rounded-lg border border-[var(--line)] p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(11rem,1.4fr)_auto]"
                     >
-                      <label className="grid gap-1 text-xs text-[var(--muted)]">
-                        Mode
-                        <select
+                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Mode">
+                        <Select
                           className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
                           value={mapping.mode}
                           onChange={(event) =>
@@ -558,12 +532,11 @@ export function SettingsPage({
                               {option.label}
                             </option>
                           ))}
-                        </select>
-                      </label>
+                        </Select>
+                      </Field>
 
-                      <label className="grid gap-1 text-xs text-[var(--muted)]">
-                        Sequence
-                        <input
+                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Sequence">
+                        <Input
                           className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 font-mono text-sm text-[var(--text)]"
                           value={mapping.sequence}
                           maxLength={8}
@@ -573,11 +546,10 @@ export function SettingsPage({
                           }
                           spellCheck={false}
                         />
-                      </label>
+                      </Field>
 
-                      <label className="grid gap-1 text-xs text-[var(--muted)]">
-                        Action
-                        <select
+                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Action">
+                        <Select
                           className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
                           value={mapping.action}
                           onChange={(event) =>
@@ -591,8 +563,8 @@ export function SettingsPage({
                               {option.label}
                             </option>
                           ))}
-                        </select>
-                      </label>
+                        </Select>
+                      </Field>
 
                       <button
                         type="button"
@@ -635,24 +607,23 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid w-full gap-1.5" aria-label="Mistral AI settings">
-            <span className="text-sm text-[var(--muted)]">Mistral API Key</span>
-            <input
+          <Field
+            label="Mistral API Key"
+            description="Used for `?` AI note completion in the command palette. Press Enter or click away to save."
+            aria-label="Mistral AI settings"
+          >
+            <Input
               type="password"
               value={mistralApiKeyDraft}
               placeholder="Paste your Mistral API key"
               onChange={(event) => setMistralApiKeyDraft(event.target.value)}
               onBlur={commitMistralApiKey}
               onKeyDown={onProfileInputKeyDown}
-              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
+              className="workspace-subtle-control h-auto w-full rounded-lg border border-[var(--line)] p-2.5"
               autoComplete="off"
               spellCheck={false}
             />
-            <span className="text-xs text-[var(--muted)]">
-              Used for `?` AI note completion in the command palette. Press Enter or click away to
-              save.
-            </span>
-          </div>
+          </Field>
         </div>
       ) : null}
     </section>

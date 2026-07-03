@@ -79,7 +79,6 @@ interface EditorProps {
   currentNotePath?: string
   onOpenNoteLink?: (target: string) => void
   onOutlineChange?: (items: NoteOutlineItem[]) => void
-  onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
   onVimModeChange?: (mode: NoteVimMode) => void
@@ -91,6 +90,7 @@ export interface NoteEditorHandle {
   focus: () => void
   hasFocusIntent: () => boolean
   blur: () => void
+  jumpToOutlineIndex: (index: number) => void
   insertNoteLink: (targetRelPath: string) => void
   loadDocument: (input: {
     content?: string | null
@@ -457,7 +457,6 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     currentNotePath,
     onOpenNoteLink,
     onOutlineChange,
-    onJumpToHeadingChange,
     vimModeEnabled,
     vimKeyMappings,
     onVimModeChange
@@ -533,10 +532,6 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   }, [onOutlineChange])
 
   useEffect(() => {
-    onJumpToHeadingChange?.(null)
-  }, [onJumpToHeadingChange])
-
-  useEffect(() => {
     mentionPickerRef.current = mentionPicker
   }, [mentionPicker])
 
@@ -590,6 +585,29 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const blur = useCallback((): void => {
     hasFocusIntentRef.current = false
     rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.blur()
+  }, [])
+
+  const jumpToOutlineIndex = useCallback((index: number): void => {
+    const root = rootRef.current
+    if (!root || index < 0) {
+      return
+    }
+
+    const headings = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
+      )
+    )
+    const target = headings[index]
+    if (!target) {
+      return
+    }
+
+    hasFocusIntentRef.current = true
+    target.scrollIntoView({
+      block: 'center',
+      behavior: 'auto'
+    })
   }, [])
 
   const createSnapshot = useCallback((): NoteEditorSnapshot => {
@@ -933,6 +951,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       focus,
       hasFocusIntent,
       blur,
+      jumpToOutlineIndex,
       insertNoteLink,
       loadDocument
     }),
@@ -942,6 +961,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       flushPendingChanges,
       focus,
       hasFocusIntent,
+      jumpToOutlineIndex,
       insertNoteLink,
       loadDocument
     ]

@@ -1,0 +1,23 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/vite-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/preload/*.d.ts",
+    "../src/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": [
+        "src/renderer/src/*"
+      ],
+      "@xingularity/workspace-template": [
+        "../src/index.ts"
+      ]
+    }
+  }
+}

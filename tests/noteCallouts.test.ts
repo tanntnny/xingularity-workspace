@@ -141,8 +141,25 @@ describe('getNoteCalloutTitleRange', () => {
     })
   })
 
-  it('does not create a title range when the marker is on its own line', () => {
-    expect(getNoteCalloutTitleRange('[!INFO]\nBody', '[!INFO]\n')).toBeNull()
+  it('uses the first content line as the title when the marker is on its own line', () => {
+    expect(getNoteCalloutTitleRange('[!INFO]\nBody', '[!INFO]\n')).toEqual({
+      start: 8,
+      end: 12
+    })
+  })
+
+  it('uses the first line as the title range for neutral quotes', () => {
+    expect(getNoteCalloutTitleRange('Quick note\nBody', '')).toEqual({
+      start: 0,
+      end: 10
+    })
+  })
+
+  it('uses the whole text as the title when a neutral quote has one line', () => {
+    expect(getNoteCalloutTitleRange('Quick note', '')).toEqual({
+      start: 0,
+      end: 10
+    })
   })
 })
 

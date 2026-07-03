@@ -10,10 +10,15 @@ import type { Parser, Serializer } from '@milkdown/transformer'
 import type { NoteVimKeyMapping, NoteVimMappingAction } from '../../../shared/types'
 
 export type NoteVimMode = 'insert' | 'normal' | 'visual' | 'visualLine'
+type NoteVimOperator = 'd' | 'c'
+type NoteVimPendingCommand =
+  | { kind: 'prefix'; key: 'g' }
+  | { kind: 'operator'; operator: NoteVimOperator }
+  | null
 
 interface NoteVimPluginState {
   mode: NoteVimMode
-  pendingKey: 'd' | 'g' | null
+  pendingCommand: NoteVimPendingCommand
   hasFocus: boolean
   visualAnchor: number | null
   visualHead: number | null
@@ -59,7 +64,7 @@ const VIM_MAPPING_SEQUENCE_TIMEOUT_MS = 1000
 const vimRegisters = new WeakMap<EditorView, NoteVimRegister>()
 const initialVimState: NoteVimPluginState = {
   mode: 'insert',
-  pendingKey: null,
+  pendingCommand: null,
   hasFocus: false,
   visualAnchor: null,
   visualHead: null,
@@ -85,7 +90,7 @@ function resetPreferredColumn(view: EditorView): void {
 function setMode(view: EditorView, mode: NoteVimMode): void {
   dispatchVimState(view, {
     mode,
-    pendingKey: null,
+    pendingCommand: null,
     visualAnchor: mode === 'visual' || mode === 'visualLine' ? view.state.selection.from : null,
     visualHead: mode === 'visual' || mode === 'visualLine' ? view.state.selection.to : null
   })
@@ -122,7 +127,7 @@ function setCursorAndVimState(
       view.state.tr
         .setSelection(TextSelection.near(view.state.doc.resolve(boundedPos), bias))
         .setMeta(noteVimModePluginKey, {
-          pendingKey: null,
+          pendingCommand: null,
           visualAnchor: null,
           visualHead: null,
           ...next
@@ -132,7 +137,7 @@ function setCursorAndVimState(
     return true
   } catch {
     dispatchVimState(view, {
-      pendingKey: null,
+      pendingCommand: null,
       visualAnchor: null,
       visualHead: null,
       ...next
@@ -234,7 +239,7 @@ function setVisualSelection(
         .setSelection(selection)
         .setMeta(noteVimModePluginKey, {
           mode,
-          pendingKey: null,
+          pendingCommand: null,
           visualAnchor: boundedDocPos(view.state, anchor),
           visualHead: boundedDocPos(view.state, head)
         })
@@ -476,6 +481,28 @@ function wordEndAfter(state: EditorState, pos: number): number | null {
   return typeof endPos === 'number' ? endPos : null
 }
 
+function currentWordEndExclusive(state: EditorState, pos: number): number | null {
+  const indexedText = buildTextIndex(state)
+  let currentIndex = textIndexAtPos(indexedText, pos)
+
+  if (
+    currentIndex < 0 ||
+    indexedText.positions[currentIndex] !== pos ||
+    !isWordChar(indexedText.text[currentIndex])
+  ) {
+    return null
+  }
+
+  while (
+    currentIndex + 1 < indexedText.text.length &&
+    isWordChar(indexedText.text[currentIndex + 1])
+  ) {
+    currentIndex += 1
+  }
+
+  return boundedDocPos(state, (indexedText.positions[currentIndex] ?? pos) + 1)
+}
+
 function firstTextPosition(state: EditorState): number {
   const indexedText = buildTextIndex(state)
   return indexedText.positions[0] ?? 0
@@ -616,17 +643,33 @@ function deleteRange(view: EditorView, from: number, to: number): boolean {
   return true
 }
 
-function deleteSelectionAndEnterNormal(view: EditorView): boolean {
+function deleteRangeAndSetMode(
+  view: EditorView,
+  from: number,
+  to: number,
+  mode: Extract<NoteVimMode, 'insert' | 'normal'>
+): boolean {
   resetPreferredColumn(view)
-  const { from, to } = view.state.selection
 
   if (to <= from) {
-    return enterNormalMode(view, from)
+    return mode === 'insert' ? enterInsertMode(view, from) : enterNormalMode(view, from)
   }
 
   const nextPos = Math.min(from, view.state.doc.content.size)
   view.dispatch(view.state.tr.delete(from, to).scrollIntoView())
-  return enterNormalMode(view, Math.min(nextPos, view.state.doc.content.size))
+  return mode === 'insert'
+    ? enterInsertMode(view, Math.min(nextPos, view.state.doc.content.size))
+    : enterNormalMode(view, Math.min(nextPos, view.state.doc.content.size))
+}
+
+function deleteSelectionAndEnterNormal(view: EditorView): boolean {
+  const { from, to } = view.state.selection
+  return deleteRangeAndSetMode(view, from, to, 'normal')
+}
+
+function deleteSelectionAndEnterInsert(view: EditorView): boolean {
+  const { from, to } = view.state.selection
+  return deleteRangeAndSetMode(view, from, to, 'insert')
 }
 
 function serializeSelectionMarkdown(view: EditorView, tools: NoteVimMarkdownTools): string | null {
@@ -753,18 +796,37 @@ function pasteClipboardText(
 }
 
 function deleteCurrentTextblock(view: EditorView): boolean {
-  resetPreferredColumn(view)
   const bounds = getCurrentTextblockNodeBounds(view.state)
-  if (bounds.to <= bounds.from) {
-    return false
-  }
+  return deleteRangeAndSetMode(view, bounds.from, bounds.to, 'normal')
+}
 
-  view.dispatch(view.state.tr.delete(bounds.from, bounds.to).scrollIntoView())
-  return enterNormalMode(view, Math.min(bounds.from, view.state.doc.content.size))
+function changeCurrentTextblock(view: EditorView): boolean {
+  const bounds = getCurrentTextblockNodeBounds(view.state)
+  return deleteRangeAndSetMode(view, bounds.from, bounds.to, 'insert')
 }
 
 function splitAtSelection(view: EditorView): boolean {
   return splitBlock(view.state, (transaction) => view.dispatch(transaction), view)
+}
+
+function openLineBelow(view: EditorView): boolean {
+  lineEnd(view)
+  if (!splitAtSelection(view)) {
+    return false
+  }
+
+  return enterInsertMode(view, view.state.selection.from)
+}
+
+function openLineAbove(view: EditorView): boolean {
+  const insertAt = getCurrentTextblockBounds(view.state).from
+  lineStart(view)
+  if (!splitAtSelection(view)) {
+    return false
+  }
+
+  const targetPos = view.state.selection.from > insertAt ? insertAt : view.state.selection.from
+  return enterInsertMode(view, targetPos)
 }
 
 function isPrintableMappingInput(value: string): boolean {
@@ -798,15 +860,9 @@ function runVimMappingAction(
       setMode(view, 'insert')
       return true
     case 'openLineBelow':
-      lineEnd(view)
-      splitAtSelection(view)
-      setMode(view, 'insert')
-      return true
+      return openLineBelow(view)
     case 'openLineAbove':
-      lineStart(view)
-      splitAtSelection(view)
-      setMode(view, 'insert')
-      return true
+      return openLineAbove(view)
     case 'pasteAfterCursor':
       return pasteClipboardText(view, 'after', tools)
     case 'pasteBeforeCursor':
@@ -854,26 +910,57 @@ function handleInsertModeKey(view: EditorView, event: KeyboardEvent): boolean {
 function handlePendingKey(
   view: EditorView,
   key: string,
-  pendingKey: NoteVimPluginState['pendingKey']
+  pendingCommand: NoteVimPluginState['pendingCommand']
 ): boolean {
-  if (pendingKey === 'g') {
+  if (pendingCommand?.kind === 'prefix' && pendingCommand.key === 'g') {
     if (key === 'g') {
       selectNormalModePosition(view, firstTextPosition(view.state))
     }
-    dispatchVimState(view, { pendingKey: null })
+    dispatchVimState(view, { pendingCommand: null })
     return true
   }
 
-  if (pendingKey === 'd') {
-    if (key === 'd') {
-      deleteCurrentTextblock(view)
+  if (pendingCommand?.kind === 'operator') {
+    const operator = pendingCommand.operator
+    const fromPos = view.state.selection.from
+    let didHandle = false
+
+    if (key === operator) {
+      didHandle = operator === 'd' ? deleteCurrentTextblock(view) : changeCurrentTextblock(view)
     } else if (key === 'w') {
-      const to = wordStartAfter(view.state, view.state.selection.from)
+      const cursorChar = view.state.doc.textBetween(fromPos, fromPos + 1, '', '')
+      const to =
+        operator === 'c' && isWordChar(cursorChar)
+          ? currentWordEndExclusive(view.state, fromPos)
+          : wordStartAfter(view.state, fromPos)
       if (typeof to === 'number') {
-        deleteRange(view, view.state.selection.from, to)
+        didHandle = deleteRangeAndSetMode(view, fromPos, to, operator === 'c' ? 'insert' : 'normal')
       }
+    } else if (key === 'e') {
+      const to = wordEndAfter(view.state, fromPos)
+      if (typeof to === 'number') {
+        didHandle = deleteRangeAndSetMode(
+          view,
+          fromPos,
+          boundedDocPos(view.state, to + 1),
+          operator === 'c' ? 'insert' : 'normal'
+        )
+      }
+    } else if (key === '$') {
+      didHandle = deleteRangeAndSetMode(
+        view,
+        fromPos,
+        getCurrentTextblockBounds(view.state).to,
+        operator === 'c' ? 'insert' : 'normal'
+      )
     }
-    dispatchVimState(view, { pendingKey: null })
+
+    if (!didHandle) {
+      dispatchVimState(view, { pendingCommand: null })
+      return true
+    }
+
+    dispatchVimState(view, { pendingCommand: null })
     return true
   }
 
@@ -898,13 +985,13 @@ function handleNormalModeKey(
     resetPreferredColumn(view)
   }
 
-  if (handlePendingKey(view, key, vimState.pendingKey)) {
+  if (handlePendingKey(view, key, vimState.pendingCommand)) {
     return true
   }
 
   switch (key) {
     case 'Escape':
-      dispatchVimState(view, { pendingKey: null })
+      dispatchVimState(view, { pendingCommand: null })
       return true
     case 'i':
       setMode(view, 'insert')
@@ -918,15 +1005,9 @@ function handleNormalModeKey(
       setMode(view, 'insert')
       return true
     case 'o':
-      lineEnd(view)
-      splitAtSelection(view)
-      setMode(view, 'insert')
-      return true
+      return openLineBelow(view)
     case 'O':
-      lineStart(view)
-      splitAtSelection(view)
-      setMode(view, 'insert')
-      return true
+      return openLineAbove(view)
     case 'v':
       return enterVisualMode(view, 'visual')
     case 'V':
@@ -959,15 +1040,25 @@ function handleNormalModeKey(
     case 'G':
       return selectNormalModePosition(view, lastTextPosition(view.state))
     case 'g':
-      dispatchVimState(view, { pendingKey: 'g' })
+      dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
       return true
     case 'd':
-      dispatchVimState(view, { pendingKey: 'd' })
+      dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'd' } })
+      return true
+    case 'c':
+      dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'c' } })
       return true
     case 'x':
       return deleteRange(view, view.state.selection.from, view.state.selection.from + 1)
     case 'D':
       return deleteRange(view, view.state.selection.from, getCurrentTextblockBounds(view.state).to)
+    case 'C':
+      return deleteRangeAndSetMode(
+        view,
+        view.state.selection.from,
+        getCurrentTextblockBounds(view.state).to,
+        'insert'
+      )
     case 'p':
       return pasteClipboardText(view, 'after', tools)
     case 'P':
@@ -999,13 +1090,13 @@ function handleVisualModeKey(
     resetPreferredColumn(view)
   }
 
-  if (vimState.pendingKey === 'g') {
+  if (vimState.pendingCommand?.kind === 'prefix' && vimState.pendingCommand.key === 'g') {
     if (key === 'g') {
       const anchor = vimState.visualAnchor ?? view.state.selection.from
       return setVisualSelection(view, mode, anchor, firstTextPosition(view.state))
     }
 
-    dispatchVimState(view, { pendingKey: null })
+    dispatchVimState(view, { pendingCommand: null })
     return true
   }
 
@@ -1023,11 +1114,13 @@ function handleVisualModeKey(
         ? enterNormalMode(view, view.state.selection.from)
         : enterVisualMode(view, 'visualLine')
     case 'g':
-      dispatchVimState(view, { pendingKey: 'g' })
+      dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
       return true
     case 'd':
     case 'x':
       return deleteSelectionAndEnterNormal(view)
+    case 'c':
+      return deleteSelectionAndEnterInsert(view)
     case 'y':
       return yankSelectionAndEnterNormal(view, tools)
     default: {
@@ -1222,7 +1315,7 @@ export function createNoteVimModePlugin({
             resetMappingSequences()
             dispatchVimState(view, {
               mode: 'insert',
-              pendingKey: null,
+              pendingCommand: null,
               hasFocus: true,
               visualAnchor: null,
               visualHead: null,
@@ -1242,7 +1335,7 @@ export function createNoteVimModePlugin({
         blur(view) {
           dispatchVimState(view, {
             hasFocus: false,
-            pendingKey: null,
+            pendingCommand: null,
             visualAnchor: null,
             visualHead: null,
             preferredColumnX: null,

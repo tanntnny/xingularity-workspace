@@ -1,0 +1,22 @@
+{
+  "name": "xingularity-workspace-template-scaffold",
+  "version": "0.1.0",
+  "description": "Scaffold a new React workspace app from the internal Xingularity workspace template package.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Xingularity Workspace Template Scaffold",
+    "shortDescription": "Bootstrap a new app from the Xingularity workspace shell and primitives.",
+    "longDescription": "Creates a starter React workspace app plus a local copy of the internal workspace-template package so later projects can reuse the sidebar, shell, vibrancy, primitives, and command-palette behavior.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Scaffold a starter repo from the internal workspace package",
+      "Keep the starter and reusable primitives aligned",
+      "Reuse Xingularity shell layout, tokens, and shortcuts"
+    ],
+    "defaultPrompt": "Scaffold a new project from the Xingularity workspace template."
+  }
+}

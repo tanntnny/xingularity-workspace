@@ -1,14 +1,11 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  useViewport
-} from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, useViewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import * as d3 from 'd3'
 import { Sparkles } from 'lucide-react'
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3'
 import type { NoteListItem } from '../../../shared/types'
+import { WorkspaceEmptyState } from '../components/workspace'
 import { buildKnowledgeGraph } from '../lib/knowledgeGraph'
 
 interface KnowledgePageProps {
@@ -271,15 +268,16 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
           data-testid="knowledge-empty-state"
           className="absolute inset-0 flex items-center justify-center p-10"
         >
-          <div className="workspace-subtle-surface max-w-xl rounded-[32px] px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.08)]">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
-              <Sparkles size={24} />
-            </div>
-            <h3 className="text-3xl font-semibold text-[var(--text)]">No note connections yet</h3>
-            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-              Link notes together with note mentions to populate the knowledge graph.
-            </p>
-          </div>
+          <WorkspaceEmptyState
+            className="max-w-xl px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.08)]"
+            icon={
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
+                <Sparkles size={20} />
+              </div>
+            }
+            heading="No note connections yet"
+            description="Link notes together with note mentions to populate the knowledge graph."
+          />
         </div>
       )}
     </div>

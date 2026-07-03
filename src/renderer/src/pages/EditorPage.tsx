@@ -1,4 +1,4 @@
-import { ReactElement, RefObject, useEffect, useRef, useState } from 'react'
+import { ReactElement, RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
@@ -6,6 +6,7 @@ import vimLogo from '../assets/vim-logo.svg'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
+import { NoteOutlineRail } from '../components/NoteOutlineRail'
 import { TagChip } from '../components/TagChip'
 import type { NoteVimMode } from '../lib/noteVimMode'
 import type { NoteOutlineItem } from '../lib/noteOutline'
@@ -27,8 +28,6 @@ interface EditorPageProps {
   onOpenNoteLink?: (target: string) => void
   onRename: (newName: string) => Promise<void>
   titleEditToken?: number
-  onOutlineChange?: (items: NoteOutlineItem[]) => void
-  onJumpToHeadingChange?: (jumpToHeading: ((blockId: string) => void) | null) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
 }
@@ -67,18 +66,24 @@ export function EditorPage({
   onOpenNoteLink,
   onRename,
   titleEditToken = 0,
-  onOutlineChange,
-  onJumpToHeadingChange,
   vimModeEnabled,
   vimKeyMappings
 }: EditorPageProps): ReactElement {
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTagValue, setNewTagValue] = useState('')
   const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
+  const [outlineState, setOutlineState] = useState<{
+    notePath: string
+    items: NoteOutlineItem[]
+  }>({
+    notePath,
+    items: []
+  })
   const tagInputRef = useRef<HTMLInputElement | null>(null)
   const isSubmittingTagRef = useRef(false)
 
   const currentName = stripNoteExtension(notePath).split('/').pop() || ''
+  const outlineItems = outlineState.notePath === notePath ? outlineState.items : []
 
   useEffect(() => {
     if (!isAddingTag) {
@@ -93,6 +98,13 @@ export function EditorPage({
 
     return () => window.cancelAnimationFrame(frameId)
   }, [editorRef, isAddingTag, tags.length])
+
+  const handleJumpToOutlineIndex = useCallback(
+    (index: number): void => {
+      editorRef?.current?.jumpToOutlineIndex(index)
+    },
+    [editorRef]
+  )
 
   const handleAddTag = (): void => {
     const nextTag = newTagValue.trim()
@@ -179,24 +191,33 @@ export function EditorPage({
           </div>
         </div>
       </div>
-      <div className="relative flex-1 min-h-0 overflow-auto px-8 pb-8">
-        <div className="h-full pt-5">
-          <Editor
-            ref={editorRef}
-            initialContent={initialContent}
-            onDirty={onDirty}
-            onSnapshotChange={onSnapshotChange}
-            onDropFile={onDropFile}
-            onPasteImage={onPasteImage}
-            notes={notes}
-            currentNotePath={notePath}
-            onOpenNoteLink={onOpenNoteLink}
-            onOutlineChange={onOutlineChange}
-            onJumpToHeadingChange={onJumpToHeadingChange}
-            vimModeEnabled={vimModeEnabled}
-            vimKeyMappings={vimKeyMappings}
-            onVimModeChange={setVimMode}
-          />
+      <div className="relative flex-1 min-h-0 px-8 pb-8">
+        <div className="flex h-full min-h-0 gap-4 pt-5 xl:gap-6">
+          <div className="min-w-0 flex-1 overflow-auto pr-1">
+            <div className="h-full">
+              <Editor
+                ref={editorRef}
+                initialContent={initialContent}
+                onDirty={onDirty}
+                onSnapshotChange={onSnapshotChange}
+                onDropFile={onDropFile}
+                onPasteImage={onPasteImage}
+                notes={notes}
+                currentNotePath={notePath}
+                onOpenNoteLink={onOpenNoteLink}
+                onOutlineChange={(items) => {
+                  setOutlineState({
+                    notePath,
+                    items
+                  })
+                }}
+                vimModeEnabled={vimModeEnabled}
+                vimKeyMappings={vimKeyMappings}
+                onVimModeChange={setVimMode}
+              />
+            </div>
+          </div>
+          <NoteOutlineRail items={outlineItems} onJumpToIndex={handleJumpToOutlineIndex} />
         </div>
       </div>
       <div className="flex shrink-0 items-center justify-end px-8 py-3">
