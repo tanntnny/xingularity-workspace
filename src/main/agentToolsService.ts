@@ -192,6 +192,7 @@ const calendarTaskCreateSchema = z.object({
   date: isoDateSchema.optional(),
   endDate: isoDateSchema.optional(),
   time: timeSchema.optional(),
+  endTime: timeSchema.optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(reminderSchema).max(10).optional(),
@@ -206,6 +207,7 @@ const calendarTaskUpdateSchema = z
     date: isoDateSchema.nullable().optional(),
     endDate: isoDateSchema.nullable().optional(),
     time: timeSchema.nullable().optional(),
+    endTime: timeSchema.nullable().optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
@@ -220,6 +222,7 @@ const calendarTaskUpdateSchema = z
       value.date !== undefined ||
       value.endDate !== undefined ||
       value.time !== undefined ||
+      value.endTime !== undefined ||
       value.priority !== undefined ||
       value.taskType !== undefined ||
       value.reminders !== undefined ||
@@ -609,6 +612,7 @@ export class AgentToolsService {
         date: input.date,
         endDate: normalizeCalendarEndDate(input.date, input.endDate),
         time: input.time,
+        endTime: input.endTime,
         completed: input.completed ?? false,
         createdAt: new Date().toISOString(),
         priority: input.priority ?? 'low',
@@ -644,6 +648,7 @@ export class AgentToolsService {
         date: nextDate,
         endDate: normalizeCalendarEndDate(nextDate, nextEndDate),
         time: input.time === undefined ? task.time : (input.time ?? undefined),
+        endTime: input.endTime === undefined ? task.endTime : (input.endTime ?? undefined),
         priority: input.priority ?? task.priority,
         taskType: input.taskType === undefined ? task.taskType : (input.taskType ?? undefined),
         reminders: input.reminders ?? task.reminders,

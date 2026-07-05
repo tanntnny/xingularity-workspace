@@ -1,7 +1,30 @@
 import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
+import { createAppErrorEvent } from '../shared/appErrors'
 import icon from '../../assets/workspace_letter.png?asset'
+import { createWindowErrorPageHtml } from './windowErrorPage'
+
+export async function loadMainWindowApp(window: BrowserWindow): Promise<void> {
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    await window.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    return
+  }
+
+  await window.loadFile(join(__dirname, '../renderer/index.html'))
+}
+
+async function showWindowErrorPage(
+  window: BrowserWindow,
+  error: ReturnType<typeof createAppErrorEvent>
+) {
+  if (window.isDestroyed()) {
+    return
+  }
+
+  const markup = createWindowErrorPageHtml(error)
+  await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(markup)}`)
+}
 
 export function createMainWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
@@ -52,12 +75,23 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.webContents.on(
     'did-fail-load',
-    (_event, errorCode, errorDescription, validatedURL) => {
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) {
+        return
+      }
+
       console.error('Renderer failed to load', {
         errorCode,
         errorDescription,
         validatedURL
       })
+      void showWindowErrorPage(
+        mainWindow,
+        createAppErrorEvent(
+          'main',
+          new Error(`Renderer failed to load: ${errorDescription} (${errorCode})`)
+        )
+      )
       mainWindow.center()
       if (!mainWindow.isVisible()) {
         mainWindow.show()
@@ -68,6 +102,15 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[window] render-process-gone', details)
+    void showWindowErrorPage(
+      mainWindow,
+      createAppErrorEvent(
+        'main',
+        new Error(
+          `Renderer process exited: ${details.reason}${details.exitCode !== undefined ? ` (${details.exitCode})` : ''}`
+        )
+      )
+    )
   })
 
   setTimeout(() => {
@@ -92,11 +135,7 @@ export function createMainWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  void loadMainWindowApp(mainWindow)
 
   return mainWindow
 }

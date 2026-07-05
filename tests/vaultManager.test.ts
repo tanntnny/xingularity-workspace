@@ -34,12 +34,12 @@ describe('vaultManager', () => {
     await expect(
       fs.readFile(path.join(root, 'notebooks', 'legacy.md'), 'utf-8')
     ).resolves.toContain('# Legacy')
-    await expect(
-      fs.readFile(path.join(root, '.xingularity', 'vault.json'), 'utf-8')
-    ).resolves.toContain('"version": 1')
+    await expect(fs.readFile(path.join(root, 'vault.json'), 'utf-8')).resolves.toContain(
+      '"version": 1'
+    )
 
     const migrations = JSON.parse(
-      await fs.readFile(path.join(root, '.xingularity', 'migrations.json'), 'utf-8')
+      await fs.readFile(path.join(root, 'migrations.json'), 'utf-8')
     ) as {
       copiedFromLegacyNotesAt?: string
       copiedFromLegacySystemAt?: string
@@ -49,6 +49,7 @@ describe('vaultManager', () => {
     expect(migrations.copiedFromLegacySystemAt).toBeTruthy()
     expect(paths.notebooksPath).toBe(path.join(root, 'notebooks'))
     expect(paths.notesPath).toBe(paths.notebooksPath)
+    await expect(fs.access(path.join(root, '.appmeta', 'vault.json'))).rejects.toThrow()
   })
 
   it('rejects unresolved dual-root notebook conflicts', async () => {

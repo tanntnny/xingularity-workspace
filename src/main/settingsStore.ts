@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createRandomProjectIcon } from '../shared/projectIcons'
-import { isProfileColor } from '../shared/profileColors'
+import { normalizeProfileColor } from '../shared/profileColors'
 import {
   AppSettings,
   AppSettingsUpdate,
@@ -16,10 +16,14 @@ import {
   ProjectSubtask
 } from '../shared/types'
 import {
+  deleteLegacyVaultPath,
   getLegacyVaultCalendarTasksPath,
+  getLegacyPageVaultCalendarTasksPath,
   getLegacyVaultProjectsPath,
+  getLegacyPageVaultProjectsPath,
   getLegacyVaultSettingsPath,
   getVaultCalendarTasksPath,
+  getVaultProjectIconsPath,
   getVaultProjectsPath,
   getVaultSettingsPath
 } from './vaultData'
@@ -45,12 +49,12 @@ interface VaultCoreSettings extends Omit<
   calendarTasks?: CalendarTask[]
 }
 
-interface VaultProjectsData {
+interface LegacyVaultProjectsData {
   projects: Project[]
   projectIcons: AppSettings['projectIcons']
 }
 
-interface VaultTasksData {
+interface LegacyVaultTasksData {
   calendarTasks: CalendarTask[]
 }
 
@@ -118,7 +122,7 @@ export function createDefaultAppSettings(): AppSettings {
     favoriteProjectIds: [],
     profile: {
       name: '',
-      color: 'indigo'
+      color: 'atmosphere'
     },
     ai: {
       mistralApiKey: ''
@@ -152,7 +156,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
         typeof parsed.profile?.name === 'string' && parsed.profile.name.trim().length > 0
           ? parsed.profile.name
           : defaults.profile.name,
-      color: isProfileColor(parsed.profile?.color) ? parsed.profile.color : defaults.profile.color
+      color: normalizeProfileColor(parsed.profile?.color, defaults.profile.color)
     },
     ai: {
       mistralApiKey:
@@ -541,22 +545,34 @@ function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolea
   return false
 }
 
-function hasMaterialProjectsData(settings: VaultProjectsData | null): boolean {
-  if (!settings) {
-    return false
-  }
-
-  if (Array.isArray(settings.projects) && settings.projects.length > 0) {
-    return true
-  }
-
-  return Object.keys(settings.projectIcons ?? {}).length > 0
+function hasMaterialProjectsData(projects: Project[] | null | undefined): boolean {
+  return Boolean(projects && Array.isArray(projects) && projects.length > 0)
 }
 
-function hasMaterialTasksData(settings: VaultTasksData | null): boolean {
-  return Boolean(
-    settings && Array.isArray(settings.calendarTasks) && settings.calendarTasks.length > 0
-  )
+function hasMaterialProjectIconsData(
+  projectIcons: AppSettings['projectIcons'] | null | undefined
+): boolean {
+  return Boolean(projectIcons && Object.keys(projectIcons).length > 0)
+}
+
+function hasMaterialTasksData(tasks: CalendarTask[] | null | undefined): boolean {
+  return Boolean(tasks && Array.isArray(tasks) && tasks.length > 0)
+}
+
+function resolvePreferredData<T>(
+  current: T | null,
+  legacy: T | undefined,
+  hasMaterial: (value: T | null | undefined) => boolean
+): T | undefined {
+  if (current === null) {
+    return legacy
+  }
+
+  if (!hasMaterial(current) && hasMaterial(legacy)) {
+    return legacy ?? current
+  }
+
+  return current
 }
 
 export class SettingsStore {
@@ -612,8 +628,11 @@ export class SettingsStore {
     const settingsPath = getVaultSettingsPath(vaultRoot)
     const legacySettingsPath = getLegacyVaultSettingsPath(vaultRoot)
     const projectsPath = getVaultProjectsPath(vaultRoot)
+    const projectIconsPath = getVaultProjectIconsPath(vaultRoot)
+    const legacyPageProjectsPath = getLegacyPageVaultProjectsPath(vaultRoot)
     const legacyProjectsPath = getLegacyVaultProjectsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
+    const legacyPageTasksPath = getLegacyPageVaultCalendarTasksPath(vaultRoot)
     const legacyTasksPath = getLegacyVaultCalendarTasksPath(vaultRoot)
 
     try {
@@ -621,16 +640,22 @@ export class SettingsStore {
         coreParsed,
         legacyCoreParsed,
         projectsData,
+        projectIconsData,
+        legacyPageProjectsData,
         legacyProjectsData,
         tasksData,
+        legacyPageTasksData,
         legacyTasksData
       ] = await Promise.all([
         this.readJsonFile<VaultCoreSettings>(settingsPath),
         this.readJsonFile<VaultCoreSettings>(legacySettingsPath),
-        this.readJsonFile<VaultProjectsData>(projectsPath),
-        this.readJsonFile<VaultProjectsData>(legacyProjectsPath),
-        this.readJsonFile<VaultTasksData>(tasksPath),
-        this.readJsonFile<VaultTasksData>(legacyTasksPath)
+        this.readJsonFile<Project[]>(projectsPath),
+        this.readJsonFile<AppSettings['projectIcons']>(projectIconsPath),
+        this.readJsonFile<LegacyVaultProjectsData>(legacyPageProjectsPath),
+        this.readJsonFile<LegacyVaultProjectsData>(legacyProjectsPath),
+        this.readJsonFile<CalendarTask[]>(tasksPath),
+        this.readJsonFile<LegacyVaultTasksData>(legacyPageTasksPath),
+        this.readJsonFile<LegacyVaultTasksData>(legacyTasksPath)
       ])
 
       const resolvedCore =
@@ -638,26 +663,59 @@ export class SettingsStore {
         (!hasMaterialCoreSettingsData(coreParsed) && hasMaterialCoreSettingsData(legacyCoreParsed))
           ? (legacyCoreParsed ?? coreParsed)
           : coreParsed
-      const resolvedProjects =
-        projectsData === null ||
-        (!hasMaterialProjectsData(projectsData) && hasMaterialProjectsData(legacyProjectsData))
-          ? (legacyProjectsData ?? projectsData)
-          : projectsData
-      const resolvedTasks =
-        tasksData === null ||
-        (!hasMaterialTasksData(tasksData) && hasMaterialTasksData(legacyTasksData))
-          ? (legacyTasksData ?? tasksData)
-          : tasksData
+
+      const resolvedLegacyProjects =
+        legacyPageProjectsData === null ||
+        (!hasMaterialProjectsData(legacyPageProjectsData.projects) &&
+          !hasMaterialProjectIconsData(legacyPageProjectsData.projectIcons) &&
+          (hasMaterialProjectsData(legacyProjectsData?.projects) ||
+            hasMaterialProjectIconsData(legacyProjectsData?.projectIcons)))
+          ? (legacyProjectsData ?? legacyPageProjectsData)
+          : legacyPageProjectsData
+
+      const resolvedLegacyTasks =
+        legacyPageTasksData === null ||
+        (!hasMaterialTasksData(legacyPageTasksData.calendarTasks) &&
+          hasMaterialTasksData(legacyTasksData?.calendarTasks))
+          ? (legacyTasksData ?? legacyPageTasksData)
+          : legacyPageTasksData
+
+      const resolvedProjects = resolvePreferredData(
+        projectsData,
+        resolvedLegacyProjects?.projects ?? resolvedCore?.projects,
+        hasMaterialProjectsData
+      )
+      const resolvedProjectIcons = resolvePreferredData(
+        projectIconsData,
+        resolvedLegacyProjects?.projectIcons ?? resolvedCore?.projectIcons,
+        hasMaterialProjectIconsData
+      )
+      const resolvedTasks = resolvePreferredData(
+        tasksData,
+        resolvedLegacyTasks?.calendarTasks ?? resolvedCore?.calendarTasks,
+        hasMaterialTasksData
+      )
+      const needsProfileColorMigration =
+        typeof resolvedCore?.profile?.color === 'string' &&
+        normalizeProfileColor(
+          resolvedCore.profile.color,
+          createDefaultAppSettings().profile.color
+        ) !== resolvedCore.profile.color
 
       const needsSplitMigration =
         coreParsed === null ||
         projectsData === null ||
+        projectIconsData === null ||
         tasksData === null ||
         legacyCoreParsed !== null ||
+        legacyPageProjectsData !== null ||
         legacyProjectsData !== null ||
+        legacyPageTasksData !== null ||
         legacyTasksData !== null ||
+        needsProfileColorMigration ||
         resolvedCore !== coreParsed ||
         resolvedProjects !== projectsData ||
+        resolvedProjectIcons !== projectIconsData ||
         resolvedTasks !== tasksData ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
@@ -665,14 +723,15 @@ export class SettingsStore {
 
       const merged = normalizeSettings({
         ...(resolvedCore ?? {}),
-        projects: resolvedProjects?.projects ?? resolvedCore?.projects,
-        projectIcons: resolvedProjects?.projectIcons ?? resolvedCore?.projectIcons,
-        calendarTasks: resolvedTasks?.calendarTasks ?? resolvedCore?.calendarTasks,
+        projects: resolvedProjects,
+        projectIcons: resolvedProjectIcons,
+        calendarTasks: resolvedTasks,
         lastVaultPath: vaultRoot
       })
 
       if (needsSplitMigration) {
         await this.persistVaultFiles(vaultRoot, merged)
+        await this.cleanupLegacyVaultFiles(vaultRoot)
       }
       return merged
     } catch (error) {
@@ -729,6 +788,7 @@ export class SettingsStore {
   private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
     const corePath = getVaultSettingsPath(vaultRoot)
     const projectsPath = getVaultProjectsPath(vaultRoot)
+    const projectIconsPath = getVaultProjectIconsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
 
     const coreSettings: VaultCoreSettings = {
@@ -747,19 +807,21 @@ export class SettingsStore {
       gridBoard: settings.gridBoard
     }
 
-    const projectsData: VaultProjectsData = {
-      projects: settings.projects,
-      projectIcons: settings.projectIcons
-    }
-
-    const tasksData: VaultTasksData = {
-      calendarTasks: settings.calendarTasks
-    }
-
     await Promise.all([
       this.writeJsonFile(corePath, coreSettings),
-      this.writeJsonFile(projectsPath, projectsData),
-      this.writeJsonFile(tasksPath, tasksData)
+      this.writeJsonFile(projectsPath, settings.projects),
+      this.writeJsonFile(projectIconsPath, settings.projectIcons),
+      this.writeJsonFile(tasksPath, settings.calendarTasks)
+    ])
+  }
+
+  private async cleanupLegacyVaultFiles(vaultRoot: string): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(getLegacyVaultSettingsPath(vaultRoot), vaultRoot),
+      deleteLegacyVaultPath(getLegacyPageVaultProjectsPath(vaultRoot), vaultRoot),
+      deleteLegacyVaultPath(getLegacyVaultProjectsPath(vaultRoot), vaultRoot),
+      deleteLegacyVaultPath(getLegacyPageVaultCalendarTasksPath(vaultRoot), vaultRoot),
+      deleteLegacyVaultPath(getLegacyVaultCalendarTasksPath(vaultRoot), vaultRoot)
     ])
   }
 

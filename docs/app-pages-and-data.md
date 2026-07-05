@@ -29,25 +29,28 @@ User workspace content lives in a selected local vault:
 - `notebooks/**/*.md`
 - `attachments/**`
 - `settings.json`
-- `projects/index.json`
-- `calendar/tasks.json`
-- `weekly-plan/state.json`
-- `subscriptions/data.json`
-- `schedules/jobs.json`
-- `schedules/runs.json`
-- `agent/chats.json`
-- `agent/runs.json`
-- `generative-ui/artifacts.json`
-- `.xingularity/vault.json`
-- `.xingularity/filemap.json`
-- `.xingularity/index.sqlite`
+- `projects.json`
+- `project-icons.json`
+- `tasks.json`
+- `weekly-plan.json`
+- `subscriptions.json`
+- `schedule-jobs.json`
+- `schedule-runs.json`
+- `agent-chats.json`
+- `agent-runs.json`
+- `generative-ui-artifacts.json`
+- `excalidraw-sessions.json`
+- `vault.json`
+- `migrations.json`
+- `filemap.json`
+- `index.sqlite`
 
 This layer is responsible for:
 
 - notebook files
 - folder structure
 - attachments
-- page-aligned workspace records
+- standalone workspace records
 - note indexing and search metadata
 
 ### App-managed structured state
@@ -66,13 +69,13 @@ Main app-managed domains:
 - agent chat sessions
 - agent run history
 
-Internal vault metadata and caches stay under `.xingularity/`.
+All app-managed vault data uses standalone root-level files, except notebook content which stays under `notebooks/`.
 
 Legacy vault behavior:
 
 - older `notes/` roots are copied into `notebooks/`
-- older `.appmeta/` metadata is copied into `.xingularity/`
-- older hidden JSON stores are read once and persisted into the visible page-aligned paths
+- older `.appmeta/` and `.xingularity/` metadata is promoted into root-level canonical files
+- older page-folder JSON stores are read once and persisted into standalone root-level files
 - if both `notes/` and `notebooks/` already exist before migration, vault open fails with a conflict instead of merging automatically
 
 ## Top-Level App Settings

@@ -48,7 +48,7 @@ export const useVaultStore = create<VaultState>((set) => ({
     favoriteProjectIds: [],
     profile: {
       name: '',
-      color: 'indigo'
+      color: 'atmosphere'
     },
     ai: {
       mistralApiKey: ''

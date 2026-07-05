@@ -232,18 +232,20 @@ Vault-backed content:
 - `notebooks/**/*.md`
 - `attachments/**`
 - `settings.json`
-- `projects/index.json`
-- `calendar/tasks.json`
-- `weekly-plan/state.json`
-- `subscriptions/data.json`
-- `schedules/jobs.json`
-- `schedules/runs.json`
-- `agent/chats.json`
-- `agent/runs.json`
-- `generative-ui/artifacts.json`
-- `.xingularity/vault.json`
-- `.xingularity/filemap.json`
-- `.xingularity/index.sqlite`
+- `projects.json`
+- `project-icons.json`
+- `tasks.json`
+- `weekly-plan.json`
+- `subscriptions.json`
+- `schedule-jobs.json`
+- `schedule-runs.json`
+- `agent-chats.json`
+- `agent-runs.json`
+- `generative-ui-artifacts.json`
+- `excalidraw-sessions.json`
+- `vault.json`
+- `filemap.json`
+- `index.sqlite`
 
 App-managed state:
 
@@ -255,4 +257,4 @@ App-managed state:
 - schedules and run records
 - agent chat sessions and run history
 
-Internal vault metadata and caches stay under `.xingularity/`.
+All app-managed vault data uses standalone root-level files, except notebook content which stays under `notebooks/`.

@@ -8,6 +8,8 @@ import {
   type SavedGenerativeUiArtifact
 } from '../shared/generativeUi'
 import {
+  deleteLegacyVaultPath,
+  getLegacyPageVaultGenerativeUiArtifactsPath,
   getLegacyVaultGenerativeUiArtifactsPath,
   getVaultGenerativeUiArtifactsPath
 } from './vaultData'
@@ -26,11 +28,15 @@ function normalizeArtifacts(value: unknown): SavedGenerativeUiArtifact[] {
 }
 
 export class GenerativeUiArtifactStore {
+  private readonly vaultRoot: string
   private readonly filePath: string
+  private readonly legacyPageFilePath: string
   private readonly legacyFilePath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.filePath = getVaultGenerativeUiArtifactsPath(vaultRoot)
+    this.legacyPageFilePath = getLegacyPageVaultGenerativeUiArtifactsPath(vaultRoot)
     this.legacyFilePath = getLegacyVaultGenerativeUiArtifactsPath(vaultRoot)
   }
 
@@ -40,10 +46,19 @@ export class GenerativeUiArtifactStore {
       return normalizeArtifacts(current)
     }
 
+    const legacyPage = await this.readJsonFile(this.legacyPageFilePath)
+    if (legacyPage) {
+      const normalized = normalizeArtifacts(legacyPage)
+      await this.writeArtifacts(normalized)
+      await this.cleanupLegacyFiles()
+      return normalized
+    }
+
     const legacy = await this.readJsonFile(this.legacyFilePath)
     if (legacy) {
       const normalized = normalizeArtifacts(legacy)
       await this.writeArtifacts(normalized)
+      await this.cleanupLegacyFiles()
       return normalized
     }
 
@@ -94,5 +109,12 @@ export class GenerativeUiArtifactStore {
       }
       return null
     }
+  }
+
+  private async cleanupLegacyFiles(): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(this.legacyPageFilePath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+    ])
   }
 }

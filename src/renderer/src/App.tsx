@@ -29,7 +29,8 @@ import {
   Target,
   FolderOpen,
   ChevronUp,
-  Star
+  Star,
+  SlidersHorizontal
 } from 'lucide-react'
 import {
   CALENDAR_TASK_TYPE_OPTIONS,
@@ -81,6 +82,7 @@ import {
   normalizeMentionTarget
 } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
+import { CalendarWeekView } from './components/CalendarWeekView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
 import { NoteShapeIcon } from './components/NoteShapeIcon'
@@ -141,12 +143,12 @@ import {
   SCHEDULE_DOCUMENTATION_MARKDOWN
 } from './pages/ScheduleDocumentationPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
-import { DashboardPage } from './pages/DashboardPage'
 import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
+import { usePersistentState } from './hooks/usePersistentState'
 import { useStaggeredScrollReveal } from './hooks/useStaggeredScrollReveal'
 import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
 import {
@@ -165,12 +167,7 @@ import {
   getProjectHealthSummary,
   toLocalIsoDate
 } from './lib/projectStatus'
-import {
-  findWeekForDate,
-  formatWeekRange,
-  getSortedWeeks,
-  getWeekPriorities
-} from './lib/weeklyPlan'
+import { findWeekForDate, formatWeekRange, getSortedWeeks } from './lib/weeklyPlan'
 import { shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -181,7 +178,6 @@ import { hideManagedProjectTree } from './lib/noteTreeVisibility'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 
 const PAGE_LABELS: Record<AppPage, string> = {
-  dashboard: 'Dashboard',
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
@@ -194,6 +190,8 @@ const PAGE_LABELS: Record<AppPage, string> = {
   agentHistory: 'Agent Chat',
   generativeUi: 'Generative UI'
 }
+
+type CalendarViewMode = 'month' | 'week'
 
 type PageLeaveSaveDebug = {
   requestedPage: AppPage | null
@@ -288,18 +286,21 @@ function SettingsRightPanelSections(): ReactElement {
     {
       id: 'settings-appearance',
       icon: <Paintbrush size={16} aria-hidden="true" />,
+      iconContainerClassName: 'bg-rose-500/12 text-rose-500',
       heading: 'Appearance',
       description: 'Theme and surface defaults for the workspace'
     },
     {
       id: 'settings-editor-defaults',
       icon: <Type size={16} aria-hidden="true" />,
+      iconContainerClassName: 'bg-cyan-500/12 text-cyan-500',
       heading: 'Editor Defaults',
       description: 'Type, writing, and editing preferences'
     },
     {
       id: 'settings-shortcuts',
       icon: <Keyboard size={16} aria-hidden="true" />,
+      iconContainerClassName: 'bg-violet-500/12 text-violet-500',
       heading: 'Shortcuts',
       description: 'Keyboard actions available across the app'
     }
@@ -318,6 +319,7 @@ function SettingsRightPanelSections(): ReactElement {
           >
             <WorkspacePanelSectionHeader
               icon={section.icon}
+              iconContainerClassName={section.iconContainerClassName}
               heading={section.heading}
               description={section.description}
             />
@@ -363,6 +365,7 @@ function App(): ReactElement {
   const setSettings = useVaultStore((state) => state.setSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
+  const [knowledgeOrphanRingRadiusInput, setKnowledgeOrphanRingRadiusInput] = useState('')
   const availablePages = useMemo(() => getAvailablePages(platform), [platform])
   const useNativeMenus = platform.capabilities.supportsNativeMenus && canUseNativeMenus()
   const [isDarkMode, setIsDarkMode] = useState(
@@ -387,6 +390,13 @@ function App(): ReactElement {
   const shellAccentStyle = accentCssVars
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
+  const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
+    'calendar-view-mode',
+    'month',
+    {
+      validate: (value): value is CalendarViewMode => value === 'month' || value === 'week'
+    }
+  )
   const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
     projectId: string
     milestoneId: string
@@ -418,6 +428,19 @@ function App(): ReactElement {
     }
   }, [accentCssVars])
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
+  const knowledgeOrphanRingRadiusPx = useMemo(() => {
+    const trimmed = knowledgeOrphanRingRadiusInput.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed)) {
+      return null
+    }
+
+    return Math.max(72, Math.round(parsed))
+  }, [knowledgeOrphanRingRadiusInput])
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntries, setSelectedNoteTreeEntries] = useState<NoteTreeSelection>([])
   const primarySelectedNoteTreeEntry = getPrimaryNoteTreeSelectionEntry(selectedNoteTreeEntries)
@@ -463,10 +486,6 @@ function App(): ReactElement {
     () => weeklyPlanWeeks.find((week) => week.id === selectedWeeklyPlanWeekId) ?? null,
     [weeklyPlanWeeks, selectedWeeklyPlanWeekId]
   )
-  const currentWeekPriorities = useMemo(
-    () => getWeekPriorities(weeklyPlanState, weeklyPlanCurrentWeekId),
-    [weeklyPlanState, weeklyPlanCurrentWeekId]
-  )
   const nextWeeklyPlanStart = useMemo(
     () => getNextWeeklyPlanStart(weeklyPlanWeeks),
     [weeklyPlanWeeks]
@@ -488,6 +507,7 @@ function App(): ReactElement {
   const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const projectFilterButtonRef = useRef<HTMLButtonElement | null>(null)
   const projectSortButtonRef = useRef<HTMLButtonElement | null>(null)
+  const calendarViewModeButtonRef = useRef<HTMLButtonElement | null>(null)
   const createNoteRef = useRef<(() => Promise<void>) | null>(null)
   const notesRef = useRef(notes)
   const currentNotePathRef = useRef(currentNotePath)
@@ -506,10 +526,10 @@ function App(): ReactElement {
   const activePageRef = useRef(activePage)
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
+  const hasAttemptedVaultRestoreRef = useRef(false)
   const shouldAnimateWorkspacePane =
     hasVault &&
-    (activePage === 'dashboard' ||
-      activePage === 'knowledge' ||
+    (activePage === 'knowledge' ||
       activePage === 'notes' ||
       activePage === 'projects' ||
       activePage === 'calendar')
@@ -942,11 +962,6 @@ function App(): ReactElement {
   const currentNoteIsFavorite = currentNotePath
     ? favoriteNotePaths.includes(currentNotePath)
     : false
-  const shouldRestoreLastOpenedNote =
-    settingsLoaded &&
-    !currentNotePath &&
-    Boolean(lastOpenedNotePath) &&
-    notes.some((note) => note.relPath === lastOpenedNotePath)
   const middleHeaderBreadcrumbItem = useMemo(() => {
     if (!hasVault) {
       return 'Select Vault'
@@ -955,10 +970,6 @@ function App(): ReactElement {
     if (activePage === 'notes') {
       if (searchQuery.trim()) {
         return 'Search Results'
-      }
-
-      if (shouldRestoreLastOpenedNote) {
-        return 'Opening Last Note'
       }
 
       if (currentNotePath || currentExcalidrawPath) {
@@ -976,14 +987,10 @@ function App(): ReactElement {
       return 'Note graph'
     }
 
-    if (activePage === 'dashboard') {
-      return currentWeeklyPlanWeek
-        ? formatWeekRange(currentWeeklyPlanWeek.startDate, currentWeeklyPlanWeek.endDate)
-        : 'Overview'
-    }
-
     if (activePage === 'calendar') {
-      return formatCalendarDateLabel(selectedCalendarDate)
+      return calendarViewMode === 'week'
+        ? formatCalendarWeekRangeLabel(selectedCalendarDate)
+        : formatCalendarDateLabel(selectedCalendarDate)
     }
 
     if (activePage === 'weeklyPlan') {
@@ -1003,17 +1010,15 @@ function App(): ReactElement {
     searchQuery,
     currentExcalidrawPath,
     currentNotePath,
+    calendarViewMode,
     selectedCalendarDate,
-    currentWeeklyPlanWeek,
     selectedProject,
-    shouldRestoreLastOpenedNote,
     selectedWeeklyPlanWeek
   ])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
       activePage !== 'notes' ||
       searchQuery.trim() ||
-      shouldRestoreLastOpenedNote ||
       (!currentNotePath && !currentExcalidrawPath)
     ) {
       return null
@@ -1022,7 +1027,7 @@ function App(): ReactElement {
     return stripNotebookFileExtension(currentNotePath ?? currentExcalidrawPath ?? '')
       .split('/')
       .filter(Boolean)
-  }, [activePage, currentExcalidrawPath, currentNotePath, searchQuery, shouldRestoreLastOpenedNote])
+  }, [activePage, currentExcalidrawPath, currentNotePath, searchQuery])
 
   useEffect(() => {
     if (!weeklyPlanWeeks.length) {
@@ -1794,7 +1799,7 @@ function App(): ReactElement {
         }
       })
       setSettings(nextSettings)
-      pushToast('success', 'Accent color updated')
+      pushToast('success', 'Color style updated')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -1958,6 +1963,44 @@ function App(): ReactElement {
     )
   }
 
+  const updateCalendarTaskSchedule = async (
+    taskId: string,
+    schedule: {
+      date: string | undefined
+      endDate: string | undefined
+      time: string | undefined
+      endTime: string | undefined
+    }
+  ): Promise<void> => {
+    await updateCalendarTasks((tasks) =>
+      tasks.map((task) => {
+        if (task.id !== taskId) {
+          return task
+        }
+
+        const nextDate = schedule.date
+        const nextEndDate =
+          nextDate && schedule.endDate
+            ? schedule.endDate >= nextDate
+              ? schedule.endDate
+              : nextDate
+            : undefined
+
+        return {
+          ...task,
+          date: nextDate,
+          endDate: nextEndDate,
+          time: schedule.time,
+          endTime: schedule.endTime
+        }
+      })
+    )
+
+    if (schedule.date) {
+      setSelectedCalendarDate(schedule.date)
+    }
+  }
+
   const updateCalendarTaskReminders = async (
     taskId: string,
     reminders: TaskReminder[]
@@ -2038,12 +2081,20 @@ function App(): ReactElement {
     )
   }
 
-  const goToPrevMonth = (): void => {
-    setSelectedCalendarDate(shiftIsoMonthClamped(selectedCalendarDate, -1))
+  const goToPrevCalendarPeriod = (): void => {
+    setSelectedCalendarDate(
+      calendarViewMode === 'week'
+        ? addIsoDays(selectedCalendarDate, -7)
+        : shiftIsoMonthClamped(selectedCalendarDate, -1)
+    )
   }
 
-  const goToNextMonth = (): void => {
-    setSelectedCalendarDate(shiftIsoMonthClamped(selectedCalendarDate, 1))
+  const goToNextCalendarPeriod = (): void => {
+    setSelectedCalendarDate(
+      calendarViewMode === 'week'
+        ? addIsoDays(selectedCalendarDate, 7)
+        : shiftIsoMonthClamped(selectedCalendarDate, 1)
+    )
   }
 
   const goToToday = (): void => {
@@ -2251,37 +2302,6 @@ function App(): ReactElement {
       return
     }
 
-    if (currentNotePath || currentExcalidrawPath) {
-      return
-    }
-
-    const lastPath = lastOpenedNotePath
-    if (!lastPath) {
-      return
-    }
-
-    const exists = notes.some((note) => note.relPath === lastPath)
-    if (!exists) {
-      void persistLastOpenedNotePath(null)
-      return
-    }
-
-    void openNote(lastPath)
-  }, [
-    settingsLoaded,
-    currentExcalidrawPath,
-    currentNotePath,
-    lastOpenedNotePath,
-    notes,
-    openNote,
-    persistLastOpenedNotePath
-  ])
-
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return
-    }
-
     if (favoriteNotePaths.length === favoriteNotePathSettings.length) {
       return
     }
@@ -2376,16 +2396,11 @@ function App(): ReactElement {
 
   const applyVaultActivationResult = useCallback(
     async (result: VaultOpenResult, successMessage?: string): Promise<void> => {
-      if (!vaultApi) {
-        return
-      }
-
-      const openedTree = await vaultApi.files.listTree()
       setSettingsLoaded(false)
       resetVaultScopedUiState()
       setVault(result.info)
       replaceNotes(result.notes)
-      setNoteTree(openedTree)
+      setNoteTree(result.tree)
       await refreshSavedVaultCount()
       if (successMessage) {
         pushToast('success', successMessage)
@@ -2397,10 +2412,29 @@ function App(): ReactElement {
       refreshSavedVaultCount,
       resetVaultScopedUiState,
       setNoteTree,
-      setVault,
-      vaultApi
+      setVault
     ]
   )
+
+  const runVaultMigration = useCallback(async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Vault migration is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before running migration')
+      void navigateToPage('settings')
+      return
+    }
+
+    try {
+      const result = await vaultApi.vault.runMigration()
+      await applyVaultActivationResult(result, `Migrated vault ${result.info.rootPath}`)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [applyVaultActivationResult, navigateToPage, pushToast, vault, vaultApi])
 
   const clearActiveVaultState = useCallback(
     async (successMessage?: string): Promise<void> => {
@@ -2417,9 +2451,10 @@ function App(): ReactElement {
   )
 
   useEffect(() => {
-    if (!vaultApi) {
+    if (!vaultApi || hasAttemptedVaultRestoreRef.current) {
       return
     }
+    hasAttemptedVaultRestoreRef.current = true
 
     void (async () => {
       try {
@@ -5018,6 +5053,34 @@ function App(): ReactElement {
     }
   }
 
+  const openNativeCalendarViewMenu = async (): Promise<void> => {
+    if (!useNativeMenus || !calendarViewModeButtonRef.current) {
+      return
+    }
+
+    const actionId = await showNativeMenu(
+      [
+        {
+          id: 'month',
+          type: 'checkbox',
+          label: 'Monthly',
+          checked: calendarViewMode === 'month'
+        },
+        {
+          id: 'week',
+          type: 'checkbox',
+          label: 'Weekly',
+          checked: calendarViewMode === 'week'
+        }
+      ],
+      getElementMenuPosition(calendarViewModeButtonRef.current, 'start')
+    )
+
+    if (actionId === 'month' || actionId === 'week') {
+      setCalendarViewMode(actionId)
+    }
+  }
+
   return (
     <div className="flex h-screen">
       <SidebarProvider
@@ -5186,7 +5249,11 @@ function App(): ReactElement {
                             title={
                               currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
                             }
-                            active={currentNoteIsFavorite}
+                            className={
+                              currentNoteIsFavorite
+                                ? 'border-amber-400/40 bg-amber-500/12 text-amber-500 hover:text-amber-400'
+                                : 'hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-500'
+                            }
                             icon={
                               <Star
                                 size={18}
@@ -5204,6 +5271,77 @@ function App(): ReactElement {
                             title="Delete Note"
                             icon={<Trash2 size={18} />}
                           />
+                        </WorkspaceHeaderActionGroup>
+                      </WorkspaceHeaderActions>
+                    ) : activePage === 'knowledge' ? (
+                      <WorkspaceHeaderActions>
+                        <WorkspaceHeaderActionGroup>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <WorkspaceActionButton
+                                title="Open graph editor"
+                                aria-label="Open graph editor"
+                                icon={<SlidersHorizontal size={18} />}
+                                data-testid="knowledge-graph-editor-trigger"
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent
+                              align="end"
+                              className="w-80 border border-[var(--line)] bg-[var(--panel)] p-4 text-[var(--text)] shadow-xl"
+                            >
+                              <div className="space-y-1">
+                                <h2 className="text-sm font-semibold text-[var(--text)]">
+                                  Graph editor
+                                </h2>
+                                <p className="text-xs text-[var(--muted)]">
+                                  Configure the orphan ring radius in pixels. Leave blank to use
+                                  the automatic canvas radius.
+                                </p>
+                              </div>
+                              <div className="mt-4 space-y-2">
+                                <label
+                                  htmlFor="knowledge-orphan-radius-input"
+                                  className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
+                                >
+                                  Orphan ring radius
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    id="knowledge-orphan-radius-input"
+                                    data-testid="knowledge-orphan-radius-input"
+                                    type="number"
+                                    min={72}
+                                    step={1}
+                                    value={knowledgeOrphanRingRadiusInput}
+                                    onChange={(event) => {
+                                      setKnowledgeOrphanRingRadiusInput(event.target.value)
+                                    }}
+                                    placeholder="Auto"
+                                    className="w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                                    aria-label="Orphan ring radius in pixels"
+                                  />
+                                  <span className="text-xs text-[var(--muted)]">px</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-[var(--muted)]">
+                                    Applied radius:{' '}
+                                    {knowledgeOrphanRingRadiusPx == null
+                                      ? 'Auto'
+                                      : `${knowledgeOrphanRingRadiusPx}px`}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                                    onClick={() => {
+                                      setKnowledgeOrphanRingRadiusInput('')
+                                    }}
+                                  >
+                                    Reset
+                                  </button>
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'projects' && selectedProject ? (
@@ -5378,7 +5516,11 @@ function App(): ReactElement {
                                 ? 'Remove Project from Favorites'
                                 : 'Add Project to Favorites'
                             }
-                            active={currentProjectIsFavorite}
+                            className={
+                              currentProjectIsFavorite
+                                ? 'border-amber-400/40 bg-amber-500/14 text-amber-500 hover:border-amber-400/50 hover:bg-amber-500/18 hover:text-amber-500'
+                                : 'hover:border-amber-400/40 hover:bg-amber-500/12 hover:text-amber-500'
+                            }
                             icon={
                               <Star
                                 size={18}
@@ -5400,22 +5542,65 @@ function App(): ReactElement {
                       </WorkspaceHeaderActions>
                     ) : activePage === 'calendar' ? (
                       <WorkspaceHeaderActions>
-                        <WorkspaceHeaderActionGroup>
+                        <WorkspaceHeaderActionGroup className="workspace-subtle-surface gap-0 overflow-hidden rounded-lg p-0">
                           <WorkspaceActionButton
-                            onClick={goToPrevMonth}
-                            title="Previous month"
+                            onClick={goToPrevCalendarPeriod}
+                            title={calendarViewMode === 'week' ? 'Previous week' : 'Previous month'}
+                            className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
                             icon={<ChevronLeft size={18} />}
                           />
                           <WorkspaceActionButton
                             onClick={goToToday}
                             title="Go to today"
+                            className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
                             icon={<CalendarDays size={18} />}
                           />
                           <WorkspaceActionButton
-                            onClick={goToNextMonth}
-                            title="Next month"
+                            onClick={goToNextCalendarPeriod}
+                            title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                            className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
                             icon={<ChevronRight size={18} />}
                           />
+                        </WorkspaceHeaderActionGroup>
+                        <WorkspaceHeaderActionGroup>
+                          {useNativeMenus ? (
+                            <WorkspaceActionButton
+                              ref={calendarViewModeButtonRef}
+                              onClick={() => {
+                                void openNativeCalendarViewMenu()
+                              }}
+                              title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                              aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                              label={formatCalendarViewModeLabel(calendarViewMode)}
+                              icon={<CalendarDays size={16} />}
+                            />
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <WorkspaceActionButton
+                                  title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                                  aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                                  label={formatCalendarViewModeLabel(calendarViewMode)}
+                                  icon={<CalendarDays size={16} />}
+                                />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup
+                                  value={calendarViewMode}
+                                  onValueChange={(value) =>
+                                    setCalendarViewMode(value as CalendarViewMode)
+                                  }
+                                >
+                                  <DropdownMenuRadioItem value="month">
+                                    Monthly
+                                  </DropdownMenuRadioItem>
+                                  <DropdownMenuRadioItem value="week">
+                                    Weekly
+                                  </DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
@@ -5494,37 +5679,15 @@ function App(): ReactElement {
                           vimModeEnabled={editorVimModeEnabled}
                           vimKeyMappings={editorVimKeyMappings}
                         />
-                      ) : shouldRestoreLastOpenedNote ? (
-                        <div className="p-5 text-sm text-[var(--muted)]">
-                          Opening your last note…
-                        </div>
                       ) : (
                         <div className="p-5 text-sm text-[var(--muted)]">
                           Pick a note or drawing from the right panel to open it
                         </div>
                       )
-                    ) : activePage === 'dashboard' ? (
-                      <DashboardPage
-                        projects={projects}
-                        currentWeek={currentWeeklyPlanWeek}
-                        currentWeekPriorities={currentWeekPriorities}
-                        tasks={calendarTasks}
-                        weeklyPlanLoading={weeklyPlanLoading}
-                        weeklyPlanReady={weeklyPlanReady}
-                        onOpenProject={(projectId) => {
-                          selectProject(projectId)
-                          void navigateToPage('projects')
-                        }}
-                        onOpenProjects={() => {
-                          void navigateToPage('projects')
-                        }}
-                        onOpenWeeklyPlan={() => {
-                          void navigateToPage('weeklyPlan')
-                        }}
-                      />
                     ) : activePage === 'knowledge' ? (
                       <KnowledgePage
                         notes={notes}
+                        orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
                         onOpenNote={(relPath) => {
                           void navigateToPage('notes')
                           setSearchQuery('')
@@ -5667,45 +5830,82 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      <CalendarMonthView
-                        selectedDate={selectedCalendarDate}
-                        tasks={scheduledCalendarTasks}
-                        milestoneEvents={milestoneCalendarEvents}
-                        onSelectDate={setSelectedCalendarDate}
-                        onCreateTask={createTaskForDate}
-                        onOpenMilestone={openMilestoneFromCalendar}
-                        onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
-                        onRescheduleTask={(taskId, newDate) => {
-                          void rescheduleCalendarTask(taskId, newDate)
-                        }}
-                        onResizeTaskStart={(taskId, newStartDate) => {
-                          void resizeCalendarTaskStart(taskId, newStartDate)
-                        }}
-                        onResizeTaskEnd={(taskId, newEndDate) => {
-                          void resizeCalendarTaskEnd(taskId, newEndDate)
-                        }}
-                        onToggleTask={(taskId) => {
-                          void toggleCalendarTask(taskId)
-                        }}
-                        onDeleteTask={(taskId) => {
-                          void removeCalendarTask(taskId)
-                        }}
-                        onRenameTask={(taskId, newTitle) => {
-                          void renameCalendarTask(taskId, newTitle)
-                        }}
-                        onUpdateTaskPriority={(taskId, priority) => {
-                          void updateCalendarTaskPriority(taskId, priority)
-                        }}
-                        onUpdateTaskType={(taskId, taskType) => {
-                          void updateCalendarTaskType(taskId, taskType)
-                        }}
-                        onUpdateTaskTime={(taskId, time) => {
-                          void updateCalendarTaskTime(taskId, time)
-                        }}
-                        onUpdateTaskReminders={(taskId, reminders) => {
-                          void updateCalendarTaskReminders(taskId, reminders)
-                        }}
-                      />
+                      calendarViewMode === 'week' ? (
+                        <CalendarWeekView
+                          selectedDate={selectedCalendarDate}
+                          tasks={calendarTasks}
+                          milestoneEvents={milestoneCalendarEvents}
+                          onSelectDate={setSelectedCalendarDate}
+                          onOpenMilestone={openMilestoneFromCalendar}
+                          onRescheduleTask={(taskId, newDate) => {
+                            void rescheduleCalendarTask(taskId, newDate)
+                          }}
+                          onToggleTask={(taskId) => {
+                            void toggleCalendarTask(taskId)
+                          }}
+                          onDeleteTask={(taskId) => {
+                            void removeCalendarTask(taskId)
+                          }}
+                          onRenameTask={(taskId, newTitle) => {
+                            void renameCalendarTask(taskId, newTitle)
+                          }}
+                          onUpdateTaskPriority={(taskId, priority) => {
+                            void updateCalendarTaskPriority(taskId, priority)
+                          }}
+                          onUpdateTaskType={(taskId, taskType) => {
+                            void updateCalendarTaskType(taskId, taskType)
+                          }}
+                          onUpdateTaskSchedule={(taskId, schedule) => {
+                            void updateCalendarTaskSchedule(taskId, schedule)
+                          }}
+                          onUpdateTaskReminders={(taskId, reminders) => {
+                            void updateCalendarTaskReminders(taskId, reminders)
+                          }}
+                        />
+                      ) : (
+                        <CalendarMonthView
+                          selectedDate={selectedCalendarDate}
+                          tasks={scheduledCalendarTasks}
+                          milestoneEvents={milestoneCalendarEvents}
+                          onSelectDate={setSelectedCalendarDate}
+                          onCreateTask={createTaskForDate}
+                          onOpenMilestone={openMilestoneFromCalendar}
+                          onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
+                          onRescheduleTask={(taskId, newDate) => {
+                            void rescheduleCalendarTask(taskId, newDate)
+                          }}
+                          onResizeTaskStart={(taskId, newStartDate) => {
+                            void resizeCalendarTaskStart(taskId, newStartDate)
+                          }}
+                          onResizeTaskEnd={(taskId, newEndDate) => {
+                            void resizeCalendarTaskEnd(taskId, newEndDate)
+                          }}
+                          onToggleTask={(taskId) => {
+                            void toggleCalendarTask(taskId)
+                          }}
+                          onDeleteTask={(taskId) => {
+                            void removeCalendarTask(taskId)
+                          }}
+                          onRenameTask={(taskId, newTitle) => {
+                            void renameCalendarTask(taskId, newTitle)
+                          }}
+                          onUpdateTaskPriority={(taskId, priority) => {
+                            void updateCalendarTaskPriority(taskId, priority)
+                          }}
+                          onUpdateTaskType={(taskId, taskType) => {
+                            void updateCalendarTaskType(taskId, taskType)
+                          }}
+                          onUpdateTaskTime={(taskId, time) => {
+                            void updateCalendarTaskTime(taskId, time)
+                          }}
+                          onUpdateTaskSchedule={(taskId, schedule) => {
+                            void updateCalendarTaskSchedule(taskId, schedule)
+                          }}
+                          onUpdateTaskReminders={(taskId, reminders) => {
+                            void updateCalendarTaskReminders(taskId, reminders)
+                          }}
+                        />
+                      )
                     ) : activePage === 'settings' ? (
                       <SettingsPage
                         profileName={profileName}
@@ -6187,6 +6387,10 @@ function App(): ReactElement {
         onManageVaults={() => {
           setCommandPaletteOpen(false)
           openVaultSwapper()
+        }}
+        onRunVaultMigration={() => {
+          setCommandPaletteOpen(false)
+          void runVaultMigration()
         }}
       />
       <VaultSwapperDialog

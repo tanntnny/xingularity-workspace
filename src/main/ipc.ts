@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
 import { GenerativeUiArtifactSchema } from '../shared/generativeUi'
@@ -8,7 +8,9 @@ import {
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES
 } from '../shared/types'
+import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
+import { loadMainWindowApp } from './window'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -140,6 +142,10 @@ const calendarTaskSchema = z.object({
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(taskReminderSchema).max(10),
   time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
+  endTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/)
     .optional(),
@@ -305,7 +311,7 @@ const settingsUpdateOptionsSchema = z
   .optional()
 
 export function registerIpcHandlers(runtime: VaultRuntime): void {
-  ipcMain.handle(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
+  handleIpc(IPC_CHANNELS.uiShowNativeMenu, async (event, request: unknown) => {
     const parsed = nativeMenuRequestSchema.parse(request)
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window) {
@@ -331,77 +337,87 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return selectedActionId
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultOpen, async () => {
+  handleIpc(IPC_CHANNELS.uiReloadApp, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) {
+      return
+    }
+
+    await loadMainWindowApp(window)
+  })
+
+  handleIpc(IPC_CHANNELS.vaultOpen, async () => {
     return runtime.openWithDialog()
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultCreate, async () => {
+  handleIpc(IPC_CHANNELS.vaultCreate, async () => {
     return runtime.createWithDialog()
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultRestoreLast, async () => {
+  handleIpc(IPC_CHANNELS.vaultRestoreLast, async () => {
     return runtime.restoreLast()
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultListSaved, async () => {
+  handleIpc(IPC_CHANNELS.vaultRunMigration, async () => {
+    return runtime.runVaultMigration()
+  })
+
+  handleIpc(IPC_CHANNELS.vaultListSaved, async () => {
     return runtime.listSavedVaults()
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultSwitchSaved, async (_event, rootPath: unknown) => {
+  handleIpc(IPC_CHANNELS.vaultSwitchSaved, async (_event, rootPath: unknown) => {
     return runtime.switchSavedVault(genericPathSchema.parse(rootPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultToggleFavoriteSaved, async (_event, rootPath: unknown) => {
+  handleIpc(IPC_CHANNELS.vaultToggleFavoriteSaved, async (_event, rootPath: unknown) => {
     return runtime.toggleFavoriteSavedVault(genericPathSchema.parse(rootPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.vaultRemoveSaved, async (_event, rootPath: unknown) => {
+  handleIpc(IPC_CHANNELS.vaultRemoveSaved, async (_event, rootPath: unknown) => {
     return runtime.removeSavedVault(genericPathSchema.parse(rootPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
+  handleIpc(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
     return runtime.chooseDirectory(directoryTitleSchema.parse(title))
   })
 
-  ipcMain.handle(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
+  handleIpc(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
     await runtime.openPath(sourcePathSchema.parse(targetPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.listNotes, async () => {
+  handleIpc(IPC_CHANNELS.listNotes, async () => {
     return runtime.listNotes()
   })
 
-  ipcMain.handle(IPC_CHANNELS.listNoteTree, async () => {
+  handleIpc(IPC_CHANNELS.listNoteTree, async () => {
     return runtime.listNoteTree()
   })
 
-  ipcMain.handle(IPC_CHANNELS.readNote, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.readNote, async (_event, relPath: unknown) => {
     return runtime.readNote(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.readNoteDocument, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.readNoteDocument, async (_event, relPath: unknown) => {
     return runtime.readNoteDocument(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.readExcalidrawFileDocument, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.readExcalidrawFileDocument, async (_event, relPath: unknown) => {
     return runtime.readExcalidrawFileDocument(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.writeNote, async (_event, relPath: unknown, content: unknown) => {
+  handleIpc(IPC_CHANNELS.writeNote, async (_event, relPath: unknown, content: unknown) => {
     await runtime.writeNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.writeNoteDocument,
-    async (_event, relPath: unknown, document: unknown) => {
-      await runtime.writeNoteDocument(
-        notePathSchema.parse(relPath),
-        noteDocumentSchema.parse(document)
-      )
-    }
-  )
+  handleIpc(IPC_CHANNELS.writeNoteDocument, async (_event, relPath: unknown, document: unknown) => {
+    await runtime.writeNoteDocument(
+      notePathSchema.parse(relPath),
+      noteDocumentSchema.parse(document)
+    )
+  })
 
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.writeExcalidrawFileDocument,
     async (_event, relPath: unknown, document: unknown) => {
       await runtime.writeExcalidrawFileDocument(
@@ -411,146 +427,134 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.createNote, async (_event, name: unknown) => {
+  handleIpc(IPC_CHANNELS.createNote, async (_event, name: unknown) => {
     return runtime.createNote(noteNameSchema.parse(name))
   })
 
-  ipcMain.handle(IPC_CHANNELS.createNoteAtPath, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.createNoteAtPath, async (_event, relPath: unknown) => {
     return runtime.createNoteAtPath(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.createExcalidrawFileAtPath, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.createExcalidrawFileAtPath, async (_event, relPath: unknown) => {
     return runtime.createExcalidrawFileAtPath(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.createNoteWithTags, async (_event, name: unknown, tags: unknown) => {
+  handleIpc(IPC_CHANNELS.createNoteWithTags, async (_event, name: unknown, tags: unknown) => {
     return runtime.createNoteWithTags(noteNameSchema.parse(name), tagsArraySchema.parse(tags))
   })
 
-  ipcMain.handle(IPC_CHANNELS.createFolder, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.createFolder, async (_event, relPath: unknown) => {
     return runtime.createFolder(genericPathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.importNotes, async () => {
+  handleIpc(IPC_CHANNELS.importNotes, async () => {
     return runtime.importNotes()
   })
 
-  ipcMain.handle(IPC_CHANNELS.migrateBlockNoteNotes, async () => {
+  handleIpc(IPC_CHANNELS.migrateBlockNoteNotes, async () => {
     return runtime.migrateBlockNoteNotes()
   })
 
-  ipcMain.handle(IPC_CHANNELS.migrateTaggedNoteBodyFrontmatter, async () => {
+  handleIpc(IPC_CHANNELS.migrateTaggedNoteBodyFrontmatter, async () => {
     return runtime.migrateTaggedNoteBodyFrontmatter()
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.renameNote,
-    async (_event, oldRelPath: unknown, newRelPath: unknown) => {
-      await runtime.renameNote(notePathSchema.parse(oldRelPath), notePathSchema.parse(newRelPath))
-    }
-  )
+  handleIpc(IPC_CHANNELS.renameNote, async (_event, oldRelPath: unknown, newRelPath: unknown) => {
+    await runtime.renameNote(notePathSchema.parse(oldRelPath), notePathSchema.parse(newRelPath))
+  })
 
-  ipcMain.handle(
-    IPC_CHANNELS.renamePath,
-    async (_event, oldRelPath: unknown, newRelPath: unknown) => {
-      await runtime.renamePath(
-        genericPathSchema.parse(oldRelPath),
-        genericPathSchema.parse(newRelPath)
-      )
-    }
-  )
+  handleIpc(IPC_CHANNELS.renamePath, async (_event, oldRelPath: unknown, newRelPath: unknown) => {
+    await runtime.renamePath(
+      genericPathSchema.parse(oldRelPath),
+      genericPathSchema.parse(newRelPath)
+    )
+  })
 
-  ipcMain.handle(IPC_CHANNELS.deleteNote, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.deleteNote, async (_event, relPath: unknown) => {
     await runtime.deleteNote(notePathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.deletePath, async (_event, relPath: unknown) => {
+  handleIpc(IPC_CHANNELS.deletePath, async (_event, relPath: unknown) => {
     await runtime.deletePath(genericPathSchema.parse(relPath))
   })
 
-  ipcMain.handle(IPC_CHANNELS.deletePaths, async (_event, relPaths: unknown) => {
+  handleIpc(IPC_CHANNELS.deletePaths, async (_event, relPaths: unknown) => {
     await runtime.deletePaths(z.array(genericPathSchema).min(1).max(100).parse(relPaths))
   })
 
-  ipcMain.handle(IPC_CHANNELS.exportNote, async (_event, relPath: unknown, content: unknown) => {
+  handleIpc(IPC_CHANNELS.exportNote, async (_event, relPath: unknown, content: unknown) => {
     return runtime.exportNote(notePathSchema.parse(relPath), contentSchema.parse(content))
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.exportProject,
-    async (_event, projectName: unknown, content: unknown) => {
-      return runtime.exportProject(
-        projectNameSchema.parse(projectName),
-        contentSchema.parse(content)
-      )
-    }
-  )
+  handleIpc(IPC_CHANNELS.exportProject, async (_event, projectName: unknown, content: unknown) => {
+    return runtime.exportProject(projectNameSchema.parse(projectName), contentSchema.parse(content))
+  })
 
-  ipcMain.handle(IPC_CHANNELS.searchQuery, (_event, query: unknown) => {
+  handleIpc(IPC_CHANNELS.searchQuery, (_event, query: unknown) => {
     return runtime.search(querySchema.parse(query))
   })
 
-  ipcMain.handle(IPC_CHANNELS.aiCompleteNote, async (_event, input: unknown) => {
+  handleIpc(IPC_CHANNELS.aiCompleteNote, async (_event, input: unknown) => {
     return runtime.completeNoteWithAi(aiCompletionInputSchema.parse(input))
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentChatSendMessage, async (_event, input: unknown) => {
+  handleIpc(IPC_CHANNELS.agentChatSendMessage, async (_event, input: unknown) => {
     return runtime.chatWithAgent(agentChatInputSchema.parse(input))
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentChatListSessions, async () => {
+  handleIpc(IPC_CHANNELS.agentChatListSessions, async () => {
     return runtime.listAgentChatSessions()
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentChatSaveSession, async (_event, session: unknown) => {
+  handleIpc(IPC_CHANNELS.agentChatSaveSession, async (_event, session: unknown) => {
     return runtime.saveAgentChatSession(agentChatSessionSchema.parse(session))
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentChatDeleteSession, async (_event, sessionId: unknown) => {
+  handleIpc(IPC_CHANNELS.agentChatDeleteSession, async (_event, sessionId: unknown) => {
     return runtime.deleteAgentChatSession(sessionIdSchema.parse(sessionId))
   })
 
-  ipcMain.handle(IPC_CHANNELS.excalidrawListSessions, async () => {
+  handleIpc(IPC_CHANNELS.excalidrawListSessions, async () => {
     return runtime.listExcalidrawSessions()
   })
 
-  ipcMain.handle(IPC_CHANNELS.excalidrawSaveSession, async (_event, session: unknown) => {
+  handleIpc(IPC_CHANNELS.excalidrawSaveSession, async (_event, session: unknown) => {
     return runtime.saveExcalidrawSession(excalidrawSessionSchema.parse(session))
   })
 
-  ipcMain.handle(IPC_CHANNELS.excalidrawDeleteSession, async (_event, sessionId: unknown) => {
+  handleIpc(IPC_CHANNELS.excalidrawDeleteSession, async (_event, sessionId: unknown) => {
     return runtime.deleteExcalidrawSession(sessionIdSchema.parse(sessionId))
   })
 
-  ipcMain.handle(IPC_CHANNELS.excalidrawImportLegacySessions, async () => {
+  handleIpc(IPC_CHANNELS.excalidrawImportLegacySessions, async () => {
     return runtime.importLegacyExcalidrawSessions()
   })
 
-  ipcMain.handle(IPC_CHANNELS.generativeUiListArtifacts, async () => {
+  handleIpc(IPC_CHANNELS.generativeUiListArtifacts, async () => {
     return runtime.listGenerativeUiArtifacts()
   })
 
-  ipcMain.handle(IPC_CHANNELS.generativeUiSaveArtifact, async (_event, input: unknown) => {
+  handleIpc(IPC_CHANNELS.generativeUiSaveArtifact, async (_event, input: unknown) => {
     return runtime.saveGenerativeUiArtifact(generativeUiSaveArtifactSchema.parse(input))
   })
 
-  ipcMain.handle(IPC_CHANNELS.generativeUiDeleteArtifact, async (_event, id: unknown) => {
+  handleIpc(IPC_CHANNELS.generativeUiDeleteArtifact, async (_event, id: unknown) => {
     await runtime.deleteGenerativeUiArtifact(sessionIdSchema.parse(id))
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {
+  handleIpc(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {
     return runtime.approveAgentChatTool(approveToolInputSchema.parse(input))
   })
 
-  ipcMain.handle(IPC_CHANNELS.agentHistoryListRuns, async () => {
+  handleIpc(IPC_CHANNELS.agentHistoryListRuns, async () => {
     return runtime.listAgentRuns()
   })
 
-  ipcMain.handle(IPC_CHANNELS.importAttachment, async (_event, sourcePath: unknown) => {
+  handleIpc(IPC_CHANNELS.importAttachment, async (_event, sourcePath: unknown) => {
     return runtime.importAttachment(sourcePathSchema.parse(sourcePath))
   })
 
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.importAttachmentFromBuffer,
     async (_event, buffer: unknown, fileExtension: unknown) => {
       if (!(buffer instanceof Uint8Array)) {
@@ -560,26 +564,26 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.settingsGet, async () => {
+  handleIpc(IPC_CHANNELS.settingsGet, async () => {
     return runtime.getSettings()
   })
 
-  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown, options: unknown) => {
+  handleIpc(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown, options: unknown) => {
     return runtime.updateSettings(
       settingsUpdateSchema.parse(next),
       settingsUpdateOptionsSchema.parse(options)
     )
   })
 
-  ipcMain.handle(IPC_CHANNELS.historyUndo, async () => {
+  handleIpc(IPC_CHANNELS.historyUndo, async () => {
     return runtime.undoHistory()
   })
 
-  ipcMain.handle(IPC_CHANNELS.historyRedo, async () => {
+  handleIpc(IPC_CHANNELS.historyRedo, async () => {
     return runtime.redoHistory()
   })
 
-  ipcMain.handle(IPC_CHANNELS.historyStatus, () => {
+  handleIpc(IPC_CHANNELS.historyStatus, () => {
     return runtime.historyStatus()
   })
 }

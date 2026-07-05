@@ -430,7 +430,9 @@ export function VaultSwapperDialog({
                   type="button"
                   className={cn(
                     paletteRowClassName,
-                    'h-9 w-9 shrink-0 justify-center px-0 text-[var(--muted)] hover:text-[var(--text)] group-hover:text-[var(--text)]'
+                    vault.isFavorite
+                      ? 'h-9 w-9 shrink-0 justify-center px-0 text-amber-500 hover:text-amber-400 group-hover:text-amber-400'
+                      : 'h-9 w-9 shrink-0 justify-center px-0 text-[var(--muted)] hover:text-amber-500 group-hover:text-amber-500'
                   )}
                   onClick={() => {
                     setSelectedItemKey(selectionKey)
@@ -447,7 +449,7 @@ export function VaultSwapperDialog({
                 >
                   <Star
                     size={16}
-                    className={vault.isFavorite ? 'fill-current text-[var(--accent)]' : ''}
+                    className={vault.isFavorite ? 'fill-current text-amber-500' : ''}
                   />
                 </button>
 

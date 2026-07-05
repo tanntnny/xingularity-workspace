@@ -13,6 +13,7 @@ import { AgentToolsService } from './agentToolsService'
 import { createMainWindow } from './window'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { HistoryService } from './historyService'
+import { broadcastMainProcessError } from './errorReporting'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
@@ -34,6 +35,16 @@ runtime.onAgentChatEvent((event) => {
       window.webContents.send(IPC_CHANNELS.agentChatEvent, event)
     }
   }
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('[main] uncaughtException', error)
+  broadcastMainProcessError(error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] unhandledRejection', reason)
+  broadcastMainProcessError(reason)
 })
 
 // Register custom protocol to serve vault files

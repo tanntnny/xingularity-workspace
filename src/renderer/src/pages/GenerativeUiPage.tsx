@@ -822,6 +822,7 @@ function GenerativeUiSidebar({
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<Save size={16} aria-hidden="true" />}
+              iconContainerClassName="bg-sky-500/12 text-sky-500"
               heading="Artifact Sessions"
               description={`${savedArtifacts.length} saved in this vault`}
             />
@@ -896,6 +897,7 @@ function GenerativeUiSidebar({
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<Library size={16} aria-hidden="true" />}
+              iconContainerClassName="bg-violet-500/12 text-violet-500"
               heading="Library"
               description="Add bundled sample artifacts into the current vault"
             />

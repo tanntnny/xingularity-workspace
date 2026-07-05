@@ -19,7 +19,6 @@ interface TopBarProps {
 }
 
 const PAGE_LABELS: Record<AppPage, string> = {
-  dashboard: 'Dashboard',
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
@@ -34,7 +33,6 @@ const PAGE_LABELS: Record<AppPage, string> = {
 }
 
 const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
-  dashboard: 'Board',
   knowledge: 'Board',
   subscriptions: 'Finance',
   generativeUi: 'Automations'

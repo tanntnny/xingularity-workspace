@@ -21,10 +21,10 @@ declare global {
 
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-grid-enabled-e2e-vault-'))
-  await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'notebooks'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'alpha.md'),
+    path.join(rootPath, 'notebooks', 'alpha.md'),
     serializeStoredNoteDocument(
       createStoredNoteDocumentFromText(
         'A distinctive note body for canvas preview.\nSecond line for preview coverage.\n'
@@ -36,7 +36,7 @@ async function createFixtureVault(): Promise<string> {
 }
 
 function getVaultSettingsPath(vaultRoot: string): string {
-  return path.join(vaultRoot, '.xingularity', 'settings.json')
+  return path.join(vaultRoot, 'settings.json')
 }
 
 async function readVaultSettings(vaultRoot: string): Promise<AppSettings> {

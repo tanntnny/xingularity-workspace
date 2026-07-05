@@ -123,6 +123,13 @@ export class VaultRuntime {
     )
   }
 
+  async runVaultMigration(): Promise<VaultOpenResult> {
+    const rootPath = this.getCurrentVaultRoot()
+    return this.enqueueActivation(
+      (): Promise<VaultOpenResult> => this.activateVault(rootPath, false)
+    )
+  }
+
   async toggleFavoriteSavedVault(rootPath: string): Promise<SavedVaultState> {
     const global = await this.settings.toggleFavoriteVault(path.resolve(rootPath))
     return this.buildSavedVaultState(global)
@@ -1052,9 +1059,12 @@ export class VaultRuntime {
     console.log('[VaultRuntime] persist global last vault', this.currentPaths.rootPath)
     await this.settings.rememberVault(this.currentPaths.rootPath)
     this.notifyVaultChange(this.currentPaths)
+    const notes = await this.fileService.listNotes()
+    const tree = this.decorateProjectTree(await this.fileService.listTree(), settings.projects)
     return {
       info: toInfo(this.currentPaths),
-      notes: await this.fileService.listNotes()
+      notes,
+      tree
     }
   }
 

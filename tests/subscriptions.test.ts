@@ -154,7 +154,7 @@ describe('SubscriptionsService', () => {
     expect(analytics.reviewCount).toBe(0)
 
     const persistedRaw = await fs.readFile(
-      path.join(vaultRoot, 'subscriptions', 'data.json'),
+      path.join(vaultRoot, 'subscriptions.json'),
       'utf-8'
     )
     const persisted = JSON.parse(persistedRaw) as Array<{ id: string; status: string }>

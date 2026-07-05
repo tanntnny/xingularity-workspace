@@ -6,18 +6,29 @@ import {
   SUBSCRIPTION_CHANNELS,
   WEEKLY_PLAN_CHANNELS
 } from '../shared/ipc'
-import { AgentChatEvent, RendererVaultApi } from '../shared/types'
+import { AgentChatEvent, AppErrorEvent, RendererVaultApi } from '../shared/types'
 
 const api: RendererVaultApi = {
   ui: {
     platform: process.platform,
     showNativeMenu: (items, position) =>
-      ipcRenderer.invoke(IPC_CHANNELS.uiShowNativeMenu, { items, position })
+      ipcRenderer.invoke(IPC_CHANNELS.uiShowNativeMenu, { items, position }),
+    reloadApp: () => ipcRenderer.invoke(IPC_CHANNELS.uiReloadApp)
+  },
+  app: {
+    onError: (listener): (() => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, payload: AppErrorEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.appErrorEvent, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.appErrorEvent, wrapped)
+    }
   },
   vault: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.vaultOpen),
     create: () => ipcRenderer.invoke(IPC_CHANNELS.vaultCreate),
     restoreLast: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRestoreLast),
+    runMigration: () => ipcRenderer.invoke(IPC_CHANNELS.vaultRunMigration),
     listSaved: () => ipcRenderer.invoke(IPC_CHANNELS.vaultListSaved),
     switchSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultSwitchSaved, rootPath),
     toggleFavoriteSaved: (rootPath) =>

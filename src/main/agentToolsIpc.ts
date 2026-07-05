@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { AGENT_TOOL_CHANNELS } from '../shared/ipc'
 import { AgentToolName, AgentToolsService } from './agentToolsService'
+import { handleIpc } from './errorReporting'
 
 const agentToolNameSchema = z.enum([
   'note.search',
@@ -23,7 +23,7 @@ const agentToolNameSchema = z.enum([
 ])
 
 export function registerAgentToolIpcHandlers(service: AgentToolsService): void {
-  ipcMain.handle(AGENT_TOOL_CHANNELS.invoke, (_event, toolName: unknown, input: unknown) => {
+  handleIpc(AGENT_TOOL_CHANNELS.invoke, (_event, toolName: unknown, input: unknown) => {
     return service.invoke(agentToolNameSchema.parse(toolName) as AgentToolName, input)
   })
 }

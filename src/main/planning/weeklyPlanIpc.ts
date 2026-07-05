@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { WEEKLY_PLAN_CHANNELS } from '../../shared/ipc'
 import { WeeklyPlanService } from './weeklyPlanService'
+import { handleIpc } from '../errorReporting'
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 
@@ -56,39 +56,39 @@ const reviewSchema = z.object({
 })
 
 export function registerWeeklyPlanIpcHandlers(service: WeeklyPlanService): void {
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.getState, () => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.getState, () => {
     return service.getState()
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.createWeek, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.createWeek, (_event, input: unknown) => {
     return service.createWeek(createWeekSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.updateWeek, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.updateWeek, (_event, input: unknown) => {
     return service.updateWeek(updateWeekSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.deleteWeek, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.deleteWeek, (_event, input: unknown) => {
     return service.deleteWeek(deleteWeekSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.addPriority, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.addPriority, (_event, input: unknown) => {
     return service.addPriority(priorityCreateSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.updatePriority, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.updatePriority, (_event, input: unknown) => {
     return service.updatePriority(priorityUpdateSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.deletePriority, (_event, priorityId: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.deletePriority, (_event, priorityId: unknown) => {
     return service.deletePriority(z.string().min(1).max(200).parse(priorityId))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.reorderPriorities, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.reorderPriorities, (_event, input: unknown) => {
     return service.reorderPriorities(reorderSchema.parse(input))
   })
 
-  ipcMain.handle(WEEKLY_PLAN_CHANNELS.upsertReview, (_event, input: unknown) => {
+  handleIpc(WEEKLY_PLAN_CHANNELS.upsertReview, (_event, input: unknown) => {
     return service.upsertReview(reviewSchema.parse(input))
   })
 }

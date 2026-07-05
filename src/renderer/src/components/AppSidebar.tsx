@@ -56,7 +56,6 @@ type SidebarSection = {
 }
 
 const BOARD_PAGES: SidebarPageItem[] = [
-  { id: 'dashboard', label: 'Dashboard', shortcut: ['cmd', 'd'] },
   { id: 'knowledge', label: 'Knowledge', shortcut: ['cmd', 'k'] }
 ]
 

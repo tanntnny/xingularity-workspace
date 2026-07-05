@@ -1,6 +1,6 @@
-import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { SCHEDULE_CHANNELS } from '../shared/ipc'
+import { handleIpc } from './errorReporting'
 import type { ScheduleService } from './scheduleService'
 
 const jobIdSchema = z.string().min(1).max(120)
@@ -43,31 +43,31 @@ const jobInputSchema = z.object({
 })
 
 export function registerScheduleIpcHandlers(service: ScheduleService): void {
-  ipcMain.handle(SCHEDULE_CHANNELS.listJobs, async () => {
+  handleIpc(SCHEDULE_CHANNELS.listJobs, async () => {
     return service.listJobs()
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.saveJob, async (_event, input: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.saveJob, async (_event, input: unknown) => {
     return service.saveJob(jobInputSchema.parse(input))
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.deleteJob, async (_event, id: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.deleteJob, async (_event, id: unknown) => {
     await service.deleteJob(jobIdSchema.parse(id))
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.runNow, async (_event, id: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.runNow, async (_event, id: unknown) => {
     return service.runNow(jobIdSchema.parse(id))
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.listRuns, async (_event, jobId: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.listRuns, async (_event, jobId: unknown) => {
     return service.listRuns(jobIdSchema.parse(jobId))
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.applyActions, async (_event, runId: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.applyActions, async (_event, runId: unknown) => {
     await service.applyActions(runIdSchema.parse(runId))
   })
 
-  ipcMain.handle(SCHEDULE_CHANNELS.dismissRun, async (_event, runId: unknown) => {
+  handleIpc(SCHEDULE_CHANNELS.dismissRun, async (_event, runId: unknown) => {
     await service.dismissRun(runIdSchema.parse(runId))
   })
 }

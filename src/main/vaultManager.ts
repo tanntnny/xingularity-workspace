@@ -4,10 +4,11 @@ import path from 'node:path'
 import { joinSafe } from '../shared/pathSafety'
 import { VaultInfo, VaultSettings } from '../shared/types'
 import {
-  ensureVaultSystemDir,
+  deleteLegacyVaultPath,
   getLegacyVaultConfigPath,
   getLegacyVaultFileMapPath,
   getLegacyVaultIndexPath,
+  getLegacyVaultMigrationsPath,
   getLegacyVaultNotesDir,
   getLegacyVaultSystemDir,
   getVaultAttachmentsDir,
@@ -43,14 +44,13 @@ function toInfo(paths: VaultPaths): VaultInfo {
 
 export function createVaultPaths(rootPath: string): VaultPaths {
   const notebooksPath = getVaultNotebooksDir(rootPath)
-  const systemPath = getVaultSystemDir(rootPath)
   return {
     rootPath,
     notebooksPath,
     notesPath: notebooksPath,
     attachmentsPath: getVaultAttachmentsDir(rootPath),
-    systemPath,
-    appMetaPath: systemPath,
+    systemPath: rootPath,
+    appMetaPath: rootPath,
     vaultConfigPath: getVaultConfigPath(rootPath),
     fileMapPath: getVaultFileMapPath(rootPath),
     indexPath: getVaultIndexPath(rootPath)
@@ -74,7 +74,6 @@ export async function initializeVault(rootPath: string): Promise<VaultPaths> {
   await fs.mkdir(paths.rootPath, { recursive: true })
   await fs.mkdir(paths.notebooksPath, { recursive: true })
   await fs.mkdir(paths.attachmentsPath, { recursive: true })
-  await ensureVaultSystemDir(paths.rootPath)
 
   const vaultSettings: VaultSettings = {
     version: 1,
@@ -94,7 +93,6 @@ export async function validateVault(rootPath: string): Promise<VaultPaths> {
 
   await fs.access(paths.rootPath)
   await fs.mkdir(paths.attachmentsPath, { recursive: true })
-  await ensureVaultSystemDir(paths.rootPath)
 
   let migrations = await readVaultMigrations(paths.rootPath)
   migrations = await migrateLegacyNotebookRoot(paths.rootPath, migrations)
@@ -158,20 +156,45 @@ async function migrateLegacySystemMetadata(
   rootPath: string,
   migrations: Awaited<ReturnType<typeof readVaultMigrations>>
 ): Promise<void> {
+  const hiddenSystemPath = getVaultSystemDir(rootPath)
   const legacySystemPath = getLegacyVaultSystemDir(rootPath)
-  if (!(await pathExists(legacySystemPath))) {
-    return
-  }
 
-  await copyFileIfMissing(getLegacyVaultConfigPath(rootPath), getVaultConfigPath(rootPath))
-  await copyFileIfMissing(getLegacyVaultFileMapPath(rootPath), getVaultFileMapPath(rootPath))
-  await copyFileIfMissing(getLegacyVaultIndexPath(rootPath), getVaultIndexPath(rootPath))
+  const migratedVaultConfig = await promoteFirstLegacyFile(getVaultConfigPath(rootPath), [
+    path.join(hiddenSystemPath, 'vault.json'),
+    getLegacyVaultConfigPath(rootPath)
+  ])
+  const migratedFileMap = await promoteFirstLegacyFile(getVaultFileMapPath(rootPath), [
+    path.join(hiddenSystemPath, 'filemap.json'),
+    getLegacyVaultFileMapPath(rootPath)
+  ])
+  const migratedIndex = await promoteFirstLegacyFile(getVaultIndexPath(rootPath), [
+    path.join(hiddenSystemPath, 'index.sqlite'),
+    getLegacyVaultIndexPath(rootPath)
+  ])
+  const migratedAny = migratedVaultConfig || migratedFileMap || migratedIndex
 
-  if (!migrations.copiedFromLegacySystemAt) {
+  if (migratedAny && !migrations.copiedFromLegacySystemAt) {
     await writeVaultMigrations(rootPath, {
       ...migrations,
       copiedFromLegacySystemAt: new Date().toISOString()
     })
+  }
+
+  await Promise.all([
+    deleteLegacyVaultPath(path.join(hiddenSystemPath, 'vault.json'), rootPath),
+    deleteLegacyVaultPath(path.join(hiddenSystemPath, 'filemap.json'), rootPath),
+    deleteLegacyVaultPath(path.join(hiddenSystemPath, 'index.sqlite'), rootPath),
+    deleteLegacyVaultPath(getLegacyVaultMigrationsPath(rootPath), rootPath),
+    deleteLegacyVaultPath(getLegacyVaultConfigPath(rootPath), rootPath),
+    deleteLegacyVaultPath(getLegacyVaultFileMapPath(rootPath), rootPath),
+    deleteLegacyVaultPath(getLegacyVaultIndexPath(rootPath), rootPath)
+  ])
+
+  if (await pathExists(hiddenSystemPath)) {
+    await removeDirIfEmpty(hiddenSystemPath)
+  }
+  if (await pathExists(legacySystemPath)) {
+    await removeDirIfEmpty(legacySystemPath)
   }
 }
 
@@ -179,17 +202,30 @@ async function ensureJsonFile(filePath: string, defaultValue: object): Promise<v
   try {
     await fs.access(filePath)
   } catch {
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify(defaultValue, null, 2), 'utf-8')
   }
 }
 
-async function copyFileIfMissing(sourcePath: string, destinationPath: string): Promise<void> {
-  if (!(await pathExists(sourcePath)) || (await pathExists(destinationPath))) {
-    return
+async function promoteFirstLegacyFile(
+  destinationPath: string,
+  sourcePaths: string[]
+): Promise<boolean> {
+  if (await pathExists(destinationPath)) {
+    return false
   }
 
-  await fs.mkdir(path.dirname(destinationPath), { recursive: true })
-  await fs.copyFile(sourcePath, destinationPath)
+  for (const sourcePath of sourcePaths) {
+    if (!(await pathExists(sourcePath))) {
+      continue
+    }
+
+    await fs.mkdir(path.dirname(destinationPath), { recursive: true })
+    await fs.copyFile(sourcePath, destinationPath)
+    return true
+  }
+
+  return false
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -199,6 +235,18 @@ async function pathExists(targetPath: string): Promise<boolean> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return false
+    }
+    throw error
+  }
+}
+
+async function removeDirIfEmpty(targetPath: string): Promise<void> {
+  try {
+    await fs.rmdir(targetPath)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || code === 'ENOTEMPTY' || code === 'EEXIST') {
+      return
     }
     throw error
   }

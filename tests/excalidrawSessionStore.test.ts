@@ -86,7 +86,7 @@ describe('ExcalidrawSessionStore', () => {
   it('falls back to an empty list for invalid JSON', async () => {
     const { root, store } = await makeStore()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const filePath = path.join(root, '.xingularity', 'excalidraw-sessions.json')
+    const filePath = path.join(root, 'excalidraw-sessions.json')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, '{ invalid', 'utf-8')
 

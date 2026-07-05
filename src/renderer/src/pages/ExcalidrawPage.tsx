@@ -603,6 +603,7 @@ export function ExcalidrawSidebar(): ReactElement {
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<PenTool size={16} aria-hidden="true" />}
+              iconContainerClassName="bg-fuchsia-500/12 text-fuchsia-500"
               heading="Saved drawings"
               description={`${sessions.length} saved drawings in this vault`}
             />

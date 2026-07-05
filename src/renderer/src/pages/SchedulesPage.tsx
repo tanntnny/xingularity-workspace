@@ -794,6 +794,7 @@ export function SchedulesPage({
                 >
                   <WorkspacePanelSectionHeader
                     icon={<CalendarClock size={16} aria-hidden="true" />}
+                    iconContainerClassName="bg-cyan-500/12 text-cyan-500"
                     heading="Schedules"
                     description={`${jobs.length} jobs configured${selectedJobId ? ' · select one to edit' : ''}`}
                   />

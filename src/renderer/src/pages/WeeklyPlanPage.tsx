@@ -495,6 +495,7 @@ export function WeeklyPlanSidebar({
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<CalendarDays size={16} aria-hidden="true" />}
+              iconContainerClassName="bg-blue-500/12 text-blue-500"
               heading="All Week"
               description={`${weeks.length} saved weeks${currentWeekId ? ' · current week available' : ''}`}
             />

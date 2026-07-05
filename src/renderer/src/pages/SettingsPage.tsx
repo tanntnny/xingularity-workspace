@@ -377,6 +377,7 @@ export function SettingsPage({
                 </p>
               </div>
               <Switch
+                className="self-center"
                 checked={workspaceVibrancyEnabled}
                 onChange={(_event, checked) => onToggleWorkspaceVibrancy(checked)}
                 inputProps={{ 'aria-label': 'Toggle workspace vibrancy' }}
@@ -388,7 +389,7 @@ export function SettingsPage({
           </div>
 
           <div className="grid gap-2">
-            <span className="text-sm text-[var(--muted)]">Accent Color</span>
+            <span className="text-sm text-[var(--muted)]">Color Style</span>
             <div className="flex flex-wrap gap-2">
               {PROFILE_COLOR_OPTIONS.map((option) => {
                 const isActive = option.value === profileColor
@@ -416,8 +417,8 @@ export function SettingsPage({
               })}
             </div>
             <p className="text-xs text-[var(--muted)]">
-              Changes the app-wide accent color. `Monotone` becomes dark in light mode and white in
-              dark mode.
+              `Atmosphere` uses a curated palette chosen to feel adaptive without changing at
+              runtime. `Monotone` becomes dark in light mode and white in dark mode.
             </p>
           </div>
 
@@ -475,6 +476,7 @@ export function SettingsPage({
                 </p>
               </div>
               <Switch
+                className="self-center"
                 checked={editorVimModeEnabled}
                 onChange={(_event, checked) => onToggleEditorVimMode(checked)}
                 inputProps={{ 'aria-label': 'Toggle Vim mode' }}

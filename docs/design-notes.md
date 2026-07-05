@@ -7,7 +7,7 @@ SQLite was chosen over a pure JS index because this app is local-first and must 
 - FTS5 gives efficient full-text search on disk without loading the full corpus in memory.
 - Querying title/body/tags is straightforward and fast.
 - Index durability and crash safety are better than ad-hoc JSON index files.
-- The data remains local and portable inside `.xingularity/index.sqlite`.
+- The data remains local and portable inside `index.sqlite` at the vault root.
 
 ## Markdown rendering choice
 

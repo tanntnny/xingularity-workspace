@@ -25,7 +25,7 @@ afterEach(async () => {
 })
 
 describe('SettingsStore', () => {
-  it('migrates legacy vault settings files into page-aligned canonical paths', async () => {
+  it('migrates legacy vault settings files into root-level canonical paths', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const legacyDir = path.join(root, '.xingularity')
     await fs.mkdir(legacyDir, { recursive: true })
@@ -105,6 +105,7 @@ describe('SettingsStore', () => {
     const settings = await store.readVault(root)
 
     expect(settings.profile.name).toBe('Amy')
+    expect(settings.profile.color).toBe('atmosphere')
     expect(settings.editorVimModeEnabled).toBe(true)
     expect(settings.editorVimKeyMappings).toEqual([
       {
@@ -126,21 +127,26 @@ describe('SettingsStore', () => {
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
     )
-    await expect(
-      fs.readFile(path.join(root, 'projects', 'index.json'), 'utf-8')
-    ).resolves.toContain('"name": "Migration"')
-    await expect(
-      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
-    ).resolves.toContain('"title": "Legacy task"')
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"color": "atmosphere"'
+    )
+    await expect(fs.readFile(path.join(root, 'projects.json'), 'utf-8')).resolves.toContain(
+      '"name": "Migration"'
+    )
+    await expect(fs.readFile(path.join(root, 'project-icons.json'), 'utf-8')).resolves.toContain(
+      '{}'
+    )
+    await expect(fs.readFile(path.join(root, 'tasks.json'), 'utf-8')).resolves.toContain(
+      '"title": "Legacy task"'
+    )
+    await expect(fs.access(path.join(legacyDir, 'settings.json'))).rejects.toThrow()
+    await expect(fs.access(path.join(legacyDir, 'projects.json'))).rejects.toThrow()
+    await expect(fs.access(path.join(legacyDir, 'tasks.json'))).rejects.toThrow()
   })
 
   it('prefers populated legacy files over empty migrated visible files', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
-    const visibleProjectsDir = path.join(root, 'projects')
-    const visibleCalendarDir = path.join(root, 'calendar')
     const legacyDir = path.join(root, '.xingularity')
-    await fs.mkdir(visibleProjectsDir, { recursive: true })
-    await fs.mkdir(visibleCalendarDir, { recursive: true })
     await fs.mkdir(legacyDir, { recursive: true })
 
     await fs.writeFile(
@@ -159,16 +165,9 @@ describe('SettingsStore', () => {
       ),
       'utf-8'
     )
-    await fs.writeFile(
-      path.join(visibleProjectsDir, 'index.json'),
-      JSON.stringify({ projects: [], projectIcons: {} }, null, 2),
-      'utf-8'
-    )
-    await fs.writeFile(
-      path.join(visibleCalendarDir, 'tasks.json'),
-      JSON.stringify({ calendarTasks: [] }, null, 2),
-      'utf-8'
-    )
+    await fs.writeFile(path.join(root, 'projects.json'), JSON.stringify([], null, 2), 'utf-8')
+    await fs.writeFile(path.join(root, 'project-icons.json'), JSON.stringify({}, null, 2), 'utf-8')
+    await fs.writeFile(path.join(root, 'tasks.json'), JSON.stringify([], null, 2), 'utf-8')
 
     await fs.writeFile(
       path.join(legacyDir, 'settings.json'),
@@ -246,11 +245,43 @@ describe('SettingsStore', () => {
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"lastOpenedNotePath": "alpha.md"'
     )
-    await expect(
-      fs.readFile(path.join(root, 'projects', 'index.json'), 'utf-8')
-    ).resolves.toContain('"name": "Migration"')
-    await expect(
-      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
-    ).resolves.toContain('"title": "Legacy task"')
+    await expect(fs.readFile(path.join(root, 'projects.json'), 'utf-8')).resolves.toContain(
+      '"name": "Migration"'
+    )
+    await expect(fs.readFile(path.join(root, 'tasks.json'), 'utf-8')).resolves.toContain(
+      '"title": "Legacy task"'
+    )
+  })
+
+  it('normalizes legacy non-monotone profile colors to atmosphere', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+
+    await fs.writeFile(
+      path.join(root, 'settings.json'),
+      JSON.stringify(
+        {
+          profile: { name: 'Amy', color: 'emerald' },
+          favoriteNotePaths: [],
+          favoriteProjectIds: [],
+          lastOpenedNotePath: null,
+          lastOpenedProjectId: null,
+          gridBoard: { viewport: { x: 0, y: 0, zoom: 1 }, items: [] }
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    )
+    await fs.writeFile(path.join(root, 'projects.json'), JSON.stringify([], null, 2), 'utf-8')
+    await fs.writeFile(path.join(root, 'project-icons.json'), JSON.stringify({}, null, 2), 'utf-8')
+    await fs.writeFile(path.join(root, 'tasks.json'), JSON.stringify([], null, 2), 'utf-8')
+
+    const store = new SettingsStore()
+    const settings = await store.readVault(root)
+
+    expect(settings.profile.color).toBe('atmosphere')
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"color": "atmosphere"'
+    )
   })
 })

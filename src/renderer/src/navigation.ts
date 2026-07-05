@@ -1,5 +1,4 @@
 export type AppPage =
-  | 'dashboard'
   | 'knowledge'
   | 'notes'
   | 'projects'
@@ -13,7 +12,6 @@ export type AppPage =
   | 'generativeUi'
 
 export const ALL_APP_PAGES: AppPage[] = [
-  'dashboard',
   'knowledge',
   'notes',
   'projects',

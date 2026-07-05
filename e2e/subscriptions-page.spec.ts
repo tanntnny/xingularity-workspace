@@ -15,12 +15,12 @@ declare global {
 }
 
 function getSubscriptionsPath(vaultRoot: string): string {
-  return path.join(vaultRoot, '.xingularity', 'subscriptions.json')
+  return path.join(vaultRoot, 'subscriptions.json')
 }
 
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-subscriptions-e2e-vault-'))
-  await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'notebooks'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
   return rootPath
 }

@@ -10,41 +10,40 @@ import {
 
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-project-page-e2e-vault-'))
-  await fs.mkdir(path.join(rootPath, 'notes', 'Projects', 'Alpha Project'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'notebooks', 'Projects', 'Alpha Project'), {
+    recursive: true
+  })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
-  await fs.mkdir(path.join(rootPath, '.xingularity'), { recursive: true })
 
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'Projects', 'Alpha Project', 'in-folder.md'),
+    path.join(rootPath, 'notebooks', 'Projects', 'Alpha Project', 'in-folder.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Inside folder\n')),
     'utf-8'
   )
   await fs.writeFile(
-    path.join(rootPath, 'notes', 'outside-note.md'),
+    path.join(rootPath, 'notebooks', 'outside-note.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Outside note\n')),
     'utf-8'
   )
   await fs.writeFile(
-    path.join(rootPath, '.xingularity', 'settings.json'),
+    path.join(rootPath, 'projects.json'),
     JSON.stringify(
-      {
-        projects: [
-          {
-            id: 'project-1',
-            name: 'Alpha Project',
-            summary: '',
-            status: 'on-track',
-            updatedAt: '2026-04-02T00:00:00.000Z',
-            progress: 0,
-            milestones: [],
-            icon: {
-              shape: 'circle',
-              variant: 'filled',
-              color: '#000000'
-            }
+      [
+        {
+          id: 'project-1',
+          name: 'Alpha Project',
+          summary: '',
+          status: 'on-track',
+          updatedAt: '2026-04-02T00:00:00.000Z',
+          progress: 0,
+          milestones: [],
+          icon: {
+            shape: 'circle',
+            variant: 'filled',
+            color: '#000000'
           }
-        ]
-      },
+        }
+      ],
       null,
       2
     ),

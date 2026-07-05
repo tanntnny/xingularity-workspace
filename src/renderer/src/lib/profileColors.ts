@@ -9,34 +9,10 @@ type ProfileColorOption = {
 
 export const PROFILE_COLOR_OPTIONS: ProfileColorOption[] = [
   {
-    value: 'indigo',
-    label: 'Indigo',
-    swatch: '#6366f1',
-    swatchBorder: 'rgba(129, 140, 248, 0.34)'
-  },
-  {
-    value: 'emerald',
-    label: 'Emerald',
-    swatch: '#10b981',
-    swatchBorder: 'rgba(52, 211, 153, 0.34)'
-  },
-  {
-    value: 'rose',
-    label: 'Rose',
-    swatch: '#f43f5e',
-    swatchBorder: 'rgba(251, 113, 133, 0.34)'
-  },
-  {
-    value: 'amber',
-    label: 'Amber',
-    swatch: '#f59e0b',
-    swatchBorder: 'rgba(251, 191, 36, 0.34)'
-  },
-  {
-    value: 'cyan',
-    label: 'Cyan',
-    swatch: '#06b6d4',
-    swatchBorder: 'rgba(34, 211, 238, 0.34)'
+    value: 'atmosphere',
+    label: 'Atmosphere',
+    swatch: 'linear-gradient(135deg, #325f6d 0%, #6e8f7b 56%, #c79b61 100%)',
+    swatchBorder: 'rgba(98, 143, 155, 0.34)'
   },
   {
     value: 'monotone',
@@ -58,44 +34,18 @@ export function resolveProfileAccent(
   soft: string
   line: string
 } {
-  if (color === 'indigo') {
-    return {
-      accent: '#6366f1',
-      soft: 'rgba(99, 102, 241, 0.16)',
-      line: 'rgba(129, 140, 248, 0.34)'
-    }
-  }
-
-  if (color === 'emerald') {
-    return {
-      accent: '#10b981',
-      soft: 'rgba(16, 185, 129, 0.16)',
-      line: 'rgba(52, 211, 153, 0.34)'
-    }
-  }
-
-  if (color === 'rose') {
-    return {
-      accent: '#f43f5e',
-      soft: 'rgba(244, 63, 94, 0.16)',
-      line: 'rgba(251, 113, 133, 0.34)'
-    }
-  }
-
-  if (color === 'amber') {
-    return {
-      accent: '#f59e0b',
-      soft: 'rgba(245, 158, 11, 0.16)',
-      line: 'rgba(251, 191, 36, 0.34)'
-    }
-  }
-
-  if (color === 'cyan') {
-    return {
-      accent: '#06b6d4',
-      soft: 'rgba(6, 182, 212, 0.16)',
-      line: 'rgba(34, 211, 238, 0.34)'
-    }
+  if (color === 'atmosphere') {
+    return isDarkMode
+      ? {
+          accent: '#a7d0d8',
+          soft: 'rgba(167, 208, 216, 0.16)',
+          line: 'rgba(167, 208, 216, 0.38)'
+        }
+      : {
+          accent: '#325f6d',
+          soft: 'rgba(50, 95, 109, 0.14)',
+          line: 'rgba(98, 143, 155, 0.34)'
+        }
   }
 
   return isDarkMode

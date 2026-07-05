@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { WeeklyPlanState } from '../../shared/types'
-import { getLegacyVaultWeeklyPlanPath, getVaultWeeklyPlanPath } from '../vaultData'
+import {
+  deleteLegacyVaultPath,
+  getLegacyPageVaultWeeklyPlanPath,
+  getLegacyVaultWeeklyPlanPath,
+  getVaultWeeklyPlanPath
+} from '../vaultData'
 
 function defaultState(): WeeklyPlanState {
   return {
@@ -22,11 +27,15 @@ function normalizeState(parsed: Partial<WeeklyPlanState>): WeeklyPlanState {
 }
 
 export class WeeklyPlanStore {
+  private readonly vaultRoot: string
   private readonly filePath: string
+  private readonly legacyPageFilePath: string
   private readonly legacyFilePath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.filePath = getVaultWeeklyPlanPath(vaultRoot)
+    this.legacyPageFilePath = getLegacyPageVaultWeeklyPlanPath(vaultRoot)
     this.legacyFilePath = getLegacyVaultWeeklyPlanPath(vaultRoot)
   }
 
@@ -36,10 +45,19 @@ export class WeeklyPlanStore {
       return normalizeState(migrated)
     }
 
+    const legacyPage = await this.readJsonFile(this.legacyPageFilePath)
+    if (legacyPage) {
+      const normalized = normalizeState(legacyPage)
+      await this.write(normalized)
+      await this.cleanupLegacyFiles()
+      return normalized
+    }
+
     const legacy = await this.readJsonFile(this.legacyFilePath)
     if (legacy) {
       const normalized = normalizeState(legacy)
       await this.write(normalized)
+      await this.cleanupLegacyFiles()
       return normalized
     }
 
@@ -72,5 +90,12 @@ export class WeeklyPlanStore {
       }
       return null
     }
+  }
+
+  private async cleanupLegacyFiles(): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(this.legacyPageFilePath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+    ])
   }
 }

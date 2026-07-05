@@ -126,6 +126,7 @@ export function NotePreviewList({
           <NoteSection
             title="Favorites"
             icon={<Heart size={16} aria-hidden="true" />}
+            iconContainerClassName="bg-amber-500/12 text-amber-500"
             description={`${favoriteNotes.length} starred notes in the current filter`}
             emptyLabel="No favorite notes yet"
             notes={favoriteNotes}
@@ -144,6 +145,7 @@ export function NotePreviewList({
           <NoteSection
             title="All Notes"
             icon={<FileText size={16} aria-hidden="true" />}
+            iconContainerClassName="bg-slate-500/12 text-slate-600 dark:text-slate-300"
             description={`${allNotes.length} notes available`}
             emptyLabel="No other notes found"
             notes={allNotes}
@@ -168,6 +170,7 @@ export function NotePreviewList({
 function NoteSection({
   title,
   icon,
+  iconContainerClassName,
   description,
   emptyLabel,
   notes,
@@ -185,6 +188,7 @@ function NoteSection({
 }: {
   title: string
   icon: ReactElement
+  iconContainerClassName: string
   description: string
   emptyLabel: string
   notes: NoteListItem[]
@@ -206,7 +210,12 @@ function NoteSection({
 }): ReactElement {
   return (
     <WorkspacePanelSection>
-      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
+      <WorkspacePanelSectionHeader
+        icon={icon}
+        iconContainerClassName={iconContainerClassName}
+        heading={title}
+        description={description}
+      />
       {notes.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (

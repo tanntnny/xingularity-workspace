@@ -1,5 +1,6 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
 import { CalendarTask, CalendarTaskType } from '../../../shared/types'
+import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 
 interface CalendarDayViewProps {
   selectedDate: string
@@ -198,7 +199,9 @@ export function CalendarDayView({
                         style={{ backgroundColor: TASK_TYPE_COLORS[task.taskType || 'assignment'] }}
                       />
                       {task.title}
-                      <span className="text-xs text-[var(--muted)]">{task.time}</span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {formatCalendarTaskTimeLabel(task)}
+                      </span>
                     </div>
                   ))}
                 </div>

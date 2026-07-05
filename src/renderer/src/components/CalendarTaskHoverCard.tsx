@@ -1,6 +1,7 @@
 import { ReactElement } from 'react'
 import { CalendarTask, formatCalendarTaskType } from '../../../shared/types'
 import { FloatingHoverCard } from './ui/floating-hover-card'
+import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 
 interface CalendarTaskHoverCardProps {
   task: CalendarTask
@@ -14,7 +15,7 @@ export function CalendarTaskHoverCard({ task, x, y }: CalendarTaskHoverCardProps
       <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">{task.title}</div>
       <div className="flex items-center justify-between text-xs text-[var(--muted)]">
         <span>{task.completed ? 'Completed' : 'Pending'}</span>
-        <span>{task.time || 'No time'}</span>
+        <span>{formatCalendarTaskTimeLabel(task)}</span>
       </div>
       <div className="mt-2 text-xs text-[var(--muted)]">Date: {task.date ?? 'Unscheduled'}</div>
       <div className="mt-1 text-xs text-[var(--muted)]">

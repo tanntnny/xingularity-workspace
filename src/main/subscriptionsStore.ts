@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { SubscriptionRecord } from '../shared/types'
-import { getLegacyVaultSubscriptionsPath, getVaultSubscriptionsPath } from './vaultData'
+import {
+  deleteLegacyVaultPath,
+  getLegacyPageVaultSubscriptionsPath,
+  getLegacyVaultSubscriptionsPath,
+  getVaultSubscriptionsPath
+} from './vaultData'
 
 function normalizeState(records: unknown): SubscriptionRecord[] {
   if (!Array.isArray(records)) {
@@ -12,11 +17,15 @@ function normalizeState(records: unknown): SubscriptionRecord[] {
 }
 
 export class SubscriptionsStore {
+  private readonly vaultRoot: string
   private readonly filePath: string
+  private readonly legacyPageFilePath: string
   private readonly legacyFilePath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.filePath = getVaultSubscriptionsPath(vaultRoot)
+    this.legacyPageFilePath = getLegacyPageVaultSubscriptionsPath(vaultRoot)
     this.legacyFilePath = getLegacyVaultSubscriptionsPath(vaultRoot)
   }
 
@@ -26,10 +35,19 @@ export class SubscriptionsStore {
       return normalizeState(current)
     }
 
+    const legacyPage = await this.readJsonFile(this.legacyPageFilePath)
+    if (legacyPage) {
+      const normalized = normalizeState(legacyPage)
+      await this.write(normalized)
+      await this.cleanupLegacyFiles()
+      return normalized
+    }
+
     const legacy = await this.readJsonFile(this.legacyFilePath)
     if (legacy) {
       const normalized = normalizeState(legacy)
       await this.write(normalized)
+      await this.cleanupLegacyFiles()
       return normalized
     }
 
@@ -63,5 +81,12 @@ export class SubscriptionsStore {
       }
       return null
     }
+  }
+
+  private async cleanupLegacyFiles(): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(this.legacyPageFilePath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+    ])
   }
 }

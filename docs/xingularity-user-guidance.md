@@ -6,34 +6,28 @@ Xingularity is a desktop workspace for notes, projects, planning, automations, a
 
 ### Open Or Create A Vault
 
-Your vault stores notebook content, page-aligned structured data, and attachments. When you pick a vault location, Xingularity creates this structure if it does not already exist:
+Your vault stores notebook content, standalone structured data files, and attachments. When you pick a vault location, Xingularity creates this structure if it does not already exist:
 
 ```text
 <your-vault>/
   notebooks/
-  projects/
-    index.json
-  calendar/
-    tasks.json
-  weekly-plan/
-    state.json
-  subscriptions/
-    data.json
-  schedules/
-    jobs.json
-    runs.json
-  agent/
-    chats.json
-    runs.json
-  generative-ui/
-    artifacts.json
   attachments/
   settings.json
-  .xingularity/
-    vault.json
-    migrations.json
-    filemap.json
-    index.sqlite
+  projects.json
+  project-icons.json
+  tasks.json
+  weekly-plan.json
+  subscriptions.json
+  schedule-jobs.json
+  schedule-runs.json
+  agent-chats.json
+  agent-runs.json
+  generative-ui-artifacts.json
+  excalidraw-sessions.json
+  vault.json
+  migrations.json
+  filemap.json
+  index.sqlite
 ```
 
 To change the vault location:
@@ -47,8 +41,8 @@ On startup, the app attempts to restore the last opened vault automatically.
 If you open an older vault, Xingularity migrates it forward in place:
 
 - `notes/` is copied into `notebooks/`
-- legacy `.appmeta/` metadata is copied into `.xingularity/`
-- older hidden JSON page stores are rewritten into the visible page-aligned paths
+- legacy `.appmeta/` and `.xingularity/` metadata files are promoted to root-level canonical files
+- older page-folder JSON stores are rewritten into standalone root-level files
 
 If both `notes/` and `notebooks/` already exist before migration, the app stops and reports a conflict instead of guessing which copy is canonical.
 
@@ -264,15 +258,16 @@ Vault-backed files:
 - notebooks: `notebooks/**/*.md`
 - attachments: `attachments/**`
 - vault-scoped settings: `settings.json`
-- projects: `projects/index.json`
-- calendar tasks: `calendar/tasks.json`
-- weekly plans: `weekly-plan/state.json`
-- schedules: `schedules/jobs.json`, `schedules/runs.json`
-- agent data: `agent/chats.json`, `agent/runs.json`
-- generative UI artifacts: `generative-ui/artifacts.json`
-- local index and vault metadata: `.xingularity/*`
-
-Subscription records live in `subscriptions/data.json`.
+- projects: `projects.json`
+- project icons: `project-icons.json`
+- calendar tasks: `tasks.json`
+- weekly plans: `weekly-plan.json`
+- subscriptions: `subscriptions.json`
+- schedules: `schedule-jobs.json`, `schedule-runs.json`
+- agent data: `agent-chats.json`, `agent-runs.json`
+- generative UI artifacts: `generative-ui-artifacts.json`
+- Excalidraw sessions: `excalidraw-sessions.json`
+- local index and vault metadata: `vault.json`, `migrations.json`, `filemap.json`, `index.sqlite`
 
 ## Current Caveats
 

@@ -162,6 +162,50 @@ async function scrollEditorToTop(page: Page): Promise<void> {
   })
 }
 
+async function getHeadingMargins(page: Page): Promise<number[]> {
+  return page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-testid="note-block-editor"] h1, [data-testid="note-block-editor"] h2, [data-testid="note-block-editor"] h3, [data-testid="note-block-editor"] h4, [data-testid="note-block-editor"] h5, [data-testid="note-block-editor"] h6'
+      )
+    ).map((heading) => Number.parseFloat(window.getComputedStyle(heading).marginTop))
+  )
+}
+
+async function getOutlineRodMargins(page: Page): Promise<number[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="note-outline-rod:"]')).map(
+      (rod) => Number.parseFloat(window.getComputedStyle(rod).marginTop)
+    )
+  )
+}
+
+async function getOutlineRodVisuals(page: Page): Promise<
+  Array<{
+    buttonCenterY: number
+    spanHeight: number
+    spanOpacity: number
+    spanWidth: number
+  }>
+> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="note-outline-rod:"]')).map(
+      (button) => {
+        const span = button.querySelector<HTMLElement>('span')
+        const buttonRect = button.getBoundingClientRect()
+        const spanRect = span?.getBoundingClientRect()
+
+        return {
+          buttonCenterY: buttonRect.top + buttonRect.height / 2,
+          spanHeight: spanRect?.height ?? 0,
+          spanOpacity: span ? Number.parseFloat(window.getComputedStyle(span).opacity) : 0,
+          spanWidth: spanRect?.width ?? 0
+        }
+      }
+    )
+  )
+}
+
 test.describe('note outline rail', () => {
   test('renders a textless rail with heading tooltips and click-to-jump navigation', async () => {
     const filler = Array.from({ length: 18 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
@@ -206,6 +250,106 @@ test.describe('note outline rail', () => {
               position.relativeTop < position.containerHeight &&
               position.scrollTop > 0
             )
+          },
+          { timeout: 10_000 }
+        )
+        .toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('applies descending heading spacing in the editor and rail', async () => {
+    const vaultRoot = await createFixtureVault(
+      ['# Title', '## Section', '### Deep Dive', '#### Detail', '##### Minor', '###### Tiny'].join(
+        '\n\n'
+      )
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await expect(page.getByTestId('note-outline-rail')).toBeVisible({ timeout: 20_000 })
+
+      const headingMargins = await getHeadingMargins(page)
+      expect(headingMargins).toEqual([0, 16, 12.8, 10.4, 8, 6.4])
+
+      const rodMargins = await getOutlineRodMargins(page)
+      expect(rodMargins).toEqual([0, 2, 0, 0, 0, 0])
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('applies proximity emphasis to nearby rods without resizing them', async () => {
+    const vaultRoot = await createFixtureVault(
+      ['# Title', '## Section', '### Deep Dive', '#### Detail', '##### Minor', '###### Tiny'].join(
+        '\n\n'
+      )
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const rail = page.getByTestId('note-outline-rail')
+      await expect(rail).toBeVisible({ timeout: 20_000 })
+
+      const baselineVisuals = await getOutlineRodVisuals(page)
+      const railBounds = await rail.boundingBox()
+      const targetRodBounds = await page.getByTestId('note-outline-rod:2').boundingBox()
+      expect(railBounds).not.toBeNull()
+      expect(targetRodBounds).not.toBeNull()
+
+      await page.mouse.move(targetRodBounds!.x + 2, targetRodBounds!.y + targetRodBounds!.height / 2)
+
+      await expect
+        .poll(
+          async () => {
+            const visuals = await getOutlineRodVisuals(page)
+            const targetOpacityBoost = visuals[2]!.spanOpacity - baselineVisuals[2]!.spanOpacity
+            const upperNeighborOpacityBoost =
+              visuals[1]!.spanOpacity - baselineVisuals[1]!.spanOpacity
+            const lowerNeighborOpacityBoost =
+              visuals[3]!.spanOpacity - baselineVisuals[3]!.spanOpacity
+            const neighborOpacityBoost = Math.max(
+              upperNeighborOpacityBoost,
+              lowerNeighborOpacityBoost
+            )
+            const farOpacityBoost = visuals[5]!.spanOpacity - baselineVisuals[5]!.spanOpacity
+
+            return (
+              targetOpacityBoost > 0.12 &&
+              neighborOpacityBoost > 0.03 &&
+              neighborOpacityBoost < targetOpacityBoost &&
+              farOpacityBoost < neighborOpacityBoost &&
+              Math.abs(visuals[2]!.spanWidth - baselineVisuals[2]!.spanWidth) < 0.75 &&
+              Math.abs(visuals[2]!.spanHeight - baselineVisuals[2]!.spanHeight) < 0.35 &&
+              Math.abs(visuals[1]!.spanWidth - baselineVisuals[1]!.spanWidth) < 0.75 &&
+              Math.abs(visuals[1]!.spanHeight - baselineVisuals[1]!.spanHeight) < 0.35
+            )
+          },
+          { timeout: 10_000 }
+        )
+        .toBe(true)
+
+      await page.mouse.move(railBounds!.x - 40, railBounds!.y - 40)
+
+      await expect
+        .poll(
+          async () => {
+            const visuals = await getOutlineRodVisuals(page)
+            return visuals.every((visual, index) => {
+              const baselineVisual = baselineVisuals[index]!
+              return (
+                Math.abs(visual.spanWidth - baselineVisual.spanWidth) < 0.75 &&
+                Math.abs(visual.spanHeight - baselineVisual.spanHeight) < 0.75 &&
+                Math.abs(visual.spanOpacity - baselineVisual.spanOpacity) < 0.05
+              )
+            })
           },
           { timeout: 10_000 }
         )

@@ -8,9 +8,9 @@ const COMMANDS = [
     keywords: ['create', 'note']
   },
   {
-    value: '>go dashboard',
-    label: 'Go to Dashboard',
-    keywords: ['home', 'overview']
+    value: '>go knowledge',
+    label: 'Go to Knowledge',
+    keywords: ['graph', 'knowledge']
   },
   {
     value: '>go projects',
@@ -40,7 +40,7 @@ describe('filterCommandPaletteCommands', () => {
 
   it('supports fuzzy subsequence matches for abbreviated command queries', () => {
     expect(
-      filterCommandPaletteCommands([...COMMANDS], 'gp').map((command) => command.value)
+      filterCommandPaletteCommands([...COMMANDS], 'gpr').map((command) => command.value)
     ).toEqual(['>go projects'])
   })
 

@@ -175,6 +175,7 @@ export interface CalendarTask {
   taskType?: CalendarTaskType
   reminders: TaskReminder[]
   time?: string // Optional time in HH:mm format
+  endTime?: string // Optional end time in HH:mm format
   // Automation deduplication fields (set by schedule runner)
   automationSource?: string
   automationSourceKey?: string
@@ -654,6 +655,7 @@ export interface RendererAgentToolsApi {
       date?: string
       endDate?: string
       time?: string
+      endTime?: string
       priority?: TaskPriority
       taskType?: CalendarTaskType
       reminders?: TaskReminder[]
@@ -666,6 +668,7 @@ export interface RendererAgentToolsApi {
       date?: string | null
       endDate?: string | null
       time?: string | null
+      endTime?: string | null
       priority?: TaskPriority
       taskType?: CalendarTaskType | null
       reminders?: TaskReminder[]
@@ -698,6 +701,7 @@ export interface RendererAgentToolsApi {
 export interface VaultOpenResult {
   info: VaultInfo
   notes: NoteListItem[]
+  tree: NoteTreeNode[]
 }
 
 export interface SavedVaultSummary {
@@ -911,11 +915,16 @@ export interface RendererVaultApi {
       items: NativeMenuItemDescriptor[],
       position: NativeMenuPosition
     ) => Promise<string | null>
+    reloadApp: () => Promise<void>
+  }
+  app: {
+    onError: (listener: (event: AppErrorEvent) => void) => () => void
   }
   vault: {
     open: () => Promise<Maybe<VaultOpenResult>>
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
+    runMigration: () => Promise<VaultOpenResult>
     listSaved: () => Promise<SavedVaultState>
     switchSaved: (rootPath: string) => Promise<VaultOpenResult>
     toggleFavoriteSaved: (rootPath: string) => Promise<SavedVaultState>

@@ -53,6 +53,15 @@ interface CalendarMonthViewProps {
   onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
+  onUpdateTaskSchedule?: (
+    taskId: string,
+    schedule: {
+      date: string | undefined
+      endDate: string | undefined
+      time: string | undefined
+      endTime: string | undefined
+    }
+  ) => void
   onUpdateTaskReminders?: (taskId: string, reminders: TaskReminder[]) => void
   milestoneEvents?: CalendarEventInput[]
   onOpenMilestone?: (projectId: string, milestoneId: string) => void
@@ -73,6 +82,7 @@ export function CalendarMonthView({
   onUpdateTaskPriority,
   onUpdateTaskType,
   onUpdateTaskTime,
+  onUpdateTaskSchedule,
   onUpdateTaskReminders,
   milestoneEvents = [],
   onOpenMilestone
@@ -120,22 +130,18 @@ export function CalendarMonthView({
   }, [tasksById])
 
   useEffect(() => {
-    if (editingTaskId && !tasksById[editingTaskId]) {
-      setEditingTaskId(null)
-    }
-  }, [editingTaskId, tasksById])
-
-  useEffect(() => {
     isInteractingRef.current = isInteracting
   }, [isInteracting])
 
   useEffect(() => {
+    const dayCellListenerMap = dayCellListenerMapRef.current
+
     return () => {
       unscheduledDragCleanupRef.current?.()
-      dayCellListenerMapRef.current.forEach((handler, el) => {
+      dayCellListenerMap.forEach((handler, el) => {
         el.removeEventListener('dblclick', handler)
       })
-      dayCellListenerMapRef.current.clear()
+      dayCellListenerMap.clear()
     }
   }, [])
 
@@ -207,7 +213,7 @@ export function CalendarMonthView({
         event.remove()
       }
     })
-  }, [calendarEvents, tasksById])
+  }, [calendarEvents])
 
   useEffect(() => {
     const api = calendarRef.current?.getApi()
@@ -430,6 +436,7 @@ export function CalendarMonthView({
   const safeUpdateTaskPriority = onUpdateTaskPriority ?? (() => undefined)
   const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
   const safeUpdateTaskTime = onUpdateTaskTime ?? (() => undefined)
+  const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? (() => undefined)
   const safeRescheduleTask = onRescheduleTask ?? (() => undefined)
 
   const handleEventWillUnmount = (mountInfo: EventMountArg): void => {
@@ -635,13 +642,13 @@ export function CalendarMonthView({
       ) : null}
       {editingTask ? (
         <TaskEditDialog
+          key={editingTask.id}
           task={editingTask}
           onClose={handleCloseEditor}
           onRename={safeRenameTask}
           onUpdateTaskPriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
-          onUpdateTaskTime={safeUpdateTaskTime}
-          onRescheduleTask={safeRescheduleTask}
+          onUpdateTaskSchedule={safeUpdateTaskSchedule}
           onDelete={safeDeleteTask}
         />
       ) : null}
@@ -655,8 +662,15 @@ interface TaskEditDialogProps {
   onRename: (taskId: string, title: string) => void
   onUpdateTaskPriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
-  onUpdateTaskTime: (taskId: string, time: string | undefined) => void
-  onRescheduleTask: (taskId: string, date: string | undefined) => void
+  onUpdateTaskSchedule: (
+    taskId: string,
+    schedule: {
+      date: string | undefined
+      endDate: string | undefined
+      time: string | undefined
+      endTime: string | undefined
+    }
+  ) => void
   onDelete: (taskId: string) => void
 }
 
@@ -666,25 +680,17 @@ export function TaskEditDialog({
   onRename,
   onUpdateTaskPriority,
   onUpdateTaskType,
-  onUpdateTaskTime,
-  onRescheduleTask,
+  onUpdateTaskSchedule,
   onDelete
 }: TaskEditDialogProps): ReactElement {
   const [title, setTitle] = useState(task.title)
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
   const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
   const [date, setDate] = useState(task.date ?? '')
+  const [endDate, setEndDate] = useState(task.endDate ?? '')
   const [time, setTime] = useState(task.time ?? '')
+  const [endTime, setEndTime] = useState(task.endTime ?? '')
   const skipAutoSaveRef = useRef(false)
-
-  useEffect(() => {
-    setTitle(task.title)
-    setPriority(task.priority ?? 'low')
-    setTaskType(task.taskType ?? 'assignment')
-    setDate(task.date ?? '')
-    setTime(task.time ?? '')
-    skipAutoSaveRef.current = false
-  }, [task.id, task.title, task.priority, task.taskType, task.date, task.time])
 
   const handleAutoSave = (): void => {
     if (skipAutoSaveRef.current) {
@@ -701,15 +707,26 @@ export function TaskEditDialog({
     if ((task.taskType ?? 'assignment') !== taskType) {
       onUpdateTaskType(task.id, taskType)
     }
-    const normalizedTime = time.trim()
-    const previousTime = task.time ?? ''
-    if (normalizedTime !== previousTime) {
-      onUpdateTaskTime(task.id, normalizedTime || undefined)
-    }
     const normalizedDate = date.trim()
+    const normalizedEndDate = endDate.trim()
+    const normalizedTime = time.trim()
+    const normalizedEndTime = endTime.trim()
     const previousDate = task.date ?? ''
-    if (normalizedDate !== previousDate) {
-      onRescheduleTask(task.id, normalizedDate || undefined)
+    const previousEndDate = task.endDate ?? ''
+    const previousTime = task.time ?? ''
+    const previousEndTime = task.endTime ?? ''
+    if (
+      normalizedDate !== previousDate ||
+      normalizedEndDate !== previousEndDate ||
+      normalizedTime !== previousTime ||
+      normalizedEndTime !== previousEndTime
+    ) {
+      onUpdateTaskSchedule(task.id, {
+        date: normalizedDate || undefined,
+        endDate: normalizedEndDate || undefined,
+        time: normalizedTime || undefined,
+        endTime: normalizedEndTime || undefined
+      })
     }
   }
 
@@ -776,27 +793,53 @@ export function TaskEditDialog({
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Date
-            </label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              className="mt-1"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Start date
+              </label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Start time
+              </label>
+              <Input
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+                className="mt-1"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Time
-            </label>
-            <Input
-              type="time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              className="mt-1"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                End date
+              </label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                End time
+              </label>
+              <Input
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+                className="mt-1"
+              />
+            </div>
           </div>
         </div>
         <DialogFooter className="flex justify-end">

@@ -4,6 +4,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { ScheduleJob, ScheduleRunRecord } from '../shared/scheduleTypes'
 import {
+  deleteLegacyVaultPath,
+  getLegacyPageVaultScheduleJobsPath,
+  getLegacyPageVaultScheduleRunsPath,
   getLegacyVaultScheduleJobsPath,
   getLegacyVaultScheduleRunsPath,
   getVaultScheduleJobsPath,
@@ -13,16 +16,22 @@ import {
 const MAX_RUNS_PER_JOB = 100
 
 export class ScheduleStore {
+  private readonly vaultRoot: string
   private readonly jobsPath: string
   private readonly runsPath: string
+  private readonly legacyPageJobsPath: string
+  private readonly legacyPageRunsPath: string
   private readonly legacyJobsPath: string
   private readonly legacyRunsPath: string
   private readonly deviceLegacyJobsPath: string
   private readonly deviceLegacyRunsPath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.jobsPath = getVaultScheduleJobsPath(vaultRoot)
     this.runsPath = getVaultScheduleRunsPath(vaultRoot)
+    this.legacyPageJobsPath = getLegacyPageVaultScheduleJobsPath(vaultRoot)
+    this.legacyPageRunsPath = getLegacyPageVaultScheduleRunsPath(vaultRoot)
     this.legacyJobsPath = getLegacyVaultScheduleJobsPath(vaultRoot)
     this.legacyRunsPath = getLegacyVaultScheduleRunsPath(vaultRoot)
     this.deviceLegacyJobsPath = path.join(app.getPath('userData'), 'schedule-jobs.json')
@@ -32,7 +41,7 @@ export class ScheduleStore {
   async readJobs(): Promise<ScheduleJob[]> {
     return this.readJsonFile<ScheduleJob[]>(
       this.jobsPath,
-      [this.legacyJobsPath, this.deviceLegacyJobsPath],
+      [this.legacyPageJobsPath, this.legacyJobsPath, this.deviceLegacyJobsPath],
       []
     )
   }
@@ -62,7 +71,7 @@ export class ScheduleStore {
   async readRuns(): Promise<ScheduleRunRecord[]> {
     return this.readJsonFile<ScheduleRunRecord[]>(
       this.runsPath,
-      [this.legacyRunsPath, this.deviceLegacyRunsPath],
+      [this.legacyPageRunsPath, this.legacyRunsPath, this.deviceLegacyRunsPath],
       []
     )
   }
@@ -113,6 +122,12 @@ export class ScheduleStore {
           const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
           const parsed = JSON.parse(legacyRaw) as T
           await this.writeJsonFile(filePath, parsed)
+          if (
+            legacyPath !== this.deviceLegacyJobsPath &&
+            legacyPath !== this.deviceLegacyRunsPath
+          ) {
+            await this.cleanupLegacyFiles()
+          }
           return parsed
         } catch (legacyError) {
           if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -131,5 +146,14 @@ export class ScheduleStore {
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
     await fs.rename(tmp, filePath)
+  }
+
+  private async cleanupLegacyFiles(): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(this.legacyPageJobsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyPageRunsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyJobsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacyRunsPath, this.vaultRoot)
+    ])
   }
 }

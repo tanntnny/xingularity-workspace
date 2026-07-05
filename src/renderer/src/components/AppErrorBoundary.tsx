@@ -1,8 +1,10 @@
 import React, { ReactNode } from 'react'
-import { useVaultStore } from '../state/store'
+import { createAppErrorEvent, mergeAppErrorStacks } from '../../../shared/appErrors'
+import type { AppErrorEvent } from '../../../shared/types'
 
 interface AppErrorBoundaryProps {
   children: ReactNode
+  onError: (error: AppErrorEvent) => void
 }
 
 interface AppErrorBoundaryState {
@@ -32,7 +34,11 @@ export class AppErrorBoundary extends React.Component<
       componentStack: info.componentStack ?? undefined
     })
 
-    useVaultStore.getState().pushToast('error', `[renderer] ${error.message}`)
+    this.props.onError(
+      createAppErrorEvent('renderer', error, {
+        stack: mergeAppErrorStacks(error.stack, info.componentStack ?? undefined)
+      })
+    )
   }
 
   render(): ReactNode {
@@ -40,22 +46,6 @@ export class AppErrorBoundary extends React.Component<
       return this.props.children
     }
 
-    return (
-      <div className="min-h-screen bg-[var(--bg)] p-6 text-[var(--text)]">
-        <div className="mx-auto grid max-w-5xl gap-4 rounded-2xl border border-[var(--destructive)] bg-[var(--panel)] p-5">
-          <div className="grid gap-1">
-            <h1 className="text-xl font-semibold">Application Error</h1>
-            <p className="text-sm text-[var(--muted)]">
-              The renderer crashed. The full error is shown below.
-            </p>
-          </div>
-          <pre className="overflow-auto rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-4 text-xs leading-6 whitespace-pre-wrap">
-            {[this.state.error.stack ?? this.state.error.message, this.state.componentStack]
-              .filter(Boolean)
-              .join('\n\n')}
-          </pre>
-        </div>
-      </div>
-    )
+    return null
   }
 }

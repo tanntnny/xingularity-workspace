@@ -1,6 +1,7 @@
 import { forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
 import { Check } from 'lucide-react'
 import { CalendarTask } from '../../../shared/types'
+import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 
 interface CalendarTaskCardProps {
   task: CalendarTask
@@ -52,7 +53,7 @@ export const CalendarTaskCard = forwardRef<
           </span>
         </button>
         <span className="pointer-events-none shrink-0 text-[10px] text-[var(--muted)]">
-          {task.time || 'No time'}
+          {formatCalendarTaskTimeLabel(task)}
         </span>
       </div>
       <div className="mt-0.5 flex items-center gap-1">

@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { ExcalidrawSession, ExcalidrawSessionScene } from '../shared/types'
-import { getVaultExcalidrawSessionsPath } from './vaultData'
+import {
+  deleteLegacyVaultPath,
+  getLegacyVaultExcalidrawSessionsPath,
+  getVaultExcalidrawSessionsPath
+} from './vaultData'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -72,10 +76,14 @@ function normalizeSessions(value: unknown): ExcalidrawSession[] {
 }
 
 export class ExcalidrawSessionStore {
+  private readonly vaultRoot: string
   private readonly filePath: string
+  private readonly legacyFilePath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.filePath = getVaultExcalidrawSessionsPath(vaultRoot)
+    this.legacyFilePath = getLegacyVaultExcalidrawSessionsPath(vaultRoot)
   }
 
   async listSessions(): Promise<ExcalidrawSession[]> {
@@ -85,8 +93,21 @@ export class ExcalidrawSessionStore {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[ExcalidrawSessionStore] Failed to read sessions', error)
+        return []
       }
-      return []
+
+      try {
+        const legacyRaw = await fs.readFile(this.legacyFilePath, 'utf-8')
+        const normalized = normalizeSessions(JSON.parse(legacyRaw))
+        await this.writeSessions(normalized)
+        await deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+        return normalized
+      } catch (legacyError) {
+        if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
+          console.error('[ExcalidrawSessionStore] Failed to read legacy sessions', legacyError)
+        }
+        return []
+      }
     }
   }
 

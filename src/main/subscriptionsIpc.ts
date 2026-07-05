@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { SUBSCRIPTION_CHANNELS } from '../shared/ipc'
 import { SubscriptionsService } from './subscriptionsService'
+import { handleIpc } from './errorReporting'
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}(T.*)?$/)
 const subscriptionStatusSchema = z.enum(['active', 'paused', 'cancelled', 'archived'])
@@ -51,23 +51,23 @@ const analyticsFiltersSchema = z
   .optional()
 
 export function registerSubscriptionsIpcHandlers(service: SubscriptionsService): void {
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.list, () => service.list())
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.get, (_event, id: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.list, () => service.list())
+  handleIpc(SUBSCRIPTION_CHANNELS.get, (_event, id: unknown) =>
     service.get(z.string().min(1).max(200).parse(id))
   )
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.create, (_event, input: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.create, (_event, input: unknown) =>
     service.create(createSubscriptionSchema.parse(input))
   )
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.update, (_event, input: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.update, (_event, input: unknown) =>
     service.update(updateSubscriptionSchema.parse(input))
   )
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.delete, (_event, id: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.delete, (_event, id: unknown) =>
     service.delete(z.string().min(1).max(200).parse(id))
   )
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.archive, (_event, id: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.archive, (_event, id: unknown) =>
     service.archive(z.string().min(1).max(200).parse(id))
   )
-  ipcMain.handle(SUBSCRIPTION_CHANNELS.getAnalytics, (_event, filters: unknown) =>
+  handleIpc(SUBSCRIPTION_CHANNELS.getAnalytics, (_event, filters: unknown) =>
     service.getAnalytics(analyticsFiltersSchema.parse(filters) ?? {})
   )
 }

@@ -27,9 +27,13 @@
     --text: #101010;
     --muted: #5d5d5d;
 
-    --accent: #4f46e5;
-    --accent-soft: #e8eaff;
-    --accent-line: #818cf8;
+    --accent: #325f6d;
+    --accent-soft: rgba(50, 95, 109, 0.14);
+    --accent-line: rgba(98, 143, 155, 0.34);
+    --switch-thumb-off-color: #fcfcfd;
+    --switch-thumb-on-color: #ffffff;
+    --switch-track-off-bg: color-mix(in srgb, var(--panel-2) 55%, var(--line-strong));
+    --switch-track-off-border: color-mix(in srgb, var(--line-strong) 82%, var(--panel));
 
     --tag-neutral-bg: #f3f4f6;
     --tag-neutral-line: #d1d5db;
@@ -173,9 +177,13 @@
       --text: #ffffff;
       --muted: #b5b5b5;
 
-      --accent: #a5b4fc;
-      --accent-soft: #1a1d36;
-      --accent-line: #6366f1;
+      --accent: #a7d0d8;
+      --accent-soft: rgba(167, 208, 216, 0.16);
+      --accent-line: rgba(167, 208, 216, 0.38);
+      --switch-thumb-off-color: #f3f4f6;
+      --switch-thumb-on-color: #ffffff;
+      --switch-track-off-bg: color-mix(in srgb, var(--panel-2) 28%, var(--line-strong));
+      --switch-track-off-border: color-mix(in srgb, var(--line-strong) 92%, var(--panel-2));
 
       --tag-neutral-bg: #1f2937;
       --tag-neutral-line: #4b5563;
@@ -584,16 +592,24 @@
 
   .sidebar-section-stack {
     position: relative;
+    --sidebar-section-rail-left: 0.84rem;
+    --sidebar-section-rail-width: 1px;
+    --sidebar-section-rail-color: color-mix(
+      in srgb,
+      var(--sidebar-section-icon-color) 52%,
+      transparent
+    );
+    --sidebar-section-rail-active-color: var(--accent);
   }
 
   .sidebar-section-rail {
     position: absolute;
-    left: 0.84rem;
+    left: var(--sidebar-section-rail-left);
     top: 0;
     bottom: 0;
-    width: 1px;
+    width: var(--sidebar-section-rail-width);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--sidebar-section-icon-color) 50%, transparent);
+    background: var(--sidebar-section-rail-color);
     pointer-events: none;
     z-index: 0;
   }
@@ -1725,31 +1741,36 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 
 .note-milkdown-editor .ProseMirror h1 {
   font-size: 1.625rem;
-  margin-top: 1.1rem !important;
-}
-
-.note-milkdown-editor .ProseMirror > h1:first-child {
-  margin-top: 0 !important;
+  margin-top: 1.25rem !important;
 }
 
 .note-milkdown-editor .ProseMirror h2 {
   font-size: 1.375rem;
+  margin-top: 1rem !important;
 }
 
 .note-milkdown-editor .ProseMirror h3 {
   font-size: 1.125rem;
+  margin-top: 0.8rem !important;
 }
 
 .note-milkdown-editor .ProseMirror h4 {
   font-size: 1rem;
+  margin-top: 0.65rem !important;
 }
 
 .note-milkdown-editor .ProseMirror h5 {
   font-size: 0.9375rem;
+  margin-top: 0.5rem !important;
 }
 
 .note-milkdown-editor .ProseMirror h6 {
   font-size: 0.8125rem;
+  margin-top: 0.4rem !important;
+}
+
+.note-milkdown-editor .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0 !important;
 }
 
 .note-milkdown-editor .ProseMirror a {

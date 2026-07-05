@@ -136,6 +136,7 @@ export function ProjectPreviewList({
           <ProjectSection
             title="Favorites"
             icon={<Heart size={16} aria-hidden="true" />}
+            iconContainerClassName="bg-amber-500/12 text-amber-500"
             description={`${favoriteProjects.length} pinned projects for quick access`}
             emptyLabel="No favorite projects yet"
             projects={favoriteProjects}
@@ -153,6 +154,7 @@ export function ProjectPreviewList({
           <ProjectSection
             title="In-Progress Projects"
             icon={<Flag size={16} aria-hidden="true" />}
+            iconContainerClassName="bg-sky-500/12 text-sky-500"
             description={`${inProgressProjects.length} active projects`}
             emptyLabel="No in-progress projects found"
             projects={inProgressProjects}
@@ -170,6 +172,7 @@ export function ProjectPreviewList({
           <ProjectSection
             title="Done Projects"
             icon={<Sparkles size={16} aria-hidden="true" />}
+            iconContainerClassName="bg-emerald-500/12 text-emerald-500"
             description={`${doneProjects.length} completed projects kept`}
             emptyLabel="No done projects found"
             projects={doneProjects}
@@ -193,6 +196,7 @@ export function ProjectPreviewList({
 function ProjectSection({
   title,
   icon,
+  iconContainerClassName,
   description,
   emptyLabel,
   projects,
@@ -209,6 +213,7 @@ function ProjectSection({
 }: {
   title: string
   icon: ReactElement
+  iconContainerClassName: string
   description: string
   emptyLabel: string
   projects: Project[]
@@ -229,7 +234,12 @@ function ProjectSection({
 }): ReactElement {
   return (
     <WorkspacePanelSection>
-      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
+      <WorkspacePanelSectionHeader
+        icon={icon}
+        iconContainerClassName={iconContainerClassName}
+        heading={title}
+        description={description}
+      />
       {projects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (

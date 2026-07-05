@@ -20,11 +20,9 @@ describe('sqlite index incremental updates', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'vault-test-'))
     dirs.push(root)
     const notesRoot = path.join(root, 'notebooks')
-    const metaRoot = path.join(root, '.xingularity')
     await fs.mkdir(notesRoot, { recursive: true })
-    await fs.mkdir(metaRoot, { recursive: true })
-    const dbPath = path.join(metaRoot, 'index.sqlite')
-    const fileMapPath = path.join(metaRoot, 'filemap.json')
+    const dbPath = path.join(root, 'index.sqlite')
+    const fileMapPath = path.join(root, 'filemap.json')
 
     const firstNotePath = path.join(notesRoot, 'first.md')
     await fs.writeFile(

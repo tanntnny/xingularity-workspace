@@ -14,7 +14,6 @@ import {
   FolderKanban,
   FolderOpen,
   GitBranch,
-  LayoutDashboard,
   Plus,
   Sparkles
 } from 'lucide-react'
@@ -46,7 +45,6 @@ export interface CommandPaletteSearchResult {
 }
 
 type CommandPalettePage =
-  | 'dashboard'
   | 'knowledge'
   | 'notes'
   | 'projects'
@@ -74,6 +72,7 @@ interface CommandPaletteProps {
   onOpenProject: (projectId: string) => void
   onOpenPage: (page: CommandPalettePage) => void
   onManageVaults?: () => void
+  onRunVaultMigration?: () => void
 }
 
 type CommandPaletteShortcutKey = 'cmd' | 'Enter' | string
@@ -94,7 +93,8 @@ export function CommandPalette({
   onOpenNote,
   onOpenProject,
   onOpenPage,
-  onManageVaults
+  onManageVaults,
+  onRunVaultMigration
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
     'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)] transition-colors group-data-[selected=true]:text-[var(--accent)]'
@@ -280,13 +280,6 @@ export function CommandPalette({
         icon: Plus
       },
       {
-        value: '>go dashboard',
-        label: 'Go to Dashboard',
-        onSelect: () => onOpenPage('dashboard'),
-        keywords: ['home', 'overview', 'start'],
-        icon: LayoutDashboard
-      },
-      {
         value: '>go knowledge',
         label: 'Go to Knowledge',
         shortcutKeys: ['cmd', 'K'] as CommandPaletteShortcutKey[],
@@ -360,9 +353,20 @@ export function CommandPalette({
               icon: FolderOpen
             }
           ]
+        : []),
+      ...(onRunVaultMigration
+        ? [
+            {
+              value: '>run vault migration',
+              label: 'Run Vault Migration',
+              onSelect: () => onRunVaultMigration(),
+              keywords: ['vault', 'migration', 'migrate', 'upgrade', 'storage'],
+              icon: FolderOpen
+            }
+          ]
         : [])
     ],
-    [onCreate, onManageVaults, onOpenPage]
+    [onCreate, onManageVaults, onOpenPage, onRunVaultMigration]
   )
 
   const filteredCommandItems = useMemo(

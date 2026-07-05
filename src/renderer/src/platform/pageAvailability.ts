@@ -6,7 +6,6 @@ const CORE_MOBILE_PAGES: AppPage[] = ['notes', 'projects', 'calendar', 'settings
 export function getAvailablePages(platform: AppPlatform): AppPage[] {
   if (platform.kind === 'desktop') {
     return [
-      'dashboard',
       'knowledge',
       'notes',
       'projects',

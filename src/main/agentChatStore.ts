@@ -2,25 +2,30 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentChatSession } from '../shared/types'
-import { getLegacyVaultAgentChatsPath, getVaultAgentChatsPath } from './vaultData'
+import {
+  deleteLegacyVaultPath,
+  getLegacyPageVaultAgentChatsPath,
+  getLegacyVaultAgentChatsPath,
+  getVaultAgentChatsPath
+} from './vaultData'
 
 const MAX_AGENT_CHAT_SESSIONS = 100
 
 export class AgentChatStore {
+  private readonly vaultRoot: string
   private readonly sessionsPath: string
+  private readonly legacyPageSessionsPath: string
   private readonly legacySessionsPath: string
 
   constructor(vaultRoot: string) {
+    this.vaultRoot = vaultRoot
     this.sessionsPath = getVaultAgentChatsPath(vaultRoot)
+    this.legacyPageSessionsPath = getLegacyPageVaultAgentChatsPath(vaultRoot)
     this.legacySessionsPath = getLegacyVaultAgentChatsPath(vaultRoot)
   }
 
   async listSessions(): Promise<AgentChatSession[]> {
-    const sessions = await this.readJsonFile<AgentChatSession[]>(
-      this.sessionsPath,
-      this.legacySessionsPath,
-      []
-    )
+    const sessions = await this.readJsonFile<AgentChatSession[]>(this.sessionsPath, [])
     return sessions
       .map((session) => ({
         ...session,
@@ -47,7 +52,7 @@ export class AgentChatStore {
     )
   }
 
-  private async readJsonFile<T>(filePath: string, legacyPath: string, fallback: T): Promise<T> {
+  private async readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
     try {
       const raw = await fs.readFile(filePath, 'utf-8')
       return JSON.parse(raw) as T
@@ -56,17 +61,21 @@ export class AgentChatStore {
         console.error('Failed to read agent chat store:', error)
       }
 
-      try {
-        const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
-        const parsed = JSON.parse(legacyRaw) as T
-        await this.writeJsonFile(filePath, parsed)
-        return parsed
-      } catch (legacyError) {
-        if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
-          console.error('Failed to read legacy agent chat store:', legacyError)
+      for (const legacyPath of [this.legacyPageSessionsPath, this.legacySessionsPath]) {
+        try {
+          const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
+          const parsed = JSON.parse(legacyRaw) as T
+          await this.writeJsonFile(filePath, parsed)
+          await this.cleanupLegacyFiles()
+          return parsed
+        } catch (legacyError) {
+          if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.error('Failed to read legacy agent chat store:', legacyError)
+          }
         }
-        return fallback
       }
+
+      return fallback
     }
   }
 
@@ -76,5 +85,12 @@ export class AgentChatStore {
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
     await fs.rename(tmp, filePath)
+  }
+
+  private async cleanupLegacyFiles(): Promise<void> {
+    await Promise.all([
+      deleteLegacyVaultPath(this.legacyPageSessionsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySessionsPath, this.vaultRoot)
+    ])
   }
 }

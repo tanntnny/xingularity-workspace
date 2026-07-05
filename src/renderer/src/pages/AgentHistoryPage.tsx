@@ -1060,6 +1060,7 @@ export function AgentHistoryPage({
                 <WorkspacePanelSectionHeader
                   className="mb-3"
                   icon={<Bot size={16} aria-hidden="true" />}
+                  iconContainerClassName="bg-sky-500/12 text-sky-500"
                   heading="Chat cards"
                   description="Select the conversation you want to continue"
                 />
@@ -1123,6 +1124,7 @@ export function AgentHistoryPage({
                 <WorkspacePanelSectionHeader
                   className="mb-3"
                   icon={<MessageSquarePlus size={16} aria-hidden="true" />}
+                  iconContainerClassName="bg-emerald-500/12 text-emerald-500"
                   heading="Active chat"
                   description="Details for the selected conversation"
                 />
@@ -1222,6 +1224,7 @@ export function AgentHistoryPage({
                 <WorkspacePanelSectionHeader
                   className="mb-3"
                   icon={<AtSign size={16} aria-hidden="true" />}
+                  iconContainerClassName="bg-amber-500/12 text-amber-500"
                   heading="Context added"
                   description="Mentions attached to the current draft before sending"
                 />

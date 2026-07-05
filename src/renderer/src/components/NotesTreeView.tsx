@@ -330,9 +330,9 @@ export function NotesTreeView({
             {previewEntry.kind === 'folder' ? (
               <Folder className="h-4 w-4 shrink-0 text-[var(--accent)]" strokeWidth={1.9} />
             ) : previewEntry.kind === 'excalidraw' ? (
-              <PenTool className="h-4 w-4 shrink-0 text-[var(--muted)]" strokeWidth={1.9} />
+              <PenTool className="h-4 w-4 shrink-0 text-[var(--text)]" strokeWidth={1.9} />
             ) : (
-              <FileText className="h-4 w-4 shrink-0 text-[var(--muted)]" strokeWidth={1.9} />
+              <FileText className="h-4 w-4 shrink-0 text-[var(--text)]" strokeWidth={1.9} />
             )}
             <span className="truncate font-medium">{label}</span>
           </div>
@@ -1084,10 +1084,10 @@ function buildNotesTreeMenuItems(
 
 function renderTreeFileIcon(kind: NoteTreeNode['kind']): ReactElement {
   if (kind === 'excalidraw') {
-    return <PenTool className={cn(TREE_ICON_CLASS, 'text-[var(--muted)]')} strokeWidth={1.9} />
+    return <PenTool className={cn(TREE_ICON_CLASS, 'text-[var(--text)]')} strokeWidth={1.9} />
   }
 
-  return <FileText className={cn(TREE_ICON_CLASS, 'text-[var(--muted)]')} strokeWidth={1.9} />
+  return <FileText className={cn(TREE_ICON_CLASS, 'text-[var(--text)]')} strokeWidth={1.9} />
 }
 
 function getTreeNodeKindLabel(kind: NoteTreeNode['kind']): string {

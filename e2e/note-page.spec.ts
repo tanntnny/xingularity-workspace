@@ -737,18 +737,18 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('saves the current note when switching to dashboard after waiting', async () => {
+  test('saves the current note when switching to knowledge after waiting', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       await openNote(page, 'alpha.md')
-      await replaceEditorContent(page, ['Dashboard page save'])
+      await replaceEditorContent(page, ['Knowledge page save'])
       await page.keyboard.type(' latest')
       await page.waitForTimeout(2200)
 
-      await page.getByTestId('sidebar-page:dashboard').click()
-      await expect(page.getByTestId('sidebar-page:dashboard')).toHaveAttribute(
+      await page.getByTestId('sidebar-page:knowledge').click()
+      await expect(page.getByTestId('sidebar-page:knowledge')).toHaveAttribute(
         'data-active',
         'true'
       )
@@ -756,7 +756,7 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(() => getLastPageLeaveSaveDebug(page), { timeout: 15_000 })
         .toMatchObject({
-          requestedPage: 'dashboard',
+          requestedPage: 'knowledge',
           notePath: 'alpha.md',
           attempted: true,
           writeCompleted: true,
@@ -766,10 +766,10 @@ test.describe('note page block editor switching', () => {
         .poll(async () => (await getLastPageLeaveSaveDebug(page)).snapshotContent, {
           timeout: 15_000
         })
-        .toContain('Dashboard page save latest')
+        .toContain('Knowledge page save latest')
       await expect
         .poll(() => readNoteFromDisk(page, 'alpha.md'), { timeout: 15_000 })
-        .toContain('Dashboard page save latest')
+        .toContain('Knowledge page save latest')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

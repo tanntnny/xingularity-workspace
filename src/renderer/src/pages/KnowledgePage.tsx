@@ -11,6 +11,7 @@ import { buildKnowledgeGraph } from '../lib/knowledgeGraph'
 interface KnowledgePageProps {
   notes: NoteListItem[]
   onOpenNote: (relPath: string) => void
+  orphanRingRadiusPx?: number | null
 }
 
 interface GraphNodeDatum extends SimulationNodeDatum {
@@ -32,15 +33,27 @@ interface GraphLinkDatum extends SimulationLinkDatum<GraphNodeDatum> {
   target: string | GraphNodeDatum
 }
 
-export function KnowledgePage({ notes, onOpenNote }: KnowledgePageProps): ReactElement {
+export function KnowledgePage({
+  notes,
+  onOpenNote,
+  orphanRingRadiusPx = null
+}: KnowledgePageProps): ReactElement {
   return (
     <ReactFlowProvider>
-      <KnowledgeCanvas notes={notes} onOpenNote={onOpenNote} />
+      <KnowledgeCanvas
+        notes={notes}
+        onOpenNote={onOpenNote}
+        orphanRingRadiusPx={orphanRingRadiusPx}
+      />
     </ReactFlowProvider>
   )
 }
 
-function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElement {
+function KnowledgeCanvas({
+  notes,
+  onOpenNote,
+  orphanRingRadiusPx = null
+}: KnowledgePageProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -84,7 +97,11 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
     const root = svg.attr('viewBox', `0 0 ${size.width} ${size.height}`).append('g')
     const centerX = size.width / 2
     const centerY = size.height / 2
-    const outerRadius = Math.max(72, Math.min(size.width, size.height) / 2 - 72)
+    const maxOuterRadius = Math.max(72, Math.min(size.width, size.height) / 2 - 72)
+    const outerRadius =
+      orphanRingRadiusPx == null
+        ? maxOuterRadius
+        : Math.min(maxOuterRadius, Math.max(72, orphanRingRadiusPx))
     const orphanNodes = graph.nodes.filter((node) => node.isOrphan)
 
     const simulationNodes: GraphNodeDatum[] = graph.nodes.map((node, index) => {
@@ -222,7 +239,7 @@ function KnowledgeCanvas({ notes, onOpenNote }: KnowledgePageProps): ReactElemen
     return () => {
       simulation.stop()
     }
-  }, [graph, onOpenNote, size.height, size.width])
+  }, [graph, onOpenNote, orphanRingRadiusPx, size.height, size.width])
 
   useEffect(() => {
     if (!svgRef.current) {
