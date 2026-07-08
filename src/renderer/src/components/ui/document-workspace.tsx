@@ -133,12 +133,11 @@ const WorkspaceActionButton = React.forwardRef<HTMLButtonElement, WorkspaceActio
       <button
         ref={ref}
         type={type}
+        data-active={active ? 'true' : 'false'}
+        data-no-ripple
         className={cn(
-          'inline-flex shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-          label ? 'h-9 gap-2 rounded-full px-3 text-xs font-medium' : 'h-8 w-8 rounded-lg',
-          active
-            ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
-            : 'workspace-subtle-control border-[var(--line)] text-[var(--muted)] hover:text-[var(--accent)]',
+          'workspace-action-button inline-flex shrink-0 items-center justify-center overflow-hidden border text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50',
+          label ? 'h-8 gap-2 rounded-lg px-3 text-sm font-medium' : 'h-8 w-8 rounded-lg',
           className
         )}
         aria-label={props['aria-label'] ?? inferredLabel}

@@ -14,8 +14,7 @@ import {
   FolderKanban,
   FolderOpen,
   GitBranch,
-  Plus,
-  Sparkles
+  Plus
 } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
@@ -52,7 +51,6 @@ type CommandPalettePage =
   | 'calendar'
   | 'weeklyPlan'
   | 'schedules'
-  | 'generativeUi'
   | 'settings'
 
 interface CommandPaletteProps {
@@ -328,13 +326,6 @@ export function CommandPalette({
         onSelect: () => onOpenPage('schedules'),
         keywords: ['schedule', 'timeline'],
         icon: FolderKanban
-      },
-      {
-        value: '>go generative ui',
-        label: 'Go to Generative UI',
-        onSelect: () => onOpenPage('generativeUi'),
-        keywords: ['ai', 'generate', 'ui'],
-        icon: Sparkles
       },
       {
         value: '>go settings',

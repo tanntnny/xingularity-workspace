@@ -120,7 +120,14 @@ export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
 export { TabMenu, TabMenuItem } from './tab-menu'
-export { ButtonGroup, ButtonGroupItem, buttonGroupVariants, buttonGroupItemVariants } from './button-group'
+export {
+  ButtonGroup,
+  ButtonGroupItem,
+  buttonGroupVariants,
+  buttonGroupItemVariants
+} from './button-group'
+export { SelectionMenu } from './selection-menu'
+export type { SelectionMenuOption } from './selection-menu'
 
 export {
   Table,

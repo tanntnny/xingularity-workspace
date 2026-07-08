@@ -39,6 +39,7 @@ import {
   DialogHeader,
   DialogTitle
 } from './ui/dialog'
+import { Select } from './ui/select'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 interface TaskContextMenuProps {
@@ -440,17 +441,17 @@ export function TaskContextMenu({
                   }
                   className="w-16 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none"
                 />
-                <select
+                <Select
                   value={newReminderType}
                   onChange={(event) =>
                     setNewReminderType(event.target.value as 'minutes' | 'hours' | 'days')
                   }
-                  className="flex-1 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none"
+                  className="flex-1 text-xs"
                 >
                   <option value="minutes">minutes</option>
                   <option value="hours">hours</option>
                   <option value="days">days</option>
-                </select>
+                </Select>
                 <button
                   type="button"
                   onClick={handleAddReminder}

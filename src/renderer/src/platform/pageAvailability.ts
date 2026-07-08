@@ -15,8 +15,7 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
       'settings',
       'schedules',
       'scheduleDocs',
-      'agentHistory',
-      'generativeUi'
+      'agentHistory'
     ]
   }
 

@@ -26,24 +26,29 @@ interface WorkspacePanelSectionHeaderProps extends React.HTMLAttributes<HTMLDivE
 const WorkspacePanelSectionHeader = React.forwardRef<
   HTMLDivElement,
   WorkspacePanelSectionHeaderProps
->(({ className, icon, heading, description, actions, iconContainerClassName, ...props }, ref) => {
-  void iconContainerClassName
-
-  return (
-    <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[color:color-mix(in_srgb,var(--text)_10%,transparent)] text-[var(--text)]">
-          {icon}
+>(
+  ({ className, icon, heading, description, actions, iconContainerClassName, ...props }, ref) => {
+    return (
+      <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
+        <div className="flex min-w-0 items-center gap-2">
+          <div
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[color:color-mix(in_srgb,var(--text)_10%,transparent)] text-[var(--text)]',
+              iconContainerClassName
+            )}
+          >
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-[var(--text)]">{heading}</h2>
+            <p className="text-xs text-[var(--muted)]">{description}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-[var(--text)]">{heading}</h2>
-          <p className="text-xs text-[var(--muted)]">{description}</p>
-        </div>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
-      {actions ? <div className="shrink-0">{actions}</div> : null}
-    </div>
-  )
-})
+    )
+  }
+)
 WorkspacePanelSectionHeader.displayName = 'WorkspacePanelSectionHeader'
 
 export { WorkspacePanelSection, WorkspacePanelSectionHeader }

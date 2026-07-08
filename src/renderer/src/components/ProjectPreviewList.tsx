@@ -8,6 +8,7 @@ import type {
   ProjectSubtask
 } from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
+import { Badge } from './ui/badge'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,7 +22,6 @@ import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspa
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
-import { cn } from '../lib/utils'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export type { Project, ProjectMilestone, ProjectSubtask, ProjectStatus }
@@ -60,8 +60,6 @@ export function ProjectPreviewList({
   onCopyLink
 }: ProjectPreviewListProps): ReactElement {
   const useNativeMenus = canUseNativeMenus()
-  const neutralChipClass =
-    'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
 
   const sortedProjects = useMemo(() => {
     const query = filter.trim().toLowerCase()
@@ -136,7 +134,6 @@ export function ProjectPreviewList({
           <ProjectSection
             title="Favorites"
             icon={<Heart size={16} aria-hidden="true" />}
-            iconContainerClassName="bg-amber-500/12 text-amber-500"
             description={`${favoriteProjects.length} pinned projects for quick access`}
             emptyLabel="No favorite projects yet"
             projects={favoriteProjects}
@@ -146,7 +143,6 @@ export function ProjectPreviewList({
             onRename={onRename}
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
-            neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
             getRevealItemProps={getRevealItemProps}
             revealKeyPrefix="favorite"
@@ -154,7 +150,6 @@ export function ProjectPreviewList({
           <ProjectSection
             title="In-Progress Projects"
             icon={<Flag size={16} aria-hidden="true" />}
-            iconContainerClassName="bg-sky-500/12 text-sky-500"
             description={`${inProgressProjects.length} active projects`}
             emptyLabel="No in-progress projects found"
             projects={inProgressProjects}
@@ -164,7 +159,6 @@ export function ProjectPreviewList({
             onRename={onRename}
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
-            neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
             getRevealItemProps={getRevealItemProps}
             revealKeyPrefix="in-progress"
@@ -172,7 +166,6 @@ export function ProjectPreviewList({
           <ProjectSection
             title="Done Projects"
             icon={<Sparkles size={16} aria-hidden="true" />}
-            iconContainerClassName="bg-emerald-500/12 text-emerald-500"
             description={`${doneProjects.length} completed projects kept`}
             emptyLabel="No done projects found"
             projects={doneProjects}
@@ -182,7 +175,6 @@ export function ProjectPreviewList({
             onRename={onRename}
             onDuplicate={onDuplicate}
             onCopyLink={onCopyLink}
-            neutralChipClass={neutralChipClass}
             useNativeMenus={useNativeMenus}
             getRevealItemProps={getRevealItemProps}
             revealKeyPrefix="done"
@@ -196,7 +188,6 @@ export function ProjectPreviewList({
 function ProjectSection({
   title,
   icon,
-  iconContainerClassName,
   description,
   emptyLabel,
   projects,
@@ -206,14 +197,12 @@ function ProjectSection({
   onRename,
   onDuplicate,
   onCopyLink,
-  neutralChipClass,
   useNativeMenus,
   getRevealItemProps,
   revealKeyPrefix
 }: {
   title: string
   icon: ReactElement
-  iconContainerClassName: string
   description: string
   emptyLabel: string
   projects: Project[]
@@ -223,7 +212,6 @@ function ProjectSection({
   onRename?: (projectId: string) => void
   onDuplicate?: (projectId: string) => void
   onCopyLink?: (projectId: string) => void
-  neutralChipClass: string
   useNativeMenus: boolean
   getRevealItemProps: (itemId: string) => {
     ref: (node: HTMLElement | null) => void
@@ -234,12 +222,7 @@ function ProjectSection({
 }): ReactElement {
   return (
     <WorkspacePanelSection>
-      <WorkspacePanelSectionHeader
-        icon={icon}
-        iconContainerClassName={iconContainerClassName}
-        heading={title}
-        description={description}
-      />
+      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {projects.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
@@ -309,17 +292,17 @@ function ProjectSection({
                 <div className="truncate text-lg font-bold">{project.name}</div>
               </div>
               <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                <span
-                  className={cn(neutralChipClass, PROJECT_STATUS_META[project.status].className)}
-                >
+                <Badge variant="neutral" tone={PROJECT_STATUS_META[project.status].tone}>
                   <Flag size={12} aria-hidden="true" />
                   {PROJECT_STATUS_META[project.status].label}
-                </span>
-                <span className={neutralChipClass}>
+                </Badge>
+                <Badge variant="neutral" tone="subtle">
                   <Flag size={12} aria-hidden="true" />
                   {milestoneCount} milestones
-                </span>
-                <span className={neutralChipClass}>{updatedLabel}</span>
+                </Badge>
+                <Badge variant="neutral" tone="neutral">
+                  {updatedLabel}
+                </Badge>
               </div>
             </button>
           )

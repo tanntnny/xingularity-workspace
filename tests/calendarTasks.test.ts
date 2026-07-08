@@ -3,6 +3,8 @@ import { CalendarTask, Project } from '../src/shared/types'
 import {
   buildCalendarEvents,
   buildMilestoneCalendarEvents,
+  buildWeeklyCalendarEntries,
+  layoutWeeklyAllDayItems,
   normalizeCalendarTasks
 } from '../src/renderer/src/lib/calendarTasks'
 
@@ -198,5 +200,159 @@ describe('buildMilestoneCalendarEvents', () => {
     ])
 
     expect(events).toEqual([])
+  })
+})
+
+describe('buildWeeklyCalendarEntries', () => {
+  it('maps single-day timed tasks into timed weekly entries', () => {
+    const { timedTasks, allDayItems } = buildWeeklyCalendarEntries(
+      [
+        makeTask({
+          id: 'task-timed',
+          title: 'Standup',
+          date: '2026-04-14',
+          time: '09:30',
+          endTime: '10:15'
+        })
+      ],
+      '2026-04-12'
+    )
+
+    expect(timedTasks).toEqual([
+      {
+        task: makeTask({
+          id: 'task-timed',
+          title: 'Standup',
+          date: '2026-04-14',
+          time: '09:30',
+          endTime: '10:15'
+        }),
+        date: '2026-04-14',
+        startMinutes: 570,
+        durationMinutes: 45
+      }
+    ])
+    expect(allDayItems).toEqual([])
+  })
+
+  it('defaults timed tasks without an end time to one hour', () => {
+    const { timedTasks } = buildWeeklyCalendarEntries(
+      [
+        makeTask({
+          id: 'task-timed',
+          title: 'Check-in',
+          date: '2026-04-14',
+          time: '13:00'
+        })
+      ],
+      '2026-04-12'
+    )
+
+    expect(timedTasks[0]).toMatchObject({
+      date: '2026-04-14',
+      startMinutes: 780,
+      durationMinutes: 60
+    })
+  })
+
+  it('keeps untimed and multi-day tasks as single weekly all-day spans', () => {
+    const { timedTasks, allDayItems } = buildWeeklyCalendarEntries(
+      [
+        makeTask({
+          id: 'task-untimed',
+          title: 'Inbox clean-up',
+          date: '2026-04-14'
+        }),
+        makeTask({
+          id: 'task-span',
+          title: 'Offsite',
+          date: '2026-04-13',
+          endDate: '2026-04-15',
+          time: '09:00',
+          endTime: '17:00'
+        })
+      ],
+      '2026-04-12'
+    )
+
+    expect(timedTasks).toEqual([])
+    expect(
+      allDayItems.map((item) => `${item.source}:${item.startDate}:${item.endDate}:${item.title}`)
+    ).toEqual(['task:2026-04-13:2026-04-15:Offsite', 'task:2026-04-14:2026-04-14:Inbox clean-up'])
+  })
+
+  it('includes milestone events in the weekly all-day collection', () => {
+    const milestoneEvents = buildMilestoneCalendarEvents([
+      makeProject({
+        id: 'project-alpha',
+        milestones: [
+          {
+            id: 'milestone-a',
+            title: 'Launch',
+            dueDate: '2026-04-16',
+            description: '',
+            collapsed: false,
+            priority: 'medium',
+            status: 'pending',
+            subtasks: []
+          }
+        ]
+      })
+    ])
+
+    const { allDayItems } = buildWeeklyCalendarEntries([], '2026-04-12', milestoneEvents)
+
+    expect(allDayItems).toEqual([
+      {
+        id: 'calendar-milestone:project-alpha:milestone-a:2026-04-16',
+        source: 'milestone',
+        startDate: '2026-04-16',
+        endDate: '2026-04-16',
+        title: 'Launch',
+        projectId: 'project-alpha',
+        projectName: 'Project',
+        milestoneId: 'milestone-a',
+        completed: false
+      }
+    ])
+  })
+})
+
+describe('layoutWeeklyAllDayItems', () => {
+  it('packs a continuous multi-day task into a single spanning row', () => {
+    const layouts = layoutWeeklyAllDayItems(
+      [
+        {
+          id: 'task-span',
+          source: 'task',
+          startDate: '2026-07-06',
+          endDate: '2026-07-07',
+          title: 'Trip'
+        },
+        {
+          id: 'task-single',
+          source: 'task',
+          startDate: '2026-07-06',
+          endDate: '2026-07-06',
+          title: 'Prep'
+        }
+      ],
+      '2026-07-05'
+    )
+
+    expect(layouts).toEqual([
+      expect.objectContaining({
+        id: 'task-span',
+        row: 0,
+        columnStart: 1,
+        columnSpan: 2
+      }),
+      expect.objectContaining({
+        id: 'task-single',
+        row: 1,
+        columnStart: 1,
+        columnSpan: 1
+      })
+    ])
   })
 })

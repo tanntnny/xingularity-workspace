@@ -9,7 +9,6 @@ export type AppPage =
   | 'schedules'
   | 'scheduleDocs'
   | 'agentHistory'
-  | 'generativeUi'
 
 export const ALL_APP_PAGES: AppPage[] = [
   'knowledge',
@@ -21,6 +20,5 @@ export const ALL_APP_PAGES: AppPage[] = [
   'settings',
   'schedules',
   'scheduleDocs',
-  'agentHistory',
-  'generativeUi'
+  'agentHistory'
 ]

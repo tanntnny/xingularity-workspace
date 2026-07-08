@@ -1,20 +1,125 @@
 import * as React from 'react'
 
+import { SelectionMenu, type SelectionMenuOption } from './selection-menu'
 import { cn } from '../../lib/utils'
 
-const Select = React.forwardRef<HTMLSelectElement, React.ComponentProps<'select'>>(
-  ({ className, children, ...props }, ref) => (
-    <select
-      ref={ref}
-      className={cn(
-        'flex h-9 w-full rounded-lg border border-[var(--input)] bg-transparent px-3 py-1 text-sm text-[var(--text)] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50',
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </select>
-  )
+type SelectOptionElement = React.ReactElement<{
+  children?: React.ReactNode
+  value?: string | number
+  disabled?: boolean
+}>
+
+interface SelectProps {
+  children?: React.ReactNode
+  className?: string
+  value?: string | number
+  defaultValue?: string | number
+  disabled?: boolean
+  id?: string
+  title?: string
+  autoFocus?: boolean
+  tabIndex?: number
+  'aria-label'?: string
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>
+}
+
+function flattenOptionLabel(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((item) => flattenOptionLabel(item)).join('')
+  }
+
+  if (React.isValidElement(node)) {
+    return flattenOptionLabel((node as SelectOptionElement).props.children)
+  }
+
+  return ''
+}
+
+function buildSelectOptions(children: React.ReactNode): SelectionMenuOption[] {
+  return React.Children.toArray(children)
+    .filter((child): child is SelectOptionElement => React.isValidElement(child))
+    .map((child) => {
+      const optionValue = child.props.value ?? flattenOptionLabel(child.props.children)
+
+      return {
+        value: String(optionValue),
+        label: child.props.children,
+        disabled: Boolean(child.props.disabled)
+      }
+    })
+}
+
+const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
+  (
+    {
+      className,
+      children,
+      onChange,
+      value,
+      defaultValue,
+      disabled,
+      id,
+      title,
+      autoFocus,
+      tabIndex,
+      'aria-label': ariaLabel
+    },
+    ref
+  ) => {
+    const options = React.useMemo(() => buildSelectOptions(children), [children])
+    const firstValue = options[0]?.value ?? ''
+    const isControlled = value !== undefined
+    const initialValue =
+      defaultValue !== undefined ? String(defaultValue) : String(value ?? firstValue)
+    const [internalValue, setInternalValue] = React.useState(initialValue)
+
+    React.useEffect(() => {
+      if (isControlled) {
+        setInternalValue(String(value ?? ''))
+      }
+    }, [isControlled, value])
+
+    const resolvedValue = isControlled ? String(value ?? '') : internalValue
+
+    const handleValueChange = (nextValue: string): void => {
+      if (!isControlled) {
+        setInternalValue(nextValue)
+      }
+
+      if (!onChange) {
+        return
+      }
+
+      const target = { value: nextValue } as HTMLSelectElement
+      const event = {
+        target,
+        currentTarget: target
+      } as React.ChangeEvent<HTMLSelectElement>
+
+      onChange(event)
+    }
+
+    return (
+      <SelectionMenu
+        ref={ref}
+        value={resolvedValue}
+        onValueChange={handleValueChange}
+        options={options}
+        variant="field"
+        id={id}
+        disabled={disabled}
+        title={title}
+        autoFocus={autoFocus}
+        tabIndex={tabIndex}
+        aria-label={ariaLabel}
+        className={cn('w-full', className)}
+      />
+    )
+  }
 )
 
 Select.displayName = 'Select'

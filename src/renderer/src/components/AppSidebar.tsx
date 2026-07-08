@@ -70,8 +70,7 @@ const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscri
 
 const DOCUMENT_PAGES: SidebarPageItem[] = [
   { id: 'schedules', label: 'Schedules', shortcut: ['cmd', '5'] },
-  { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] },
-  { id: 'generativeUi', label: 'Generative UI' }
+  { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] }
 ]
 
 const SETTINGS_PAGE: SidebarPageItem = {

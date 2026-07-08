@@ -8,18 +8,25 @@ import {
   type ButtonGroupProps
 } from './button-group'
 
-type TabMenuVariant = 'boxed' | 'inline-accent'
+type TabMenuVariant = 'boxed' | 'inline-accent' | 'toolbar'
 
 export interface TabMenuProps extends Omit<ButtonGroupProps, 'variant' | 'size'> {
   variant?: TabMenuVariant
+  fullWidth?: boolean
+  withSpacer?: boolean
 }
 
 const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
-  ({ className, children, variant = 'boxed', ...props }, ref) => (
+  ({ className, children, variant = 'boxed', fullWidth = true, withSpacer, ...props }, ref) => (
     <div
       className={cn(
-        'tab-menu-shell flex w-full items-center py-2',
-        variant === 'inline-accent' ? 'border-b border-[var(--line)] py-0' : null
+        'tab-menu-shell flex min-w-0 items-center py-2',
+        fullWidth ? 'w-full' : 'w-auto shrink-0',
+        variant === 'inline-accent'
+          ? 'border-b border-[var(--line)] py-0'
+          : variant === 'toolbar'
+            ? 'h-8 py-0'
+            : null
       )}
     >
       <ButtonGroup
@@ -29,13 +36,15 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
         className={cn(
           variant === 'inline-accent'
             ? 'tab-menu-group min-h-10 gap-5 rounded-none border-0 bg-transparent p-0 shadow-none'
-            : 'tab-menu-group rounded-md p-1',
+            : variant === 'toolbar'
+              ? 'tab-menu-group workspace-action-group h-full w-auto gap-0 rounded-lg p-0'
+              : 'tab-menu-group rounded-md p-1',
           className
         )}
         {...props}
       >
         {children}
-        {variant === 'inline-accent' ? null : (
+        {variant === 'inline-accent' || withSpacer === false ? null : (
           <div className="tab-menu-spacer" aria-hidden="true" />
         )}
       </ButtonGroup>
@@ -57,7 +66,9 @@ const TabMenuItem = React.forwardRef<HTMLButtonElement, TabMenuItemProps>(
       className={cn(
         variant === 'inline-accent'
           ? 'tab-menu-item relative h-10 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-0 text-[var(--muted)] shadow-none hover:bg-transparent hover:text-[var(--text)] data-[active=true]:border-[var(--accent)] data-[active=true]:bg-transparent data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-none'
-          : 'tab-menu-item relative data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-[inset_0_0_0_1px_var(--accent-line)]',
+          : variant === 'toolbar'
+            ? 'tab-menu-item relative h-full rounded-lg border border-transparent px-3 text-sm font-medium text-[var(--control-glass-muted-text)] shadow-none hover:bg-[var(--control-glass-bg-hover)] hover:text-[var(--control-glass-text)] data-[active=true]:border-[var(--control-glass-border-active)] data-[active=true]:bg-[var(--control-glass-bg-active)] data-[active=true]:text-[var(--control-glass-text)] data-[active=true]:shadow-none'
+            : 'tab-menu-item relative data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-[inset_0_0_0_1px_var(--accent-line)]',
         className
       )}
       {...props}

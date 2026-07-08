@@ -10,7 +10,6 @@ import type { Messages as MistralChatMessage } from '@mistralai/mistralai/models
 import { AgentChatStore } from './agentChatStore'
 import { AgentHistoryStore } from './agentHistoryStore'
 import { ExcalidrawSessionStore } from './excalidrawSessionStore'
-import { GenerativeUiArtifactStore } from './generativeUiArtifactStore'
 import { FileService, findAvailableExcalidrawRelPath, sanitizeNotePath } from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import {
@@ -63,7 +62,6 @@ import {
   ExcalidrawSession,
   StoredExcalidrawFileDocument
 } from '../shared/types'
-import type { GenerativeUiArtifact, SavedGenerativeUiArtifact } from '../shared/generativeUi'
 
 export class VaultRuntime {
   private currentPaths: VaultPaths | null = null
@@ -102,14 +100,17 @@ export class VaultRuntime {
       return null
     }
 
+    const lastVaultPath = global.lastVaultPath
+
     try {
-      return await this.enqueueActivation(() => this.activateVault(global.lastVaultPath!, false))
+      return await this.enqueueActivation(() => this.activateVault(lastVaultPath, false))
     } catch (error) {
       console.error('Failed to restore last vault:', {
-        lastVaultPath: global.lastVaultPath,
+        lastVaultPath,
         error
       })
-      throw new Error(`Could not restore previous vault at ${global.lastVaultPath}`)
+      await this.settings.clearRememberedVault(lastVaultPath)
+      return null
     }
   }
 
@@ -757,24 +758,6 @@ export class VaultRuntime {
     return result
   }
 
-  async listGenerativeUiArtifacts(): Promise<SavedGenerativeUiArtifact[]> {
-    this.assertReady()
-    return this.getGenerativeUiArtifactStore().listArtifacts()
-  }
-
-  async saveGenerativeUiArtifact(input: {
-    artifact: GenerativeUiArtifact
-    id?: string
-  }): Promise<SavedGenerativeUiArtifact> {
-    this.assertReady()
-    return this.getGenerativeUiArtifactStore().saveArtifact(input)
-  }
-
-  async deleteGenerativeUiArtifact(id: string): Promise<void> {
-    this.assertReady()
-    await this.getGenerativeUiArtifactStore().deleteArtifact(id)
-  }
-
   async approveAgentChatTool(input: {
     requestId?: string
     stepId: string
@@ -1399,10 +1382,6 @@ export class VaultRuntime {
 
   private getExcalidrawSessionStore(): ExcalidrawSessionStore {
     return new ExcalidrawSessionStore(this.getCurrentVaultRoot())
-  }
-
-  private getGenerativeUiArtifactStore(): GenerativeUiArtifactStore {
-    return new GenerativeUiArtifactStore(this.getCurrentVaultRoot())
   }
 
   private async recordAgentRun(run: AgentRunRecord): Promise<void> {

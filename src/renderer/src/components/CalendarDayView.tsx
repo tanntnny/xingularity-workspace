@@ -1,5 +1,5 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
-import { CalendarTask, CalendarTaskType } from '../../../shared/types'
+import { CalendarTask } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 
 interface CalendarDayViewProps {
@@ -7,18 +7,6 @@ interface CalendarDayViewProps {
   tasks: CalendarTask[]
   onSelectDate: (date: string) => void
   onRescheduleTask?: (taskId: string, newDate: string) => void
-}
-
-const TASK_TYPE_COLORS: Record<CalendarTaskType, string> = {
-  meeting: '#3b82f6',
-  assignment: '#f59e0b',
-  review: '#8b5cf6',
-  personal: '#22c55e',
-  call: '#06b6d4',
-  'deep-work': '#f43f5e',
-  errand: '#84cc16',
-  'follow-up': '#14b8a6',
-  other: '#64748b'
 }
 
 // Time slots from 6 AM to 11 PM
@@ -126,17 +114,13 @@ export function CalendarDayView({
             {allDayTasks.map((task) => (
               <div
                 key={task.id}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm ${
-                  task.completed
-                    ? 'workspace-subtle-control border-[var(--line)] opacity-60 line-through'
-                    : 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                }`}
+                className={`calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
+                  task.taskType || 'assignment'
+                } ${task.completed ? 'beacon-task-completed line-through' : ''} inline-flex items-center rounded-lg px-2.5 py-1.5 text-sm`}
               >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: TASK_TYPE_COLORS[task.taskType || 'assignment'] }}
-                />
-                {task.title}
+                <span className="truncate font-medium text-[color:var(--calendar-task-text)]">
+                  {task.title}
+                </span>
               </div>
             ))}
           </div>
@@ -188,18 +172,14 @@ export function CalendarDayView({
                   {slotTasks.map((task) => (
                     <div
                       key={task.id}
-                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm ${
-                        task.completed
-                          ? 'workspace-subtle-control border-[var(--line)] opacity-60 line-through'
-                          : 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                      }`}
+                      className={`calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
+                        task.taskType || 'assignment'
+                      } ${task.completed ? 'beacon-task-completed line-through' : ''} mb-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm`}
                     >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: TASK_TYPE_COLORS[task.taskType || 'assignment'] }}
-                      />
-                      {task.title}
-                      <span className="text-xs text-[var(--muted)]">
+                      <span className="truncate font-medium text-[color:var(--calendar-task-text)]">
+                        {task.title}
+                      </span>
+                      <span className="text-xs text-[color:var(--calendar-task-meta)]">
                         {formatCalendarTaskTimeLabel(task)}
                       </span>
                     </div>

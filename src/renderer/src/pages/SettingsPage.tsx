@@ -425,7 +425,7 @@ export function SettingsPage({
           <Field label="App Font" htmlFor="font-family-select">
             <Select
               id="font-family-select"
-              className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5"
+              className="w-full"
               value={selectedFontFamily}
               onChange={(event) => onSelectFont(event.target.value)}
             >
@@ -521,7 +521,7 @@ export function SettingsPage({
                     >
                       <Field className="gap-1 text-xs text-[var(--muted)]" label="Mode">
                         <Select
-                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
+                          className="w-full"
                           value={mapping.mode}
                           onChange={(event) =>
                             updateVimMapping(mapping.id, {
@@ -552,7 +552,7 @@ export function SettingsPage({
 
                       <Field className="gap-1 text-xs text-[var(--muted)]" label="Action">
                         <Select
-                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 text-sm text-[var(--text)]"
+                          className="w-full"
                           value={mapping.action}
                           onChange={(event) =>
                             updateVimMapping(mapping.id, {

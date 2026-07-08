@@ -28,14 +28,12 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings',
   schedules: 'Schedules',
   scheduleDocs: 'Schedule API Guide',
-  agentHistory: 'Agent Chat',
-  generativeUi: 'Generative UI'
+  agentHistory: 'Agent Chat'
 }
 
 const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {
   knowledge: 'Board',
-  subscriptions: 'Finance',
-  generativeUi: 'Automations'
+  subscriptions: 'Finance'
 }
 
 export function TopBar({

@@ -24,7 +24,7 @@ export const CalendarTaskCard = forwardRef<
   return (
     <div
       ref={ref}
-      className={`beacon-task-inner group w-full rounded px-1.5 py-1 ${className ?? ''}`}
+      className={`beacon-task-inner group flex h-full w-full flex-col justify-start rounded px-1.5 py-1 ${className ?? ''}`}
       onMouseMove={onMouseMove}
       {...rest}
     >
@@ -40,23 +40,23 @@ export const CalendarTaskCard = forwardRef<
           title={task.completed ? 'Mark as pending' : 'Mark as complete'}
         >
           <span
-            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 ${
               task.completed
                 ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
-                : 'border-[var(--line-strong)] bg-[var(--panel)]'
+                : 'border-[color:var(--calendar-task-text)] bg-[color:color-mix(in_srgb,var(--calendar-task-card-bg)_72%,white)]'
             }`}
           >
             {task.completed ? <Check size={8} strokeWidth={3} /> : null}
           </span>
-          <span className="text-[10px] font-medium text-[var(--muted)]">
+          <span className="text-[10px] font-medium text-[color:var(--calendar-task-meta)]">
             {task.completed ? 'Completed' : 'Pending'}
           </span>
         </button>
-        <span className="pointer-events-none shrink-0 text-[10px] text-[var(--muted)]">
+        <span className="pointer-events-none shrink-0 text-[10px] text-[color:var(--calendar-task-meta)]">
           {formatCalendarTaskTimeLabel(task)}
         </span>
       </div>
-      <div className="mt-0.5 flex items-center gap-1">
+      <div className="mt-0.5 flex items-start gap-1">
         {priorityMarker && priorityMarkerColor ? (
           <span
             className="pointer-events-none shrink-0 text-[11px] font-semibold leading-none"
@@ -66,11 +66,13 @@ export const CalendarTaskCard = forwardRef<
             {priorityMarker}
           </span>
         ) : null}
-        <span className="pointer-events-none truncate text-[11px] font-medium text-[var(--text)]">
+        <span className="pointer-events-none truncate text-[11px] font-semibold leading-tight text-[color:var(--calendar-task-text)]">
           {task.title}
         </span>
         {(task.reminders || []).some((reminder) => reminder.enabled) ? (
-          <span className="pointer-events-none shrink-0 text-[10px] text-[var(--muted)]">*</span>
+          <span className="pointer-events-none shrink-0 text-[10px] text-[color:var(--calendar-task-meta)]">
+            *
+          </span>
         ) : null}
       </div>
     </div>

@@ -1,4 +1,12 @@
-import { Fragment, type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   CalendarDays,
@@ -12,12 +20,13 @@ import {
   Plus,
   Tag
 } from 'lucide-react'
-import { type NoteListItem } from '../../../shared/types'
+import { type NativeMenuItemDescriptor, type NoteListItem } from '../../../shared/types'
 import { generateProjectTag, isProjectTag } from '../../../shared/noteTags'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
+import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Calendar } from '../components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
@@ -41,7 +50,12 @@ import {
 } from '../components/ui/table'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { PROJECT_STATUS_META, getProjectHealthSummary } from '../lib/projectStatus'
-import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import {
+  canUseNativeMenus,
+  getElementMenuPosition,
+  getMouseMenuPosition,
+  showNativeMenu
+} from '../lib/nativeMenu'
 import { cn } from '../lib/utils'
 
 interface ProjectDetailsPageProps {
@@ -87,8 +101,6 @@ type ProjectNoteRow = {
   tags: string[]
 }
 
-const neutralChipClass =
-  'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
 const defaultProjectNoteSort: ProjectNoteSortState = {
   key: 'name',
   direction: 'asc'
@@ -262,11 +274,12 @@ export function ProjectDetailsPage({
   }, [hideCompletedItems, milestoneSort, project.milestones])
   const healthSummary = useMemo(() => getProjectHealthSummary(project), [project])
 
-  const openProjectNoteMenu = async (button: HTMLButtonElement, relPath: string): Promise<void> => {
-    const actionId = await showNativeMenu(
-      [{ id: 'open', label: 'Open note' }],
-      getElementMenuPosition(button)
-    )
+  const openProjectNoteMenu = async (
+    items: NativeMenuItemDescriptor[],
+    relPath: string,
+    position: { x: number; y: number }
+  ): Promise<void> => {
+    const actionId = await showNativeMenu(items, position)
 
     if (!actionId) {
       return
@@ -274,6 +287,97 @@ export function ProjectDetailsPage({
     if (actionId === 'open') {
       onOpenNote(relPath)
     }
+  }
+
+  const handleProjectNoteContextMenu = async (
+    event: ReactMouseEvent<HTMLElement>,
+    relPath: string
+  ): Promise<void> => {
+    event.preventDefault()
+    await openProjectNoteMenu(buildProjectNoteMenuItems(), relPath, getMouseMenuPosition(event))
+  }
+
+  const openMilestoneMenu = async (
+    items: NativeMenuItemDescriptor[],
+    milestoneId: string,
+    position: { x: number; y: number }
+  ): Promise<void> => {
+    const actionId = await showNativeMenu(items, position)
+
+    if (!actionId) {
+      return
+    }
+    if (actionId === 'duplicate' && onDuplicateMilestone) {
+      onDuplicateMilestone(milestoneId)
+      return
+    }
+    if (actionId === 'copy-link' && onCopyMilestoneLink) {
+      onCopyMilestoneLink(milestoneId)
+      return
+    }
+    if (actionId === 'unschedule') {
+      onUpdateMilestoneDueDate(milestoneId, undefined)
+      return
+    }
+    if (actionId === 'delete') {
+      _onRemoveMilestone(milestoneId)
+    }
+  }
+
+  const handleMilestoneContextMenu = async (
+    event: ReactMouseEvent<HTMLElement>,
+    milestone: ProjectMilestone
+  ): Promise<void> => {
+    event.preventDefault()
+    await openMilestoneMenu(
+      buildMilestoneMenuItems({
+        canDuplicate: Boolean(onDuplicateMilestone),
+        canCopyLink: Boolean(onCopyMilestoneLink)
+      }),
+      milestone.id,
+      getMouseMenuPosition(event)
+    )
+  }
+
+  const openSubtaskMenu = async (
+    items: NativeMenuItemDescriptor[],
+    milestoneId: string,
+    subtaskId: string,
+    position: { x: number; y: number }
+  ): Promise<void> => {
+    const actionId = await showNativeMenu(items, position)
+
+    if (!actionId) {
+      return
+    }
+    if (actionId === 'duplicate' && onDuplicateSubtask) {
+      onDuplicateSubtask(milestoneId, subtaskId)
+      return
+    }
+    if (actionId === 'copy-link' && onCopySubtaskLink) {
+      onCopySubtaskLink(milestoneId, subtaskId)
+      return
+    }
+    if (actionId === 'delete') {
+      onRemoveSubtask(milestoneId, subtaskId)
+    }
+  }
+
+  const handleSubtaskContextMenu = async (
+    event: ReactMouseEvent<HTMLElement>,
+    milestoneId: string,
+    subtaskId: string
+  ): Promise<void> => {
+    event.preventDefault()
+    await openSubtaskMenu(
+      buildSubtaskMenuItems({
+        canDuplicate: Boolean(onDuplicateSubtask),
+        canCopyLink: Boolean(onCopySubtaskLink)
+      }),
+      milestoneId,
+      subtaskId,
+      getMouseMenuPosition(event)
+    )
   }
 
   const toggleNoteSort = (key: ProjectNoteSortKey): void => {
@@ -324,16 +428,15 @@ export function ProjectDetailsPage({
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  className={cn(
-                    neutralChipClass,
-                    'cursor-help',
-                    PROJECT_STATUS_META[project.status].className
-                  )}
-                  tabIndex={0}
-                >
-                  <CircleDashed size={12} aria-hidden="true" />
-                  {PROJECT_STATUS_META[project.status].label}
+                <span className="inline-flex" tabIndex={0}>
+                  <Badge
+                    variant="neutral"
+                    tone={PROJECT_STATUS_META[project.status].tone}
+                    className="cursor-help"
+                  >
+                    <CircleDashed size={12} aria-hidden="true" />
+                    {PROJECT_STATUS_META[project.status].label}
+                  </Badge>
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs space-y-1.5 text-left">
@@ -356,14 +459,14 @@ export function ProjectDetailsPage({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <span className={neutralChipClass}>
+          <Badge variant="neutral" tone="info">
             <CircleDashed size={12} aria-hidden="true" />
             Progress: {project.progress}%
-          </span>
-          <span className={neutralChipClass}>
+          </Badge>
+          <Badge variant="neutral" tone="neutral">
             <CalendarDays size={12} aria-hidden="true" />
             Last updated: {new Date(project.updatedAt).toLocaleDateString()}
-          </span>
+          </Badge>
         </div>
       </div>
 
@@ -435,7 +538,14 @@ export function ProjectDetailsPage({
                   </TableRow>
                 ) : null}
                 {projectNoteRows.map((row) => (
-                  <TableRow key={row.relPath}>
+                  <TableRow
+                    key={row.relPath}
+                    onContextMenu={
+                      useNativeMenus
+                        ? (event) => void handleProjectNoteContextMenu(event, row.relPath)
+                        : undefined
+                    }
+                  >
                     <TableCell className="p-0">
                       <button
                         type="button"
@@ -462,7 +572,11 @@ export function ProjectDetailsPage({
                           className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
                           aria-label="Open note actions"
                           onClick={(event) => {
-                            void openProjectNoteMenu(event.currentTarget, row.relPath)
+                            void openProjectNoteMenu(
+                              buildProjectNoteMenuItems(),
+                              row.relPath,
+                              getElementMenuPosition(event.currentTarget)
+                            )
                           }}
                         >
                           <MoreHorizontal size={14} />
@@ -575,6 +689,11 @@ export function ProjectDetailsPage({
                             ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
                             : undefined
                         )}
+                        onContextMenu={
+                          useNativeMenus
+                            ? (event) => void handleMilestoneContextMenu(event, milestone)
+                            : undefined
+                        }
                       >
                         <TableCell className="px-3 py-2 text-center">
                           <button
@@ -644,40 +763,14 @@ export function ProjectDetailsPage({
                                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
                                 aria-label="Open milestone actions"
                                 onClick={async (event) => {
-                                  const actionId = await showNativeMenu(
-                                    [
-                                      ...(onDuplicateMilestone
-                                        ? [{ id: 'duplicate', label: 'Duplicate' }]
-                                        : []),
-                                      ...(onCopyMilestoneLink
-                                        ? [{ id: 'copy-link', label: 'Copy link' }]
-                                        : []),
-                                      {
-                                        id: 'unschedule',
-                                        label: 'Make unscheduled'
-                                      },
-                                      { type: 'separator' as const },
-                                      {
-                                        id: 'delete',
-                                        label: 'Delete',
-                                        accelerator: 'Command+Backspace'
-                                      }
-                                    ],
+                                  await openMilestoneMenu(
+                                    buildMilestoneMenuItems({
+                                      canDuplicate: Boolean(onDuplicateMilestone),
+                                      canCopyLink: Boolean(onCopyMilestoneLink)
+                                    }),
+                                    milestone.id,
                                     getElementMenuPosition(event.currentTarget)
                                   )
-
-                                  if (!actionId) {
-                                    return
-                                  }
-                                  if (actionId === 'duplicate' && onDuplicateMilestone) {
-                                    onDuplicateMilestone(milestone.id)
-                                  } else if (actionId === 'copy-link' && onCopyMilestoneLink) {
-                                    onCopyMilestoneLink(milestone.id)
-                                  } else if (actionId === 'unschedule') {
-                                    onUpdateMilestoneDueDate(milestone.id, undefined)
-                                  } else if (actionId === 'delete') {
-                                    _onRemoveMilestone(milestone.id)
-                                  }
                                 }}
                               >
                                 <MoreHorizontal size={14} />
@@ -739,7 +832,19 @@ export function ProjectDetailsPage({
                         ? null
                         : milestone.subtasks.map((subtask) => (
                             <Fragment key={`subtask-fragment-${milestone.id}-${subtask.id}`}>
-                              <TableRow key={`subtask-${milestone.id}-${subtask.id}`}>
+                              <TableRow
+                                key={`subtask-${milestone.id}-${subtask.id}`}
+                                onContextMenu={
+                                  useNativeMenus
+                                    ? (event) =>
+                                        void handleSubtaskContextMenu(
+                                          event,
+                                          milestone.id,
+                                          subtask.id
+                                        )
+                                    : undefined
+                                }
+                              >
                                 <TableCell className="px-3 py-2 text-center">
                                   <div className="flex items-center justify-center">
                                     <input
@@ -790,37 +895,15 @@ export function ProjectDetailsPage({
                                         className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
                                         aria-label="Open subtask actions"
                                         onClick={async (event) => {
-                                          const actionId = await showNativeMenu(
-                                            [
-                                              ...(onDuplicateSubtask
-                                                ? [{ id: 'duplicate', label: 'Duplicate' }]
-                                                : []),
-                                              ...(onCopySubtaskLink
-                                                ? [{ id: 'copy-link', label: 'Copy link' }]
-                                                : []),
-                                              { type: 'separator' as const },
-                                              {
-                                                id: 'delete',
-                                                label: 'Delete',
-                                                accelerator: 'Command+Backspace'
-                                              }
-                                            ],
+                                          await openSubtaskMenu(
+                                            buildSubtaskMenuItems({
+                                              canDuplicate: Boolean(onDuplicateSubtask),
+                                              canCopyLink: Boolean(onCopySubtaskLink)
+                                            }),
+                                            milestone.id,
+                                            subtask.id,
                                             getElementMenuPosition(event.currentTarget)
                                           )
-
-                                          if (!actionId) {
-                                            return
-                                          }
-                                          if (actionId === 'duplicate' && onDuplicateSubtask) {
-                                            onDuplicateSubtask(milestone.id, subtask.id)
-                                          } else if (
-                                            actionId === 'copy-link' &&
-                                            onCopySubtaskLink
-                                          ) {
-                                            onCopySubtaskLink(milestone.id, subtask.id)
-                                          } else if (actionId === 'delete') {
-                                            onRemoveSubtask(milestone.id, subtask.id)
-                                          }
                                         }}
                                       >
                                         <MoreHorizontal size={14} />
@@ -1074,6 +1157,39 @@ function formatSubtaskPriority(priority?: 'low' | 'medium' | 'high'): string {
     return 'Medium'
   }
   return 'Low'
+}
+
+function buildProjectNoteMenuItems(): NativeMenuItemDescriptor[] {
+  return [{ id: 'open', label: 'Open note' }]
+}
+
+function buildMilestoneMenuItems(options: {
+  canDuplicate: boolean
+  canCopyLink: boolean
+}): NativeMenuItemDescriptor[] {
+  return [
+    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
+    { id: 'unschedule', label: 'Make unscheduled' },
+    { type: 'separator' as const },
+    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+  ]
+}
+
+function buildSubtaskMenuItems(options: {
+  canDuplicate: boolean
+  canCopyLink: boolean
+}): NativeMenuItemDescriptor[] {
+  const leadingItems = [
+    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
+    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : [])
+  ]
+
+  return [
+    ...leadingItems,
+    ...(leadingItems.length > 0 ? [{ type: 'separator' as const }] : []),
+    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
+  ]
 }
 
 function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): string {

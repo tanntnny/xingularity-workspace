@@ -1,32 +1,29 @@
+import type { UiTone } from './uiTone'
 import type { Project, ProjectMilestone, ProjectStatus } from '../../../shared/types'
 
 export const PROJECT_STATUS_META: Record<
   ProjectStatus,
-  { label: string; titleLabel: string; className: string }
+  { label: string; titleLabel: string; tone: UiTone }
 > = {
   'on-track': {
     label: 'on-track',
     titleLabel: 'On Track',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+    tone: 'success'
   },
   'at-risk': {
     label: 'at-risk',
     titleLabel: 'At Risk',
-    className:
-      'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309]'
+    tone: 'warning'
   },
   blocked: {
     label: 'blocked',
     titleLabel: 'Blocked',
-    className:
-      'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c]'
+    tone: 'danger'
   },
   completed: {
     label: 'completed',
     titleLabel: 'Completed',
-    className:
-      'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d]'
+    tone: 'success'
   }
 }
 
@@ -49,11 +46,19 @@ export function deriveMilestoneStatus(milestone: ProjectMilestone): ProjectMiles
   const subtasks = milestone.subtasks ?? []
   const completedCount = subtasks.filter((subtask) => subtask.completed).length
 
-  if (milestone.status === 'completed') {
-    return 'completed'
+  if (subtasks.length === 0) {
+    if (milestone.status === 'completed') {
+      return 'completed'
+    }
+
+    if (milestone.status === 'blocked') {
+      return 'blocked'
+    }
+
+    return 'pending'
   }
 
-  if (subtasks.length > 0 && completedCount === subtasks.length) {
+  if (completedCount === subtasks.length) {
     return 'completed'
   }
 

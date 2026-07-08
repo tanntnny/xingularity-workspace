@@ -9,18 +9,15 @@ import {
   useState
 } from 'react'
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Check,
+  ChevronDown,
   Copy,
   Download,
-  Funnel,
   Keyboard,
+  LayoutGrid,
+  ListTodo,
   Paintbrush,
   Trash2,
   Plus,
-  RotateCcw,
   Type,
   Link2,
   ChevronLeft,
@@ -60,12 +57,7 @@ import {
   stripNotebookFileExtension,
   withExcalidrawExtension
 } from '../../shared/excalidrawFile'
-import {
-  createRandomProjectIcon,
-  PROJECT_ICON_COLORS,
-  PROJECT_ICON_SHAPES,
-  PROJECT_ICON_VARIANTS
-} from '../../shared/projectIcons'
+import { createRandomProjectIcon } from '../../shared/projectIcons'
 import { resolveProfileAccent } from './lib/profileColors'
 import {
   appendTextToNoteMarkdown,
@@ -85,15 +77,8 @@ import { CalendarMonthView } from './components/CalendarMonthView'
 import { CalendarWeekView } from './components/CalendarWeekView'
 import { UnscheduledTaskList } from './components/UnscheduledTaskList'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
-import { NoteShapeIcon } from './components/NoteShapeIcon'
 import { NotesTreeView } from './components/NotesTreeView'
 import type { NoteEditorHandle } from './components/Editor'
-import {
-  ProjectPreviewList,
-  type ProjectFilterMode,
-  type ProjectSortDirection,
-  type ProjectSortField
-} from './components/ProjectPreviewList'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
 import type { AppPage } from './navigation'
@@ -109,9 +94,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from './components/ui/dropdown-menu'
 import {
@@ -130,12 +112,13 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
+import { SelectionMenu, type SelectionMenuOption } from './components/ui/selection-menu'
+import { TabMenu, TabMenuItem } from './components/ui/tab-menu'
 import { EditorPage } from './pages/EditorPage'
-import { ProjectDetailsPage } from './pages/ProjectDetailsPage'
+import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
 import { FontOption, SettingsPage } from './pages/SettingsPage'
 import { AgentHistoryPage } from './pages/AgentHistoryPage'
-import { GenerativeUiPage } from './pages/GenerativeUiPage'
 import { SchedulesPage } from './pages/SchedulesPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import {
@@ -176,6 +159,7 @@ import {
 } from './lib/noteTreeSelection'
 import { hideManagedProjectTree } from './lib/noteTreeVisibility'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
+import { type ProjectsWorkspaceFilterMode } from './lib/projectTaskRows'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
@@ -187,8 +171,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings',
   schedules: 'Schedules',
   scheduleDocs: 'Schedule API Guide',
-  agentHistory: 'Agent Chat',
-  generativeUi: 'Generative UI'
+  agentHistory: 'Agent Chat'
 }
 
 type CalendarViewMode = 'month' | 'week'
@@ -274,6 +257,18 @@ const CALENDAR_BULK_SCOPE_OPTIONS = [
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' }
 ] as const
+
+const CALENDAR_VIEW_MODE_OPTIONS: SelectionMenuOption[] = [
+  { value: 'month', label: 'Monthly' },
+  { value: 'week', label: 'Weekly' }
+]
+
+const CALENDAR_BULK_SCOPE_SELECTION_OPTIONS: SelectionMenuOption[] =
+  CALENDAR_BULK_SCOPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))
+
+const CALENDAR_TASK_TYPE_SELECTION_OPTIONS: SelectionMenuOption[] = CALENDAR_TASK_TYPE_OPTIONS.map(
+  (option) => ({ value: option.value, label: option.label })
+)
 
 const NOTE_AUTOSAVE_DELAY_MS = 1200
 
@@ -452,13 +447,37 @@ function App(): ReactElement {
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [projectNameEditTarget, setProjectNameEditTarget] = useState<{
+  const [projectFilterMode, setProjectFilterMode] = useState<ProjectsWorkspaceFilterMode>('all')
+  const [projectsWorkspaceTab, setProjectsWorkspaceTab] = usePersistentState<ProjectsWorkspaceTab>(
+    'projects-workspace-tab',
+    'board',
+    {
+      validate: (value): value is ProjectsWorkspaceTab => value === 'board' || value === 'taskList'
+    }
+  )
+  const [projectDrawerRequest, setProjectDrawerRequest] = useState<{
     projectId: string
     token: number
   } | null>(null)
-  const [projectFilterMode, setProjectFilterMode] = useState<ProjectFilterMode>('all')
-  const [projectSortField, setProjectSortField] = useState<ProjectSortField>('name')
-  const [projectSortDirection, setProjectSortDirection] = useState<ProjectSortDirection>('asc')
+  const [newProjectRequest, setNewProjectRequest] = useState<{ token: number } | null>(null)
+  const [newMilestoneRequest, setNewMilestoneRequest] = useState<{
+    projectId: string
+    token: number
+  } | null>(null)
+  const [newSubtaskRequest, setNewSubtaskRequest] = useState<{
+    projectId: string
+    milestoneId: string
+    token: number
+  } | null>(null)
+  const [projectTaskListCollapseAllRequest, setProjectTaskListCollapseAllRequest] = useState<{
+    token: number
+    collapsed: boolean
+  } | null>(null)
+  const [areProjectTaskListGroupsCollapsed, setAreProjectTaskListGroupsCollapsed] = useState(false)
+  const [projectsWorkspaceMilestoneContext, setProjectsWorkspaceMilestoneContext] = useState<{
+    projectId: string
+    milestoneId: string
+  } | null>(null)
   const {
     data: weeklyPlanState,
     loading: weeklyPlanLoading,
@@ -490,7 +509,6 @@ function App(): ReactElement {
     () => getNextWeeklyPlanStart(weeklyPlanWeeks),
     [weeklyPlanWeeks]
   )
-  const [projectSearchQuery, setProjectSearchQuery] = useState('')
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
     []
   )
@@ -502,12 +520,8 @@ function App(): ReactElement {
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
-  const [isProjectIconPickerOpen, setIsProjectIconPickerOpen] = useState(false)
   const commandPaletteSearchRequestRef = useRef(0)
   const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const projectFilterButtonRef = useRef<HTMLButtonElement | null>(null)
-  const projectSortButtonRef = useRef<HTMLButtonElement | null>(null)
-  const calendarViewModeButtonRef = useRef<HTMLButtonElement | null>(null)
   const createNoteRef = useRef<(() => Promise<void>) | null>(null)
   const notesRef = useRef(notes)
   const currentNotePathRef = useRef(currentNotePath)
@@ -534,11 +548,7 @@ function App(): ReactElement {
       activePage === 'projects' ||
       activePage === 'calendar')
   const showWorkspacePanel =
-    hasVault &&
-    (activePage === 'notes' ||
-      activePage === 'projects' ||
-      activePage === 'calendar' ||
-      activePage === 'weeklyPlan')
+    hasVault && (activePage === 'notes' || activePage === 'calendar' || activePage === 'weeklyPlan')
   const shouldSlideWorkspacePanelOut = showWorkspacePanel && (isRightPanelCollapsed || isFocusMode)
   const hasRightPanel =
     showWorkspacePanel || activePage === 'schedules' || activePage === 'agentHistory'
@@ -785,13 +795,6 @@ function App(): ReactElement {
     [persistLastOpenedProjectId]
   )
 
-  const handleProjectListSelect = useCallback(
-    (projectId: string): void => {
-      selectProject(projectId)
-    },
-    [selectProject]
-  )
-
   const handleCreateWeeklyPlanWeek = async (input: CreateWeeklyPlanWeekInput): Promise<void> => {
     if (!weeklyPlanReady) {
       pushToast('error', 'Weekly Plan is unavailable. Restart Beacon after updating to enable it.')
@@ -940,10 +943,6 @@ function App(): ReactElement {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
 
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId]
-  )
   const favoriteProjectIds = useMemo(
     () =>
       favoriteProjectIdSettings.filter((projectId) =>
@@ -951,9 +950,6 @@ function App(): ReactElement {
       ),
     [favoriteProjectIdSettings, projects]
   )
-  const currentProjectIsFavorite = selectedProjectId
-    ? favoriteProjectIds.includes(selectedProjectId)
-    : false
   const favoriteNotePaths = useMemo(
     () =>
       favoriteNotePathSettings.filter((relPath) => notes.some((note) => note.relPath === relPath)),
@@ -980,7 +976,7 @@ function App(): ReactElement {
     }
 
     if (activePage === 'projects') {
-      return selectedProject?.name ?? 'No Project Selected'
+      return null
     }
 
     if (activePage === 'knowledge') {
@@ -1012,9 +1008,33 @@ function App(): ReactElement {
     currentNotePath,
     calendarViewMode,
     selectedCalendarDate,
-    selectedProject,
     selectedWeeklyPlanWeek
   ])
+  const calendarHeaderBreadcrumbItem = useMemo(() => {
+    if (activePage !== 'calendar') {
+      return null
+    }
+
+    if (calendarViewMode === 'week') {
+      const range = formatCalendarWeekRangeLabel(selectedCalendarDate)
+
+      return (
+        <div className="workspace-action-button inline-flex h-8 items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text)]">
+          <CalendarDays size={15} className="shrink-0 text-[var(--control-glass-muted-text)]" />
+          <span className="truncate">{range}</span>
+        </div>
+      )
+    }
+
+    const dateLabel = formatCalendarTopBarDateLabel(selectedCalendarDate)
+
+    return (
+      <div className="workspace-action-button inline-flex h-8 items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text)]">
+        <CalendarDays size={15} className="shrink-0 text-[var(--control-glass-muted-text)]" />
+        <span className="truncate">{dateLabel}</span>
+      </div>
+    )
+  }, [activePage, calendarViewMode, selectedCalendarDate])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
       activePage !== 'notes' ||
@@ -1111,12 +1131,6 @@ function App(): ReactElement {
 
     setCommandPaletteOpen(false)
   }, [commandPaletteOpen, hasVault, setCommandPaletteOpen])
-
-  useEffect(() => {
-    if (activePage !== 'projects' || !selectedProject) {
-      setIsProjectIconPickerOpen(false)
-    }
-  }, [activePage, selectedProject])
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -2103,6 +2117,7 @@ function App(): ReactElement {
 
   const openMilestoneFromCalendar = useCallback(
     (projectId: string, milestoneId: string): void => {
+      setProjectsWorkspaceTab('taskList')
       selectProject(projectId)
       setFocusedMilestoneTarget({
         projectId,
@@ -2111,7 +2126,7 @@ function App(): ReactElement {
       })
       void navigateToPage('projects')
     },
-    [navigateToPage, selectProject]
+    [navigateToPage, selectProject, setProjectsWorkspaceTab]
   )
 
   const reassignCalendarTaskTypeForScope = async (
@@ -2460,6 +2475,8 @@ function App(): ReactElement {
       try {
         const restored = await vaultApi.vault.restoreLast()
         if (!restored) {
+          const nextSettings = await vaultApi.settings.get()
+          setSettings(nextSettings)
           return
         }
         await applyVaultActivationResult(restored, `Restored vault ${restored.info.rootPath}`)
@@ -2467,7 +2484,7 @@ function App(): ReactElement {
         pushToast('error', String(error))
       }
     })()
-  }, [applyVaultActivationResult, pushToast, vaultApi])
+  }, [applyVaultActivationResult, pushToast, setSettings, vaultApi])
 
   useEffect(() => {
     void refreshSavedVaultCount()
@@ -2554,47 +2571,6 @@ function App(): ReactElement {
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [hasVault])
-
-  const createProjectNote = async (project: Project): Promise<void> => {
-    if (!vaultApi) {
-      pushToast('error', 'Create note is only available inside the Electron app')
-      return
-    }
-
-    if (!vault) {
-      pushToast('error', 'Select a vault in Settings before creating notes')
-      void navigateToPage('settings')
-      return
-    }
-
-    try {
-      let relPath: string | null = null
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const suffix = attempt === 0 ? '' : ` ${attempt + 1}`
-        try {
-          relPath = await vaultApi.files.createNoteWithTags(`${project.name}${suffix}`, [
-            generateProjectTag(project.id)
-          ])
-          break
-        } catch (error) {
-          if (!String(error).includes('EEXIST')) {
-            throw error
-          }
-        }
-      }
-
-      if (!relPath) {
-        throw new Error('Could not create a unique project note name')
-      }
-      await refreshNotesAndTree()
-      await navigateToPage('notes')
-      await openNote(relPath)
-      setNoteTitleEditTarget({ relPath, token: Date.now() })
-      pushToast('success', 'Project note created')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
 
   const importNotes = async (): Promise<void> => {
     if (!vaultApi) {
@@ -3087,11 +3063,6 @@ function App(): ReactElement {
     void persistProjectData(nextProjects, nextProjectIcons)
   }
 
-  const randomizeProjectIcon = (projectId: string): void => {
-    const seed = `${projectId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-    updateProjectIcon(projectId, createRandomProjectIcon(seed))
-  }
-
   const renameCurrentNote = async (newName: string): Promise<void> => {
     if (!vaultApi) {
       return
@@ -3452,8 +3423,12 @@ function App(): ReactElement {
     }
   }
 
-  const createProject = (): void => {
-    const baseName = 'Untitled Project'
+  const createProject = (input?: {
+    name?: string
+    summary?: string
+    icon?: ProjectIconStyle
+  }): string => {
+    const baseName = input?.name?.trim() || 'Untitled Project'
     const existingNames = new Set(projects.map((project) => project.name.toLowerCase()))
 
     let nextName = baseName
@@ -3466,9 +3441,9 @@ function App(): ReactElement {
     const nextProject: Project = {
       id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: nextName,
-      summary: 'Add project details here.',
+      summary: input?.summary?.trim() ?? 'Add project details here.',
       status: 'on-track',
-      icon: createRandomProjectIcon(nextName),
+      icon: input?.icon ?? createRandomProjectIcon(nextName),
       updatedAt: new Date().toISOString(),
       progress: 0,
       milestones: []
@@ -3478,10 +3453,8 @@ function App(): ReactElement {
     const nextProjectIcons = { ...projectIcons, [nextProject.id]: nextProject.icon }
     void persistProjectData(nextProjects, nextProjectIcons)
     selectProject(nextProject.id)
-    setProjectNameEditTarget({ projectId: nextProject.id, token: Date.now() })
-    setProjectSearchQuery('')
-    void navigateToPage('projects')
     pushToast('success', 'Project created')
+    return nextProject.id
   }
 
   const renameProject = (projectId: string, nextName: string): void => {
@@ -3550,9 +3523,18 @@ function App(): ReactElement {
     pushToast('success', nextStatus === 'completed' ? 'Project marked done' : 'Project reopened')
   }
 
-  const addMilestoneToProject = (projectId: string, title: string, dueDate?: string): void => {
-    const normalizedTitle = title.trim()
-    const normalizedDueDate = dueDate?.trim() || undefined
+  const addMilestoneToProject = (
+    projectId: string,
+    input: {
+      title: string
+      description?: string
+      dueDate?: string
+      priority?: TaskPriority
+      status?: ProjectMilestone['status']
+    }
+  ): void => {
+    const normalizedTitle = input.title.trim()
+    const normalizedDueDate = input.dueDate?.trim() || undefined
     if (!normalizedTitle) {
       return
     }
@@ -3565,11 +3547,11 @@ function App(): ReactElement {
       const nextMilestone: ProjectMilestone = {
         id: `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: normalizedTitle,
-        description: '',
+        description: input.description?.trim() ?? '',
         collapsed: false,
         dueDate: normalizedDueDate,
-        priority: 'medium',
-        status: 'pending',
+        priority: input.priority ?? 'medium',
+        status: input.status ?? 'pending',
         subtasks: []
       }
 
@@ -3671,16 +3653,18 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const toggleProjectMilestoneCollapsed = (projectId: string, milestoneId: string): void => {
+  const updateProjectMilestoneStatus = (
+    projectId: string,
+    milestoneId: string,
+    nextStatus: ProjectMilestone['status']
+  ): void => {
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
         return project
       }
 
       const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? { ...milestone, collapsed: !(milestone.collapsed ?? false) }
-          : milestone
+        milestone.id === milestoneId ? { ...milestone, status: nextStatus } : milestone
       )
 
       return withComputedProjectState({
@@ -3689,24 +3673,21 @@ function App(): ReactElement {
         updatedAt: new Date().toISOString()
       })
     })
-
-    setSettings({
-      ...useVaultStore.getState().settings,
-      projects: nextProjects
-    })
     void persistProjects(nextProjects)
   }
 
-  const cycleProjectMilestonePriority = (projectId: string, milestoneId: string): void => {
+  const updateProjectMilestonePriority = (
+    projectId: string,
+    milestoneId: string,
+    nextPriority: TaskPriority | undefined
+  ): void => {
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
         return project
       }
 
       const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? { ...milestone, priority: getNextTaskPriority(milestone.priority) }
-          : milestone
+        milestone.id === milestoneId ? { ...milestone, priority: nextPriority } : milestone
       )
 
       return withComputedProjectState({
@@ -3735,67 +3716,18 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const moveProjectMilestone = (
+  const addSubtaskToMilestone = (
     projectId: string,
     milestoneId: string,
-    direction: 'up' | 'down'
+    input: {
+      title: string
+      description?: string
+      dueDate?: string
+      completed?: boolean
+      priority?: TaskPriority
+    }
   ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const currentIndex = project.milestones.findIndex((milestone) => milestone.id === milestoneId)
-      if (currentIndex < 0) {
-        return project
-      }
-
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-      if (targetIndex < 0 || targetIndex >= project.milestones.length) {
-        return project
-      }
-
-      const nextMilestones = [...project.milestones]
-      const [movingMilestone] = nextMilestones.splice(currentIndex, 1)
-      nextMilestones.splice(targetIndex, 0, movingMilestone)
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const reorderProjectMilestones = (projectId: string, orderedMilestoneIds: string[]): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const milestoneById = new Map(
-        project.milestones.map((milestone) => [milestone.id, milestone])
-      )
-      const reorderedMilestones = orderedMilestoneIds
-        .map((milestoneId) => milestoneById.get(milestoneId))
-        .filter((milestone): milestone is ProjectMilestone => Boolean(milestone))
-
-      if (reorderedMilestones.length !== project.milestones.length) {
-        return project
-      }
-
-      return withComputedProjectState({
-        ...project,
-        milestones: reorderedMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const addSubtaskToMilestone = (projectId: string, milestoneId: string, title: string): void => {
-    const normalizedTitle = title.trim()
+    const normalizedTitle = input.title.trim()
     if (!normalizedTitle) {
       return
     }
@@ -3814,10 +3746,11 @@ function App(): ReactElement {
                 {
                   id: `subtask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                   title: normalizedTitle,
-                  description: '',
-                  completed: false,
-                  priority: 'medium',
-                  createdAt: new Date().toISOString()
+                  description: input.description?.trim() ?? '',
+                  completed: Boolean(input.completed),
+                  priority: input.priority ?? 'medium',
+                  createdAt: new Date().toISOString(),
+                  dueDate: input.dueDate?.trim() || undefined
                 } satisfies ProjectSubtask
               ]
             }
@@ -3849,41 +3782,6 @@ function App(): ReactElement {
               ...milestone,
               subtasks: milestone.subtasks.map((subtask) =>
                 subtask.id === subtaskId ? { ...subtask, completed: !subtask.completed } : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const cycleMilestoneSubtaskPriority = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId
-                  ? {
-                      ...subtask,
-                      priority: getNextTaskPriority(subtask.priority)
-                    }
-                  : subtask
               )
             }
           : milestone
@@ -3969,41 +3867,28 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const moveMilestoneSubtask = (
+  const updateMilestoneSubtaskDueDate = (
     projectId: string,
     milestoneId: string,
     subtaskId: string,
-    direction: 'up' | 'down'
+    nextDueDate: string | undefined
   ): void => {
+    const normalizedDueDate = nextDueDate?.trim() || undefined
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
         return project
       }
 
-      const nextMilestones = project.milestones.map((milestone) => {
-        if (milestone.id !== milestoneId) {
-          return milestone
-        }
-
-        const currentIndex = milestone.subtasks.findIndex((subtask) => subtask.id === subtaskId)
-        if (currentIndex < 0) {
-          return milestone
-        }
-
-        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-        if (targetIndex < 0 || targetIndex >= milestone.subtasks.length) {
-          return milestone
-        }
-
-        const nextSubtasks = [...milestone.subtasks]
-        const [movingSubtask] = nextSubtasks.splice(currentIndex, 1)
-        nextSubtasks.splice(targetIndex, 0, movingSubtask)
-
-        return {
-          ...milestone,
-          subtasks: nextSubtasks
-        }
-      })
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              subtasks: milestone.subtasks.map((subtask) =>
+                subtask.id === subtaskId ? { ...subtask, dueDate: normalizedDueDate } : subtask
+              )
+            }
+          : milestone
+      )
 
       return withComputedProjectState({
         ...project,
@@ -4014,35 +3899,27 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const reorderMilestoneSubtasks = (
+  const updateMilestoneSubtaskPriority = (
     projectId: string,
     milestoneId: string,
-    orderedSubtaskIds: string[]
+    subtaskId: string,
+    nextPriority: TaskPriority | undefined
   ): void => {
     const nextProjects = projects.map((project) => {
       if (project.id !== projectId) {
         return project
       }
 
-      const nextMilestones = project.milestones.map((milestone) => {
-        if (milestone.id !== milestoneId) {
-          return milestone
-        }
-
-        const subtaskById = new Map(milestone.subtasks.map((subtask) => [subtask.id, subtask]))
-        const reorderedSubtasks = orderedSubtaskIds
-          .map((subtaskId) => subtaskById.get(subtaskId))
-          .filter((subtask): subtask is ProjectSubtask => Boolean(subtask))
-
-        if (reorderedSubtasks.length !== milestone.subtasks.length) {
-          return milestone
-        }
-
-        return {
-          ...milestone,
-          subtasks: reorderedSubtasks
-        }
-      })
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              subtasks: milestone.subtasks.map((subtask) =>
+                subtask.id === subtaskId ? { ...subtask, priority: nextPriority } : subtask
+              )
+            }
+          : milestone
+      )
 
       return withComputedProjectState({
         ...project,
@@ -4079,14 +3956,6 @@ function App(): ReactElement {
       })
     })
     void persistProjects(nextProjects)
-  }
-
-  const removeSelectedProject = async (): Promise<void> => {
-    if (!selectedProject) {
-      return
-    }
-
-    await removeProjectById(selectedProject.id)
   }
 
   const removeProjectById = async (projectId: string): Promise<void> => {
@@ -4136,15 +4005,10 @@ function App(): ReactElement {
     pushToast('success', 'Project removed')
   }
 
-  const toggleCurrentProjectFavorite = (): void => {
-    if (!selectedProjectId) {
-      return
-    }
-
-    const nextFavoriteProjectIds = currentProjectIsFavorite
-      ? favoriteProjectIds.filter((projectId) => projectId !== selectedProjectId)
-      : [selectedProjectId, ...favoriteProjectIds]
-
+  const toggleProjectFavoriteById = (projectId: string): void => {
+    const nextFavoriteProjectIds = favoriteProjectIds.includes(projectId)
+      ? favoriteProjectIds.filter((currentProjectId) => currentProjectId !== projectId)
+      : [projectId, ...favoriteProjectIds]
     void persistFavoriteProjectIds(nextFavoriteProjectIds)
   }
 
@@ -4913,10 +4777,7 @@ function App(): ReactElement {
   }
 
   const isStandalonePage =
-    activePage === 'schedules' ||
-    activePage === 'scheduleDocs' ||
-    activePage === 'agentHistory' ||
-    activePage === 'generativeUi'
+    activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
   const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
   const headerPageLabel =
@@ -4980,107 +4841,6 @@ function App(): ReactElement {
     }
   }
 
-  const openNativeProjectFilterMenu = async (): Promise<void> => {
-    if (!useNativeMenus || !projectFilterButtonRef.current) {
-      return
-    }
-
-    const actionId = await showNativeMenu(
-      [
-        { id: 'all', type: 'checkbox', label: 'All', checked: projectFilterMode === 'all' },
-        {
-          id: 'favorites',
-          type: 'checkbox',
-          label: 'Favorites',
-          checked: projectFilterMode === 'favorites'
-        },
-        {
-          id: 'active',
-          type: 'checkbox',
-          label: 'In Progress',
-          checked: projectFilterMode === 'active'
-        },
-        {
-          id: 'completed',
-          type: 'checkbox',
-          label: 'Done',
-          checked: projectFilterMode === 'completed'
-        }
-      ],
-      getElementMenuPosition(projectFilterButtonRef.current, 'start')
-    )
-
-    if (
-      actionId === 'all' ||
-      actionId === 'favorites' ||
-      actionId === 'active' ||
-      actionId === 'completed'
-    ) {
-      setProjectFilterMode(actionId)
-    }
-  }
-
-  const openNativeProjectSortMenu = async (): Promise<void> => {
-    if (!useNativeMenus || !projectSortButtonRef.current) {
-      return
-    }
-
-    const actionId = await showNativeMenu(
-      [
-        { id: 'name', type: 'checkbox', label: 'Name', checked: projectSortField === 'name' },
-        {
-          id: 'updated',
-          type: 'checkbox',
-          label: 'Updated',
-          checked: projectSortField === 'updated'
-        },
-        { type: 'separator' },
-        {
-          id: 'toggle-direction',
-          label: `Direction: ${projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}`
-        }
-      ],
-      getElementMenuPosition(projectSortButtonRef.current, 'start')
-    )
-
-    if (actionId === 'name' || actionId === 'updated') {
-      setProjectSortField(actionId)
-      setProjectSortDirection(actionId === 'name' ? 'asc' : 'desc')
-      return
-    }
-    if (actionId === 'toggle-direction') {
-      setProjectSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-    }
-  }
-
-  const openNativeCalendarViewMenu = async (): Promise<void> => {
-    if (!useNativeMenus || !calendarViewModeButtonRef.current) {
-      return
-    }
-
-    const actionId = await showNativeMenu(
-      [
-        {
-          id: 'month',
-          type: 'checkbox',
-          label: 'Monthly',
-          checked: calendarViewMode === 'month'
-        },
-        {
-          id: 'week',
-          type: 'checkbox',
-          label: 'Weekly',
-          checked: calendarViewMode === 'week'
-        }
-      ],
-      getElementMenuPosition(calendarViewModeButtonRef.current, 'start')
-    )
-
-    if (actionId === 'month' || actionId === 'week') {
-      setCalendarViewMode(actionId)
-    }
-  }
-
   return (
     <div className="flex h-screen">
       <SidebarProvider
@@ -5140,55 +4900,79 @@ function App(): ReactElement {
                 isRightPanelCollapsed={isRightPanelCollapsed}
               />
             ) : null}
-            {hasVault && activePage === 'generativeUi' && vaultApi ? (
-              <GenerativeUiPage vaultApi={vaultApi} pushToast={pushToast} />
-            ) : null}
             <>
               <DocumentWorkspaceMain
                 className={`${isStandalonePage ? 'hidden ' : ''}${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
               >
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
-                    <Breadcrumb>
-                      <BreadcrumbList className="text-[var(--muted)]">
-                        <BreadcrumbItem>
-                          <BreadcrumbPage className="text-sm text-[var(--muted)]">
-                            {headerPageLabel}
-                          </BreadcrumbPage>
-                        </BreadcrumbItem>
-                        {noteHeaderBreadcrumbSegments ? (
-                          noteHeaderBreadcrumbSegments.map((segment, index) => {
-                            const isLast = index === noteHeaderBreadcrumbSegments.length - 1
+                    activePage === 'projects' ? (
+                      <TabMenu
+                        variant="toolbar"
+                        value={projectsWorkspaceTab}
+                        onValueChange={(value) =>
+                          setProjectsWorkspaceTab(value as ProjectsWorkspaceTab)
+                        }
+                        fullWidth={false}
+                        withSpacer={false}
+                      >
+                        <TabMenuItem variant="toolbar" value="board">
+                          <span className="inline-flex items-center gap-2">
+                            <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
+                            Project Board
+                          </span>
+                        </TabMenuItem>
+                        <TabMenuItem variant="toolbar" value="taskList">
+                          <span className="inline-flex items-center gap-2">
+                            <ListTodo size={15} className="shrink-0" aria-hidden="true" />
+                            Task List
+                          </span>
+                        </TabMenuItem>
+                      </TabMenu>
+                    ) : activePage === 'calendar' && calendarHeaderBreadcrumbItem ? (
+                      <div className="text-[var(--text)]">{calendarHeaderBreadcrumbItem}</div>
+                    ) : (
+                      <Breadcrumb>
+                        <BreadcrumbList className="text-[var(--muted)]">
+                          <BreadcrumbItem>
+                            <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                              {headerPageLabel}
+                            </BreadcrumbPage>
+                          </BreadcrumbItem>
+                          {noteHeaderBreadcrumbSegments ? (
+                            noteHeaderBreadcrumbSegments.map((segment, index) => {
+                              const isLast = index === noteHeaderBreadcrumbSegments.length - 1
 
-                            return (
-                              <Fragment key={`${segment}:${index}`}>
-                                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
-                                <BreadcrumbItem>
-                                  <BreadcrumbPage
-                                    className={
-                                      isLast
-                                        ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
-                                        : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
-                                    }
-                                  >
-                                    {segment}
-                                  </BreadcrumbPage>
-                                </BreadcrumbItem>
-                              </Fragment>
-                            )
-                          })
-                        ) : middleHeaderBreadcrumbItem ? (
-                          <>
-                            <BreadcrumbSeparator className="text-[var(--line-strong)]" />
-                            <BreadcrumbItem>
-                              <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
-                                {middleHeaderBreadcrumbItem}
-                              </BreadcrumbPage>
-                            </BreadcrumbItem>
-                          </>
-                        ) : null}
-                      </BreadcrumbList>
-                    </Breadcrumb>
+                              return (
+                                <Fragment key={`${segment}:${index}`}>
+                                  <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                                  <BreadcrumbItem>
+                                    <BreadcrumbPage
+                                      className={
+                                        isLast
+                                          ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
+                                          : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
+                                      }
+                                    >
+                                      {segment}
+                                    </BreadcrumbPage>
+                                  </BreadcrumbItem>
+                                </Fragment>
+                              )
+                            })
+                          ) : middleHeaderBreadcrumbItem ? (
+                            <>
+                              <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                              <BreadcrumbItem>
+                                <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                                  {middleHeaderBreadcrumbItem}
+                                </BreadcrumbPage>
+                              </BreadcrumbItem>
+                            </>
+                          ) : null}
+                        </BreadcrumbList>
+                      </Breadcrumb>
+                    )
                   }
                   actions={
                     noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
@@ -5294,8 +5078,8 @@ function App(): ReactElement {
                                   Graph editor
                                 </h2>
                                 <p className="text-xs text-[var(--muted)]">
-                                  Configure the orphan ring radius in pixels. Leave blank to use
-                                  the automatic canvas radius.
+                                  Configure the orphan ring radius in pixels. Leave blank to use the
+                                  automatic canvas radius.
                                 </p>
                               </div>
                               <div className="mt-4 space-y-2">
@@ -5344,199 +5128,95 @@ function App(): ReactElement {
                           </Popover>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
-                    ) : activePage === 'projects' && selectedProject ? (
+                    ) : activePage === 'projects' ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
+                          {projectsWorkspaceTab === 'taskList' ? (
+                            <WorkspaceActionButton
+                              onClick={() => {
+                                setProjectTaskListCollapseAllRequest({
+                                  token: Date.now(),
+                                  collapsed: !areProjectTaskListGroupsCollapsed
+                                })
+                              }}
+                              icon={
+                                areProjectTaskListGroupsCollapsed ? (
+                                  <ChevronDown size={16} />
+                                ) : (
+                                  <ChevronUp size={16} />
+                                )
+                              }
+                              aria-label={
+                                areProjectTaskListGroupsCollapsed
+                                  ? 'Expand all groups'
+                                  : 'Collapse all groups'
+                              }
+                              title={
+                                areProjectTaskListGroupsCollapsed
+                                  ? 'Expand all groups'
+                                  : 'Collapse all groups'
+                              }
+                            />
+                          ) : null}
                           <WorkspaceActionButton
                             onClick={() => {
-                              void openProjectFolder(selectedProject)
+                              setNewProjectRequest({ token: Date.now() })
                             }}
-                            title={
-                              selectedProject.folderPath?.trim()
-                                ? `Open linked folder\n${selectedProject.folderPath}`
-                                : 'Link project folder'
-                            }
-                            aria-label={
-                              selectedProject.folderPath?.trim()
-                                ? 'Open linked project folder'
-                                : 'Link project folder'
-                            }
-                            icon={<FolderOpen size={18} />}
+                            icon={<Plus size={16} />}
+                            label="New Project"
+                            aria-label="New Project"
+                            title="New Project"
                           />
-                          <Popover
-                            open={isProjectIconPickerOpen}
-                            onOpenChange={setIsProjectIconPickerOpen}
-                          >
-                            <PopoverTrigger asChild>
-                              <WorkspaceActionButton
-                                title="Customize project icon"
-                                aria-label="Customize project icon"
-                                icon={
-                                  <NoteShapeIcon
-                                    icon={selectedProject.icon}
-                                    size={18}
-                                    className="shrink-0"
-                                  />
-                                }
-                              />
-                            </PopoverTrigger>
-                            <PopoverContent
-                              align="end"
-                              className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                            >
-                              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                Shape
-                              </div>
-                              <div className="mb-3 flex flex-wrap gap-1.5">
-                                {PROJECT_ICON_SHAPES.map((shape) => {
-                                  const isActive = selectedProject.icon.shape === shape
-                                  return (
-                                    <button
-                                      key={shape}
-                                      type="button"
-                                      className={`inline-flex items-center justify-center rounded-md border p-1.5 ${
-                                        isActive
-                                          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                                          : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
-                                      }`}
-                                      onClick={() =>
-                                        updateProjectIcon(selectedProject.id, {
-                                          ...selectedProject.icon,
-                                          shape
-                                        })
-                                      }
-                                      title={shape}
-                                    >
-                                      <NoteShapeIcon
-                                        icon={{ ...selectedProject.icon, shape }}
-                                        size={15}
-                                      />
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                Style
-                              </div>
-                              <div className="mb-3 flex gap-1.5">
-                                {PROJECT_ICON_VARIANTS.map((variant) => {
-                                  const isActive = selectedProject.icon.variant === variant
-                                  return (
-                                    <button
-                                      key={variant}
-                                      type="button"
-                                      className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                                        isActive
-                                          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-                                          : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] hover:border-[var(--accent)]'
-                                      }`}
-                                      onClick={() =>
-                                        updateProjectIcon(selectedProject.id, {
-                                          ...selectedProject.icon,
-                                          variant
-                                        })
-                                      }
-                                    >
-                                      {variant}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                Color
-                              </div>
-                              <div className="mb-3 flex flex-wrap gap-1.5">
-                                {PROJECT_ICON_COLORS.map((color) => {
-                                  const isActive = selectedProject.icon.color === color
-                                  return (
-                                    <button
-                                      key={color}
-                                      type="button"
-                                      className={`h-6 w-6 rounded-full border-2 ${
-                                        isActive
-                                          ? 'border-[var(--text)] ring-1 ring-[var(--line)]'
-                                          : 'border-transparent'
-                                      }`}
-                                      style={{ backgroundColor: color }}
-                                      onClick={() =>
-                                        updateProjectIcon(selectedProject.id, {
-                                          ...selectedProject.icon,
-                                          color
-                                        })
-                                      }
-                                      title={color}
-                                    />
-                                  )
-                                })}
-                              </div>
-                              <button
-                                type="button"
-                                className="w-full rounded-md border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-1.5 text-xs font-medium hover:border-[var(--accent)]"
-                                onClick={() => randomizeProjectIcon(selectedProject.id)}
-                              >
-                                Randomize icon
-                              </button>
-                            </PopoverContent>
-                          </Popover>
                           <WorkspaceActionButton
                             onClick={() => {
-                              void exportProject(selectedProject)
+                              if (!selectedProjectId) {
+                                return
+                              }
+                              setNewMilestoneRequest({
+                                projectId: selectedProjectId,
+                                token: Date.now()
+                              })
                             }}
-                            title="Export Project"
-                            icon={<Download size={18} />}
-                          />
-                          <WorkspaceActionButton
-                            onClick={() => toggleProjectDone(selectedProject.id)}
+                            icon={<Target size={16} />}
+                            label="New Milestone"
+                            aria-label="New Milestone"
                             title={
-                              selectedProject.status === 'completed'
-                                ? 'Reopen Project'
-                                : 'Mark Project Done'
+                              selectedProjectId
+                                ? 'New Milestone'
+                                : 'Select a project for New Milestone'
                             }
-                            aria-label={
-                              selectedProject.status === 'completed'
-                                ? 'Reopen project'
-                                : 'Mark project done'
-                            }
-                            active={selectedProject.status === 'completed'}
-                            icon={
-                              selectedProject.status === 'completed' ? (
-                                <RotateCcw size={18} />
-                              ) : (
-                                <Check size={18} />
-                              )
-                            }
+                            disabled={!selectedProjectId}
                           />
-                        </WorkspaceHeaderActionGroup>
-                        <WorkspaceHeaderActionDivider />
-                        <WorkspaceHeaderActionGroup>
-                          <WorkspaceActionButton
-                            onClick={toggleCurrentProjectFavorite}
-                            title={
-                              currentProjectIsFavorite
-                                ? 'Remove Project from Favorites'
-                                : 'Add Project to Favorites'
-                            }
-                            className={
-                              currentProjectIsFavorite
-                                ? 'border-amber-400/40 bg-amber-500/14 text-amber-500 hover:border-amber-400/50 hover:bg-amber-500/18 hover:text-amber-500'
-                                : 'hover:border-amber-400/40 hover:bg-amber-500/12 hover:text-amber-500'
-                            }
-                            icon={
-                              <Star
-                                size={18}
-                                className={currentProjectIsFavorite ? 'fill-current' : ''}
-                              />
-                            }
-                          />
-                        </WorkspaceHeaderActionGroup>
-                        <WorkspaceHeaderActionDivider />
-                        <WorkspaceHeaderActionGroup>
                           <WorkspaceActionButton
                             onClick={() => {
-                              void removeSelectedProject()
+                              if (
+                                !selectedProjectId ||
+                                !projectsWorkspaceMilestoneContext ||
+                                projectsWorkspaceMilestoneContext.projectId !== selectedProjectId
+                              ) {
+                                return
+                              }
+                              setNewSubtaskRequest({
+                                projectId: projectsWorkspaceMilestoneContext.projectId,
+                                milestoneId: projectsWorkspaceMilestoneContext.milestoneId,
+                                token: Date.now()
+                              })
                             }}
-                            title="Remove Project"
-                            icon={<Trash2 size={18} />}
+                            icon={<ListTodo size={16} />}
+                            label="New Subtask"
+                            aria-label="New Subtask"
+                            title={
+                              selectedProjectId &&
+                              projectsWorkspaceMilestoneContext &&
+                              projectsWorkspaceMilestoneContext.projectId === selectedProjectId
+                                ? 'New Subtask'
+                                : 'Open a milestone for New Subtask'
+                            }
+                            disabled={
+                              !selectedProjectId ||
+                              !projectsWorkspaceMilestoneContext ||
+                              projectsWorkspaceMilestoneContext.projectId !== selectedProjectId
+                            }
                           />
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
@@ -5563,44 +5243,18 @@ function App(): ReactElement {
                           />
                         </WorkspaceHeaderActionGroup>
                         <WorkspaceHeaderActionGroup>
-                          {useNativeMenus ? (
-                            <WorkspaceActionButton
-                              ref={calendarViewModeButtonRef}
-                              onClick={() => {
-                                void openNativeCalendarViewMenu()
-                              }}
-                              title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                              aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                              label={formatCalendarViewModeLabel(calendarViewMode)}
-                              icon={<CalendarDays size={16} />}
-                            />
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceActionButton
-                                  title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                                  aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                                  label={formatCalendarViewModeLabel(calendarViewMode)}
-                                  icon={<CalendarDays size={16} />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                <DropdownMenuRadioGroup
-                                  value={calendarViewMode}
-                                  onValueChange={(value) =>
-                                    setCalendarViewMode(value as CalendarViewMode)
-                                  }
-                                >
-                                  <DropdownMenuRadioItem value="month">
-                                    Monthly
-                                  </DropdownMenuRadioItem>
-                                  <DropdownMenuRadioItem value="week">
-                                    Weekly
-                                  </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
+                          <SelectionMenu
+                            value={calendarViewMode}
+                            onValueChange={(value) =>
+                              setCalendarViewMode(value as CalendarViewMode)
+                            }
+                            options={CALENDAR_VIEW_MODE_OPTIONS}
+                            variant="toolbar"
+                            icon={<CalendarDays size={16} aria-hidden="true" />}
+                            title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                            aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
+                            className="min-w-[10.5rem]"
+                          />
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
@@ -5696,124 +5350,47 @@ function App(): ReactElement {
                         }}
                       />
                     ) : activePage === 'projects' ? (
-                      selectedProject ? (
-                        <ProjectDetailsPage
-                          project={selectedProject}
-                          notes={notes}
-                          focusedMilestoneId={
-                            focusedMilestoneTarget?.projectId === selectedProject.id
-                              ? focusedMilestoneTarget.milestoneId
-                              : null
-                          }
-                          focusedMilestoneToken={
-                            focusedMilestoneTarget?.projectId === selectedProject.id
-                              ? focusedMilestoneTarget.token
-                              : 0
-                          }
-                          nameEditToken={
-                            projectNameEditTarget?.projectId === selectedProject.id
-                              ? projectNameEditTarget.token
-                              : 0
-                          }
-                          onRename={(nextName) => renameProject(selectedProject.id, nextName)}
-                          onUpdateSummary={(nextSummary) =>
-                            updateProjectSummary(selectedProject.id, nextSummary)
-                          }
-                          onAddMilestone={(title, dueDate) =>
-                            addMilestoneToProject(selectedProject.id, title, dueDate)
-                          }
-                          onRenameMilestone={(milestoneId, nextTitle) =>
-                            renameProjectMilestone(selectedProject.id, milestoneId, nextTitle)
-                          }
-                          onUpdateMilestoneDueDate={(milestoneId, nextDueDate) =>
-                            updateProjectMilestoneDueDate(
-                              selectedProject.id,
-                              milestoneId,
-                              nextDueDate
-                            )
-                          }
-                          onUpdateMilestoneDescription={(milestoneId, nextDescription) =>
-                            updateProjectMilestoneDescription(
-                              selectedProject.id,
-                              milestoneId,
-                              nextDescription
-                            )
-                          }
-                          onToggleMilestoneCollapsed={(milestoneId) =>
-                            toggleProjectMilestoneCollapsed(selectedProject.id, milestoneId)
-                          }
-                          onCycleMilestonePriority={(milestoneId) =>
-                            cycleProjectMilestonePriority(selectedProject.id, milestoneId)
-                          }
-                          onMoveMilestone={(milestoneId, direction) =>
-                            moveProjectMilestone(selectedProject.id, milestoneId, direction)
-                          }
-                          onReorderMilestones={(orderedMilestoneIds) =>
-                            reorderProjectMilestones(selectedProject.id, orderedMilestoneIds)
-                          }
-                          onRemoveMilestone={(milestoneId) =>
-                            removeProjectMilestone(selectedProject.id, milestoneId)
-                          }
-                          onAddSubtask={(milestoneId, title) =>
-                            addSubtaskToMilestone(selectedProject.id, milestoneId, title)
-                          }
-                          onToggleSubtask={(milestoneId, subtaskId) =>
-                            toggleMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
-                          }
-                          onCycleSubtaskPriority={(milestoneId, subtaskId) =>
-                            cycleMilestoneSubtaskPriority(
-                              selectedProject.id,
-                              milestoneId,
-                              subtaskId
-                            )
-                          }
-                          onRenameSubtask={(milestoneId, subtaskId, nextTitle) =>
-                            renameMilestoneSubtask(
-                              selectedProject.id,
-                              milestoneId,
-                              subtaskId,
-                              nextTitle
-                            )
-                          }
-                          onUpdateSubtaskDescription={(milestoneId, subtaskId, nextDescription) =>
-                            updateMilestoneSubtaskDescription(
-                              selectedProject.id,
-                              milestoneId,
-                              subtaskId,
-                              nextDescription
-                            )
-                          }
-                          onMoveSubtask={(milestoneId, subtaskId, direction) =>
-                            moveMilestoneSubtask(
-                              selectedProject.id,
-                              milestoneId,
-                              subtaskId,
-                              direction
-                            )
-                          }
-                          onReorderSubtasks={(milestoneId, orderedSubtaskIds) =>
-                            reorderMilestoneSubtasks(
-                              selectedProject.id,
-                              milestoneId,
-                              orderedSubtaskIds
-                            )
-                          }
-                          onRemoveSubtask={(milestoneId, subtaskId) =>
-                            removeMilestoneSubtask(selectedProject.id, milestoneId, subtaskId)
-                          }
-                          onCreateProjectNote={() => {
-                            void createProjectNote(selectedProject)
-                          }}
-                          onOpenNote={(relPath) => {
-                            void navigateToPage('notes')
-                            void openNote(relPath)
-                          }}
-                        />
-                      ) : (
-                        <div className="p-5 text-sm text-[var(--muted)]">
-                          Pick a project from the right panel to open details
-                        </div>
-                      )
+                      <ProjectsWorkspacePage
+                        projects={projects}
+                        favoriteProjectIds={favoriteProjectIds}
+                        selectedProjectId={selectedProjectId}
+                        activeTab={projectsWorkspaceTab}
+                        filterMode={projectFilterMode}
+                        newProjectRequest={newProjectRequest}
+                        newMilestoneRequest={newMilestoneRequest}
+                        newSubtaskRequest={newSubtaskRequest}
+                        taskListCollapseAllRequest={projectTaskListCollapseAllRequest}
+                        projectDrawerRequest={projectDrawerRequest}
+                        focusedMilestoneTarget={focusedMilestoneTarget}
+                        onFilterModeChange={setProjectFilterMode}
+                        onTaskListCollapseStateChange={setAreProjectTaskListGroupsCollapsed}
+                        onMilestoneContextChange={setProjectsWorkspaceMilestoneContext}
+                        onActiveTabChange={setProjectsWorkspaceTab}
+                        onSelectProject={selectProject}
+                        onCreateProject={createProject}
+                        onRenameProject={renameProject}
+                        onUpdateProjectSummary={updateProjectSummary}
+                        onUpdateProjectIcon={updateProjectIcon}
+                        onToggleProjectDone={toggleProjectDone}
+                        onToggleProjectFavorite={toggleProjectFavoriteById}
+                        onOpenProjectFolder={openProjectFolder}
+                        onExportProject={exportProject}
+                        onDeleteProject={removeProjectById}
+                        onAddMilestone={addMilestoneToProject}
+                        onRenameMilestone={renameProjectMilestone}
+                        onUpdateMilestoneDescription={updateProjectMilestoneDescription}
+                        onUpdateMilestoneDueDate={updateProjectMilestoneDueDate}
+                        onUpdateMilestoneStatus={updateProjectMilestoneStatus}
+                        onUpdateMilestonePriority={updateProjectMilestonePriority}
+                        onRemoveMilestone={removeProjectMilestone}
+                        onAddSubtask={addSubtaskToMilestone}
+                        onToggleSubtask={toggleMilestoneSubtask}
+                        onRenameSubtask={renameMilestoneSubtask}
+                        onUpdateSubtaskDescription={updateMilestoneSubtaskDescription}
+                        onUpdateSubtaskDueDate={updateMilestoneSubtaskDueDate}
+                        onUpdateSubtaskPriority={updateMilestoneSubtaskPriority}
+                        onRemoveSubtask={removeMilestoneSubtask}
+                      />
                     ) : activePage === 'subscriptions' ? (
                       <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
                     ) : activePage === 'weeklyPlan' ? (
@@ -5857,9 +5434,6 @@ function App(): ReactElement {
                           }}
                           onUpdateTaskSchedule={(taskId, schedule) => {
                             void updateCalendarTaskSchedule(taskId, schedule)
-                          }}
-                          onUpdateTaskReminders={(taskId, reminders) => {
-                            void updateCalendarTaskReminders(taskId, reminders)
                           }}
                         />
                       ) : (
@@ -6054,114 +5628,6 @@ function App(): ReactElement {
                               )}
                             </WorkspaceHeaderActionGroup>
                           </WorkspaceHeaderActions>
-                        ) : activePage === 'projects' ? (
-                          <WorkspaceHeaderActions>
-                            <WorkspaceHeaderActionGroup>
-                              <WorkspaceActionButton
-                                onClick={createProject}
-                                aria-label="Add new project"
-                                title="Add new project"
-                                icon={<Plus size={18} aria-hidden="true" />}
-                              />
-                            </WorkspaceHeaderActionGroup>
-                            <WorkspaceHeaderActionDivider />
-                            <WorkspaceHeaderActionGroup>
-                              {useNativeMenus ? (
-                                <WorkspaceActionButton
-                                  ref={projectFilterButtonRef}
-                                  onClick={() => {
-                                    void openNativeProjectFilterMenu()
-                                  }}
-                                  aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                  title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                  icon={<Funnel size={18} aria-hidden="true" />}
-                                />
-                              ) : (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <WorkspaceActionButton
-                                      aria-label={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                      title={`Filter projects: ${formatProjectFilterMode(projectFilterMode)}`}
-                                      icon={<Funnel size={18} aria-hidden="true" />}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuRadioGroup
-                                      value={projectFilterMode}
-                                      onValueChange={(value) =>
-                                        setProjectFilterMode(value as ProjectFilterMode)
-                                      }
-                                    >
-                                      <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="favorites">
-                                        Favorites
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="active">
-                                        In Progress
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="completed">
-                                        Done
-                                      </DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                              {useNativeMenus ? (
-                                <WorkspaceActionButton
-                                  ref={projectSortButtonRef}
-                                  onClick={() => {
-                                    void openNativeProjectSortMenu()
-                                  }}
-                                  aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                  title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                  icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                                />
-                              ) : (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <WorkspaceActionButton
-                                      aria-label={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                      title={`Sort projects: ${formatProjectSortLabel(projectSortField, projectSortDirection)}`}
-                                      icon={<ArrowUpDown size={18} aria-hidden="true" />}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuRadioGroup
-                                      value={projectSortField}
-                                      onValueChange={(value) => {
-                                        const field = value as ProjectSortField
-                                        setProjectSortField(field)
-                                        setProjectSortDirection(field === 'name' ? 'asc' : 'desc')
-                                      }}
-                                    >
-                                      <DropdownMenuRadioItem value="name">
-                                        Name
-                                      </DropdownMenuRadioItem>
-                                      <DropdownMenuRadioItem value="updated">
-                                        Updated
-                                      </DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        setProjectSortDirection((current) =>
-                                          current === 'asc' ? 'desc' : 'asc'
-                                        )
-                                      }
-                                    >
-                                      {projectSortDirection === 'asc' ? (
-                                        <ArrowUp size={12} aria-hidden="true" />
-                                      ) : (
-                                        <ArrowDown size={12} aria-hidden="true" />
-                                      )}
-                                      Direction:{' '}
-                                      {projectSortDirection === 'asc' ? 'Ascending' : 'Descending'}
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </WorkspaceHeaderActionGroup>
-                          </WorkspaceHeaderActions>
                         ) : activePage === 'calendar' ? (
                           <WorkspaceHeaderActions>
                             <WorkspaceHeaderActionGroup>
@@ -6185,42 +5651,29 @@ function App(): ReactElement {
                                       <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                                         Scope
                                       </span>
-                                      <select
+                                      <SelectionMenu
                                         value={calendarBulkScope}
-                                        onChange={(event) =>
+                                        onValueChange={(value) =>
                                           setCalendarBulkScope(
-                                            event.currentTarget
-                                              .value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
+                                            value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
                                           )
                                         }
-                                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                      >
-                                        {CALENDAR_BULK_SCOPE_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                        options={CALENDAR_BULK_SCOPE_SELECTION_OPTIONS}
+                                        aria-label="Bulk action scope"
+                                      />
                                     </label>
                                     <label className="flex flex-col gap-1">
                                       <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                                         Task Type
                                       </span>
-                                      <select
+                                      <SelectionMenu
                                         value={calendarBulkTaskType}
-                                        onChange={(event) =>
-                                          setCalendarBulkTaskType(
-                                            event.currentTarget.value as CalendarTaskType
-                                          )
+                                        onValueChange={(value) =>
+                                          setCalendarBulkTaskType(value as CalendarTaskType)
                                         }
-                                        className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)]"
-                                      >
-                                        {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                        options={CALENDAR_TASK_TYPE_SELECTION_OPTIONS}
+                                        aria-label="Bulk action task type"
+                                      />
                                     </label>
                                     <button
                                       type="button"
@@ -6293,20 +5746,6 @@ function App(): ReactElement {
                           }}
                           onMoveEntries={moveTreeEntries}
                         />
-                      ) : activePage === 'projects' ? (
-                        <ProjectPreviewList
-                          projects={projects}
-                          favoriteProjectIds={favoriteProjectIds}
-                          selectedProjectId={selectedProjectId}
-                          filter={projectSearchQuery}
-                          filterMode={projectFilterMode}
-                          sortField={projectSortField}
-                          sortDirection={projectSortDirection}
-                          onSelect={handleProjectListSelect}
-                          onDelete={(projectId) => {
-                            void removeProjectById(projectId)
-                          }}
-                        />
                       ) : activePage === 'calendar' ? (
                         <UnscheduledTaskList
                           tasks={unscheduledTasks}
@@ -6378,8 +5817,13 @@ function App(): ReactElement {
           void openNote(relPath)
         }}
         onOpenProject={(projectId) => {
-          void navigateToPage('projects')
+          setProjectsWorkspaceTab('board')
           selectProject(projectId)
+          setProjectDrawerRequest({
+            projectId,
+            token: Date.now()
+          })
+          void navigateToPage('projects')
         }}
         onOpenPage={(page) => {
           void navigateToPage(page)
@@ -6544,6 +5988,29 @@ function addIsoDays(iso: string, days: number): string {
   const date = parseIsoDate(iso)
   date.setDate(date.getDate() + days)
   return toIsoDate(date)
+}
+
+function formatCalendarViewModeLabel(mode: CalendarViewMode): string {
+  return mode === 'week' ? 'Weekly' : 'Monthly'
+}
+
+function formatCalendarWeekRangeLabel(isoDate: string): string {
+  const start = startOfWeekIso(parseIsoDate(isoDate))
+  return formatWeekRange(start, addIsoDays(start, 6))
+}
+
+function formatCalendarTopBarDateLabel(isoDate: string): string {
+  const parsed = new Date(`${isoDate}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) {
+    return isoDate
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })
 }
 
 function formatCalendarDateLabel(isoDate: string): string {
@@ -6783,17 +6250,6 @@ function scoreSubsequenceMatch(term: string, fieldText: string): number {
   return Math.max(26 - (span - term.length) - Math.floor(firstMatchIndex / 2), 8)
 }
 
-function formatProjectFilterMode(mode: ProjectFilterMode): string {
-  if (mode === 'favorites') return 'Favorites'
-  if (mode === 'active') return 'In Progress'
-  if (mode === 'completed') return 'Done'
-  return 'All'
-}
-
-function formatProjectSortLabel(field: ProjectSortField, direction: ProjectSortDirection): string {
-  return `${field === 'name' ? 'Name' : 'Updated'} ${direction === 'asc' ? '↑' : '↓'}`
-}
-
 function isNestedPath(candidate: string | null, parentPath: string): boolean {
   if (!candidate) {
     return false
@@ -6865,16 +6321,4 @@ function buildDefaultNoteName(): string {
   return `note-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
     now.getHours()
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-}
-
-function getNextTaskPriority(
-  priority: CalendarTaskType extends never ? never : 'low' | 'medium' | 'high' | undefined
-): 'low' | 'medium' | 'high' {
-  if (priority === 'low') {
-    return 'medium'
-  }
-  if (priority === 'medium') {
-    return 'high'
-  }
-  return 'low'
 }

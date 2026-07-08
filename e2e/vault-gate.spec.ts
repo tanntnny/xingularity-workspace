@@ -7,6 +7,15 @@ async function launchWithoutVault(): Promise<{
   electronApp: ElectronApplication
   page: Page
 }> {
+  return launchWithGlobalSettings({ lastVaultPath: null })
+}
+
+async function launchWithGlobalSettings(settings: {
+  lastVaultPath: string | null
+}): Promise<{
+  electronApp: ElectronApplication
+  page: Page
+}> {
   const electronApp = await electron.launch({
     args: ['.'],
     cwd: process.cwd(),
@@ -20,7 +29,7 @@ async function launchWithoutVault(): Promise<{
   await fs.mkdir(userDataPath, { recursive: true })
   await fs.writeFile(
     path.join(userDataPath, 'settings.json'),
-    JSON.stringify({ lastVaultPath: null }, null, 2),
+    JSON.stringify(settings, null, 2),
     'utf-8'
   )
 
@@ -46,6 +55,27 @@ test.describe('vault gate', () => {
       await expect(page.getByTestId('sidebar-page:projects')).toBeDisabled()
       await expect(page.getByTestId('sidebar-page:settings')).toBeDisabled()
       await expect(page.getByText('No previous vault remembered on this device.')).toBeVisible()
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('clears a stale remembered vault and falls back to the vault gate', async () => {
+    const staleVaultPath = path.join(os.tmpdir(), 'xingularity-missing-vault-gate')
+    await fs.rm(staleVaultPath, { recursive: true, force: true })
+
+    const { electronApp, page } = await launchWithGlobalSettings({
+      lastVaultPath: staleVaultPath
+    })
+
+    try {
+      await expect(page.getByTestId('vault-required-page')).toBeVisible()
+      await expect(page.getByText('No previous vault remembered on this device.')).toBeVisible()
+      await expect(page.getByText(`Could not restore previous vault at ${staleVaultPath}`)).toHaveCount(0)
+
+      const userDataPath = await electronApp.evaluate(({ app }) => app.getPath('userData'))
+      const raw = await fs.readFile(path.join(userDataPath, 'settings.json'), 'utf-8')
+      expect(JSON.parse(raw)).toMatchObject({ lastVaultPath: null })
     } finally {
       await electronApp.close()
     }

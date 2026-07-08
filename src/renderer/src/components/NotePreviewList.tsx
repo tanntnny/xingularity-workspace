@@ -126,7 +126,6 @@ export function NotePreviewList({
           <NoteSection
             title="Favorites"
             icon={<Heart size={16} aria-hidden="true" />}
-            iconContainerClassName="bg-amber-500/12 text-amber-500"
             description={`${favoriteNotes.length} starred notes in the current filter`}
             emptyLabel="No favorite notes yet"
             notes={favoriteNotes}
@@ -145,7 +144,6 @@ export function NotePreviewList({
           <NoteSection
             title="All Notes"
             icon={<FileText size={16} aria-hidden="true" />}
-            iconContainerClassName="bg-slate-500/12 text-slate-600 dark:text-slate-300"
             description={`${allNotes.length} notes available`}
             emptyLabel="No other notes found"
             notes={allNotes}
@@ -170,7 +168,6 @@ export function NotePreviewList({
 function NoteSection({
   title,
   icon,
-  iconContainerClassName,
   description,
   emptyLabel,
   notes,
@@ -188,7 +185,6 @@ function NoteSection({
 }: {
   title: string
   icon: ReactElement
-  iconContainerClassName: string
   description: string
   emptyLabel: string
   notes: NoteListItem[]
@@ -210,12 +206,7 @@ function NoteSection({
 }): ReactElement {
   return (
     <WorkspacePanelSection>
-      <WorkspacePanelSectionHeader
-        icon={icon}
-        iconContainerClassName={iconContainerClassName}
-        heading={title}
-        description={description}
-      />
+      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {notes.length === 0 ? (
         <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
       ) : (
@@ -290,7 +281,7 @@ function NoteSection({
                 </div>
                 <div className="truncate text-xs text-[var(--muted)]">{note.relPath}</div>
                 <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
-                  <Badge variant="neutral">
+                  <Badge variant="neutral" tone="subtle">
                     <Pencil size={12} aria-hidden="true" />
                     {updatedLabel}
                   </Badge>
@@ -298,7 +289,11 @@ function NoteSection({
                     {visibleTags.map((tag) => (
                       <TagChip key={`${note.relPath}-${tag}`} tag={tag} />
                     ))}
-                    {hiddenTagCount > 0 ? <Badge variant="neutral">+{hiddenTagCount}</Badge> : null}
+                    {hiddenTagCount > 0 ? (
+                      <Badge variant="neutral" tone="neutral">
+                        +{hiddenTagCount}
+                      </Badge>
+                    ) : null}
                   </span>
                 </div>
               </div>

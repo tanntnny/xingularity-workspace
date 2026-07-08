@@ -1,5 +1,4 @@
 import type { ProfileColor } from './profileColors'
-import type { GenerativeUiArtifact, SavedGenerativeUiArtifact } from './generativeUi'
 
 export type Maybe<T> = T | null
 
@@ -37,10 +36,24 @@ export interface NoteRecord {
 }
 
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
+export type ProjectIconSet = 'shape' | 'lucide'
+export type ProjectIconSymbol =
+  | 'briefcase'
+  | 'folder-kanban'
+  | 'rocket'
+  | 'lightbulb'
+  | 'target'
+  | 'book-open'
+  | 'package'
+  | 'flask-conical'
 export type ProjectIconVariant = 'filled' | 'outlined'
+export type ProjectIconGlyph = ProjectIconShape | ProjectIconSymbol
 
 export interface ProjectIconStyle {
-  shape: ProjectIconShape
+  set?: ProjectIconSet
+  glyph?: ProjectIconGlyph
+  // Compatibility alias for legacy stored shape icons.
+  shape?: ProjectIconShape
   variant: ProjectIconVariant
   color: string
 }
@@ -990,14 +1003,6 @@ export interface RendererVaultApi {
     saveSession: (session: ExcalidrawSession) => Promise<ExcalidrawSession>
     deleteSession: (sessionId: string) => Promise<void>
     importLegacySessions: () => Promise<LegacyExcalidrawImportResult>
-  }
-  generativeUi: {
-    listArtifacts: () => Promise<SavedGenerativeUiArtifact[]>
-    saveArtifact: (input: {
-      artifact: GenerativeUiArtifact
-      id?: string
-    }) => Promise<SavedGenerativeUiArtifact>
-    deleteArtifact: (id: string) => Promise<void>
   }
   settings: {
     get: () => Promise<AppSettings>

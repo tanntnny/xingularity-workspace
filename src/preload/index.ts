@@ -109,11 +109,6 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(IPC_CHANNELS.excalidrawDeleteSession, sessionId),
     importLegacySessions: () => ipcRenderer.invoke(IPC_CHANNELS.excalidrawImportLegacySessions)
   },
-  generativeUi: {
-    listArtifacts: () => ipcRenderer.invoke(IPC_CHANNELS.generativeUiListArtifacts),
-    saveArtifact: (input) => ipcRenderer.invoke(IPC_CHANNELS.generativeUiSaveArtifact, input),
-    deleteArtifact: (id) => ipcRenderer.invoke(IPC_CHANNELS.generativeUiDeleteArtifact, id)
-  },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (next, options) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next, options)

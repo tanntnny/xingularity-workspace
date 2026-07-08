@@ -57,6 +57,7 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
+import { Select } from '../components/ui/select'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface SchedulesPageProps {
@@ -1022,8 +1023,8 @@ function ScheduleForm({
         <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
           Trigger
         </label>
-        <select
-          className="mt-1.5 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+        <Select
+          className="mt-1.5"
           value={triggerType}
           onChange={(e) =>
             updateDraft('trigger', {
@@ -1037,7 +1038,7 @@ function ScheduleForm({
               {TRIGGER_LABELS[type]}
             </option>
           ))}
-        </select>
+        </Select>
 
         {triggerType === 'daily' && (
           <div className="mt-3 flex flex-wrap items-center gap-3">

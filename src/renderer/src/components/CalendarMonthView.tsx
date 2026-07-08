@@ -22,6 +22,7 @@ import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { Input } from './ui/input'
+import { Select } from './ui/select'
 import {
   buildCalendarEvents,
   type CalendarEventInput,
@@ -485,8 +486,11 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="calendar-full p-4">
-      <div className="workspace-subtle-surface relative rounded-2xl">
+    <section className="calendar-full p-4" data-testid="calendar-month-view">
+      <div
+        className="workspace-subtle-surface relative overflow-hidden rounded-lg border border-[var(--text)]"
+        data-testid="calendar-month-shell"
+      >
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -767,31 +771,31 @@ export function TaskEditDialog({
             <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Priority
             </label>
-            <select
+            <Select
               value={priority}
               onChange={(event) => setPriority(event.target.value as TaskPriority)}
-              className="workspace-subtle-control mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+              className="mt-1 w-full"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Type
             </label>
-            <select
+            <Select
               value={taskType}
               onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
-              className="workspace-subtle-control mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+              className="mt-1 w-full"
             >
               {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

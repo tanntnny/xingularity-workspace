@@ -1,7 +1,6 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
-import { GenerativeUiArtifactSchema } from '../shared/generativeUi'
 import { IPC_CHANNELS } from '../shared/ipc'
 import {
   CALENDAR_TASK_TYPE_VALUES,
@@ -108,10 +107,6 @@ const excalidrawSessionSchema = z.object({
   updatedAt: z.string().min(1).max(100),
   scene: excalidrawSceneSchema
 })
-const generativeUiSaveArtifactSchema = z.object({
-  id: z.string().min(1).max(200).optional(),
-  artifact: GenerativeUiArtifactSchema
-})
 const approveToolInputSchema = z.object({
   requestId: z.string().min(1).max(200).optional(),
   stepId: z.string().min(1).max(200),
@@ -154,7 +149,25 @@ const calendarTaskSchema = z.object({
 })
 
 const projectIconSchema = z.object({
-  shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']),
+  set: z.enum(['shape', 'lucide']).optional(),
+  glyph: z
+    .enum([
+      'circle',
+      'square',
+      'triangle',
+      'diamond',
+      'hex',
+      'briefcase',
+      'folder-kanban',
+      'rocket',
+      'lightbulb',
+      'target',
+      'book-open',
+      'package',
+      'flask-conical'
+    ])
+    .optional(),
+  shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']).optional(),
   variant: z.enum(['filled', 'outlined']),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
@@ -528,18 +541,6 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.excalidrawImportLegacySessions, async () => {
     return runtime.importLegacyExcalidrawSessions()
-  })
-
-  handleIpc(IPC_CHANNELS.generativeUiListArtifacts, async () => {
-    return runtime.listGenerativeUiArtifacts()
-  })
-
-  handleIpc(IPC_CHANNELS.generativeUiSaveArtifact, async (_event, input: unknown) => {
-    return runtime.saveGenerativeUiArtifact(generativeUiSaveArtifactSchema.parse(input))
-  })
-
-  handleIpc(IPC_CHANNELS.generativeUiDeleteArtifact, async (_event, id: unknown) => {
-    await runtime.deleteGenerativeUiArtifact(sessionIdSchema.parse(id))
   })
 
   handleIpc(IPC_CHANNELS.agentChatApproveTool, async (_event, input: unknown) => {

@@ -149,18 +149,6 @@ export function getLegacyVaultAgentRunsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'agent-runs.json')
 }
 
-export function getVaultGenerativeUiArtifactsPath(rootPath: string): string {
-  return path.join(rootPath, 'generative-ui-artifacts.json')
-}
-
-export function getLegacyPageVaultGenerativeUiArtifactsPath(rootPath: string): string {
-  return path.join(rootPath, 'generative-ui', 'artifacts.json')
-}
-
-export function getLegacyVaultGenerativeUiArtifactsPath(rootPath: string): string {
-  return path.join(getVaultSystemDir(rootPath), 'generative-ui-artifacts.json')
-}
-
 export function getVaultExcalidrawSessionsPath(rootPath: string): string {
   return path.join(rootPath, 'excalidraw-sessions.json')
 }

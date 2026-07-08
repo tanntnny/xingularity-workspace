@@ -14,6 +14,7 @@ import type {
   SubscriptionStatus,
   UpdateSubscriptionInput
 } from '../../../shared/types'
+import type { UiTone } from '../lib/uiTone'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Field } from '../components/ui/field'
@@ -275,27 +276,27 @@ function formatRelativeRenewal(value?: string): string {
   return `In ${diffDays}d`
 }
 
-function statusTone(status: SubscriptionStatus): string {
+function statusTone(status: SubscriptionStatus): UiTone {
   if (status === 'active') {
-    return 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200'
+    return 'success'
   }
   if (status === 'paused') {
-    return 'border-amber-500/30 bg-amber-500/12 text-amber-100'
+    return 'warning'
   }
   if (status === 'cancelled') {
-    return 'border-slate-500/30 bg-slate-500/12 text-slate-200'
+    return 'danger'
   }
-  return 'border-neutral-500/30 bg-neutral-500/12 text-neutral-200'
+  return 'neutral'
 }
 
-function reviewTone(flag: SubscriptionReviewFlag): string {
+function reviewTone(flag: SubscriptionReviewFlag): UiTone {
   if (flag === 'unused' || flag === 'duplicate') {
-    return 'border-rose-500/30 bg-rose-500/12 text-rose-100'
+    return 'danger'
   }
   if (flag === 'expensive' || flag === 'review') {
-    return 'border-amber-500/30 bg-amber-500/12 text-amber-100'
+    return 'warning'
   }
-  return 'border-slate-500/30 bg-slate-500/12 text-slate-200'
+  return 'neutral'
 }
 
 function buildSubscriptionTooltip(record: SubscriptionRecord): string {
@@ -1096,10 +1097,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                               {(record.tags ?? []).length ? (
                                 <div className="flex flex-wrap gap-1">
                                   {(record.tags ?? []).slice(0, 3).map((tag) => (
-                                    <Badge
-                                      key={tag}
-                                      className="workspace-subtle-control border-[var(--line)] text-[var(--muted)]"
-                                    >
+                                    <Badge key={tag} variant="neutral" tone="subtle">
                                       {tag}
                                     </Badge>
                                   ))}
@@ -1125,9 +1123,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
-                              <Badge className={statusTone(record.status)}>{record.status}</Badge>
+                              <Badge tone={statusTone(record.status)}>{record.status}</Badge>
                               {(record.reviewFlag ?? 'none') !== 'none' ? (
-                                <Badge className={reviewTone(record.reviewFlag ?? 'none')}>
+                                <Badge tone={reviewTone(record.reviewFlag ?? 'none')}>
                                   {record.reviewFlag}
                                 </Badge>
                               ) : null}

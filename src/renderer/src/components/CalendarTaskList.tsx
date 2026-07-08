@@ -32,15 +32,8 @@ import {
   ContextMenuTrigger
 } from './ui/context-menu'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from './ui/dropdown-menu'
+import { SelectionMenu, type SelectionMenuOption } from './ui/selection-menu'
+import { Select } from './ui/select'
 
 type TaskFilterMode = 'all' | 'pending' | 'completed'
 type ItemTypeFilter = 'all' | 'tasks' | 'milestones' | 'subtasks'
@@ -54,9 +47,6 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; sort
 }
 
 const TYPE_SORT_ORDER = { task: 1, milestone: 2, subtask: 3 }
-const iconActionButtonClass =
-  'inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text)]'
-
 interface CalendarTaskListProps {
   selectedDate: string
   tasks: CalendarTask[]
@@ -337,104 +327,87 @@ export function CalendarTaskList({
   const milestonesCount = calendarItems.filter((i) => i.type === 'milestone').length
   const subtasksCount = calendarItems.filter((i) => i.type === 'subtask').length
   const totalItems = tasks.length + milestonesCount + subtasksCount
+  const itemTypeOptions: SelectionMenuOption[] = [
+    { value: 'all', label: `All (${totalItems})` },
+    { value: 'tasks', label: `Tasks (${tasks.length})` },
+    { value: 'milestones', label: `Milestones (${milestonesCount})` },
+    { value: 'subtasks', label: `Subtasks (${subtasksCount})` }
+  ]
+  const taskFilterOptions: SelectionMenuOption[] = [
+    {
+      value: 'all',
+      label: `All (${tasks.length + calendarItems.filter((i) => i.type !== 'task').length})`
+    },
+    {
+      value: 'pending',
+      label: `Pending (${pendingCount + calendarItems.filter((i) => !i.completed).length})`
+    },
+    {
+      value: 'completed',
+      label: `Completed (${completedCount + calendarItems.filter((i) => i.completed).length})`
+    }
+  ]
+  const sortOptions: SelectionMenuOption[] = [
+    { value: 'name', label: 'Name' },
+    { value: 'created', label: 'Created' },
+    { value: 'status', label: 'Status' },
+    { value: 'priority', label: 'Priority' },
+    { value: 'type', label: 'Type' }
+  ]
 
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={iconActionButtonClass}
-              aria-label={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
-              title={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
-            >
-              <Eye size={14} aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={itemTypeFilter}
-              onValueChange={(value) => setItemTypeFilter(value as ItemTypeFilter)}
-            >
-              <DropdownMenuRadioItem value="all">All ({totalItems})</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="tasks">Tasks ({tasks.length})</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="milestones">
-                Milestones ({milestonesCount})
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="subtasks">
-                Subtasks ({subtasksCount})
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={iconActionButtonClass}
-              aria-label={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
-              title={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
-            >
-              <Funnel size={14} aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={filterMode}
-              onValueChange={(value) => setFilterMode(value as TaskFilterMode)}
-            >
-              <DropdownMenuRadioItem value="all">
-                All ({tasks.length + calendarItems.filter((i) => i.type !== 'task').length})
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="pending">
-                Pending ({pendingCount + calendarItems.filter((i) => !i.completed).length})
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="completed">
-                Completed ({completedCount + calendarItems.filter((i) => i.completed).length})
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={iconActionButtonClass}
-              aria-label={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
-              title={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
-            >
-              <ArrowUpDown size={14} aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuRadioGroup
-              value={sortField}
-              onValueChange={(value) => selectSortField(value as TaskSortField)}
-            >
-              <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="created">Created</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="status">Status</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="priority">Priority</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="type">Type</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }
-            >
-              {sortDirection === 'asc' ? (
-                <ArrowUp size={12} aria-hidden="true" />
-              ) : (
-                <ArrowDown size={12} aria-hidden="true" />
-              )}
-              Direction: {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="flex flex-wrap items-center gap-2">
+        <SelectionMenu
+          value={itemTypeFilter}
+          onValueChange={(value) => setItemTypeFilter(value as ItemTypeFilter)}
+          options={itemTypeOptions}
+          selectedLabel={formatItemTypeFilter(itemTypeFilter)}
+          variant="toolbar"
+          icon={<Eye size={14} aria-hidden="true" />}
+          aria-label={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
+          title={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
+          className="min-w-[8.5rem]"
+        />
+        <SelectionMenu
+          value={filterMode}
+          onValueChange={(value) => setFilterMode(value as TaskFilterMode)}
+          options={taskFilterOptions}
+          selectedLabel={formatTaskFilterMode(filterMode)}
+          variant="toolbar"
+          icon={<Funnel size={14} aria-hidden="true" />}
+          aria-label={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
+          title={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
+          className="min-w-[8.5rem]"
+        />
+        <SelectionMenu
+          value={sortField}
+          onValueChange={(value) => selectSortField(value as TaskSortField)}
+          options={sortOptions}
+          selectedLabel={formatTaskSortField(sortField)}
+          variant="toolbar"
+          icon={<ArrowUpDown size={14} aria-hidden="true" />}
+          aria-label={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
+          title={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
+          className="min-w-[8rem]"
+        />
+        <button
+          type="button"
+          data-no-ripple
+          className="workspace-subtle-control inline-flex h-8 items-center gap-2 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)] transition-colors hover:text-[var(--text)]"
+          aria-label={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
+          title={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
+          onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
+        >
+          <span className="flex items-center gap-2">
+            {sortDirection === 'asc' ? (
+              <ArrowUp size={14} aria-hidden="true" />
+            ) : (
+              <ArrowDown size={14} aria-hidden="true" />
+            )}
+            <span>{sortDirection === 'asc' ? 'Ascending' : 'Descending'}</span>
+          </span>
+        </button>
       </div>
       <h2 className="text-lg font-semibold text-[var(--text)]">
         Items for {formatCalendarDateHeading(selectedDate)}
@@ -482,7 +455,7 @@ export function CalendarTaskList({
                     <button
                       type="button"
                       onClick={() => onToggle(task.id)}
-                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                         task.completed
                           ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
                           : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
@@ -712,19 +685,19 @@ export function CalendarTaskList({
                                     }
                                     className="w-16 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
                                   />
-                                  <select
+                                  <Select
                                     value={newReminderType}
                                     onChange={(e) =>
                                       setNewReminderType(
                                         e.target.value as 'minutes' | 'hours' | 'days'
                                       )
                                     }
-                                    className="flex-1 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                                    className="min-w-[7.5rem] flex-1 text-xs"
                                   >
                                     <option value="minutes">minutes</option>
                                     <option value="hours">hours</option>
                                     <option value="days">days</option>
-                                  </select>
+                                  </Select>
                                   <button
                                     type="button"
                                     onClick={() => handleAddReminder(task.id, task)}
@@ -783,9 +756,7 @@ export function CalendarTaskList({
                     </ContextMenuSubContent>
                   </ContextMenuSub>
                   <ContextMenuSeparator />
-                  <ContextMenuDestructiveItem
-                    onClick={() => onDelete(task.id)}
-                  >
+                  <ContextMenuDestructiveItem onClick={() => onDelete(task.id)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                     <ContextMenuShortcut keys={['cmd', 'backspace']} />
@@ -899,18 +870,21 @@ function formatTaskFilterMode(value: TaskFilterMode): string {
 }
 
 function formatTaskSortLabel(field: TaskSortField, direction: TaskSortDirection): string {
-  const label =
-    field === 'name'
-      ? 'Name'
-      : field === 'created'
-        ? 'Created'
-        : field === 'status'
-          ? 'Status'
-          : field === 'priority'
-            ? 'Priority'
-            : 'Type'
+  const label = formatTaskSortField(field)
 
   return `${label} ${direction === 'asc' ? '↑' : '↓'}`
+}
+
+function formatTaskSortField(field: TaskSortField): string {
+  return field === 'name'
+    ? 'Name'
+    : field === 'created'
+      ? 'Created'
+      : field === 'status'
+        ? 'Status'
+        : field === 'priority'
+          ? 'Priority'
+          : 'Type'
 }
 
 function formatCalendarDateHeading(isoDate: string): string {

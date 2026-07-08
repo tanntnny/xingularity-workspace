@@ -17,7 +17,6 @@ export interface AppPlatformCapabilities {
   supportsDesktopImport: boolean
   supportsDesktopAutomation: boolean
   supportsAgentChat: boolean
-  supportsGenerativeUi: boolean
   supportsKnowledgeGraph: boolean
   supportsSubscriptions: boolean
   supportsWeeklyPlan: boolean
@@ -38,7 +37,6 @@ const DESKTOP_CAPABILITIES: AppPlatformCapabilities = {
   supportsDesktopImport: true,
   supportsDesktopAutomation: true,
   supportsAgentChat: true,
-  supportsGenerativeUi: true,
   supportsKnowledgeGraph: true,
   supportsSubscriptions: true,
   supportsWeeklyPlan: true
@@ -51,7 +49,6 @@ const MOBILE_CAPABILITIES: AppPlatformCapabilities = {
   supportsDesktopImport: false,
   supportsDesktopAutomation: false,
   supportsAgentChat: false,
-  supportsGenerativeUi: false,
   supportsKnowledgeGraph: false,
   supportsSubscriptions: false,
   supportsWeeklyPlan: false

@@ -6,6 +6,11 @@ import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { setCalendarTaskDragPreview } from '../lib/calendarTaskDragPreview'
+import {
+  clearCalendarTaskDragSession,
+  setCalendarTaskDragSession
+} from '../lib/calendarTaskDragSession'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
@@ -175,25 +180,14 @@ export function UnscheduledTaskList({
                       setHoveredTaskCard(null)
                       e.dataTransfer.setData('text/plain', `move:${task.id}`)
                       e.dataTransfer.effectAllowed = 'move'
-                      const dragPreview = e.currentTarget.cloneNode(true)
-                      if (dragPreview instanceof HTMLElement) {
-                        const rect = e.currentTarget.getBoundingClientRect()
-                        dragPreview.style.position = 'fixed'
-                        dragPreview.style.top = '-9999px'
-                        dragPreview.style.left = '-9999px'
-                        dragPreview.style.width = `${rect.width}px`
-                        dragPreview.style.pointerEvents = 'none'
-                        dragPreview.style.transform = 'none'
-                        dragPreview.style.opacity = '1'
-                        dragPreview.classList.add('calendar-task-drag-preview')
-                        document.body.appendChild(dragPreview)
-                        e.dataTransfer.setDragImage(
-                          dragPreview,
-                          e.clientX - rect.left,
-                          e.clientY - rect.top
-                        )
-                        window.setTimeout(() => dragPreview.remove(), 0)
-                      }
+                      setCalendarTaskDragSession({
+                        taskId: task.id,
+                        pointerOffsetMinutes: 0
+                      })
+                      setCalendarTaskDragPreview(e)
+                    }}
+                    onDragEnd={() => {
+                      clearCalendarTaskDragSession()
                     }}
                     onClick={() => {
                       setHoveredTaskCard(null)
@@ -254,13 +248,13 @@ export function UnscheduledTaskList({
           onRename={onRename}
           onUpdateTaskPriority={onUpdatePriority}
           onUpdateTaskType={onUpdateTaskType}
-          onUpdateTaskTime={onUpdateTime}
-          onRescheduleTask={(taskId, date) => {
-            if (date) {
-              onScheduleTask(taskId, date)
-              return
+          onUpdateTaskSchedule={(taskId, schedule) => {
+            if (schedule.date) {
+              onScheduleTask(taskId, schedule.date)
+            } else {
+              onUnscheduleTask?.(taskId)
             }
-            onUnscheduleTask?.(taskId)
+            onUpdateTime(taskId, schedule.time)
           }}
           onDelete={onDelete}
         />

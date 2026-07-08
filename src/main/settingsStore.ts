@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { createRandomProjectIcon } from '../shared/projectIcons'
+import { normalizeProjectIcon } from '../shared/projectIcons'
 import { normalizeProfileColor } from '../shared/profileColors'
 import {
   AppSettings,
@@ -176,7 +176,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     calendarTasks: Array.isArray(parsed.calendarTasks)
       ? parsed.calendarTasks
       : defaults.calendarTasks,
-    projectIcons: parsed.projectIcons ?? defaults.projectIcons,
+    projectIcons: normalizeProjectIcons(parsed.projectIcons),
     projects: Array.isArray(parsed.projects)
       ? parsed.projects.flatMap((project) => normalizeProject(project))
       : defaults.projects,
@@ -379,16 +379,28 @@ function normalizeProject(input: unknown): Project[] {
           : new Date().toISOString(),
       progress,
       milestones,
-      icon:
-        candidate.icon &&
-        typeof candidate.icon === 'object' &&
-        (candidate.icon as Project['icon']).shape &&
-        (candidate.icon as Project['icon']).variant &&
-        typeof (candidate.icon as Project['icon']).color === 'string'
-          ? (candidate.icon as Project['icon'])
-          : createRandomProjectIcon(name)
+      icon: normalizeProjectIcon(
+        candidate.icon && typeof candidate.icon === 'object'
+          ? (candidate.icon as Partial<Project['icon']>)
+          : null,
+        name
+      )
     }
   ]
+}
+
+function normalizeProjectIcons(
+  input: Record<string, AppSettings['projectIcons'][string]> | null | undefined
+): AppSettings['projectIcons'] {
+  if (!input || typeof input !== 'object') {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(input)
+      .filter(([projectId]) => projectId.trim().length > 0)
+      .map(([projectId, icon]) => [projectId, normalizeProjectIcon(icon, projectId)])
+  )
 }
 
 function isLegacyAppSettings(value: unknown): value is AppSettings {
@@ -490,6 +502,19 @@ function forgetGlobalVault(settings: GlobalSettings, rootPath: string): GlobalSe
   return normalizeGlobalSettings({
     lastVaultPath: settings.lastVaultPath === nextRootPath ? null : settings.lastVaultPath,
     savedVaults: settings.savedVaults.filter((item) => item.rootPath !== nextRootPath)
+  })
+}
+
+function clearRememberedGlobalVault(settings: GlobalSettings, rootPath: string): GlobalSettings {
+  const nextRootPath = path.resolve(rootPath)
+
+  if (settings.lastVaultPath !== nextRootPath) {
+    return settings
+  }
+
+  return normalizeGlobalSettings({
+    lastVaultPath: null,
+    savedVaults: settings.savedVaults
   })
 }
 
@@ -612,6 +637,12 @@ export class SettingsStore {
 
   async forgetVault(rootPath: string): Promise<GlobalSettings> {
     const next = forgetGlobalVault(await this.readGlobal(), rootPath)
+    await this.writeGlobal(next)
+    return next
+  }
+
+  async clearRememberedVault(rootPath: string): Promise<GlobalSettings> {
+    const next = clearRememberedGlobalVault(await this.readGlobal(), rootPath)
     await this.writeGlobal(next)
     return next
   }

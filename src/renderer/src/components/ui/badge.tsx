@@ -1,10 +1,11 @@
 import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 
+import { type UiTone, mergeUiToneStyle } from '../../lib/uiTone'
 import { cn } from '../../lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2',
+  'inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2',
   {
     variants: {
       variant: {
@@ -35,8 +36,24 @@ const badgeVariants = cva(
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps): React.ReactElement {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />
+function Badge({
+  className,
+  variant,
+  style,
+  tone,
+  ...props
+}: BadgeProps & { tone?: UiTone }): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        badgeVariants({ variant }),
+        tone && 'border-[var(--ui-tone-border)] bg-[var(--ui-tone-bg)] text-[var(--ui-tone-text)]',
+        className
+      )}
+      style={mergeUiToneStyle(tone, style)}
+      {...props}
+    />
+  )
 }
 
 export { Badge, badgeVariants }
