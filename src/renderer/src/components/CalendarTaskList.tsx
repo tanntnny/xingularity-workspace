@@ -34,6 +34,7 @@ import {
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { SelectionMenu, type SelectionMenuOption } from './ui/selection-menu'
 import { Select } from './ui/select'
+import { TabMenuCountBadge } from './ui/tab-menu'
 
 type TaskFilterMode = 'all' | 'pending' | 'completed'
 type ItemTypeFilter = 'all' | 'tasks' | 'milestones' | 'subtasks'
@@ -327,24 +328,39 @@ export function CalendarTaskList({
   const milestonesCount = calendarItems.filter((i) => i.type === 'milestone').length
   const subtasksCount = calendarItems.filter((i) => i.type === 'subtask').length
   const totalItems = tasks.length + milestonesCount + subtasksCount
+  const renderCountLabel = (label: string, count: number): ReactElement => (
+    <span className="inline-flex items-center gap-2">
+      <span>{label}</span>
+      <TabMenuCountBadge count={count} />
+    </span>
+  )
   const itemTypeOptions: SelectionMenuOption[] = [
-    { value: 'all', label: `All (${totalItems})` },
-    { value: 'tasks', label: `Tasks (${tasks.length})` },
-    { value: 'milestones', label: `Milestones (${milestonesCount})` },
-    { value: 'subtasks', label: `Subtasks (${subtasksCount})` }
+    { value: 'all', label: renderCountLabel('All', totalItems) },
+    { value: 'tasks', label: renderCountLabel('Tasks', tasks.length) },
+    { value: 'milestones', label: renderCountLabel('Milestones', milestonesCount) },
+    { value: 'subtasks', label: renderCountLabel('Subtasks', subtasksCount) }
   ]
   const taskFilterOptions: SelectionMenuOption[] = [
     {
       value: 'all',
-      label: `All (${tasks.length + calendarItems.filter((i) => i.type !== 'task').length})`
+      label: renderCountLabel(
+        'All',
+        tasks.length + calendarItems.filter((i) => i.type !== 'task').length
+      )
     },
     {
       value: 'pending',
-      label: `Pending (${pendingCount + calendarItems.filter((i) => !i.completed).length})`
+      label: renderCountLabel(
+        'Pending',
+        pendingCount + calendarItems.filter((i) => !i.completed).length
+      )
     },
     {
       value: 'completed',
-      label: `Completed (${completedCount + calendarItems.filter((i) => i.completed).length})`
+      label: renderCountLabel(
+        'Completed',
+        completedCount + calendarItems.filter((i) => i.completed).length
+      )
     }
   ]
   const sortOptions: SelectionMenuOption[] = [

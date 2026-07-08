@@ -24,19 +24,35 @@ export const PROJECT_ICON_SYMBOLS: ProjectIconSymbol[] = [
   'target',
   'book-open',
   'package',
-  'flask-conical'
+  'flask-conical',
+  'sparkles',
+  'pen-tool',
+  'monitor',
+  'megaphone',
+  'globe',
+  'shield',
+  'camera',
+  'calendar'
 ]
 export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled', 'outlined']
 
 export const PROJECT_ICON_COLORS: string[] = [
+  '#0ea5e9',
+  '#0891b2',
   '#2563eb',
-  '#0f766e',
-  '#c2410c',
-  '#be123c',
+  '#4f46e5',
   '#7c3aed',
-  '#334155',
+  '#db2777',
+  '#be123c',
+  '#ea580c',
+  '#c2410c',
+  '#d97706',
+  '#b45309',
+  '#65a30d',
   '#16a34a',
-  '#d97706'
+  '#0f766e',
+  '#475569',
+  '#334155'
 ]
 
 export const DEFAULT_PROJECT_ICON_COLOR = PROJECT_ICON_COLORS[0]

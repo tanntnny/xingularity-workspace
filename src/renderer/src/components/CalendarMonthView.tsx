@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -19,6 +19,12 @@ import {
   TaskReminder
 } from '../../../shared/types'
 import { CalendarTaskCard } from './CalendarTaskCard'
+import {
+  CalendarMilestoneCard,
+  CalendarMilestoneDetails,
+  CalendarMilestoneHoverCard,
+  CalendarMilestoneDialog
+} from './CalendarMilestoneDetails'
 import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { Input } from './ui/input'
@@ -95,6 +101,11 @@ export function CalendarMonthView({
     x: number
     y: number
   } | null>(null)
+  const [hoveredMilestoneCard, setHoveredMilestoneCard] = useState<{
+    milestone: CalendarMilestoneDetails
+    x: number
+    y: number
+  } | null>(null)
   const [calendarContextMenu, setCalendarContextMenu] = useState<{
     taskId: string
     x: number
@@ -103,6 +114,7 @@ export function CalendarMonthView({
   } | null>(null)
   const [isInteracting, setIsInteracting] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [selectedMilestone, setSelectedMilestone] = useState<CalendarMilestoneDetails | null>(null)
   const contextMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const contextMenuNonceRef = useRef(0)
   const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
@@ -119,7 +131,7 @@ export function CalendarMonthView({
     new WeakMap<
       HTMLElement,
       {
-        onContextMenu: (event: MouseEvent) => void
+        onContextMenu?: (event: MouseEvent) => void
         onMouseMove: (event: MouseEvent) => void
         onMouseLeave: () => void
         contextMenuTargets: HTMLElement[]
@@ -343,16 +355,32 @@ export function CalendarMonthView({
       return
     }
 
-    const task = tasksById[hoverInfo.event.id]
-    if (!task) {
-      return
-    }
-
     const { x, y } = getCalendarTaskHoverPosition(
       hoverInfo.jsEvent.clientX,
       hoverInfo.jsEvent.clientY
     )
 
+    const source = String(hoverInfo.event.extendedProps.source ?? 'task')
+    if (source === 'milestone') {
+      const milestone = getMilestoneDetailsFromEvent(hoverInfo.event)
+      if (!milestone) {
+        return
+      }
+      setHoveredTaskCard(null)
+      setHoveredMilestoneCard({
+        milestone,
+        x,
+        y
+      })
+      return
+    }
+
+    const task = tasksById[hoverInfo.event.id]
+    if (!task) {
+      return
+    }
+
+    setHoveredMilestoneCard(null)
     setHoveredTaskCard({
       task,
       x,
@@ -362,36 +390,48 @@ export function CalendarMonthView({
 
   const handleEventMouseLeave = (): void => {
     setHoveredTaskCard(null)
+    setHoveredMilestoneCard(null)
   }
 
   const handleEventDidMount = (mountInfo: EventMountArg): void => {
     const source = String(mountInfo.event.extendedProps.source ?? 'task')
-    if (source !== 'task') {
-      return
-    }
-
     const taskId = mountInfo.event.id
-    const onContextMenu = (event: MouseEvent): void => {
-      event.preventDefault()
-      event.stopPropagation()
-      contextMenuNonceRef.current += 1
-      setHoveredTaskCard(null)
-      setCalendarContextMenu({
-        taskId,
-        x: event.clientX,
-        y: event.clientY,
-        nonce: contextMenuNonceRef.current
-      })
-    }
     const onMouseMove = (event: MouseEvent): void => {
       if (isInteractingRef.current) {
+        return
+      }
+      const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+      if (source === 'milestone') {
+        const milestone = getMilestoneDetailsFromEvent(mountInfo.event)
+        if (!milestone) {
+          return
+        }
+        setHoveredTaskCard(null)
+        setHoveredMilestoneCard((current) => {
+          if (
+            !current ||
+            current.milestone.projectId !== milestone.projectId ||
+            current.milestone.milestoneId !== milestone.milestoneId
+          ) {
+            return {
+              milestone,
+              x,
+              y
+            }
+          }
+          return {
+            ...current,
+            x,
+            y
+          }
+        })
         return
       }
       const task = tasksByIdRef.current[taskId]
       if (!task) {
         return
       }
-      const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+      setHoveredMilestoneCard(null)
       setHoveredTaskCard((current) => {
         if (!current || current.task.id !== task.id) {
           return {
@@ -409,16 +449,36 @@ export function CalendarMonthView({
     }
     const onMouseLeave = (): void => {
       setHoveredTaskCard(null)
+      setHoveredMilestoneCard(null)
     }
+
+    const onContextMenu =
+      source === 'task'
+        ? (event: MouseEvent): void => {
+            event.preventDefault()
+            event.stopPropagation()
+            contextMenuNonceRef.current += 1
+            setHoveredTaskCard(null)
+            setHoveredMilestoneCard(null)
+            setCalendarContextMenu({
+              taskId,
+              x: event.clientX,
+              y: event.clientY,
+              nonce: contextMenuNonceRef.current
+            })
+          }
+        : undefined
 
     const contextMenuTargets = [
       mountInfo.el,
       mountInfo.el.querySelector<HTMLElement>('.fc-event-main')
     ].filter((target): target is HTMLElement => Boolean(target))
 
-    contextMenuTargets.forEach((target) => {
-      target.addEventListener('contextmenu', onContextMenu, true)
-    })
+    if (onContextMenu) {
+      contextMenuTargets.forEach((target) => {
+        target.addEventListener('contextmenu', onContextMenu, true)
+      })
+    }
     mountInfo.el.addEventListener('mousemove', onMouseMove)
     mountInfo.el.addEventListener('mouseleave', onMouseLeave)
     eventListenerMapRef.current.set(mountInfo.el, {
@@ -445,9 +505,11 @@ export function CalendarMonthView({
     if (!handlers) {
       return
     }
-    handlers.contextMenuTargets.forEach((target) => {
-      target.removeEventListener('contextmenu', handlers.onContextMenu, true)
-    })
+    if (handlers.onContextMenu) {
+      handlers.contextMenuTargets.forEach((target) => {
+        target.removeEventListener('contextmenu', handlers.onContextMenu as EventListener, true)
+      })
+    }
     mountInfo.el.removeEventListener('mousemove', handlers.onMouseMove)
     mountInfo.el.removeEventListener('mouseleave', handlers.onMouseLeave)
     eventListenerMapRef.current.delete(mountInfo.el)
@@ -486,11 +548,8 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="calendar-full p-4" data-testid="calendar-month-view">
-      <div
-        className="workspace-subtle-surface relative overflow-hidden rounded-lg border border-[var(--text)]"
-        data-testid="calendar-month-shell"
-      >
+    <section className="calendar-full min-h-0" data-testid="calendar-month-view">
+      <div className="relative overflow-hidden">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -530,10 +589,12 @@ export function CalendarMonthView({
             info.jsEvent.stopPropagation()
             const source = String(info.event.extendedProps.source ?? 'task')
             if (source === 'milestone') {
-              const projectId = String(info.event.extendedProps.projectId ?? '')
-              const milestoneId = String(info.event.extendedProps.milestoneId ?? '')
-              if (projectId && milestoneId) {
-                onOpenMilestone?.(projectId, milestoneId)
+              const milestone = getMilestoneDetailsFromEvent(info.event)
+              if (milestone) {
+                setHoveredTaskCard(null)
+                setHoveredMilestoneCard(null)
+                setCalendarContextMenu(null)
+                setSelectedMilestone(milestone)
               }
               return
             }
@@ -570,35 +631,13 @@ export function CalendarMonthView({
           eventContent={(arg) => {
             const source = String(arg.event.extendedProps.source ?? 'task')
             if (source === 'milestone') {
-              const isCompleted = Boolean(arg.event.extendedProps.completed)
-              const projectName = String(arg.event.extendedProps.projectName ?? '')
+              const milestone = getMilestoneDetailsFromEvent(arg.event)
+              if (!milestone) {
+                return <span className="truncate text-[var(--text)]">{arg.event.title}</span>
+              }
               return (
                 <div className="beacon-task-inner w-full rounded px-1.5 py-1">
-                  <div className="beacon-task-row flex items-center justify-between gap-1.5">
-                    <span className="flex min-w-0 items-center gap-1">
-                      <span
-                        aria-hidden="true"
-                        className="inline-flex items-center"
-                        title={isCompleted ? 'Completed milestone' : 'Pending milestone'}
-                      >
-                        <span
-                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                            isCompleted
-                              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
-                              : 'workspace-subtle-control border-[var(--line-strong)]'
-                          }`}
-                        >
-                          {isCompleted ? <Check size={8} strokeWidth={3} /> : null}
-                        </span>
-                      </span>
-                      <span className="min-w-0 truncate text-[10px] font-medium text-[var(--muted)]">
-                        {projectName}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-0.5 truncate text-[11px] font-medium text-[var(--text)]">
-                    {arg.event.title}
-                  </div>
+                  <CalendarMilestoneCard milestone={milestone} />
                 </div>
               )
             }
@@ -636,6 +675,20 @@ export function CalendarMonthView({
             aria-hidden="true"
           />
         </TaskContextMenu>
+      ) : null}
+      {selectedMilestone ? (
+        <CalendarMilestoneDialog
+          milestone={selectedMilestone}
+          onClose={() => setSelectedMilestone(null)}
+          onOpenMilestone={onOpenMilestone}
+        />
+      ) : null}
+      {hoveredMilestoneCard ? (
+        <CalendarMilestoneHoverCard
+          milestone={hoveredMilestoneCard.milestone}
+          x={hoveredMilestoneCard.x}
+          y={hoveredMilestoneCard.y}
+        />
       ) : null}
       {hoveredTaskCard ? (
         <CalendarTaskHoverCard
@@ -935,9 +988,56 @@ function buildCalendarSyncSignature(event: CalendarEventInput): string {
     priority: event.extendedProps.priority ?? '',
     projectId: event.extendedProps.projectId ?? '',
     projectName: event.extendedProps.projectName ?? '',
+    projectIcon: event.extendedProps.projectIcon ?? null,
     completed: event.extendedProps.completed ?? false,
-    milestoneId: event.extendedProps.milestoneId ?? ''
+    milestoneId: event.extendedProps.milestoneId ?? '',
+    milestoneDescription: event.extendedProps.milestoneDescription ?? '',
+    milestoneDueDate: event.extendedProps.milestoneDueDate ?? '',
+    milestoneStatus: event.extendedProps.milestoneStatus ?? '',
+    milestoneCompletedSubtaskCount: event.extendedProps.milestoneCompletedSubtaskCount ?? 0,
+    milestoneSubtaskCount: event.extendedProps.milestoneSubtaskCount ?? 0,
+    milestoneProgressPercent: event.extendedProps.milestoneProgressPercent ?? 0
   })
+}
+
+function getMilestoneDetailsFromEvent(event: EventApi): CalendarMilestoneDetails | null {
+  const projectId = String(event.extendedProps.projectId ?? '')
+  const milestoneId = String(event.extendedProps.milestoneId ?? '')
+  const projectName = String(event.extendedProps.projectName ?? '')
+
+  if (!projectId || !milestoneId || !projectName) {
+    return null
+  }
+
+  return {
+    title: event.title,
+    projectId,
+    projectName,
+    projectIcon: event.extendedProps.projectIcon,
+    milestoneId,
+    milestoneDescription:
+      typeof event.extendedProps.milestoneDescription === 'string'
+        ? event.extendedProps.milestoneDescription
+        : undefined,
+    milestoneDueDate:
+      typeof event.extendedProps.milestoneDueDate === 'string'
+        ? event.extendedProps.milestoneDueDate
+        : undefined,
+    milestoneStatus: event.extendedProps.milestoneStatus,
+    milestoneCompletedSubtaskCount:
+      typeof event.extendedProps.milestoneCompletedSubtaskCount === 'number'
+        ? event.extendedProps.milestoneCompletedSubtaskCount
+        : undefined,
+    milestoneSubtaskCount:
+      typeof event.extendedProps.milestoneSubtaskCount === 'number'
+        ? event.extendedProps.milestoneSubtaskCount
+        : undefined,
+    milestoneProgressPercent:
+      typeof event.extendedProps.milestoneProgressPercent === 'number'
+        ? event.extendedProps.milestoneProgressPercent
+        : undefined,
+    completed: Boolean(event.extendedProps.completed)
+  }
 }
 
 function hasCalendarEventChanged(

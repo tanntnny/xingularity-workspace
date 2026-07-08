@@ -145,7 +145,18 @@ describe('buildMilestoneCalendarEvents', () => {
           source: 'milestone',
           projectId: 'project-alpha',
           projectName: 'Project',
+          projectIcon: {
+            shape: 'circle',
+            variant: 'filled',
+            color: '#000000'
+          },
           milestoneId: 'milestone-a',
+          milestoneDescription: '',
+          milestoneDueDate: '2026-04-02',
+          milestoneStatus: 'pending',
+          milestoneCompletedSubtaskCount: 0,
+          milestoneSubtaskCount: 0,
+          milestoneProgressPercent: 0,
           completed: false
         }
       }
@@ -311,7 +322,18 @@ describe('buildWeeklyCalendarEntries', () => {
         title: 'Launch',
         projectId: 'project-alpha',
         projectName: 'Project',
+        projectIcon: {
+          shape: 'circle',
+          variant: 'filled',
+          color: '#000000'
+        },
         milestoneId: 'milestone-a',
+        milestoneDescription: '',
+        milestoneDueDate: '2026-04-16',
+        milestoneStatus: 'pending',
+        milestoneCompletedSubtaskCount: 0,
+        milestoneSubtaskCount: 0,
+        milestoneProgressPercent: 0,
         completed: false
       }
     ])

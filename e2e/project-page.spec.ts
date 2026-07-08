@@ -140,8 +140,22 @@ test.describe('projects workspace', () => {
         .first()
         .click()
       await expect(page.getByText('Edit project details and workspace actions.')).toBeVisible()
+      const drawer = page.getByRole('dialog')
+      await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
+      await drawer.getByLabel('Project name').fill('Alpha Project Updated')
       await page.keyboard.press('Escape')
       await expect(page.getByText('Edit project details and workspace actions.')).toHaveCount(0)
+      await expect(page.getByText('Alpha Project Updated').first()).toBeVisible()
+
+      await page
+        .locator('article')
+        .filter({ hasText: 'Alpha Project Updated' })
+        .first()
+        .locator('button')
+        .first()
+        .click()
+      await expect(drawer.getByLabel('Project name')).toHaveValue('Alpha Project Updated')
+      await page.keyboard.press('Escape')
 
       await page.getByText('Task List').click()
       await expect(page.getByText('No project work matches the current filter.')).toHaveCount(0)

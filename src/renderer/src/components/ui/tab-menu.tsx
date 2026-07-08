@@ -57,6 +57,10 @@ export interface TabMenuItemProps extends Omit<ButtonGroupItemProps, 'variant' |
   variant?: TabMenuVariant
 }
 
+interface TabMenuCountBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  count: number
+}
+
 const TabMenuItem = React.forwardRef<HTMLButtonElement, TabMenuItemProps>(
   ({ className, children, variant = 'boxed', ...props }, ref) => (
     <ButtonGroupItem
@@ -79,4 +83,22 @@ const TabMenuItem = React.forwardRef<HTMLButtonElement, TabMenuItemProps>(
 )
 TabMenuItem.displayName = 'TabMenuItem'
 
-export { TabMenu, TabMenuItem }
+function TabMenuCountBadge({
+  count,
+  className,
+  ...props
+}: TabMenuCountBadgeProps): React.ReactNode {
+  return (
+    <span
+      className={cn(
+        'inline-flex h-[1.2rem] min-w-[1.2rem] items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--line)_78%,transparent)] bg-[color:color-mix(in_srgb,var(--panel)_82%,transparent)] px-1.5 text-[10px] font-semibold leading-none text-[var(--muted)]',
+        className
+      )}
+      {...props}
+    >
+      {count}
+    </span>
+  )
+}
+
+export { TabMenu, TabMenuItem, TabMenuCountBadge }

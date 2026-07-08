@@ -1,4 +1,11 @@
-import { CalendarTask, CalendarTaskType, Project, TaskPriority } from '../../../shared/types'
+import {
+  CalendarTask,
+  CalendarTaskType,
+  Project,
+  ProjectIconStyle,
+  ProjectMilestone,
+  TaskPriority
+} from '../../../shared/types'
 
 export type CalendarEventSource = 'task' | 'milestone'
 
@@ -16,7 +23,14 @@ export interface CalendarEventInput {
     taskId?: string
     projectId?: string
     projectName?: string
+    projectIcon?: ProjectIconStyle
     milestoneId?: string
+    milestoneDescription?: string
+    milestoneDueDate?: string
+    milestoneStatus?: ProjectMilestone['status']
+    milestoneCompletedSubtaskCount?: number
+    milestoneSubtaskCount?: number
+    milestoneProgressPercent?: number
     taskType?: CalendarTaskType
     priority?: TaskPriority
     completed?: boolean
@@ -40,7 +54,14 @@ export interface WeeklyCalendarAllDayItem {
   task?: CalendarTask
   projectId?: string
   projectName?: string
+  projectIcon?: ProjectIconStyle
   milestoneId?: string
+  milestoneDescription?: string
+  milestoneDueDate?: string
+  milestoneStatus?: ProjectMilestone['status']
+  milestoneCompletedSubtaskCount?: number
+  milestoneSubtaskCount?: number
+  milestoneProgressPercent?: number
   completed?: boolean
 }
 
@@ -95,6 +116,15 @@ export function buildMilestoneCalendarEvents(projects: Project[]): CalendarEvent
         return []
       }
 
+      const milestoneCompletedSubtaskCount = milestone.subtasks.filter(
+        (subtask) => subtask.completed
+      ).length
+      const milestoneSubtaskCount = milestone.subtasks.length
+      const milestoneProgressPercent = getMilestoneProgressPercent(
+        milestone,
+        milestoneCompletedSubtaskCount
+      )
+
       return [
         {
           id: getMilestoneCalendarEventId(project.id, milestone.id),
@@ -108,7 +138,14 @@ export function buildMilestoneCalendarEvents(projects: Project[]): CalendarEvent
             source: 'milestone',
             projectId: project.id,
             projectName: project.name,
+            projectIcon: project.icon,
             milestoneId: milestone.id,
+            milestoneDescription: milestone.description,
+            milestoneDueDate: milestone.dueDate,
+            milestoneStatus: milestone.status,
+            milestoneCompletedSubtaskCount,
+            milestoneSubtaskCount,
+            milestoneProgressPercent,
             completed: milestone.status === 'completed'
           }
         }
@@ -181,7 +218,14 @@ export function buildWeeklyCalendarEntries(
       title: event.title,
       projectId: event.extendedProps.projectId,
       projectName: event.extendedProps.projectName,
+      projectIcon: event.extendedProps.projectIcon,
       milestoneId: event.extendedProps.milestoneId,
+      milestoneDescription: event.extendedProps.milestoneDescription,
+      milestoneDueDate: event.extendedProps.milestoneDueDate,
+      milestoneStatus: event.extendedProps.milestoneStatus,
+      milestoneCompletedSubtaskCount: event.extendedProps.milestoneCompletedSubtaskCount,
+      milestoneSubtaskCount: event.extendedProps.milestoneSubtaskCount,
+      milestoneProgressPercent: event.extendedProps.milestoneProgressPercent,
       completed: event.extendedProps.completed
     })
   }
@@ -278,6 +322,21 @@ function diffIsoDays(startIso: string, endIso: string): number {
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+function getMilestoneProgressPercent(
+  milestone: ProjectMilestone,
+  completedSubtaskCount: number
+): number {
+  if (milestone.status === 'completed') {
+    return 100
+  }
+
+  if (milestone.subtasks.length === 0) {
+    return 0
+  }
+
+  return Math.round((completedSubtaskCount / milestone.subtasks.length) * 100)
 }
 
 function parseTimeToMinutes(time: string | undefined): number | null {

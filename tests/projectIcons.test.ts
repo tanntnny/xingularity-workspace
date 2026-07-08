@@ -57,4 +57,24 @@ describe('project icon helpers', () => {
       color: '#be123c'
     })
   })
+
+  it('preserves supported extended lucide glyphs during normalization', () => {
+    expect(
+      normalizeProjectIcon(
+        {
+          set: 'lucide',
+          glyph: 'sparkles',
+          variant: 'filled',
+          color: '#0ea5e9'
+        },
+        'beta'
+      )
+    ).toEqual({
+      set: 'lucide',
+      glyph: 'sparkles',
+      shape: undefined,
+      variant: 'filled',
+      color: '#0ea5e9'
+    })
+  })
 })

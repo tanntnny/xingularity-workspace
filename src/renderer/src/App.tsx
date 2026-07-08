@@ -8,6 +8,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { flushSync } from 'react-dom'
 import {
   ChevronDown,
   Copy,
@@ -113,7 +114,7 @@ import {
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
 import { SelectionMenu, type SelectionMenuOption } from './components/ui/selection-menu'
-import { TabMenu, TabMenuItem } from './components/ui/tab-menu'
+import { TabMenu, TabMenuCountBadge, TabMenuItem } from './components/ui/tab-menu'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
@@ -175,6 +176,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
 }
 
 type CalendarViewMode = 'month' | 'week'
+type CalendarContentFilter = 'all' | 'tasks' | 'milestones'
 
 type PageLeaveSaveDebug = {
   requestedPage: AppPage | null
@@ -392,6 +394,11 @@ function App(): ReactElement {
       validate: (value): value is CalendarViewMode => value === 'month' || value === 'week'
     }
   )
+  const [calendarContentFilter, setCalendarContentFilter] =
+    usePersistentState<CalendarContentFilter>('calendar-content-filter', 'all', {
+      validate: (value): value is CalendarContentFilter =>
+        value === 'all' || value === 'tasks' || value === 'milestones'
+    })
   const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
     projectId: string
     milestoneId: string
@@ -939,6 +946,44 @@ function App(): ReactElement {
     return normalizeCalendarTasks(calendarTasks).filter((task) => Boolean(task.date))
   }, [calendarTasks])
   const milestoneCalendarEvents = useMemo(() => buildMilestoneCalendarEvents(projects), [projects])
+  const calendarContentFilterOptions = useMemo(
+    () => [
+      {
+        value: 'all' as const,
+        label: 'All',
+        count: scheduledCalendarTasks.length + milestoneCalendarEvents.length
+      },
+      {
+        value: 'tasks' as const,
+        label: 'Tasks',
+        count: scheduledCalendarTasks.length
+      },
+      {
+        value: 'milestones' as const,
+        label: 'Milestones',
+        count: milestoneCalendarEvents.length
+      }
+    ],
+    [milestoneCalendarEvents.length, scheduledCalendarTasks.length]
+  )
+  const visibleCalendarTasks = useMemo(() => {
+    if (calendarContentFilter === 'milestones') {
+      return []
+    }
+    return calendarTasks
+  }, [calendarContentFilter, calendarTasks])
+  const visibleScheduledCalendarTasks = useMemo(() => {
+    if (calendarContentFilter === 'milestones') {
+      return []
+    }
+    return scheduledCalendarTasks
+  }, [calendarContentFilter, scheduledCalendarTasks])
+  const visibleMilestoneCalendarEvents = useMemo(() => {
+    if (calendarContentFilter === 'tasks') {
+      return []
+    }
+    return milestoneCalendarEvents
+  }, [calendarContentFilter, milestoneCalendarEvents])
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -983,12 +1028,6 @@ function App(): ReactElement {
       return 'Note graph'
     }
 
-    if (activePage === 'calendar') {
-      return calendarViewMode === 'week'
-        ? formatCalendarWeekRangeLabel(selectedCalendarDate)
-        : formatCalendarDateLabel(selectedCalendarDate)
-    }
-
     if (activePage === 'weeklyPlan') {
       return selectedWeeklyPlanWeek
         ? formatWeekRange(selectedWeeklyPlanWeek.startDate, selectedWeeklyPlanWeek.endDate)
@@ -1006,35 +1045,9 @@ function App(): ReactElement {
     searchQuery,
     currentExcalidrawPath,
     currentNotePath,
-    calendarViewMode,
-    selectedCalendarDate,
     selectedWeeklyPlanWeek
   ])
-  const calendarHeaderBreadcrumbItem = useMemo(() => {
-    if (activePage !== 'calendar') {
-      return null
-    }
-
-    if (calendarViewMode === 'week') {
-      const range = formatCalendarWeekRangeLabel(selectedCalendarDate)
-
-      return (
-        <div className="workspace-action-button inline-flex h-8 items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text)]">
-          <CalendarDays size={15} className="shrink-0 text-[var(--control-glass-muted-text)]" />
-          <span className="truncate">{range}</span>
-        </div>
-      )
-    }
-
-    const dateLabel = formatCalendarTopBarDateLabel(selectedCalendarDate)
-
-    return (
-      <div className="workspace-action-button inline-flex h-8 items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text)]">
-        <CalendarDays size={15} className="shrink-0 text-[var(--control-glass-muted-text)]" />
-        <span className="truncate">{dateLabel}</span>
-      </div>
-    )
-  }, [activePage, calendarViewMode, selectedCalendarDate])
+  const calendarTodayHeader = useMemo(() => getCalendarHeaderDateParts(todayIso), [todayIso])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
       activePage !== 'notes' ||
@@ -1869,6 +1882,13 @@ function App(): ReactElement {
       return false
     }
 
+    flushSync(() => {
+      setSettings({
+        ...useVaultStore.getState().settings,
+        projects: nextProjects
+      })
+    })
+
     try {
       const nextSettings = await vaultApi.settings.update({ projects: nextProjects })
       setSettings(nextSettings)
@@ -1886,6 +1906,14 @@ function App(): ReactElement {
     if (!vaultApi) {
       return false
     }
+
+    flushSync(() => {
+      setSettings({
+        ...useVaultStore.getState().settings,
+        projects: nextProjects,
+        projectIcons: nextProjectIcons
+      })
+    })
 
     try {
       const nextSettings = await vaultApi.settings.update({
@@ -3476,6 +3504,30 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
+  const saveProject = (
+    projectId: string,
+    draft: { name: string; summary: string; icon: ProjectIconStyle }
+  ): void => {
+    const normalizedName = draft.name.trim()
+    if (!normalizedName) {
+      return
+    }
+
+    const nextProjects = projects.map((project) =>
+      project.id === projectId
+        ? {
+            ...project,
+            name: normalizedName,
+            summary: draft.summary.trim(),
+            icon: draft.icon,
+            updatedAt: new Date().toISOString()
+          }
+        : project
+    )
+    const nextProjectIcons = { ...projectIcons, [projectId]: draft.icon }
+    void persistProjectData(nextProjects, nextProjectIcons)
+  }
+
   const updateProjectSummary = (projectId: string, nextSummary: string): void => {
     const normalizedSummary = nextSummary.trim()
 
@@ -3641,6 +3693,49 @@ function App(): ReactElement {
       const nextMilestones = project.milestones.map((milestone) =>
         milestone.id === milestoneId
           ? { ...milestone, description: normalizedDescription }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const saveProjectMilestone = (
+    projectId: string,
+    milestoneId: string,
+    draft: {
+      title: string
+      description: string
+      dueDate: string
+      status: 'pending' | 'blocked' | 'completed'
+      priority: '' | TaskPriority
+    }
+  ): void => {
+    const normalizedTitle = draft.title.trim()
+    if (!normalizedTitle) {
+      return
+    }
+
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              title: normalizedTitle,
+              description: draft.description.trim(),
+              dueDate: draft.dueDate || undefined,
+              status: draft.status,
+              priority: draft.priority || undefined
+            }
           : milestone
       )
 
@@ -3852,6 +3947,57 @@ function App(): ReactElement {
               subtasks: milestone.subtasks.map((subtask) =>
                 subtask.id === subtaskId
                   ? { ...subtask, description: normalizedDescription }
+                  : subtask
+              )
+            }
+          : milestone
+      )
+
+      return withComputedProjectState({
+        ...project,
+        milestones: nextMilestones,
+        updatedAt: new Date().toISOString()
+      })
+    })
+    void persistProjects(nextProjects)
+  }
+
+  const saveMilestoneSubtask = (
+    projectId: string,
+    milestoneId: string,
+    subtaskId: string,
+    draft: {
+      title: string
+      description: string
+      dueDate: string
+      completed: boolean
+      priority: '' | TaskPriority
+    }
+  ): void => {
+    const normalizedTitle = draft.title.trim()
+    if (!normalizedTitle) {
+      return
+    }
+
+    const nextProjects = projects.map((project) => {
+      if (project.id !== projectId) {
+        return project
+      }
+
+      const nextMilestones = project.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              subtasks: milestone.subtasks.map((subtask) =>
+                subtask.id === subtaskId
+                  ? {
+                      ...subtask,
+                      title: normalizedTitle,
+                      description: draft.description.trim(),
+                      dueDate: draft.dueDate || undefined,
+                      completed: draft.completed,
+                      priority: draft.priority || undefined
+                    }
                   : subtask
               )
             }
@@ -4929,8 +5075,27 @@ function App(): ReactElement {
                           </span>
                         </TabMenuItem>
                       </TabMenu>
-                    ) : activePage === 'calendar' && calendarHeaderBreadcrumbItem ? (
-                      <div className="text-[var(--text)]">{calendarHeaderBreadcrumbItem}</div>
+                    ) : activePage === 'calendar' ? (
+                      <TabMenu
+                        variant="toolbar"
+                        value={calendarViewMode}
+                        onValueChange={(value) => setCalendarViewMode(value as CalendarViewMode)}
+                        fullWidth={false}
+                        withSpacer={false}
+                      >
+                        {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
+                          <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+                            <span className="inline-flex items-center gap-2">
+                              {option.value === 'month' ? (
+                                <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
+                              ) : (
+                                <CalendarDays size={15} className="shrink-0" aria-hidden="true" />
+                              )}
+                              {option.label}
+                            </span>
+                          </TabMenuItem>
+                        ))}
+                      </TabMenu>
                     ) : (
                       <Breadcrumb>
                         <BreadcrumbList className="text-[var(--muted)]">
@@ -5220,43 +5385,6 @@ function App(): ReactElement {
                           />
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
-                    ) : activePage === 'calendar' ? (
-                      <WorkspaceHeaderActions>
-                        <WorkspaceHeaderActionGroup className="workspace-subtle-surface gap-0 overflow-hidden rounded-lg p-0">
-                          <WorkspaceActionButton
-                            onClick={goToPrevCalendarPeriod}
-                            title={calendarViewMode === 'week' ? 'Previous week' : 'Previous month'}
-                            className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                            icon={<ChevronLeft size={18} />}
-                          />
-                          <WorkspaceActionButton
-                            onClick={goToToday}
-                            title="Go to today"
-                            className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
-                            icon={<CalendarDays size={18} />}
-                          />
-                          <WorkspaceActionButton
-                            onClick={goToNextCalendarPeriod}
-                            title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                            className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                            icon={<ChevronRight size={18} />}
-                          />
-                        </WorkspaceHeaderActionGroup>
-                        <WorkspaceHeaderActionGroup>
-                          <SelectionMenu
-                            value={calendarViewMode}
-                            onValueChange={(value) =>
-                              setCalendarViewMode(value as CalendarViewMode)
-                            }
-                            options={CALENDAR_VIEW_MODE_OPTIONS}
-                            variant="toolbar"
-                            icon={<CalendarDays size={16} aria-hidden="true" />}
-                            title={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                            aria-label={`Calendar view: ${formatCalendarViewModeLabel(calendarViewMode)}`}
-                            className="min-w-[10.5rem]"
-                          />
-                        </WorkspaceHeaderActionGroup>
-                      </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
@@ -5390,6 +5518,9 @@ function App(): ReactElement {
                         onUpdateSubtaskDueDate={updateMilestoneSubtaskDueDate}
                         onUpdateSubtaskPriority={updateMilestoneSubtaskPriority}
                         onRemoveSubtask={removeMilestoneSubtask}
+                        onSaveProject={saveProject}
+                        onSaveMilestone={saveProjectMilestone}
+                        onSaveSubtask={saveMilestoneSubtask}
                       />
                     ) : activePage === 'subscriptions' ? (
                       <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
@@ -5407,79 +5538,172 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      calendarViewMode === 'week' ? (
-                        <CalendarWeekView
-                          selectedDate={selectedCalendarDate}
-                          tasks={calendarTasks}
-                          milestoneEvents={milestoneCalendarEvents}
-                          onSelectDate={setSelectedCalendarDate}
-                          onOpenMilestone={openMilestoneFromCalendar}
-                          onRescheduleTask={(taskId, newDate) => {
-                            void rescheduleCalendarTask(taskId, newDate)
-                          }}
-                          onToggleTask={(taskId) => {
-                            void toggleCalendarTask(taskId)
-                          }}
-                          onDeleteTask={(taskId) => {
-                            void removeCalendarTask(taskId)
-                          }}
-                          onRenameTask={(taskId, newTitle) => {
-                            void renameCalendarTask(taskId, newTitle)
-                          }}
-                          onUpdateTaskPriority={(taskId, priority) => {
-                            void updateCalendarTaskPriority(taskId, priority)
-                          }}
-                          onUpdateTaskType={(taskId, taskType) => {
-                            void updateCalendarTaskType(taskId, taskType)
-                          }}
-                          onUpdateTaskSchedule={(taskId, schedule) => {
-                            void updateCalendarTaskSchedule(taskId, schedule)
-                          }}
-                        />
-                      ) : (
-                        <CalendarMonthView
-                          selectedDate={selectedCalendarDate}
-                          tasks={scheduledCalendarTasks}
-                          milestoneEvents={milestoneCalendarEvents}
-                          onSelectDate={setSelectedCalendarDate}
-                          onCreateTask={createTaskForDate}
-                          onOpenMilestone={openMilestoneFromCalendar}
-                          onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
-                          onRescheduleTask={(taskId, newDate) => {
-                            void rescheduleCalendarTask(taskId, newDate)
-                          }}
-                          onResizeTaskStart={(taskId, newStartDate) => {
-                            void resizeCalendarTaskStart(taskId, newStartDate)
-                          }}
-                          onResizeTaskEnd={(taskId, newEndDate) => {
-                            void resizeCalendarTaskEnd(taskId, newEndDate)
-                          }}
-                          onToggleTask={(taskId) => {
-                            void toggleCalendarTask(taskId)
-                          }}
-                          onDeleteTask={(taskId) => {
-                            void removeCalendarTask(taskId)
-                          }}
-                          onRenameTask={(taskId, newTitle) => {
-                            void renameCalendarTask(taskId, newTitle)
-                          }}
-                          onUpdateTaskPriority={(taskId, priority) => {
-                            void updateCalendarTaskPriority(taskId, priority)
-                          }}
-                          onUpdateTaskType={(taskId, taskType) => {
-                            void updateCalendarTaskType(taskId, taskType)
-                          }}
-                          onUpdateTaskTime={(taskId, time) => {
-                            void updateCalendarTaskTime(taskId, time)
-                          }}
-                          onUpdateTaskSchedule={(taskId, schedule) => {
-                            void updateCalendarTaskSchedule(taskId, schedule)
-                          }}
-                          onUpdateTaskReminders={(taskId, reminders) => {
-                            void updateCalendarTaskReminders(taskId, reminders)
-                          }}
-                        />
-                      )
+                      <div className="calendar-full flex min-h-full flex-col p-4">
+                        <section
+                          data-testid={
+                            calendarViewMode === 'week'
+                              ? 'calendar-week-shell'
+                              : 'calendar-month-shell'
+                          }
+                          className="workspace-subtle-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--text)]"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
+                            <div className="min-w-0 flex flex-1 items-center gap-4">
+                              <div className="overflow-hidden rounded-lg border-2 border-[#d32f2f] shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+                                <div className="flex h-6 items-center justify-center bg-[#d32f2f] px-3 text-center text-[13px] font-extrabold text-white">
+                                  {calendarTodayHeader.monthShort}
+                                </div>
+                                <div className="flex h-6 items-center justify-center border-t-2 border-[color:rgba(217,90,78,0.28)] px-3 text-center">
+                                  <span className="block text-lg font-medium leading-none text-[var(--text)]">
+                                    {calendarTodayHeader.dayNumber}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-lg font-semibold text-[var(--text)]">
+                                  {calendarTodayHeader.weekday}
+                                </p>
+                                <p className="truncate text-sm text-[var(--muted)]">
+                                  {calendarTodayHeader.fullDate}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <TabMenu
+                                variant="toolbar"
+                                value={calendarContentFilter}
+                                onValueChange={(value) =>
+                                  setCalendarContentFilter(value as CalendarContentFilter)
+                                }
+                                fullWidth={false}
+                                withSpacer={false}
+                              >
+                                {calendarContentFilterOptions.map((option) => (
+                                  <TabMenuItem
+                                    key={option.value}
+                                    variant="toolbar"
+                                    value={option.value}
+                                  >
+                                    <span className="inline-flex items-center gap-2">
+                                      <span>{option.label}</span>
+                                      <TabMenuCountBadge count={option.count} />
+                                    </span>
+                                  </TabMenuItem>
+                                ))}
+                              </TabMenu>
+                              <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
+                                <WorkspaceActionButton
+                                  onClick={goToPrevCalendarPeriod}
+                                  title={
+                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
+                                  }
+                                  className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                                  icon={<ChevronLeft size={18} />}
+                                />
+                                <WorkspaceActionButton
+                                  onClick={goToToday}
+                                  title={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  aria-label={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
+                                  icon={<CalendarDays size={18} />}
+                                  label={
+                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
+                                  }
+                                />
+                                <WorkspaceActionButton
+                                  onClick={goToNextCalendarPeriod}
+                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                                  className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                                  icon={<ChevronRight size={18} />}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="min-h-0 flex-1">
+                            {calendarViewMode === 'week' ? (
+                              <CalendarWeekView
+                                selectedDate={selectedCalendarDate}
+                                tasks={visibleCalendarTasks}
+                                milestoneEvents={visibleMilestoneCalendarEvents}
+                                onSelectDate={setSelectedCalendarDate}
+                                onOpenMilestone={openMilestoneFromCalendar}
+                                onRescheduleTask={(taskId, newDate) => {
+                                  void rescheduleCalendarTask(taskId, newDate)
+                                }}
+                                onToggleTask={(taskId) => {
+                                  void toggleCalendarTask(taskId)
+                                }}
+                                onDeleteTask={(taskId) => {
+                                  void removeCalendarTask(taskId)
+                                }}
+                                onRenameTask={(taskId, newTitle) => {
+                                  void renameCalendarTask(taskId, newTitle)
+                                }}
+                                onUpdateTaskPriority={(taskId, priority) => {
+                                  void updateCalendarTaskPriority(taskId, priority)
+                                }}
+                                onUpdateTaskType={(taskId, taskType) => {
+                                  void updateCalendarTaskType(taskId, taskType)
+                                }}
+                                onUpdateTaskSchedule={(taskId, schedule) => {
+                                  void updateCalendarTaskSchedule(taskId, schedule)
+                                }}
+                              />
+                            ) : (
+                              <CalendarMonthView
+                                selectedDate={selectedCalendarDate}
+                                tasks={visibleScheduledCalendarTasks}
+                                milestoneEvents={visibleMilestoneCalendarEvents}
+                                onSelectDate={setSelectedCalendarDate}
+                                onCreateTask={createTaskForDate}
+                                onOpenMilestone={openMilestoneFromCalendar}
+                                onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
+                                onRescheduleTask={(taskId, newDate) => {
+                                  void rescheduleCalendarTask(taskId, newDate)
+                                }}
+                                onResizeTaskStart={(taskId, newStartDate) => {
+                                  void resizeCalendarTaskStart(taskId, newStartDate)
+                                }}
+                                onResizeTaskEnd={(taskId, newEndDate) => {
+                                  void resizeCalendarTaskEnd(taskId, newEndDate)
+                                }}
+                                onToggleTask={(taskId) => {
+                                  void toggleCalendarTask(taskId)
+                                }}
+                                onDeleteTask={(taskId) => {
+                                  void removeCalendarTask(taskId)
+                                }}
+                                onRenameTask={(taskId, newTitle) => {
+                                  void renameCalendarTask(taskId, newTitle)
+                                }}
+                                onUpdateTaskPriority={(taskId, priority) => {
+                                  void updateCalendarTaskPriority(taskId, priority)
+                                }}
+                                onUpdateTaskType={(taskId, taskType) => {
+                                  void updateCalendarTaskType(taskId, taskType)
+                                }}
+                                onUpdateTaskTime={(taskId, time) => {
+                                  void updateCalendarTaskTime(taskId, time)
+                                }}
+                                onUpdateTaskSchedule={(taskId, schedule) => {
+                                  void updateCalendarTaskSchedule(taskId, schedule)
+                                }}
+                                onUpdateTaskReminders={(taskId, reminders) => {
+                                  void updateCalendarTaskReminders(taskId, reminders)
+                                }}
+                              />
+                            )}
+                          </div>
+                        </section>
+                      </div>
                     ) : activePage === 'settings' ? (
                       <SettingsPage
                         profileName={profileName}
@@ -5990,40 +6214,32 @@ function addIsoDays(iso: string, days: number): string {
   return toIsoDate(date)
 }
 
-function formatCalendarViewModeLabel(mode: CalendarViewMode): string {
-  return mode === 'week' ? 'Weekly' : 'Monthly'
-}
-
-function formatCalendarWeekRangeLabel(isoDate: string): string {
-  const start = startOfWeekIso(parseIsoDate(isoDate))
-  return formatWeekRange(start, addIsoDays(start, 6))
-}
-
-function formatCalendarTopBarDateLabel(isoDate: string): string {
+function getCalendarHeaderDateParts(isoDate: string): {
+  monthShort: string
+  dayNumber: string
+  weekday: string
+  fullDate: string
+} {
   const parsed = new Date(`${isoDate}T00:00:00`)
   if (Number.isNaN(parsed.getTime())) {
-    return isoDate
+    return {
+      monthShort: 'N/A',
+      dayNumber: '--',
+      weekday: isoDate,
+      fullDate: isoDate
+    }
   }
 
-  return parsed.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
-
-function formatCalendarDateLabel(isoDate: string): string {
-  const parsed = new Date(`${isoDate}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) {
-    return isoDate
+  return {
+    monthShort: parsed.toLocaleDateString(undefined, { month: 'short' }).replace('.', ''),
+    dayNumber: parsed.toLocaleDateString(undefined, { day: 'numeric' }),
+    weekday: parsed.toLocaleDateString(undefined, { weekday: 'long' }),
+    fullDate: parsed.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })
   }
-
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
 }
 
 type RankedCommandPaletteNote = {

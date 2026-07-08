@@ -1,14 +1,19 @@
 import { format, parseISO } from 'date-fns'
-import { Fragment, ReactElement, useEffect, useMemo, useState } from 'react'
-import CheckBoxIcon from '@mui/icons-material/CheckBox'
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
-import MuiCheckbox from '@mui/material/Checkbox'
-import LinearProgress from '@mui/material/LinearProgress'
+import {
+  Fragment,
+  ReactElement,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  Check,
   Circle,
   Flag,
   FolderOpen,
@@ -52,7 +57,7 @@ import { Field } from '../components/ui/field'
 import { Input } from '../components/ui/input'
 import { SelectionMenu, type SelectionMenuOption } from '../components/ui/selection-menu'
 import { Select } from '../components/ui/select'
-import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
+import { TabMenu, TabMenuCountBadge, TabMenuItem } from '../components/ui/tab-menu'
 import {
   Table,
   TableBody,
@@ -67,7 +72,6 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import {
   buildProjectTaskRows,
   compareProjectTaskRows,
-  PROJECTS_WORKSPACE_FILTER_OPTIONS,
   filterProjectsForWorkspace,
   type ProjectTaskRow,
   type ProjectTaskSortDirection,
@@ -174,6 +178,33 @@ interface ProjectsWorkspacePageProps {
     nextPriority: TaskPriority | undefined
   ) => void
   onRemoveSubtask: (projectId: string, milestoneId: string, subtaskId: string) => void
+  onSaveProject: (
+    projectId: string,
+    draft: { name: string; summary: string; icon: ProjectIconStyle }
+  ) => void
+  onSaveMilestone: (
+    projectId: string,
+    milestoneId: string,
+    draft: {
+      title: string
+      description: string
+      dueDate: string
+      status: 'pending' | 'blocked' | 'completed'
+      priority: '' | TaskPriority
+    }
+  ) => void
+  onSaveSubtask: (
+    projectId: string,
+    milestoneId: string,
+    subtaskId: string,
+    draft: {
+      title: string
+      description: string
+      dueDate: string
+      completed: boolean
+      priority: '' | TaskPriority
+    }
+  ) => void
 }
 
 type DrawerState =
@@ -295,33 +326,21 @@ export function ProjectsWorkspacePage({
   onActiveTabChange,
   onSelectProject,
   onCreateProject,
-  onRenameProject,
-  onUpdateProjectSummary,
-  onUpdateProjectIcon,
   onToggleProjectDone,
   onToggleProjectFavorite,
   onOpenProjectFolder,
   onExportProject,
   onDeleteProject,
   onAddMilestone,
-  onRenameMilestone,
-  onUpdateMilestoneDescription,
-  onUpdateMilestoneDueDate,
-  onUpdateMilestoneStatus,
-  onUpdateMilestonePriority,
   onRemoveMilestone,
   onAddSubtask,
   onToggleSubtask,
-  onRenameSubtask,
-  onUpdateSubtaskDescription,
-  onUpdateSubtaskDueDate,
-  onUpdateSubtaskPriority,
-  onRemoveSubtask
+  onRemoveSubtask,
+  onSaveProject,
+  onSaveMilestone,
+  onSaveSubtask
 }: ProjectsWorkspacePageProps): ReactElement {
   const [drawerState, setDrawerState] = useState<DrawerState | null>(null)
-  const [projectDraft, setProjectDraft] = useState<ProjectDraft>(() => createEmptyProjectDraft())
-  const [milestoneDraft, setMilestoneDraft] = useState<MilestoneDraft>(createEmptyMilestoneDraft())
-  const [subtaskDraft, setSubtaskDraft] = useState<SubtaskDraft>(createEmptySubtaskDraft())
   const [hideCompletedItems, setHideCompletedItems] = useState(false)
   const [taskListGroupBy, setTaskListGroupBy] = useState<TaskListGroupBy>('project')
   const [taskListSort, setTaskListSort] = usePersistentState<ProjectTaskSortState>(
@@ -342,6 +361,27 @@ export function ProjectsWorkspacePage({
     () => filterProjectsForWorkspace(projects, favoriteProjectIds, filterMode),
     [favoriteProjectIds, filterMode, projects]
   )
+  const projectFilterOptions = useMemo(() => {
+    const favoriteIds = new Set(favoriteProjectIds)
+    return [
+      { value: 'all' as const, label: 'All', count: projects.length },
+      {
+        value: 'favorites' as const,
+        label: 'Favorites',
+        count: projects.filter((project) => favoriteIds.has(project.id)).length
+      },
+      {
+        value: 'active' as const,
+        label: 'Active',
+        count: projects.filter((project) => project.status !== 'completed').length
+      },
+      {
+        value: 'completed' as const,
+        label: 'Completed',
+        count: projects.filter((project) => project.status === 'completed').length
+      }
+    ]
+  }, [favoriteProjectIds, projects])
   const todayIso = useMemo(() => toLocalIsoDate(new Date()), [])
   const taskRows = useMemo(() => buildProjectTaskRows(filteredProjects), [filteredProjects])
   const visibleTaskRows = useMemo(
@@ -388,35 +428,14 @@ export function ProjectsWorkspacePage({
     )
   }
 
-  const drawerProject =
-    drawerState?.kind === 'project' || drawerState?.kind === 'new-milestone'
-      ? (projects.find((project) => project.id === drawerState.projectId) ?? null)
-      : drawerState?.kind === 'milestone' ||
-          drawerState?.kind === 'new-subtask' ||
-          drawerState?.kind === 'subtask'
-        ? (projects.find((project) => project.id === drawerState.projectId) ?? null)
-        : null
-
-  const drawerMilestone =
-    drawerProject &&
-    (drawerState?.kind === 'milestone' ||
-      drawerState?.kind === 'new-subtask' ||
-      drawerState?.kind === 'subtask')
-      ? (drawerProject.milestones.find((milestone) => milestone.id === drawerState.milestoneId) ??
-        null)
-      : null
-
-  const drawerSubtask =
-    drawerMilestone && drawerState?.kind === 'subtask'
-      ? (drawerMilestone.subtasks.find((subtask) => subtask.id === drawerState.subtaskId) ?? null)
-      : null
-
   useEffect(() => {
     if (!newProjectRequest) {
       return
     }
 
-    setDrawerState({ kind: 'new-project' })
+    startTransition(() => {
+      setDrawerState({ kind: 'new-project' })
+    })
   }, [newProjectRequest])
 
   useEffect(() => {
@@ -424,7 +443,9 @@ export function ProjectsWorkspacePage({
       return
     }
 
-    setDrawerState({ kind: 'project', projectId: projectDrawerRequest.projectId })
+    startTransition(() => {
+      setDrawerState({ kind: 'project', projectId: projectDrawerRequest.projectId })
+    })
   }, [projectDrawerRequest])
 
   useEffect(() => {
@@ -432,7 +453,9 @@ export function ProjectsWorkspacePage({
       return
     }
 
-    setDrawerState({ kind: 'new-milestone', projectId: newMilestoneRequest.projectId })
+    startTransition(() => {
+      setDrawerState({ kind: 'new-milestone', projectId: newMilestoneRequest.projectId })
+    })
   }, [newMilestoneRequest])
 
   useEffect(() => {
@@ -440,10 +463,12 @@ export function ProjectsWorkspacePage({
       return
     }
 
-    setDrawerState({
-      kind: 'new-subtask',
-      projectId: newSubtaskRequest.projectId,
-      milestoneId: newSubtaskRequest.milestoneId
+    startTransition(() => {
+      setDrawerState({
+        kind: 'new-subtask',
+        projectId: newSubtaskRequest.projectId,
+        milestoneId: newSubtaskRequest.milestoneId
+      })
     })
   }, [newSubtaskRequest])
 
@@ -452,12 +477,14 @@ export function ProjectsWorkspacePage({
       return
     }
 
-    setHideCompletedItems(false)
-    setActiveMilestoneToken(focusedMilestoneTarget.token)
-    setDrawerState({
-      kind: 'milestone',
-      projectId: focusedMilestoneTarget.projectId,
-      milestoneId: focusedMilestoneTarget.milestoneId
+    startTransition(() => {
+      setHideCompletedItems(false)
+      setActiveMilestoneToken(focusedMilestoneTarget.token)
+      setDrawerState({
+        kind: 'milestone',
+        projectId: focusedMilestoneTarget.projectId,
+        milestoneId: focusedMilestoneTarget.milestoneId
+      })
     })
   }, [focusedMilestoneTarget])
 
@@ -476,219 +503,8 @@ export function ProjectsWorkspacePage({
   }, [activeMilestoneToken])
 
   useEffect(() => {
-    if (
-      drawerProject &&
-      drawerMilestone &&
-      (drawerState?.kind === 'milestone' ||
-        drawerState?.kind === 'new-subtask' ||
-        drawerState?.kind === 'subtask')
-    ) {
-      onMilestoneContextChange({
-        projectId: drawerProject.id,
-        milestoneId: drawerMilestone.id
-      })
-      return
-    }
-
-    onMilestoneContextChange(null)
-  }, [drawerMilestone, drawerProject, drawerState, onMilestoneContextChange])
-
-  useEffect(() => {
     onTaskListCollapseStateChange(areAllTaskListGroupsCollapsed)
   }, [areAllTaskListGroupsCollapsed, onTaskListCollapseStateChange])
-
-  useEffect(() => {
-    if (!drawerState) {
-      return
-    }
-
-    if (drawerState.kind === 'new-project') {
-      setProjectDraft(createEmptyProjectDraft())
-      return
-    }
-
-    if (drawerState.kind === 'project' && drawerProject) {
-      setProjectDraft({
-        name: drawerProject.name,
-        summary: drawerProject.summary,
-        icon: coerceFilledLucideProjectIcon(drawerProject.icon, drawerProject.id)
-      })
-      return
-    }
-
-    if (drawerState.kind === 'new-milestone') {
-      setMilestoneDraft(createEmptyMilestoneDraft())
-      return
-    }
-
-    if (drawerState.kind === 'milestone' && drawerMilestone) {
-      setMilestoneDraft({
-        title: drawerMilestone.title,
-        description: drawerMilestone.description ?? '',
-        dueDate: drawerMilestone.dueDate ?? '',
-        status:
-          drawerMilestone.status === 'blocked' || drawerMilestone.status === 'completed'
-            ? drawerMilestone.status
-            : 'pending',
-        priority: drawerMilestone.priority ?? ''
-      })
-      return
-    }
-
-    if (drawerState.kind === 'new-subtask') {
-      setSubtaskDraft(createEmptySubtaskDraft())
-      return
-    }
-
-    if (drawerState.kind === 'subtask' && drawerSubtask) {
-      setSubtaskDraft({
-        title: drawerSubtask.title,
-        description: drawerSubtask.description ?? '',
-        dueDate: drawerSubtask.dueDate ?? '',
-        completed: drawerSubtask.completed,
-        priority: drawerSubtask.priority ?? ''
-      })
-    }
-  }, [drawerMilestone, drawerProject, drawerState, drawerSubtask])
-
-  useEffect(() => {
-    if (!drawerState) {
-      return
-    }
-
-    if (drawerState.kind === 'project' && !drawerProject) {
-      setDrawerState(null)
-      return
-    }
-
-    if (drawerState.kind === 'milestone' && !drawerMilestone) {
-      setDrawerState(null)
-      return
-    }
-
-    if (drawerState.kind === 'subtask' && !drawerSubtask) {
-      setDrawerState(null)
-    }
-  }, [drawerMilestone, drawerProject, drawerState, drawerSubtask])
-
-  const handleProjectSave = (): void => {
-    const normalizedName = projectDraft.name.trim()
-    if (!normalizedName) {
-      return
-    }
-
-    if (drawerState?.kind === 'new-project') {
-      const nextProjectId = onCreateProject({
-        name: normalizedName,
-        summary: projectDraft.summary.trim(),
-        icon: projectDraft.icon
-      })
-      onSelectProject(nextProjectId)
-      setDrawerState({ kind: 'project', projectId: nextProjectId })
-      onActiveTabChange('board')
-      return
-    }
-
-    if (drawerState?.kind !== 'project' || !drawerProject) {
-      return
-    }
-
-    onRenameProject(drawerProject.id, normalizedName)
-    onUpdateProjectSummary(drawerProject.id, projectDraft.summary.trim())
-    onUpdateProjectIcon(drawerProject.id, projectDraft.icon)
-    setDrawerState(null)
-  }
-
-  const handleMilestoneSave = (): void => {
-    const normalizedTitle = milestoneDraft.title.trim()
-    if (!normalizedTitle || !drawerProject) {
-      return
-    }
-
-    if (drawerState?.kind === 'new-milestone') {
-      onAddMilestone(drawerProject.id, {
-        title: normalizedTitle,
-        description: milestoneDraft.description.trim(),
-        dueDate: milestoneDraft.dueDate || undefined,
-        priority: milestoneDraft.priority || undefined,
-        status: milestoneDraft.status
-      })
-      setDrawerState(null)
-      return
-    }
-
-    if (drawerState?.kind !== 'milestone' || !drawerMilestone) {
-      return
-    }
-
-    onRenameMilestone(drawerProject.id, drawerMilestone.id, normalizedTitle)
-    onUpdateMilestoneDescription(
-      drawerProject.id,
-      drawerMilestone.id,
-      milestoneDraft.description.trim()
-    )
-    onUpdateMilestoneDueDate(
-      drawerProject.id,
-      drawerMilestone.id,
-      milestoneDraft.dueDate || undefined
-    )
-    onUpdateMilestoneStatus(drawerProject.id, drawerMilestone.id, milestoneDraft.status)
-    onUpdateMilestonePriority(
-      drawerProject.id,
-      drawerMilestone.id,
-      milestoneDraft.priority || undefined
-    )
-    setDrawerState(null)
-  }
-
-  const handleSubtaskSave = (): void => {
-    const normalizedTitle = subtaskDraft.title.trim()
-    if (!normalizedTitle || !drawerProject || !drawerMilestone) {
-      return
-    }
-
-    if (drawerState?.kind === 'new-subtask') {
-      onAddSubtask(drawerProject.id, drawerMilestone.id, {
-        title: normalizedTitle,
-        description: subtaskDraft.description.trim(),
-        dueDate: subtaskDraft.dueDate || undefined,
-        priority: subtaskDraft.priority || undefined,
-        completed: subtaskDraft.completed
-      })
-      setDrawerState(null)
-      return
-    }
-
-    if (drawerState?.kind !== 'subtask' || !drawerSubtask) {
-      return
-    }
-
-    onRenameSubtask(drawerProject.id, drawerMilestone.id, drawerSubtask.id, normalizedTitle)
-    onUpdateSubtaskDescription(
-      drawerProject.id,
-      drawerMilestone.id,
-      drawerSubtask.id,
-      subtaskDraft.description.trim()
-    )
-    onUpdateSubtaskDueDate(
-      drawerProject.id,
-      drawerMilestone.id,
-      drawerSubtask.id,
-      subtaskDraft.dueDate || undefined
-    )
-    onUpdateSubtaskPriority(
-      drawerProject.id,
-      drawerMilestone.id,
-      drawerSubtask.id,
-      subtaskDraft.priority || undefined
-    )
-
-    if (drawerSubtask.completed !== subtaskDraft.completed) {
-      onToggleSubtask(drawerProject.id, drawerMilestone.id, drawerSubtask.id)
-    }
-
-    setDrawerState(null)
-  }
 
   const toggleTaskGroup = (groupKey: string): void => {
     const currentCollapsed =
@@ -875,9 +691,12 @@ export function ProjectsWorkspacePage({
                   fullWidth={false}
                   withSpacer={false}
                 >
-                  {PROJECTS_WORKSPACE_FILTER_OPTIONS.map((option) => (
+                  {projectFilterOptions.map((option) => (
                     <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
-                      {option.label}
+                      <span className="inline-flex items-center gap-2">
+                        <span>{option.label}</span>
+                        <TabMenuCountBadge count={option.count} />
+                      </span>
                     </TabMenuItem>
                   ))}
                 </TabMenu>
@@ -1114,41 +933,37 @@ export function ProjectsWorkspacePage({
                                     {row.kind === 'milestone' ? (
                                       renderMilestoneProgressControl(row)
                                     ) : (
-                                      <MuiCheckbox
-                                        checked={row.completed}
-                                        disableRipple
-                                        icon={<CheckBoxOutlineBlankIcon fontSize="small" />}
-                                        checkedIcon={<CheckBoxIcon fontSize="small" />}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onChange={() =>
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
                                           onToggleSubtask(
                                             row.projectId,
                                             row.milestoneId,
                                             row.subtaskId as string
                                           )
-                                        }
-                                        inputProps={{
-                                          'aria-label': row.completed
+                                        }}
+                                        aria-label={
+                                          row.completed
                                             ? 'Mark subtask as pending'
                                             : 'Mark subtask as complete'
-                                        }}
-                                        sx={{
-                                          p: '4px',
-                                          color: 'var(--line-strong)',
-                                          '&.Mui-checked': {
-                                            color: 'var(--accent)'
-                                          },
-                                          '&:hover': {
-                                            backgroundColor: 'transparent',
-                                            color: 'var(--accent)'
-                                          },
-                                          '& .MuiSvgIcon-root': {
-                                            fontSize: 22,
-                                            transition:
-                                              'transform 180ms ease, color 180ms ease, opacity 180ms ease'
-                                          }
-                                        }}
-                                      />
+                                        }
+                                        title={
+                                          row.completed
+                                            ? 'Mark subtask as pending'
+                                            : 'Mark subtask as complete'
+                                        }
+                                        data-testid={`project-task-list-subtask-toggle:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
+                                        className="group relative flex h-9 w-9 shrink-0 items-center justify-center"
+                                      >
+                                        <TaskListStatusGlyph
+                                          checked={row.completed}
+                                          variant="circle"
+                                          ringTestId={`project-task-list-subtask-ring:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
+                                          checkTestId={`project-task-list-subtask-check:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
+                                          ringClassName="group-hover:border-[var(--accent)]"
+                                        />
+                                      </button>
                                     )}
                                   </TableCell>
                                   <TableCell className="border-r-0">
@@ -1268,190 +1083,666 @@ export function ProjectsWorkspacePage({
         )}
       </div>
 
-      <Drawer open={drawerState !== null} onOpenChange={(open) => !open && setDrawerState(null)}>
-        <DrawerContent side="right">
-          {drawerState?.kind === 'new-project' ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>New Project</DrawerTitle>
-                <DrawerDescription>Create a project for the board and task list.</DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <ProjectForm draft={projectDraft} onChange={setProjectDraft} />
-              </div>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => setDrawerState(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleProjectSave}>Create project</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-
-          {drawerState?.kind === 'project' && drawerProject ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>{drawerProject.name}</DrawerTitle>
-                <DrawerDescription>Edit project details and workspace actions.</DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <div className="mb-4 flex flex-wrap gap-2">
-                  <Badge variant="neutral" tone={PROJECT_STATUS_META[drawerProject.status].tone}>
-                    <Flag size={12} />
-                    {PROJECT_STATUS_META[drawerProject.status].titleLabel}
-                  </Badge>
-                  <Badge variant="neutral" tone="info">
-                    {drawerProject.progress}% complete
-                  </Badge>
-                </div>
-                <ProjectForm draft={projectDraft} onChange={setProjectDraft} />
-                <div className="mt-6 flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => void onOpenProjectFolder(drawerProject)}>
-                    <FolderOpen size={14} />
-                    {drawerProject.folderPath?.trim() ? 'Open Folder' : 'Link Folder'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => onToggleProjectFavorite(drawerProject.id)}
-                  >
-                    <Star
-                      size={14}
-                      className={
-                        favoriteProjectIds.includes(drawerProject.id) ? 'fill-current' : ''
-                      }
-                    />
-                    {favoriteProjectIds.includes(drawerProject.id) ? 'Favorited' : 'Favorite'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setDrawerState({ kind: 'new-milestone', projectId: drawerProject.id })
-                    }
-                  >
-                    <Plus size={14} />
-                    Add Milestone
-                  </Button>
-                </div>
-              </div>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => onToggleProjectDone(drawerProject.id)}>
-                  {drawerProject.status === 'completed' ? 'Reopen project' : 'Mark done'}
-                </Button>
-                <Button variant="outline" onClick={() => void onExportProject(drawerProject)}>
-                  Export
-                </Button>
-                <Button variant="outline" onClick={() => void onDeleteProject(drawerProject.id)}>
-                  <Trash2 size={14} />
-                  Delete
-                </Button>
-                <Button onClick={handleProjectSave}>Save changes</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-
-          {drawerState?.kind === 'new-milestone' && drawerProject ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>New Milestone</DrawerTitle>
-                <DrawerDescription>Add a milestone to {drawerProject.name}.</DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <MilestoneForm draft={milestoneDraft} onChange={setMilestoneDraft} />
-              </div>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => setDrawerState(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleMilestoneSave}>Create milestone</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-
-          {drawerState?.kind === 'milestone' && drawerProject && drawerMilestone ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>{drawerMilestone.title}</DrawerTitle>
-                <DrawerDescription>
-                  Edit milestone details for {drawerProject.name}.
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <MilestoneForm draft={milestoneDraft} onChange={setMilestoneDraft} />
-                <div className="mt-6">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setDrawerState({
-                        kind: 'new-subtask',
-                        projectId: drawerProject.id,
-                        milestoneId: drawerMilestone.id
-                      })
-                    }
-                  >
-                    <Plus size={14} />
-                    Add Subtask
-                  </Button>
-                </div>
-              </div>
-              <DrawerFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => onRemoveMilestone(drawerProject.id, drawerMilestone.id)}
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </Button>
-                <Button onClick={handleMilestoneSave}>Save changes</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-
-          {drawerState?.kind === 'new-subtask' && drawerProject && drawerMilestone ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>New Subtask</DrawerTitle>
-                <DrawerDescription>Add a subtask to {drawerMilestone.title}.</DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <SubtaskForm draft={subtaskDraft} onChange={setSubtaskDraft} />
-              </div>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => setDrawerState(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSubtaskSave}>Create subtask</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-
-          {drawerState?.kind === 'subtask' && drawerProject && drawerMilestone && drawerSubtask ? (
-            <>
-              <DrawerHeader>
-                <DrawerTitle>{drawerSubtask.title}</DrawerTitle>
-                <DrawerDescription>
-                  Edit subtask details for {drawerMilestone.title}.
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-                <SubtaskForm draft={subtaskDraft} onChange={setSubtaskDraft} />
-              </div>
-              <DrawerFooter>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    onRemoveSubtask(drawerProject.id, drawerMilestone.id, drawerSubtask.id)
-                  }
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </Button>
-                <Button onClick={handleSubtaskSave}>Save changes</Button>
-              </DrawerFooter>
-            </>
-          ) : null}
-        </DrawerContent>
-      </Drawer>
+      <ProjectsDrawer
+        drawerState={drawerState}
+        projects={projects}
+        favoriteProjectIds={favoriteProjectIds}
+        onDrawerStateChange={setDrawerState}
+        onMilestoneContextChange={onMilestoneContextChange}
+        onActiveTabChange={onActiveTabChange}
+        onSelectProject={onSelectProject}
+        onCreateProject={onCreateProject}
+        onToggleProjectDone={onToggleProjectDone}
+        onToggleProjectFavorite={onToggleProjectFavorite}
+        onOpenProjectFolder={onOpenProjectFolder}
+        onExportProject={onExportProject}
+        onDeleteProject={onDeleteProject}
+        onAddMilestone={onAddMilestone}
+        onRemoveMilestone={onRemoveMilestone}
+        onAddSubtask={onAddSubtask}
+        onRemoveSubtask={onRemoveSubtask}
+        onSaveProject={onSaveProject}
+        onSaveMilestone={onSaveMilestone}
+        onSaveSubtask={onSaveSubtask}
+      />
     </div>
+  )
+}
+
+type ProjectsDrawerProps = Pick<
+  ProjectsWorkspacePageProps,
+  | 'projects'
+  | 'favoriteProjectIds'
+  | 'onMilestoneContextChange'
+  | 'onActiveTabChange'
+  | 'onSelectProject'
+  | 'onCreateProject'
+  | 'onToggleProjectDone'
+  | 'onToggleProjectFavorite'
+  | 'onOpenProjectFolder'
+  | 'onExportProject'
+  | 'onDeleteProject'
+  | 'onAddMilestone'
+  | 'onRemoveMilestone'
+  | 'onAddSubtask'
+  | 'onRemoveSubtask'
+  | 'onSaveProject'
+  | 'onSaveMilestone'
+  | 'onSaveSubtask'
+> & {
+  drawerState: DrawerState | null
+  onDrawerStateChange: (state: DrawerState | null) => void
+}
+
+function ProjectsDrawer({
+  drawerState,
+  projects,
+  favoriteProjectIds,
+  onDrawerStateChange,
+  onMilestoneContextChange,
+  onActiveTabChange,
+  onSelectProject,
+  onCreateProject,
+  onToggleProjectDone,
+  onToggleProjectFavorite,
+  onOpenProjectFolder,
+  onExportProject,
+  onDeleteProject,
+  onAddMilestone,
+  onRemoveMilestone,
+  onAddSubtask,
+  onRemoveSubtask,
+  onSaveProject,
+  onSaveMilestone,
+  onSaveSubtask
+}: ProjectsDrawerProps): ReactElement {
+  const [projectDraft, setProjectDraft] = useState<ProjectDraft>(() => createEmptyProjectDraft())
+  const [milestoneDraft, setMilestoneDraft] = useState<MilestoneDraft>(createEmptyMilestoneDraft())
+  const [subtaskDraft, setSubtaskDraft] = useState<SubtaskDraft>(createEmptySubtaskDraft())
+  const projectDraftRef = useRef(projectDraft)
+  const milestoneDraftRef = useRef(milestoneDraft)
+  const subtaskDraftRef = useRef(subtaskDraft)
+  const previousDrawerStateRef = useRef<DrawerState | null>(drawerState)
+  const initializedDrawerKeyRef = useRef<string | null>(null)
+  const suppressAutoCommitRef = useRef(false)
+  const drawerStateKey = getDrawerStateKey(drawerState)
+
+  const {
+    project: drawerProject,
+    milestone: drawerMilestone,
+    subtask: drawerSubtask
+  } = useMemo(() => resolveDrawerEntities(projects, drawerState), [projects, drawerState])
+
+  const handleProjectDraftChange = useCallback((next: ProjectDraft): void => {
+    projectDraftRef.current = next
+    setProjectDraft(next)
+  }, [])
+
+  const handleMilestoneDraftChange = useCallback((next: MilestoneDraft): void => {
+    milestoneDraftRef.current = next
+    setMilestoneDraft(next)
+  }, [])
+
+  const handleSubtaskDraftChange = useCallback((next: SubtaskDraft): void => {
+    subtaskDraftRef.current = next
+    setSubtaskDraft(next)
+  }, [])
+
+  const persistProjectDraft = useCallback(
+    (project: Project): void => {
+      const currentProjectDraft = projectDraftRef.current
+      const normalizedName = currentProjectDraft.name.trim()
+
+      if (!normalizedName) {
+        return
+      }
+
+      onSaveProject(project.id, {
+        name: normalizedName,
+        summary: currentProjectDraft.summary.trim(),
+        icon: currentProjectDraft.icon
+      })
+    },
+    [onSaveProject]
+  )
+
+  const persistMilestoneDraft = useCallback(
+    (project: Project, milestone: ProjectMilestone): void => {
+      const currentMilestoneDraft = milestoneDraftRef.current
+      const normalizedTitle = currentMilestoneDraft.title.trim()
+
+      if (!normalizedTitle) {
+        return
+      }
+
+      onSaveMilestone(project.id, milestone.id, {
+        title: normalizedTitle,
+        description: currentMilestoneDraft.description.trim(),
+        dueDate: currentMilestoneDraft.dueDate,
+        status: currentMilestoneDraft.status,
+        priority: currentMilestoneDraft.priority
+      })
+    },
+    [onSaveMilestone]
+  )
+
+  const persistSubtaskDraft = useCallback(
+    (
+      project: Project,
+      milestone: ProjectMilestone,
+      subtask: ProjectMilestone['subtasks'][number]
+    ): void => {
+      const currentSubtaskDraft = subtaskDraftRef.current
+      const normalizedTitle = currentSubtaskDraft.title.trim()
+
+      if (!normalizedTitle) {
+        return
+      }
+
+      onSaveSubtask(project.id, milestone.id, subtask.id, {
+        title: normalizedTitle,
+        description: currentSubtaskDraft.description.trim(),
+        dueDate: currentSubtaskDraft.dueDate,
+        completed: currentSubtaskDraft.completed,
+        priority: currentSubtaskDraft.priority
+      })
+    },
+    [onSaveSubtask]
+  )
+
+  const commitDrawerDraft = useCallback(
+    (state: DrawerState | null): void => {
+      if (!state) {
+        return
+      }
+
+      const { project, milestone, subtask } = resolveDrawerEntities(projects, state)
+
+      if (state.kind === 'new-project') {
+        const currentProjectDraft = projectDraftRef.current
+        const normalizedName = currentProjectDraft.name.trim()
+
+        if (!normalizedName) {
+          return
+        }
+
+        const nextProjectId = onCreateProject({
+          name: normalizedName,
+          summary: currentProjectDraft.summary.trim(),
+          icon: currentProjectDraft.icon
+        })
+        onSelectProject(nextProjectId)
+        onActiveTabChange('board')
+        return
+      }
+
+      if (state.kind === 'project' && project) {
+        persistProjectDraft(project)
+        return
+      }
+
+      if (state.kind === 'new-milestone' && project) {
+        const currentMilestoneDraft = milestoneDraftRef.current
+        const normalizedTitle = currentMilestoneDraft.title.trim()
+
+        if (!normalizedTitle) {
+          return
+        }
+
+        onAddMilestone(project.id, {
+          title: normalizedTitle,
+          description: currentMilestoneDraft.description.trim(),
+          dueDate: currentMilestoneDraft.dueDate || undefined,
+          priority: currentMilestoneDraft.priority || undefined,
+          status: currentMilestoneDraft.status
+        })
+        return
+      }
+
+      if (state.kind === 'milestone' && project && milestone) {
+        persistMilestoneDraft(project, milestone)
+        return
+      }
+
+      if (state.kind === 'new-subtask' && project && milestone) {
+        const currentSubtaskDraft = subtaskDraftRef.current
+        const normalizedTitle = currentSubtaskDraft.title.trim()
+
+        if (!normalizedTitle) {
+          return
+        }
+
+        onAddSubtask(project.id, milestone.id, {
+          title: normalizedTitle,
+          description: currentSubtaskDraft.description.trim(),
+          dueDate: currentSubtaskDraft.dueDate || undefined,
+          priority: currentSubtaskDraft.priority || undefined,
+          completed: currentSubtaskDraft.completed
+        })
+        return
+      }
+
+      if (state.kind === 'subtask' && project && milestone && subtask) {
+        persistSubtaskDraft(project, milestone, subtask)
+      }
+    },
+    [
+      onActiveTabChange,
+      onAddMilestone,
+      onAddSubtask,
+      onCreateProject,
+      onSelectProject,
+      persistMilestoneDraft,
+      persistProjectDraft,
+      persistSubtaskDraft,
+      projects
+    ]
+  )
+
+  const transitionDrawerState = (state: DrawerState | null): void => {
+    suppressAutoCommitRef.current = true
+    onDrawerStateChange(state)
+  }
+
+  useEffect(() => {
+    if (
+      drawerProject &&
+      drawerMilestone &&
+      (drawerState?.kind === 'milestone' ||
+        drawerState?.kind === 'new-subtask' ||
+        drawerState?.kind === 'subtask')
+    ) {
+      onMilestoneContextChange({
+        projectId: drawerProject.id,
+        milestoneId: drawerMilestone.id
+      })
+      return
+    }
+
+    onMilestoneContextChange(null)
+  }, [drawerMilestone, drawerProject, drawerState, onMilestoneContextChange])
+
+  useEffect(() => {
+    const previousDrawerState = previousDrawerStateRef.current
+    const previousDrawerKey = getDrawerStateKey(previousDrawerState)
+
+    if (previousDrawerKey !== drawerStateKey) {
+      if (previousDrawerState && !suppressAutoCommitRef.current) {
+        commitDrawerDraft(previousDrawerState)
+      }
+
+      suppressAutoCommitRef.current = false
+      previousDrawerStateRef.current = drawerState
+    }
+  }, [commitDrawerDraft, drawerState, drawerStateKey])
+
+  useEffect(() => {
+    if (!drawerState) {
+      initializedDrawerKeyRef.current = null
+      return
+    }
+
+    if (drawerStateKey === initializedDrawerKeyRef.current) {
+      return
+    }
+
+    if (drawerState.kind === 'new-project') {
+      const nextProjectDraft = createEmptyProjectDraft()
+      projectDraftRef.current = nextProjectDraft
+      startTransition(() => {
+        setProjectDraft(nextProjectDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+      return
+    }
+
+    if (drawerState.kind === 'project' && drawerProject) {
+      const nextProjectDraft = {
+        name: drawerProject.name,
+        summary: drawerProject.summary,
+        icon: coerceFilledLucideProjectIcon(drawerProject.icon, drawerProject.id)
+      }
+      projectDraftRef.current = nextProjectDraft
+      startTransition(() => {
+        setProjectDraft(nextProjectDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+      return
+    }
+
+    if (drawerState.kind === 'new-milestone') {
+      const nextMilestoneDraft = createEmptyMilestoneDraft()
+      milestoneDraftRef.current = nextMilestoneDraft
+      startTransition(() => {
+        setMilestoneDraft(nextMilestoneDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+      return
+    }
+
+    if (drawerState.kind === 'milestone' && drawerMilestone) {
+      const nextMilestoneDraft = {
+        title: drawerMilestone.title,
+        description: drawerMilestone.description ?? '',
+        dueDate: drawerMilestone.dueDate ?? '',
+        status:
+          drawerMilestone.status === 'blocked' || drawerMilestone.status === 'completed'
+            ? drawerMilestone.status
+            : 'pending',
+        priority: drawerMilestone.priority ?? ''
+      } satisfies MilestoneDraft
+      milestoneDraftRef.current = nextMilestoneDraft
+      startTransition(() => {
+        setMilestoneDraft(nextMilestoneDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+      return
+    }
+
+    if (drawerState.kind === 'new-subtask') {
+      const nextSubtaskDraft = createEmptySubtaskDraft()
+      subtaskDraftRef.current = nextSubtaskDraft
+      startTransition(() => {
+        setSubtaskDraft(nextSubtaskDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+      return
+    }
+
+    if (drawerState.kind === 'subtask' && drawerSubtask) {
+      const nextSubtaskDraft = {
+        title: drawerSubtask.title,
+        description: drawerSubtask.description ?? '',
+        dueDate: drawerSubtask.dueDate ?? '',
+        completed: drawerSubtask.completed,
+        priority: drawerSubtask.priority ?? ''
+      } satisfies SubtaskDraft
+      subtaskDraftRef.current = nextSubtaskDraft
+      startTransition(() => {
+        setSubtaskDraft(nextSubtaskDraft)
+      })
+      initializedDrawerKeyRef.current = drawerStateKey
+    }
+  }, [drawerMilestone, drawerProject, drawerState, drawerStateKey, drawerSubtask])
+
+  useEffect(() => {
+    if (!drawerState) {
+      return
+    }
+
+    if (drawerState.kind === 'project' && !drawerProject) {
+      onDrawerStateChange(null)
+      return
+    }
+
+    if (drawerState.kind === 'milestone' && !drawerMilestone) {
+      onDrawerStateChange(null)
+      return
+    }
+
+    if (drawerState.kind === 'subtask' && !drawerSubtask) {
+      onDrawerStateChange(null)
+    }
+  }, [drawerMilestone, drawerProject, drawerState, drawerSubtask, onDrawerStateChange])
+
+  const handleDrawerClose = (): void => {
+    commitDrawerDraft(drawerState)
+    transitionDrawerState(null)
+  }
+
+  const handleProjectSave = (): void => {
+    const currentProjectDraft = projectDraftRef.current
+    const normalizedName = currentProjectDraft.name.trim()
+    if (!normalizedName) {
+      return
+    }
+
+    if (drawerState?.kind === 'new-project') {
+      const nextProjectId = onCreateProject({
+        name: normalizedName,
+        summary: currentProjectDraft.summary.trim(),
+        icon: currentProjectDraft.icon
+      })
+      onSelectProject(nextProjectId)
+      onActiveTabChange('board')
+      transitionDrawerState({ kind: 'project', projectId: nextProjectId })
+      return
+    }
+
+    if (drawerState?.kind !== 'project' || !drawerProject) {
+      return
+    }
+
+    persistProjectDraft(drawerProject)
+    transitionDrawerState(null)
+  }
+
+  const handleMilestoneSave = (): void => {
+    const currentMilestoneDraft = milestoneDraftRef.current
+    const normalizedTitle = currentMilestoneDraft.title.trim()
+    if (!normalizedTitle || !drawerProject) {
+      return
+    }
+
+    if (drawerState?.kind === 'new-milestone') {
+      onAddMilestone(drawerProject.id, {
+        title: normalizedTitle,
+        description: currentMilestoneDraft.description.trim(),
+        dueDate: currentMilestoneDraft.dueDate || undefined,
+        priority: currentMilestoneDraft.priority || undefined,
+        status: currentMilestoneDraft.status
+      })
+      transitionDrawerState(null)
+      return
+    }
+
+    if (drawerState?.kind !== 'milestone' || !drawerMilestone) {
+      return
+    }
+
+    persistMilestoneDraft(drawerProject, drawerMilestone)
+    transitionDrawerState(null)
+  }
+
+  const handleSubtaskSave = (): void => {
+    const currentSubtaskDraft = subtaskDraftRef.current
+    const normalizedTitle = currentSubtaskDraft.title.trim()
+    if (!normalizedTitle || !drawerProject || !drawerMilestone) {
+      return
+    }
+
+    if (drawerState?.kind === 'new-subtask') {
+      onAddSubtask(drawerProject.id, drawerMilestone.id, {
+        title: normalizedTitle,
+        description: currentSubtaskDraft.description.trim(),
+        dueDate: currentSubtaskDraft.dueDate || undefined,
+        priority: currentSubtaskDraft.priority || undefined,
+        completed: currentSubtaskDraft.completed
+      })
+      transitionDrawerState(null)
+      return
+    }
+
+    if (drawerState?.kind !== 'subtask' || !drawerSubtask) {
+      return
+    }
+
+    persistSubtaskDraft(drawerProject, drawerMilestone, drawerSubtask)
+    transitionDrawerState(null)
+  }
+
+  return (
+    <Drawer open={drawerState !== null} onOpenChange={(open) => !open && handleDrawerClose()}>
+      <DrawerContent side="right">
+        {drawerState?.kind === 'new-project' ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>New Project</DrawerTitle>
+              <DrawerDescription>Create a project for the board and task list.</DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <ProjectForm draft={projectDraft} onChange={handleProjectDraftChange} />
+            </div>
+            <DrawerFooter>
+              <Button onClick={handleProjectSave}>Create project</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+
+        {drawerState?.kind === 'project' && drawerProject ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>{drawerProject.name}</DrawerTitle>
+              <DrawerDescription>Edit project details and workspace actions.</DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <div className="mb-4 flex flex-wrap gap-2">
+                <Badge variant="neutral" tone={PROJECT_STATUS_META[drawerProject.status].tone}>
+                  <Flag size={12} />
+                  {PROJECT_STATUS_META[drawerProject.status].titleLabel}
+                </Badge>
+                <Badge variant="neutral" tone="info">
+                  {drawerProject.progress}% complete
+                </Badge>
+              </div>
+              <ProjectForm draft={projectDraft} onChange={handleProjectDraftChange} />
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void onOpenProjectFolder(drawerProject)}>
+                  <FolderOpen size={14} />
+                  {drawerProject.folderPath?.trim() ? 'Open Folder' : 'Link Folder'}
+                </Button>
+                <Button variant="outline" onClick={() => onToggleProjectFavorite(drawerProject.id)}>
+                  <Star
+                    size={14}
+                    className={favoriteProjectIds.includes(drawerProject.id) ? 'fill-current' : ''}
+                  />
+                  {favoriteProjectIds.includes(drawerProject.id) ? 'Favorited' : 'Favorite'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    persistProjectDraft(drawerProject)
+                    transitionDrawerState({ kind: 'new-milestone', projectId: drawerProject.id })
+                  }}
+                >
+                  <Plus size={14} />
+                  Add Milestone
+                </Button>
+              </div>
+            </div>
+            <DrawerFooter>
+              <Button variant="outline" onClick={() => onToggleProjectDone(drawerProject.id)}>
+                {drawerProject.status === 'completed' ? 'Reopen project' : 'Mark done'}
+              </Button>
+              <Button variant="outline" onClick={() => void onExportProject(drawerProject)}>
+                Export
+              </Button>
+              <Button variant="outline" onClick={() => void onDeleteProject(drawerProject.id)}>
+                <Trash2 size={14} />
+                Delete
+              </Button>
+              <Button onClick={handleProjectSave}>Save changes</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+
+        {drawerState?.kind === 'new-milestone' && drawerProject ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>New Milestone</DrawerTitle>
+              <DrawerDescription>Add a milestone to {drawerProject.name}.</DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <MilestoneForm draft={milestoneDraft} onChange={handleMilestoneDraftChange} />
+            </div>
+            <DrawerFooter>
+              <Button onClick={handleMilestoneSave}>Create milestone</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+
+        {drawerState?.kind === 'milestone' && drawerProject && drawerMilestone ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>{drawerMilestone.title}</DrawerTitle>
+              <DrawerDescription>
+                Edit milestone details for {drawerProject.name}.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <MilestoneForm draft={milestoneDraft} onChange={handleMilestoneDraftChange} />
+              <div className="mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    persistMilestoneDraft(drawerProject, drawerMilestone)
+                    transitionDrawerState({
+                      kind: 'new-subtask',
+                      projectId: drawerProject.id,
+                      milestoneId: drawerMilestone.id
+                    })
+                  }}
+                >
+                  <Plus size={14} />
+                  Add Subtask
+                </Button>
+              </div>
+            </div>
+            <DrawerFooter>
+              <Button
+                variant="outline"
+                onClick={() => onRemoveMilestone(drawerProject.id, drawerMilestone.id)}
+              >
+                <Trash2 size={14} />
+                Delete
+              </Button>
+              <Button onClick={handleMilestoneSave}>Save changes</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+
+        {drawerState?.kind === 'new-subtask' && drawerProject && drawerMilestone ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>New Subtask</DrawerTitle>
+              <DrawerDescription>Add a subtask to {drawerMilestone.title}.</DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <SubtaskForm draft={subtaskDraft} onChange={handleSubtaskDraftChange} />
+            </div>
+            <DrawerFooter>
+              <Button onClick={handleSubtaskSave}>Create subtask</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+
+        {drawerState?.kind === 'subtask' && drawerProject && drawerMilestone && drawerSubtask ? (
+          <>
+            <DrawerHeader>
+              <DrawerTitle>{drawerSubtask.title}</DrawerTitle>
+              <DrawerDescription>
+                Edit subtask details for {drawerMilestone.title}.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <SubtaskForm draft={subtaskDraft} onChange={handleSubtaskDraftChange} />
+            </div>
+            <DrawerFooter>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  onRemoveSubtask(drawerProject.id, drawerMilestone.id, drawerSubtask.id)
+                }
+              >
+                <Trash2 size={14} />
+                Delete
+              </Button>
+              <Button onClick={handleSubtaskSave}>Save changes</Button>
+            </DrawerFooter>
+          </>
+        ) : null}
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -1509,7 +1800,7 @@ function ProjectForm({
                     key={glyph}
                     type="button"
                     className={cn(
-                      'inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-colors',
+                      'inline-flex h-12 w-12 items-center justify-center rounded-xl border transition-colors',
                       isActive
                         ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                         : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
@@ -1517,7 +1808,7 @@ function ProjectForm({
                     onClick={() => onChange({ ...draft, icon: nextIcon })}
                     title={glyph}
                   >
-                    <NoteShapeIcon icon={nextIcon} size={22} />
+                    <NoteShapeIcon icon={nextIcon} size={28} />
                   </button>
                 )
               })}
@@ -1727,43 +2018,83 @@ function renderMilestoneProgressControl(row: ProjectTaskRow): ReactElement {
       role="img"
       aria-label={`Milestone progress: ${summary}`}
       title={summary}
-      className="relative inline-flex h-9 w-7 shrink-0 items-center justify-center"
+      data-testid={`project-task-list-milestone-control:${row.projectId}:${row.milestoneId}`}
+      className="flex h-9 w-9 shrink-0 items-center justify-center"
     >
-      <span className="absolute left-1/2 top-1/2 h-[22px] w-[14px] -translate-x-1/2 -translate-y-1/2 rotate-45 overflow-hidden border border-[color:color-mix(in_srgb,#67e8f9_50%,#1e293b_20%)] bg-[color:color-mix(in_srgb,var(--panel)_74%,#0f172a_26%)] shadow-[0_8px_20px_color-mix(in_srgb,#0f172a_14%,transparent)]">
-        <LinearProgress
-          variant="determinate"
-          value={progress}
-          aria-hidden="true"
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            width: '160%',
-            height: '100%',
-            left: '-30%',
-            backgroundColor: 'color-mix(in_srgb, var(--panel-2) 78%, #0f172a 22%)',
-            borderRadius: 0,
-            transform: 'rotate(-90deg)',
-            transformOrigin: 'center',
-            '& .MuiLinearProgress-bar': {
-              borderRadius: 0,
-              backgroundImage:
-                'linear-gradient(180deg, #7dd3fc 0%, #2563eb 55%, #d946ef 100%)'
-            }
-          }}
-        />
-      </span>
-      <CheckRoundedIcon
-        sx={{
-          position: 'relative',
-          zIndex: 1,
-          fontSize: 13,
-          color: '#ffffff',
-          filter: 'drop-shadow(0 1px 3px rgba(8,15,30,0.45))',
-          transition: 'transform 180ms ease, opacity 180ms ease',
-          transform: row.completed ? 'scale(1)' : 'scale(0.5)',
-          opacity: row.completed ? 1 : 0
-        }}
+      <TaskListStatusGlyph
+        checked={row.completed}
+        variant="diamond"
+        progress={progress}
+        ringTestId={`project-task-list-milestone-ring:${row.projectId}:${row.milestoneId}`}
+        checkTestId={`project-task-list-milestone-check:${row.projectId}:${row.milestoneId}`}
       />
+    </span>
+  )
+}
+
+interface TaskListStatusGlyphProps {
+  checked: boolean
+  variant: 'circle' | 'diamond'
+  progress?: number
+  ringTestId: string
+  checkTestId: string
+  ringClassName?: string
+}
+
+function TaskListStatusGlyph({
+  checked,
+  variant,
+  progress = 0,
+  ringTestId,
+  checkTestId,
+  ringClassName
+}: TaskListStatusGlyphProps): ReactElement {
+  const clampedProgress = Math.max(0, Math.min(100, progress))
+
+  return (
+    <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+      {variant === 'diamond' ? (
+        <>
+          <span className="absolute inset-0 rotate-45 overflow-hidden shadow-[0_8px_20px_color-mix(in_srgb,#0f172a_14%,transparent)]">
+            <span className="absolute inset-[-21%] -rotate-45">
+              <span className="absolute inset-0 bg-[linear-gradient(180deg,#7dd3fc_0%,#2563eb_55%,#d946ef_100%)]" />
+              <span
+                className="absolute inset-0 bg-[color:color-mix(in_srgb,var(--panel-2)_78%,#0f172a_22%)]"
+                style={{ clipPath: `inset(0 0 ${clampedProgress}% 0)` }}
+              />
+            </span>
+          </span>
+          <span
+            data-testid={ringTestId}
+            className={cn(
+              'absolute inset-0 rotate-45 border-2 border-[color:color-mix(in_srgb,#67e8f9_46%,#1e293b_22%)] bg-transparent',
+              ringClassName
+            )}
+          />
+        </>
+      ) : (
+        <span
+          data-testid={ringTestId}
+          className={cn(
+            checked
+              ? 'absolute inset-0 rounded-full border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)] shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_24%,transparent)]'
+              : 'absolute inset-0 rounded-full border-2 border-[color:var(--calendar-task-text)] bg-[var(--panel)] shadow-[0_8px_18px_color-mix(in_srgb,#0f172a_14%,transparent)]',
+            ringClassName
+          )}
+        />
+      )}
+      <span
+        data-testid={checkTestId}
+        className={cn(
+          'pointer-events-none absolute inset-0 flex items-center justify-center drop-shadow-[0_1px_3px_rgba(8,15,30,0.45)]',
+          variant === 'diamond' ? 'text-white' : 'text-[var(--primary-foreground)]'
+        )}
+        style={{
+          opacity: checked ? 1 : 0
+        }}
+      >
+        <Check size={10} strokeWidth={3} />
+      </span>
     </span>
   )
 }
@@ -2016,6 +2347,57 @@ function getDueDateGroupDescriptor(
   }
 
   return { key: 'due:later', label: 'Due Later' }
+}
+
+function getDrawerStateKey(state: DrawerState | null): string | null {
+  if (!state) {
+    return null
+  }
+
+  switch (state.kind) {
+    case 'new-project':
+      return 'new-project'
+    case 'project':
+      return `project:${state.projectId}`
+    case 'new-milestone':
+      return `new-milestone:${state.projectId}`
+    case 'milestone':
+      return `milestone:${state.projectId}:${state.milestoneId}`
+    case 'new-subtask':
+      return `new-subtask:${state.projectId}:${state.milestoneId}`
+    case 'subtask':
+      return `subtask:${state.projectId}:${state.milestoneId}:${state.subtaskId}`
+  }
+}
+
+function resolveDrawerEntities(
+  projects: Project[],
+  state: DrawerState | null
+): {
+  project: Project | null
+  milestone: ProjectMilestone | null
+  subtask: ProjectMilestone['subtasks'][number] | null
+} {
+  if (!state || state.kind === 'new-project') {
+    return { project: null, milestone: null, subtask: null }
+  }
+
+  const project = projects.find((candidate) => candidate.id === state.projectId) ?? null
+
+  if (!project || state.kind === 'project' || state.kind === 'new-milestone') {
+    return { project, milestone: null, subtask: null }
+  }
+
+  const milestone =
+    project.milestones.find((candidate) => candidate.id === state.milestoneId) ?? null
+
+  if (!milestone || state.kind === 'milestone' || state.kind === 'new-subtask') {
+    return { project, milestone, subtask: null }
+  }
+
+  const subtask = milestone.subtasks.find((candidate) => candidate.id === state.subtaskId) ?? null
+
+  return { project, milestone, subtask }
 }
 
 function createEmptyProjectDraft(): ProjectDraft {

@@ -46,6 +46,14 @@ export type ProjectIconSymbol =
   | 'book-open'
   | 'package'
   | 'flask-conical'
+  | 'sparkles'
+  | 'pen-tool'
+  | 'monitor'
+  | 'megaphone'
+  | 'globe'
+  | 'shield'
+  | 'camera'
+  | 'calendar'
 export type ProjectIconVariant = 'filled' | 'outlined'
 export type ProjectIconGlyph = ProjectIconShape | ProjectIconSymbol
 

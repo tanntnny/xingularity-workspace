@@ -2,11 +2,19 @@ import { ReactElement } from 'react'
 import {
   BookOpen,
   Briefcase,
+  Calendar,
+  Camera,
   FlaskConical,
   FolderKanban,
+  Globe,
   Lightbulb,
+  Megaphone,
+  Monitor,
   Package,
+  PenTool,
   Rocket,
+  Shield,
+  Sparkles,
   Target
 } from 'lucide-react'
 import { ProjectIconStyle } from '../../../shared/types'
@@ -90,6 +98,30 @@ function renderLucideGlyph(name: string, size: number, color: string): ReactElem
   }
   if (name === 'flask-conical') {
     return <FlaskConical {...props} />
+  }
+  if (name === 'sparkles') {
+    return <Sparkles {...props} />
+  }
+  if (name === 'pen-tool') {
+    return <PenTool {...props} />
+  }
+  if (name === 'monitor') {
+    return <Monitor {...props} />
+  }
+  if (name === 'megaphone') {
+    return <Megaphone {...props} />
+  }
+  if (name === 'globe') {
+    return <Globe {...props} />
+  }
+  if (name === 'shield') {
+    return <Shield {...props} />
+  }
+  if (name === 'camera') {
+    return <Camera {...props} />
+  }
+  if (name === 'calendar') {
+    return <Calendar {...props} />
   }
 
   return <Briefcase {...props} />

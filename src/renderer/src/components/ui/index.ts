@@ -119,7 +119,7 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
-export { TabMenu, TabMenuItem } from './tab-menu'
+export { TabMenu, TabMenuItem, TabMenuCountBadge } from './tab-menu'
 export {
   ButtonGroup,
   ButtonGroupItem,

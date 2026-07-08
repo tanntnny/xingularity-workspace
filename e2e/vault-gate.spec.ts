@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 
 async function launchWithoutVault(): Promise<{

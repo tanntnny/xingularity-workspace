@@ -7,7 +7,6 @@ import {
   useRef,
   useState
 } from 'react'
-import { Milestone } from 'lucide-react'
 import { CalendarTask, CalendarTaskType, TaskPriority } from '../../../shared/types'
 import {
   buildWeeklyCalendarEntries,
@@ -47,6 +46,12 @@ import {
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
+import {
+  CalendarMilestoneCard,
+  CalendarMilestoneDetails,
+  CalendarMilestoneHoverCard,
+  CalendarMilestoneDialog
+} from './CalendarMilestoneDetails'
 import { TaskEditDialog } from './CalendarMonthView'
 
 interface CalendarWeekViewProps {
@@ -170,6 +175,7 @@ export function CalendarWeekView({
     [normalizedTasks]
   )
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [selectedMilestone, setSelectedMilestone] = useState<CalendarMilestoneDetails | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [timedDropIndicator, setTimedDropIndicator] = useState<TimedDropIndicatorState | null>(null)
   const [allDayDropIndicator, setAllDayDropIndicator] = useState<AllDayDropIndicatorState | null>(
@@ -177,6 +183,11 @@ export function CalendarWeekView({
   )
   const [hoveredTaskCard, setHoveredTaskCard] = useState<{
     task: CalendarTask
+    x: number
+    y: number
+  } | null>(null)
+  const [hoveredMilestoneCard, setHoveredMilestoneCard] = useState<{
+    milestone: CalendarMilestoneDetails
     x: number
     y: number
   } | null>(null)
@@ -571,11 +582,13 @@ export function CalendarWeekView({
       onDragEnd={handleTaskDragEnd}
       onClick={(event) => {
         event.stopPropagation()
+        setHoveredMilestoneCard(null)
         setHoveredTaskCard(null)
         setEditingTaskId(task.id)
       }}
       onMouseMove={(event) => {
         const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+        setHoveredMilestoneCard(null)
         setHoveredTaskCard((current) => {
           if (!current || current.task.id !== task.id) {
             return { task, x, y }
@@ -603,6 +616,7 @@ export function CalendarWeekView({
     <button
       key={item.id}
       type="button"
+      data-testid={`calendar-week-milestone:${item.projectId ?? ''}:${item.milestoneId ?? ''}`}
       style={{
         gridColumn: `${item.columnStart + 1} / span ${item.columnSpan}`,
         gridRow: `${item.row + 1}`,
@@ -611,15 +625,56 @@ export function CalendarWeekView({
       }}
       onClick={(event) => {
         event.stopPropagation()
-        if (item.projectId && item.milestoneId) {
-          onOpenMilestone?.(item.projectId, item.milestoneId)
+        const milestone = getMilestoneDetailsFromWeeklyItem(item)
+        if (milestone) {
+          setHoveredMilestoneCard(null)
+          setSelectedMilestone(milestone)
         }
       }}
-      className="pointer-events-auto inline-flex h-full items-center gap-1.5 self-stretch rounded-md border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent-soft)_72%,var(--panel))] px-2 py-1 text-left text-[11px] text-[var(--text)]"
+      onMouseMove={(event) => {
+        const milestone = getMilestoneDetailsFromWeeklyItem(item)
+        if (!milestone) {
+          return
+        }
+        const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+        setHoveredTaskCard(null)
+        setHoveredMilestoneCard((current) => {
+          if (
+            !current ||
+            current.milestone.projectId !== milestone.projectId ||
+            current.milestone.milestoneId !== milestone.milestoneId
+          ) {
+            return { milestone, x, y }
+          }
+          return { ...current, x, y }
+        })
+      }}
+      onMouseLeave={() => setHoveredMilestoneCard(null)}
+      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent-soft)_72%,var(--panel))] px-2 py-1 text-left text-[11px] text-[var(--text)]"
       title={item.projectName ? `${item.title} · ${item.projectName}` : item.title}
     >
-      <Milestone size={12} className="shrink-0 text-[var(--accent)]" />
-      <span className="truncate font-medium">{item.title}</span>
+      {item.projectId && item.milestoneId ? (
+        <div className="min-w-0 self-center">
+          <CalendarMilestoneCard
+            milestone={{
+              title: item.title,
+              projectId: item.projectId,
+              projectName: item.projectName ?? '',
+              projectIcon: item.projectIcon,
+              milestoneId: item.milestoneId,
+              milestoneDescription: item.milestoneDescription,
+              milestoneDueDate: item.milestoneDueDate,
+              milestoneStatus: item.milestoneStatus,
+              milestoneCompletedSubtaskCount: item.milestoneCompletedSubtaskCount,
+              milestoneSubtaskCount: item.milestoneSubtaskCount,
+              milestoneProgressPercent: item.milestoneProgressPercent,
+              completed: item.completed
+            }}
+          />
+        </div>
+      ) : (
+        <span className="truncate font-medium">{item.title}</span>
+      )}
     </button>
   )
 
@@ -653,6 +708,7 @@ export function CalendarWeekView({
           if (timedInteractionRef.current) {
             return
           }
+          setHoveredMilestoneCard(null)
           const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
           setHoveredTaskCard((current) => {
             if (!current || current.task.id !== task.id) {
@@ -720,229 +776,73 @@ export function CalendarWeekView({
   }
 
   return (
-    <section data-testid="calendar-week-view" className="flex h-full flex-col p-4">
-      <div className="workspace-subtle-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--text)]">
-        <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
-          <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-4" />
-          {weekDays.map(({ date, value }) => {
-            const isSelected = date === selectedDate
-            const isToday = date === todayIso
-            const isHighlighted = isSelected || isToday
+    <section data-testid="calendar-week-view" className="flex min-h-0 flex-1 flex-col">
+      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
+        <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-4" />
+        {weekDays.map(({ date, value }) => {
+          const isSelected = date === selectedDate
+          const isToday = date === todayIso
+          const isHighlighted = isSelected || isToday
 
-            return (
-              <button
-                key={date}
-                type="button"
-                onClick={() => onSelectDate(date)}
-                className={`border-r border-[var(--line)] px-3 py-3 text-center transition-colors last:border-r-0 ${
-                  isHighlighted
-                    ? 'bg-[var(--accent-soft)]'
-                    : 'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)]'
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => onSelectDate(date)}
+              className={`border-r border-[var(--line)] px-3 py-3 text-center transition-colors last:border-r-0 ${
+                isHighlighted
+                  ? 'bg-[var(--accent-soft)]'
+                  : 'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)]'
+              }`}
+            >
+              <div
+                className={`text-sm font-semibold ${
+                  isToday ? 'text-[var(--accent)]' : 'text-[var(--text)]'
                 }`}
               >
-                <div
-                  className={`text-sm font-semibold ${
-                    isToday ? 'text-[var(--accent)]' : 'text-[var(--text)]'
-                  }`}
-                >
-                  {formatWeekdayHeaderLabel(value)}
-                </div>
-                <div
-                  className={`mt-1 text-xs font-normal ${
-                    isToday ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
-                  }`}
-                >
-                  {formatWeekDateHeaderLabel(value)}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
-          <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-3" />
-          <div
-            className="relative col-span-7"
-            style={{ minHeight: `${allDaySurfaceMinHeightPx}px` }}
-          >
-            <div className="absolute inset-0 grid grid-cols-7">
-              {weekDays.map(({ date }) => {
-                const isSelected = date === selectedDate
-                const isToday = date === todayIso
-                const isHighlighted = isSelected || isToday
-                const dragKey = `all-day:${date}`
-
-                return (
-                  <div
-                    key={date}
-                    onClick={() => onSelectDate(date)}
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = 'move'
-                      setDragOverKey(dragKey)
-                      setTimedDropIndicator(null)
-                      const dragState = getCalendarTaskDragSession()
-                      const taskId = dragState?.taskId ?? getDraggedTaskId(event)
-                      if (!taskId) {
-                        setAllDayDropIndicator(null)
-                        return
-                      }
-                      const sourceTask = tasksById[taskId]
-                      setAllDayDropIndicator(
-                        buildWeeklyAllDayDropIndicator(sourceTask, date, weekStart)
-                      )
-                    }}
-                    onDragLeave={(event) => {
-                      if (
-                        event.relatedTarget instanceof Node &&
-                        event.currentTarget.contains(event.relatedTarget)
-                      ) {
-                        return
-                      }
-                      if (dragOverKey === dragKey) {
-                        setDragOverKey(null)
-                      }
-                      setAllDayDropIndicator(null)
-                    }}
-                    onDrop={(event) => handleAllDayDrop(event, date)}
-                    className={`h-full border-r border-[var(--line)] px-2 py-2 transition-colors last:border-r-0 ${
-                      dragOverKey === dragKey && !allDayDropIndicator
-                        ? 'bg-[var(--accent-soft)]'
-                        : isHighlighted
-                          ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_16%,transparent)]'
-                          : 'bg-transparent'
-                    }`}
-                    style={{
-                      paddingLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
-                      paddingRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
-                    }}
-                  >
-                    {allDayLayouts.length === 0 ? (
-                      <div className="flex h-full items-center justify-center rounded-md border border-dashed border-transparent text-[11px] text-[var(--muted)]">
-                        No all-day items
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-
-            {allDayDropIndicator ? (
-              <div className="pointer-events-none absolute inset-0 z-[1] grid grid-cols-7">
-                <div
-                  data-testid="calendar-week-all-day-drop-indicator"
-                  className="bg-[color:color-mix(in_srgb,var(--accent-soft)_88%,transparent)]"
-                  style={{
-                    gridColumn: `${allDayDropIndicator.columnStart + 1} / span ${allDayDropIndicator.columnSpan}`,
-                    gridRow: '1 / 2'
-                  }}
-                />
+                {formatWeekdayHeaderLabel(value)}
               </div>
-            ) : null}
-
-            {allDayLayouts.length > 0 ? (
               <div
-                className="pointer-events-none relative z-[2] grid h-full grid-cols-7 py-2"
-                style={{
-                  gridAutoRows: `${WEEKLY_ALL_DAY_ROW_HEIGHT_PX}px`,
-                  rowGap: `${WEEKLY_ALL_DAY_ROW_GAP_PX}px`,
-                  minHeight: `${allDaySurfaceMinHeightPx}px`
-                }}
+                className={`mt-1 text-xs font-normal ${
+                  isToday ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+                }`}
               >
-                {allDayLayouts.map((item) =>
-                  item.source === 'milestone'
-                    ? renderMilestoneAllDayItem(item)
-                    : item.task
-                      ? renderAllDayTask(item.task, item)
-                      : null
-                )}
+                {formatWeekDateHeaderLabel(value)}
               </div>
-            ) : null}
-          </div>
-        </div>
+            </button>
+          )
+        })}
+      </div>
 
-        <div className="flex-1 overflow-auto">
-          <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-            <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]">
-              <div className="relative" style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}>
-                <div
-                  ref={timeScaleRef}
-                  className="absolute inset-x-0"
-                  style={{
-                    top: `${WEEKLY_CELL_PADDING_PX}px`,
-                    height: `${WEEKLY_DAY_HEIGHT_PX}px`
-                  }}
-                >
-                  {TIME_SLOTS.map((slot, index) => (
-                    <div
-                      key={slot.hour}
-                      className={`px-3 text-right text-[11px] font-medium text-[var(--muted)] ${
-                        index === 0 ? '' : 'border-t border-[var(--line)]'
-                      }`}
-                      style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px`, paddingTop: '8px' }}
-                    >
-                      {slot.label}
-                    </div>
-                  ))}
-                </div>
-                {currentTimeIndicator ? (
-                  <div
-                    data-testid="calendar-week-current-time-label"
-                    className="pointer-events-none absolute inset-x-0 z-[30]"
-                    style={{ top: `${currentTimeIndicator.topPx}px` }}
-                  >
-                    <div className="relative -translate-y-1/2">
-                      <div className="absolute right-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-[var(--accent)]" />
-                      <div className="pr-4 text-right text-[11px] font-semibold leading-none text-[var(--accent)]">
-                        {currentTimeIndicator.label}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
+        <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-3" />
+        <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceMinHeightPx}px` }}>
+          <div className="absolute inset-0 grid grid-cols-7">
             {weekDays.map(({ date }) => {
               const isSelected = date === selectedDate
               const isToday = date === todayIso
               const isHighlighted = isSelected || isToday
-              const dayLayouts = timedLayoutsByDate[date] ?? []
+              const dragKey = `all-day:${date}`
 
               return (
                 <div
                   key={date}
-                  data-testid={`calendar-week-timed-column:${date}`}
                   onClick={() => onSelectDate(date)}
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
-                    setAllDayDropIndicator(null)
+                    setDragOverKey(dragKey)
+                    setTimedDropIndicator(null)
                     const dragState = getCalendarTaskDragSession()
                     const taskId = dragState?.taskId ?? getDraggedTaskId(event)
                     if (!taskId) {
-                      setTimedDropIndicator(null)
+                      setAllDayDropIndicator(null)
                       return
                     }
-                    const pointerMinutes = getPointerMinutesForClientY(
-                      event.clientY,
-                      daySurfaceRefs.current[date] ?? event.currentTarget
-                    )
                     const sourceTask = tasksById[taskId]
-                    const pointerOffsetMinutes =
-                      dragState && dragState.taskId === taskId ? dragState.pointerOffsetMinutes : 0
-                    const nextRange = buildWeeklyTimedDropRange(
-                      sourceTask,
-                      pointerMinutes,
-                      pointerOffsetMinutes
+                    setAllDayDropIndicator(
+                      buildWeeklyAllDayDropIndicator(sourceTask, date, weekStart)
                     )
-
-                    setTimedDropIndicator({
-                      date,
-                      topPx: minutesToPixels(nextRange.startMinutes),
-                      heightPx: Math.max(
-                        minutesToPixels(nextRange.endMinutes - nextRange.startMinutes),
-                        minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
-                      )
-                    })
                   }}
                   onDragLeave={(event) => {
                     if (
@@ -951,71 +851,222 @@ export function CalendarWeekView({
                     ) {
                       return
                     }
-                    setTimedDropIndicator((current) => (current?.date === date ? null : current))
+                    if (dragOverKey === dragKey) {
+                      setDragOverKey(null)
+                    }
+                    setAllDayDropIndicator(null)
                   }}
-                  onDrop={(event) => handleTimedDrop(event, date)}
-                  className={`relative border-r border-[var(--line)] last:border-r-0 ${
-                    isHighlighted
-                      ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_12%,transparent)]'
-                      : 'bg-transparent'
+                  onDrop={(event) => handleAllDayDrop(event, date)}
+                  className={`h-full border-r border-[var(--line)] px-2 py-2 transition-colors last:border-r-0 ${
+                    dragOverKey === dragKey && !allDayDropIndicator
+                      ? 'bg-[var(--accent-soft)]'
+                      : isHighlighted
+                        ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_16%,transparent)]'
+                        : 'bg-transparent'
                   }`}
-                  style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}
+                  style={{
+                    paddingLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
+                    paddingRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
+                  }}
                 >
-                  <div
-                    ref={(node) => {
-                      daySurfaceRefs.current[date] = node
-                    }}
-                    className="absolute"
-                    style={{
-                      top: `${WEEKLY_CELL_PADDING_PX}px`,
-                      right: `${WEEKLY_CELL_PADDING_PX}px`,
-                      bottom: `${WEEKLY_CELL_PADDING_PX}px`,
-                      left: `${WEEKLY_CELL_PADDING_PX}px`
-                    }}
-                  >
-                    <div className="absolute inset-0">
-                      {TIME_SLOTS.map((slot, index) => (
-                        <div
-                          key={slot.hour}
-                          className={`border-t border-[var(--line)] ${
-                            index === 0 ? 'border-t-0' : ''
-                          }`}
-                          style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px` }}
-                        />
-                      ))}
+                  {allDayLayouts.length === 0 ? (
+                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-transparent text-[11px] text-[var(--muted)]">
+                      No all-day items
                     </div>
-                    {timedDropIndicator?.date === date ? (
-                      <div className="pointer-events-none absolute inset-0 z-[1]">
-                        <div
-                          data-testid="calendar-week-drop-indicator"
-                          className="calendar-week-drop-indicator absolute inset-x-0"
-                          style={{
-                            top: `${timedDropIndicator.topPx}px`,
-                            height: `${timedDropIndicator.heightPx}px`
-                          }}
-                        />
-                      </div>
-                    ) : null}
-                    <div className="absolute inset-0">
-                      {dayLayouts.map((layout) => renderTimedTask(layout))}
-                    </div>
-                  </div>
+                  ) : null}
                 </div>
               )
             })}
-            {currentTimeIndicator ? (
+          </div>
+
+          {allDayDropIndicator ? (
+            <div className="pointer-events-none absolute inset-0 z-[1] grid grid-cols-7">
               <div
-                data-testid="calendar-week-current-time-line"
-                className="pointer-events-none absolute right-0 z-[30] -translate-y-1/2"
+                data-testid="calendar-week-all-day-drop-indicator"
+                className="bg-[color:color-mix(in_srgb,var(--accent-soft)_88%,transparent)]"
                 style={{
-                  top: `${currentTimeIndicator.topPx}px`,
-                  left: `${WEEKLY_TIME_GUTTER_WIDTH_PX}px`
+                  gridColumn: `${allDayDropIndicator.columnStart + 1} / span ${allDayDropIndicator.columnSpan}`,
+                  gridRow: '1 / 2'
+                }}
+              />
+            </div>
+          ) : null}
+
+          {allDayLayouts.length > 0 ? (
+            <div
+              className="pointer-events-none relative z-[2] grid h-full grid-cols-7 py-2"
+              style={{
+                gridAutoRows: `${WEEKLY_ALL_DAY_ROW_HEIGHT_PX}px`,
+                rowGap: `${WEEKLY_ALL_DAY_ROW_GAP_PX}px`,
+                minHeight: `${allDaySurfaceMinHeightPx}px`
+              }}
+            >
+              {allDayLayouts.map((item) =>
+                item.source === 'milestone'
+                  ? renderMilestoneAllDayItem(item)
+                  : item.task
+                    ? renderAllDayTask(item.task, item)
+                    : null
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
+          <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]">
+            <div className="relative" style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}>
+              <div
+                ref={timeScaleRef}
+                className="absolute inset-x-0"
+                style={{
+                  top: `${WEEKLY_CELL_PADDING_PX}px`,
+                  height: `${WEEKLY_DAY_HEIGHT_PX}px`
                 }}
               >
-                <div className="h-0.5 w-full bg-[var(--accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_28%,transparent)]" />
+                {TIME_SLOTS.map((slot, index) => (
+                  <div
+                    key={slot.hour}
+                    className={`px-3 text-right text-[11px] font-medium text-[var(--muted)] ${
+                      index === 0 ? '' : 'border-t border-[var(--line)]'
+                    }`}
+                    style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px`, paddingTop: '8px' }}
+                  >
+                    {slot.label}
+                  </div>
+                ))}
               </div>
-            ) : null}
+              {currentTimeIndicator ? (
+                <div
+                  data-testid="calendar-week-current-time-label"
+                  className="pointer-events-none absolute inset-x-0 z-[30]"
+                  style={{ top: `${currentTimeIndicator.topPx}px` }}
+                >
+                  <div className="relative -translate-y-1/2">
+                    <div className="absolute right-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-[var(--accent)]" />
+                    <div className="pr-4 text-right text-[11px] font-semibold leading-none text-[var(--accent)]">
+                      {currentTimeIndicator.label}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
+          {weekDays.map(({ date }) => {
+            const isSelected = date === selectedDate
+            const isToday = date === todayIso
+            const isHighlighted = isSelected || isToday
+            const dayLayouts = timedLayoutsByDate[date] ?? []
+
+            return (
+              <div
+                key={date}
+                data-testid={`calendar-week-timed-column:${date}`}
+                onClick={() => onSelectDate(date)}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setAllDayDropIndicator(null)
+                  const dragState = getCalendarTaskDragSession()
+                  const taskId = dragState?.taskId ?? getDraggedTaskId(event)
+                  if (!taskId) {
+                    setTimedDropIndicator(null)
+                    return
+                  }
+                  const pointerMinutes = getPointerMinutesForClientY(
+                    event.clientY,
+                    daySurfaceRefs.current[date] ?? event.currentTarget
+                  )
+                  const sourceTask = tasksById[taskId]
+                  const pointerOffsetMinutes =
+                    dragState && dragState.taskId === taskId ? dragState.pointerOffsetMinutes : 0
+                  const nextRange = buildWeeklyTimedDropRange(
+                    sourceTask,
+                    pointerMinutes,
+                    pointerOffsetMinutes
+                  )
+
+                  setTimedDropIndicator({
+                    date,
+                    topPx: minutesToPixels(nextRange.startMinutes),
+                    heightPx: Math.max(
+                      minutesToPixels(nextRange.endMinutes - nextRange.startMinutes),
+                      minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
+                    )
+                  })
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    event.relatedTarget instanceof Node &&
+                    event.currentTarget.contains(event.relatedTarget)
+                  ) {
+                    return
+                  }
+                  setTimedDropIndicator((current) => (current?.date === date ? null : current))
+                }}
+                onDrop={(event) => handleTimedDrop(event, date)}
+                className={`relative border-r border-[var(--line)] last:border-r-0 ${
+                  isHighlighted
+                    ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_12%,transparent)]'
+                    : 'bg-transparent'
+                }`}
+                style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}
+              >
+                <div
+                  ref={(node) => {
+                    daySurfaceRefs.current[date] = node
+                  }}
+                  className="absolute"
+                  style={{
+                    top: `${WEEKLY_CELL_PADDING_PX}px`,
+                    right: `${WEEKLY_CELL_PADDING_PX}px`,
+                    bottom: `${WEEKLY_CELL_PADDING_PX}px`,
+                    left: `${WEEKLY_CELL_PADDING_PX}px`
+                  }}
+                >
+                  <div className="absolute inset-0">
+                    {TIME_SLOTS.map((slot, index) => (
+                      <div
+                        key={slot.hour}
+                        className={`border-t border-[var(--line)] ${
+                          index === 0 ? 'border-t-0' : ''
+                        }`}
+                        style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px` }}
+                      />
+                    ))}
+                  </div>
+                  {timedDropIndicator?.date === date ? (
+                    <div className="pointer-events-none absolute inset-0 z-[1]">
+                      <div
+                        data-testid="calendar-week-drop-indicator"
+                        className="calendar-week-drop-indicator absolute inset-x-0"
+                        style={{
+                          top: `${timedDropIndicator.topPx}px`,
+                          height: `${timedDropIndicator.heightPx}px`
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="absolute inset-0">
+                    {dayLayouts.map((layout) => renderTimedTask(layout))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {currentTimeIndicator ? (
+            <div
+              data-testid="calendar-week-current-time-line"
+              className="pointer-events-none absolute right-0 z-[30] -translate-y-1/2"
+              style={{
+                top: `${currentTimeIndicator.topPx}px`,
+                left: `${WEEKLY_TIME_GUTTER_WIDTH_PX}px`
+              }}
+            >
+              <div className="h-0.5 w-full bg-[var(--accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_28%,transparent)]" />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1024,6 +1075,22 @@ export function CalendarWeekView({
           task={hoveredTaskCard.task}
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
+        />
+      ) : null}
+
+      {hoveredMilestoneCard ? (
+        <CalendarMilestoneHoverCard
+          milestone={hoveredMilestoneCard.milestone}
+          x={hoveredMilestoneCard.x}
+          y={hoveredMilestoneCard.y}
+        />
+      ) : null}
+
+      {selectedMilestone ? (
+        <CalendarMilestoneDialog
+          milestone={selectedMilestone}
+          onClose={() => setSelectedMilestone(null)}
+          onOpenMilestone={onOpenMilestone}
         />
       ) : null}
 
@@ -1058,6 +1125,29 @@ function buildTimedTaskStyle(layout: WeeklyTimedTaskLayout): {
 
 function getWeeklyResizeBandPx(heightPx: number): number {
   return Math.max(4, Math.min(WEEKLY_TASK_RESIZE_BAND_MAX_PX, Math.floor(heightPx / 4)))
+}
+
+function getMilestoneDetailsFromWeeklyItem(
+  item: WeeklyCalendarAllDayLayout
+): CalendarMilestoneDetails | null {
+  if (!item.projectId || !item.milestoneId || !item.projectName) {
+    return null
+  }
+
+  return {
+    title: item.title,
+    projectId: item.projectId,
+    projectName: item.projectName,
+    projectIcon: item.projectIcon,
+    milestoneId: item.milestoneId,
+    milestoneDescription: item.milestoneDescription,
+    milestoneDueDate: item.milestoneDueDate,
+    milestoneStatus: item.milestoneStatus,
+    milestoneCompletedSubtaskCount: item.milestoneCompletedSubtaskCount,
+    milestoneSubtaskCount: item.milestoneSubtaskCount,
+    milestoneProgressPercent: item.milestoneProgressPercent,
+    completed: item.completed
+  }
 }
 
 function getDraggedTaskId(event: DragEvent<HTMLElement>): string | null {
