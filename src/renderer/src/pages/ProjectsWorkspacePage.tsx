@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import {
+  CSSProperties,
   Fragment,
   ReactElement,
   startTransition,
@@ -19,6 +20,7 @@ import {
   FolderOpen,
   MoreHorizontal,
   Plus,
+  SlidersHorizontal,
   Star,
   Trash2
 } from 'lucide-react'
@@ -53,8 +55,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '../components/ui/dropdown-menu'
+import { WorkspaceActionButton } from '../components/ui/document-workspace'
 import { Field } from '../components/ui/field'
 import { Input } from '../components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 import { SelectionMenu, type SelectionMenuOption } from '../components/ui/selection-menu'
 import { Select } from '../components/ui/select'
 import { TabMenu, TabMenuCountBadge, TabMenuItem } from '../components/ui/tab-menu'
@@ -238,6 +242,7 @@ interface SubtaskDraft {
 }
 
 type TaskListGroupBy = 'project' | 'dueDate'
+type TaskListRowHeight = 'compact' | 'default' | 'comfortable'
 
 interface TaskListMilestoneBlock {
   milestoneRow: ProjectTaskRow
@@ -298,6 +303,35 @@ const TASK_LIST_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
   }
 ]
 
+const TASK_LIST_ROW_HEIGHT_OPTIONS: Array<{ value: TaskListRowHeight; label: string }> = [
+  { value: 'compact', label: 'Compact' },
+  { value: 'default', label: 'Default' },
+  { value: 'comfortable', label: 'Comfortable' }
+]
+
+const TASK_LIST_DATA_CELL_PADDING_CLASS: Record<TaskListRowHeight, string> = {
+  compact: 'py-1.5',
+  default: 'py-2',
+  comfortable: 'py-3'
+}
+
+const TASK_LIST_GROUP_BUTTON_PADDING_CLASS: Record<TaskListRowHeight, string> = {
+  compact: 'py-2',
+  default: 'py-3',
+  comfortable: 'py-4'
+}
+
+const TASK_LIST_HELPER_BUTTON_PADDING_CLASS: Record<TaskListRowHeight, string> = {
+  compact: 'py-2',
+  default: 'py-2.5',
+  comfortable: 'py-3.5'
+}
+
+const TASK_LIST_GROUP_ROW_BACKGROUND_COLOR =
+  'color-mix(in srgb, var(--accent-soft) 34%, color-mix(in srgb, var(--panel-3) 82%, var(--panel) 18%))'
+const TASK_LIST_ROW_HOVER_CLASS =
+  'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_46%,var(--panel-2))]'
+
 interface ProjectTaskSortState {
   key: ProjectTaskSortKey
   direction: ProjectTaskSortDirection
@@ -348,6 +382,12 @@ export function ProjectsWorkspacePage({
     defaultProjectTaskSort,
     { validate: isProjectTaskSortState }
   )
+  const [taskListRowHeight, setTaskListRowHeight] = usePersistentState<TaskListRowHeight>(
+    'beacon:projects-workspace:task-list-row-height',
+    'default',
+    { validate: isTaskListRowHeight }
+  )
+  const [isTaskListViewMenuOpen, setIsTaskListViewMenuOpen] = useState(false)
   const [taskListCollapseOverrides, setTaskListCollapseOverrides] = useState<{
     scopeToken: number
     values: Record<string, boolean>
@@ -392,6 +432,9 @@ export function ProjectsWorkspacePage({
     () => groupTaskRows(filteredProjects, visibleTaskRows, taskListGroupBy, todayIso, taskListSort),
     [filteredProjects, taskListGroupBy, taskListSort, todayIso, visibleTaskRows]
   )
+  const taskListDataCellPaddingClass = TASK_LIST_DATA_CELL_PADDING_CLASS[taskListRowHeight]
+  const taskListGroupButtonPaddingClass = TASK_LIST_GROUP_BUTTON_PADDING_CLASS[taskListRowHeight]
+  const taskListHelperButtonPaddingClass = TASK_LIST_HELPER_BUTTON_PADDING_CLASS[taskListRowHeight]
   const taskListCollapseScopeToken = taskListCollapseAllRequest?.token ?? 0
   const taskListCollapseBaseline = taskListCollapseAllRequest?.collapsed ?? false
   const effectiveTaskListCollapseOverrides = useMemo(
@@ -526,7 +569,7 @@ export function ProjectsWorkspacePage({
 
   return (
     <div className="workspace-clear-surface flex h-full flex-col">
-      <div className="min-h-0 flex-1 overflow-auto px-8 py-6">
+      <div className="workspace-page-padding min-h-0 flex-1 overflow-auto">
         {activeTab === 'board' ? (
           <>
             <div className="mb-4 text-right">
@@ -668,8 +711,8 @@ export function ProjectsWorkspacePage({
             </div>
           </>
         ) : (
-          <section className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_12%,transparent)]">
-            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-4 py-3">
+          <section className="workspace-table-row-surface overflow-hidden rounded-2xl border border-[var(--line)]">
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <SelectionMenu
                   value={taskListGroupBy}
@@ -715,13 +758,64 @@ export function ProjectsWorkspacePage({
                   </TabMenuItem>
                 </TabMenu>
               </div>
+              <div className="ml-auto flex shrink-0 items-center">
+                <Popover open={isTaskListViewMenuOpen} onOpenChange={setIsTaskListViewMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <WorkspaceActionButton
+                      active={isTaskListViewMenuOpen}
+                      label="View Settings"
+                      icon={<SlidersHorizontal size={16} />}
+                      aria-label="Open task list view settings"
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-96 border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_86%,transparent)] p-3 text-[var(--text)] shadow-xl backdrop-blur-xl"
+                  >
+                    <div className="space-y-1">
+                      <h2 className="text-sm font-semibold text-[var(--text)]">View Settings</h2>
+                      <p className="text-xs text-[var(--muted)]">
+                        Adjust how the task list is displayed.
+                      </p>
+                    </div>
+                    <div className="mt-3 rounded-lg border border-[var(--line)]/80 bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-[var(--text)]">Row height</div>
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          Control the spacing for task rows in this list.
+                        </p>
+                      </div>
+                      <div className="mt-3">
+                        <SelectionMenu
+                          value={taskListRowHeight}
+                          onValueChange={(value) =>
+                            setTaskListRowHeight(value as TaskListRowHeight)
+                          }
+                          options={TASK_LIST_ROW_HEIGHT_OPTIONS}
+                          variant="toolbar"
+                          align="end"
+                          className="min-w-[10.5rem]"
+                          selectedLabel={
+                            TASK_LIST_ROW_HEIGHT_OPTIONS.find(
+                              (option) => option.value === taskListRowHeight
+                            )?.label ?? 'Default'
+                          }
+                          aria-label="Task list row height"
+                          title="Task list row height"
+                          fullWidth={false}
+                        />
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
             <Table className="projects-task-list-table table-fixed">
               <colgroup>
                 <col style={{ width: '56px' }} />
-                <col />
-                <col />
-                <col />
+                <col style={{ width: 'calc((100% - 364px) * 0.5)' }} />
+                <col style={{ width: 'calc((100% - 364px) * 0.25)' }} />
+                <col style={{ width: 'calc((100% - 364px) * 0.25)' }} />
                 <col style={{ width: '112px' }} />
                 <col style={{ width: '124px' }} />
                 <col style={{ width: '72px' }} />
@@ -804,14 +898,18 @@ export function ProjectsWorkspacePage({
 
                     return (
                       <Fragment key={group.key}>
-                        <TableRow className="hover:bg-transparent">
+                        <TableRow className={cn('transition-colors', TASK_LIST_ROW_HOVER_CLASS)}>
                           <TableCell
                             colSpan={7}
-                            className="border-r-0 border-y border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-4 py-0 text-[var(--accent)]"
+                            className="border-r-0 px-4 py-0 text-[var(--text)]"
+                            style={{ backgroundColor: TASK_LIST_GROUP_ROW_BACKGROUND_COLOR }}
                           >
                             <button
                               type="button"
-                              className="flex w-full items-center gap-3 py-3 text-left text-[var(--accent)] transition-colors hover:text-[var(--text)]"
+                              className={cn(
+                                'flex w-full items-center gap-3 text-left text-[var(--text)] transition-colors',
+                                taskListGroupButtonPaddingClass
+                              )}
                               onClick={() => toggleTaskGroup(group.key)}
                               aria-expanded={!isCollapsed}
                             >
@@ -826,7 +924,7 @@ export function ProjectsWorkspacePage({
                               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                                 {group.label}
                               </span>
-                              <span className="shrink-0 text-xs text-[var(--muted)]">
+                              <span className="shrink-0 text-xs text-[var(--text)]">
                                 {group.itemCount} {group.itemCount === 1 ? 'item' : 'items'}
                               </span>
                             </button>
@@ -839,11 +937,15 @@ export function ProjectsWorkspacePage({
                                 return (
                                   <TableRow
                                     key={`create-subtask:${displayRow.projectId}:${displayRow.milestoneId}`}
+                                    className={cn('transition-colors', TASK_LIST_ROW_HOVER_CLASS)}
                                   >
                                     <TableCell colSpan={7} className="border-r-0 p-0">
                                       <button
                                         type="button"
-                                        className="flex w-full items-center gap-3 rounded-none border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)] px-4 py-2.5 text-left text-sm text-[var(--accent)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--accent)_14%,transparent)] hover:text-[var(--text)]"
+                                        className={cn(
+                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--text)] transition-colors',
+                                          taskListHelperButtonPaddingClass
+                                        )}
                                         onClick={() => {
                                           onSelectProject(displayRow.projectId)
                                           onActiveTabChange('taskList')
@@ -865,11 +967,17 @@ export function ProjectsWorkspacePage({
 
                               if (displayRow.kind === 'create-milestone') {
                                 return (
-                                  <TableRow key={`create-milestone:${displayRow.projectId}`}>
+                                  <TableRow
+                                    key={`create-milestone:${displayRow.projectId}`}
+                                    className={cn('transition-colors', TASK_LIST_ROW_HOVER_CLASS)}
+                                  >
                                     <TableCell colSpan={7} className="border-r-0 p-0">
                                       <button
                                         type="button"
-                                        className="flex w-full items-center gap-3 rounded-none border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)] px-4 py-2.5 text-left text-sm text-[var(--accent)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--accent)_14%,transparent)] hover:text-[var(--text)]"
+                                        className={cn(
+                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--text)] transition-colors',
+                                          taskListHelperButtonPaddingClass
+                                        )}
                                         onClick={() => {
                                           onSelectProject(displayRow.projectId)
                                           onActiveTabChange('taskList')
@@ -903,7 +1011,8 @@ export function ProjectsWorkspacePage({
                                 <TableRow
                                   key={row.id}
                                   className={cn(
-                                    'cursor-pointer transition-colors hover:bg-[var(--panel-2)]/70',
+                                    'cursor-pointer transition-colors',
+                                    TASK_LIST_ROW_HOVER_CLASS,
                                     (isMilestoneActive || isSubtaskActive) &&
                                       'bg-[var(--accent-soft)]/35',
                                     activeMilestoneToken !== null &&
@@ -929,7 +1038,9 @@ export function ProjectsWorkspacePage({
                                     )
                                   }}
                                 >
-                                  <TableCell className="border-r-0">
+                                  <TableCell
+                                    className={cn('border-r-0', taskListDataCellPaddingClass)}
+                                  >
                                     {row.kind === 'milestone' ? (
                                       renderMilestoneProgressControl(row)
                                     ) : (
@@ -962,11 +1073,16 @@ export function ProjectsWorkspacePage({
                                           ringTestId={`project-task-list-subtask-ring:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
                                           checkTestId={`project-task-list-subtask-check:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
                                           ringClassName="group-hover:border-[var(--accent)]"
+                                          checkClassName="text-white"
+                                          checkedCircleStyle={TASK_LIST_SUBTASK_CHECKED_STYLE}
+                                          uncheckedCircleStyle={TASK_LIST_SUBTASK_UNCHECKED_STYLE}
                                         />
                                       </button>
                                     )}
                                   </TableCell>
-                                  <TableCell className="border-r-0">
+                                  <TableCell
+                                    className={cn('border-r-0', taskListDataCellPaddingClass)}
+                                  >
                                     <div
                                       className={cn(
                                         'truncate font-medium text-[var(--text)]',
@@ -977,7 +1093,9 @@ export function ProjectsWorkspacePage({
                                       {row.title}
                                     </div>
                                   </TableCell>
-                                  <TableCell className="border-r-0">
+                                  <TableCell
+                                    className={cn('border-r-0', taskListDataCellPaddingClass)}
+                                  >
                                     <div className="flex min-w-0 items-center gap-2">
                                       <NoteShapeIcon icon={row.projectIcon} size={22} />
                                       <span className="truncate text-sm text-[var(--text)]">
@@ -985,16 +1103,36 @@ export function ProjectsWorkspacePage({
                                       </span>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="border-r-0 text-sm text-[var(--muted)]">
+                                  <TableCell
+                                    className={cn(
+                                      'border-r-0 text-sm text-[var(--muted)]',
+                                      taskListDataCellPaddingClass
+                                    )}
+                                  >
                                     {row.kind === 'milestone' ? '—' : row.milestoneTitle}
                                   </TableCell>
-                                  <TableCell className="whitespace-nowrap border-r-0">
+                                  <TableCell
+                                    className={cn(
+                                      'whitespace-nowrap border-r-0',
+                                      taskListDataCellPaddingClass
+                                    )}
+                                  >
                                     {renderPriorityBadge(row.priority)}
                                   </TableCell>
-                                  <TableCell className="whitespace-nowrap border-r-0 text-sm text-[var(--muted)]">
+                                  <TableCell
+                                    className={cn(
+                                      'whitespace-nowrap border-r-0 text-sm text-[var(--muted)]',
+                                      taskListDataCellPaddingClass
+                                    )}
+                                  >
                                     {formatTaskListDueDate(row.dueDate)}
                                   </TableCell>
-                                  <TableCell className="border-r-0 text-right">
+                                  <TableCell
+                                    className={cn(
+                                      'border-r-0 text-right',
+                                      taskListDataCellPaddingClass
+                                    )}
+                                  >
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
                                         <button
@@ -2039,6 +2177,9 @@ interface TaskListStatusGlyphProps {
   ringTestId: string
   checkTestId: string
   ringClassName?: string
+  checkClassName?: string
+  checkedCircleStyle?: CSSProperties
+  uncheckedCircleStyle?: CSSProperties
 }
 
 function TaskListStatusGlyph({
@@ -2047,7 +2188,10 @@ function TaskListStatusGlyph({
   progress = 0,
   ringTestId,
   checkTestId,
-  ringClassName
+  ringClassName,
+  checkClassName,
+  checkedCircleStyle,
+  uncheckedCircleStyle
 }: TaskListStatusGlyphProps): ReactElement {
   const clampedProgress = Math.max(0, Math.min(100, progress))
 
@@ -2081,13 +2225,15 @@ function TaskListStatusGlyph({
               : 'absolute inset-0 rounded-full border-2 border-[color:var(--calendar-task-text)] bg-[var(--panel)] shadow-[0_8px_18px_color-mix(in_srgb,#0f172a_14%,transparent)]',
             ringClassName
           )}
+          style={checked ? checkedCircleStyle : uncheckedCircleStyle}
         />
       )}
       <span
         data-testid={checkTestId}
         className={cn(
           'pointer-events-none absolute inset-0 flex items-center justify-center drop-shadow-[0_1px_3px_rgba(8,15,30,0.45)]',
-          variant === 'diamond' ? 'text-white' : 'text-[var(--primary-foreground)]'
+          variant === 'diamond' ? 'text-white' : 'text-[var(--primary-foreground)]',
+          checkClassName
         )}
         style={{
           opacity: checked ? 1 : 0
@@ -2097,6 +2243,21 @@ function TaskListStatusGlyph({
       </span>
     </span>
   )
+}
+
+const TASK_LIST_SUBTASK_BORDER_COLOR = 'color-mix(in srgb, #67e8f9 46%, #1e293b 22%)'
+const TASK_LIST_SUBTASK_FILL_COLOR = 'color-mix(in srgb, #67e8f9 22%, var(--panel-2) 78%)'
+
+const TASK_LIST_SUBTASK_CHECKED_STYLE: CSSProperties = {
+  borderColor: TASK_LIST_SUBTASK_BORDER_COLOR,
+  backgroundColor: TASK_LIST_SUBTASK_FILL_COLOR,
+  boxShadow: '0 8px 18px color-mix(in srgb, #0f172a 14%, transparent)'
+}
+
+const TASK_LIST_SUBTASK_UNCHECKED_STYLE: CSSProperties = {
+  borderColor: TASK_LIST_SUBTASK_BORDER_COLOR,
+  backgroundColor: 'transparent',
+  boxShadow: '0 8px 18px color-mix(in srgb, #0f172a 14%, transparent)'
 }
 
 function formatTaskListDueDate(value: string | undefined): string {
@@ -2120,6 +2281,10 @@ function isProjectTaskSortState(value: unknown): value is ProjectTaskSortState {
     ((value as { direction?: unknown }).direction === 'asc' ||
       (value as { direction?: unknown }).direction === 'desc')
   )
+}
+
+function isTaskListRowHeight(value: unknown): value is TaskListRowHeight {
+  return value === 'compact' || value === 'default' || value === 'comfortable'
 }
 
 function formatTaskListGroupByLabel(value: TaskListGroupBy): string {

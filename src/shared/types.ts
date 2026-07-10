@@ -339,7 +339,7 @@ export interface AppSettings {
     mistralApiKey: string
   }
   fontFamily: string
-  workspaceVibrancyEnabled: boolean
+  performanceModeEnabled: boolean
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   calendarTasks: CalendarTask[]
@@ -358,7 +358,7 @@ export interface AppSettingsUpdate {
     mistralApiKey: string
   }
   fontFamily?: string
-  workspaceVibrancyEnabled?: boolean
+  performanceModeEnabled?: boolean
   editorVimModeEnabled?: boolean
   editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
@@ -936,6 +936,7 @@ export interface RendererVaultApi {
       items: NativeMenuItemDescriptor[],
       position: NativeMenuPosition
     ) => Promise<string | null>
+    applyPerformanceMode: (enabled: boolean) => Promise<void>
     reloadApp: () => Promise<void>
   }
   app: {

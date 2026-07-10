@@ -106,6 +106,7 @@ describe('SettingsStore', () => {
 
     expect(settings.profile.name).toBe('Amy')
     expect(settings.profile.color).toBe('atmosphere')
+    expect(settings.performanceModeEnabled).toBe(true)
     expect(settings.editorVimModeEnabled).toBe(true)
     expect(settings.editorVimKeyMappings).toEqual([
       {
@@ -126,6 +127,9 @@ describe('SettingsStore', () => {
 
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
+    )
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"performanceModeEnabled": true'
     )
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"color": "atmosphere"'

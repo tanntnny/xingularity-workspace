@@ -344,7 +344,7 @@ function App(): ReactElement {
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
-  const workspaceVibrancyEnabled = useVaultStore((state) => state.settings.workspaceVibrancyEnabled)
+  const performanceModeEnabled = useVaultStore((state) => state.settings.performanceModeEnabled)
   const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
   const editorVimKeyMappings = useVaultStore((state) => state.settings.editorVimKeyMappings)
   const profileName = useVaultStore((state) => state.settings.profile.name)
@@ -1047,6 +1047,21 @@ function App(): ReactElement {
     currentNotePath,
     selectedWeeklyPlanWeek
   ])
+  const calendarCurrentPeriodTitle = useMemo(() => {
+    if (calendarViewMode === 'week') {
+      const start = startOfWeekIso(parseIsoDate(selectedCalendarDate))
+      return formatWeekRange(start, addIsoDays(start, 6))
+    }
+
+    return parseIsoDate(selectedCalendarDate).toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric'
+    })
+  }, [calendarViewMode, selectedCalendarDate])
+  const calendarCurrentPeriodSubtitle = useMemo(
+    () => (calendarViewMode === 'week' ? 'Week view' : 'Month view'),
+    [calendarViewMode]
+  )
   const calendarTodayHeader = useMemo(() => getCalendarHeaderDateParts(todayIso), [todayIso])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
@@ -1739,6 +1754,25 @@ function App(): ReactElement {
     }
   }, [flushCurrentNote])
 
+  useEffect(() => {
+    if (!vaultApi) {
+      return
+    }
+
+    void vaultApi.ui.applyPerformanceMode(performanceModeEnabled).catch(() => undefined)
+  }, [performanceModeEnabled, vaultApi])
+
+  useEffect(() => {
+    const nextValue = performanceModeEnabled ? 'on' : 'off'
+    document.documentElement.dataset.performanceMode = nextValue
+    document.body.dataset.performanceMode = nextValue
+
+    return () => {
+      delete document.documentElement.dataset.performanceMode
+      delete document.body.dataset.performanceMode
+    }
+  }, [performanceModeEnabled])
+
   const updateFontFamily = async (fontFamily: string): Promise<void> => {
     if (!vaultApi) {
       return
@@ -1753,15 +1787,15 @@ function App(): ReactElement {
     }
   }
 
-  const updateWorkspaceVibrancy = async (enabled: boolean): Promise<void> => {
+  const updatePerformanceMode = async (enabled: boolean): Promise<void> => {
     if (!vaultApi) {
       return
     }
 
     try {
-      const nextSettings = await vaultApi.settings.update({ workspaceVibrancyEnabled: enabled })
+      const nextSettings = await vaultApi.settings.update({ performanceModeEnabled: enabled })
       setSettings(nextSettings)
-      pushToast('success', enabled ? 'Workspace vibrancy enabled' : 'Workspace vibrancy disabled')
+      pushToast('success', enabled ? 'Performance mode enabled' : 'Performance mode disabled')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -4925,7 +4959,8 @@ function App(): ReactElement {
   const isStandalonePage =
     activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
   const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
-  const paletteBlurClass = commandPaletteOpen ? ' search-palette-surface-blur' : ''
+  const paletteBlurClass =
+    commandPaletteOpen && !performanceModeEnabled ? ' search-palette-surface-blur' : ''
   const headerPageLabel =
     hasVault && activePage === 'subscriptions'
       ? 'Finance'
@@ -4988,7 +5023,7 @@ function App(): ReactElement {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen" data-performance-mode={performanceModeEnabled ? 'on' : 'off'}>
       <SidebarProvider
         className="h-full"
         style={shellAccentStyle}
@@ -5013,7 +5048,8 @@ function App(): ReactElement {
         />
 
         <SidebarInset
-          data-workspace-vibrancy={workspaceVibrancyEnabled ? 'on' : 'off'}
+          data-workspace-vibrancy={performanceModeEnabled ? 'off' : 'on'}
+          data-performance-mode={performanceModeEnabled ? 'on' : 'off'}
           className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]"
         >
           <div className="workspace-vibrancy-scope flex h-full min-w-0">
@@ -5051,6 +5087,11 @@ function App(): ReactElement {
                 className={`${isStandalonePage ? 'hidden ' : ''}${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
               >
                 <DocumentWorkspaceMainHeader
+                  className={
+                    activePage === 'projects' || activePage === 'calendar'
+                      ? 'workspace-table-row-surface'
+                      : undefined
+                  }
                   breadcrumb={
                     activePage === 'projects' ? (
                       <TabMenu
@@ -5385,6 +5426,68 @@ function App(): ReactElement {
                           />
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
+                    ) : activePage === 'calendar' ? (
+                      <WorkspaceHeaderActions>
+                        <WorkspaceHeaderActionGroup>
+                          <TabMenu
+                            variant="toolbar"
+                            value={calendarContentFilter}
+                            onValueChange={(value) =>
+                              setCalendarContentFilter(value as CalendarContentFilter)
+                            }
+                            fullWidth={false}
+                            withSpacer={false}
+                          >
+                            {calendarContentFilterOptions.map((option) => (
+                              <TabMenuItem
+                                key={option.value}
+                                variant="toolbar"
+                                value={option.value}
+                              >
+                                <span className="inline-flex items-center gap-2">
+                                  <span>{option.label}</span>
+                                  <TabMenuCountBadge count={option.count} />
+                                </span>
+                              </TabMenuItem>
+                            ))}
+                          </TabMenu>
+                        </WorkspaceHeaderActionGroup>
+                        <WorkspaceHeaderActionDivider />
+                        <WorkspaceHeaderActionGroup>
+                          <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
+                            <WorkspaceActionButton
+                              onClick={goToPrevCalendarPeriod}
+                              title={
+                                calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
+                              }
+                              className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                              icon={<ChevronLeft size={18} />}
+                            />
+                            <WorkspaceActionButton
+                              onClick={goToToday}
+                              title={
+                                calendarViewMode === 'week'
+                                  ? 'Go to current week'
+                                  : 'Go to current month'
+                              }
+                              aria-label={
+                                calendarViewMode === 'week'
+                                  ? 'Go to current week'
+                                  : 'Go to current month'
+                              }
+                              className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
+                              icon={<CalendarDays size={18} />}
+                              label={calendarViewMode === 'week' ? 'Current week' : 'Current month'}
+                            />
+                            <WorkspaceActionButton
+                              onClick={goToNextCalendarPeriod}
+                              title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                              className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                              icon={<ChevronRight size={18} />}
+                            />
+                          </div>
+                        </WorkspaceHeaderActionGroup>
+                      </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
@@ -5538,14 +5641,14 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      <div className="calendar-full flex min-h-full flex-col p-4">
+                      <div className="workspace-page-padding calendar-full flex min-h-full flex-col">
                         <section
                           data-testid={
                             calendarViewMode === 'week'
                               ? 'calendar-week-shell'
                               : 'calendar-month-shell'
                           }
-                          className="workspace-subtle-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--text)]"
+                          className="workspace-table-row-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line)]"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
                             <div className="min-w-0 flex flex-1 items-center gap-4">
@@ -5561,69 +5664,11 @@ function App(): ReactElement {
                               </div>
                               <div className="min-w-0">
                                 <p className="truncate text-lg font-semibold text-[var(--text)]">
-                                  {calendarTodayHeader.weekday}
+                                  {calendarCurrentPeriodTitle}
                                 </p>
                                 <p className="truncate text-sm text-[var(--muted)]">
-                                  {calendarTodayHeader.fullDate}
+                                  {calendarCurrentPeriodSubtitle}
                                 </p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <TabMenu
-                                variant="toolbar"
-                                value={calendarContentFilter}
-                                onValueChange={(value) =>
-                                  setCalendarContentFilter(value as CalendarContentFilter)
-                                }
-                                fullWidth={false}
-                                withSpacer={false}
-                              >
-                                {calendarContentFilterOptions.map((option) => (
-                                  <TabMenuItem
-                                    key={option.value}
-                                    variant="toolbar"
-                                    value={option.value}
-                                  >
-                                    <span className="inline-flex items-center gap-2">
-                                      <span>{option.label}</span>
-                                      <TabMenuCountBadge count={option.count} />
-                                    </span>
-                                  </TabMenuItem>
-                                ))}
-                              </TabMenu>
-                              <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
-                                <WorkspaceActionButton
-                                  onClick={goToPrevCalendarPeriod}
-                                  title={
-                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
-                                  }
-                                  className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                                  icon={<ChevronLeft size={18} />}
-                                />
-                                <WorkspaceActionButton
-                                  onClick={goToToday}
-                                  title={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  aria-label={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
-                                  icon={<CalendarDays size={18} />}
-                                  label={
-                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
-                                  }
-                                />
-                                <WorkspaceActionButton
-                                  onClick={goToNextCalendarPeriod}
-                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                                  className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                                  icon={<ChevronRight size={18} />}
-                                />
                               </div>
                             </div>
                           </div>
@@ -5711,7 +5756,7 @@ function App(): ReactElement {
                         fontOptions={FONT_OPTIONS}
                         selectedFontFamily={fontFamily}
                         profileColor={profileColor}
-                        workspaceVibrancyEnabled={workspaceVibrancyEnabled}
+                        performanceModeEnabled={performanceModeEnabled}
                         editorVimModeEnabled={editorVimModeEnabled}
                         editorVimKeyMappings={editorVimKeyMappings}
                         vaultLocation={vault?.rootPath ?? lastVaultPath}
@@ -5728,8 +5773,8 @@ function App(): ReactElement {
                         onSelectProfileColor={(color) => {
                           void updateProfileColor(color)
                         }}
-                        onToggleWorkspaceVibrancy={(enabled) => {
-                          void updateWorkspaceVibrancy(enabled)
+                        onTogglePerformanceMode={(enabled) => {
+                          void updatePerformanceMode(enabled)
                         }}
                         onToggleEditorVimMode={(enabled) => {
                           void updateEditorVimMode(enabled)

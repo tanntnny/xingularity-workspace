@@ -28,11 +28,11 @@ const buttonGroupItemVariants = cva(
     variants: {
       variant: {
         default:
-          'rounded-md text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--panel)_18%,transparent)] hover:text-[var(--text)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
+          'rounded-md border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_42%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--panel)_18%,transparent)] hover:text-[var(--text)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         outline:
-          'rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
+          'rounded-md border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_46%,transparent)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         ghost:
-          'rounded-lg border border-transparent text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)]'
+          'rounded-lg border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_46%,transparent)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)]'
       },
       size: {
         default: 'h-8 px-3 text-sm',

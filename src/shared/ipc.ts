@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   desktopChooseDirectory: 'desktop:choose-directory',
   desktopOpenPath: 'desktop:open-path',
   uiShowNativeMenu: 'ui:show-native-menu',
+  uiApplyPerformanceMode: 'ui:apply-performance-mode',
   uiReloadApp: 'ui:reload-app',
   listNotes: 'files:list-notes',
   listNoteTree: 'files:list-note-tree',

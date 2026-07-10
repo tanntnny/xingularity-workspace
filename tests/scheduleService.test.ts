@@ -24,7 +24,7 @@ function createDefaultSettings(): AppSettings {
     profile: { name: '', color: 'atmosphere' },
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
-    workspaceVibrancyEnabled: true,
+    performanceModeEnabled: false,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

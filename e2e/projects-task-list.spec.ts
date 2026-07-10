@@ -221,15 +221,36 @@ test.describe('projects task list', () => {
         const node = element as HTMLElement
         const rect = node.getBoundingClientRect()
         const styles = window.getComputedStyle(node)
-        return {
+        const borderReference = document.createElement('span')
+        borderReference.style.borderTopWidth = '2px'
+        borderReference.style.borderTopStyle = 'solid'
+        borderReference.style.borderTopColor = 'color-mix(in srgb, #67e8f9 46%, #1e293b 22%)'
+        const transparentReference = document.createElement('span')
+        transparentReference.style.backgroundColor = 'transparent'
+        document.body.appendChild(borderReference)
+        document.body.appendChild(transparentReference)
+        const borderReferenceStyles = window.getComputedStyle(borderReference)
+        const transparentReferenceStyles = window.getComputedStyle(transparentReference)
+        const result = {
           width: rect.width,
           height: rect.height,
-          borderRadius: Number.parseFloat(styles.borderTopLeftRadius)
+          borderRadius: Number.parseFloat(styles.borderTopLeftRadius),
+          borderColor: styles.borderTopColor,
+          backgroundColor: styles.backgroundColor,
+          milestoneBorderColor: borderReferenceStyles.borderTopColor,
+          transparentBackgroundColor: transparentReferenceStyles.backgroundColor
+        }
+        borderReference.remove()
+        transparentReference.remove()
+        return {
+          ...result
         }
       })
 
       expect(Math.abs(subtaskGeometry.width - subtaskGeometry.height)).toBeLessThanOrEqual(0.25)
       expect(subtaskGeometry.borderRadius).toBeGreaterThanOrEqual(subtaskGeometry.width / 2 - 1)
+      expect(subtaskGeometry.borderColor).toBe(subtaskGeometry.milestoneBorderColor)
+      expect(subtaskGeometry.backgroundColor).toBe(subtaskGeometry.transparentBackgroundColor)
 
       const milestoneTransform = await milestoneRing.evaluate(
         (element) => window.getComputedStyle(element as HTMLElement).transform
@@ -252,6 +273,32 @@ test.describe('projects task list', () => {
       await subtaskToggle.click()
 
       await expect(subtaskToggle).toHaveAttribute('aria-label', 'Mark subtask as pending')
+
+      const subtaskRingAfter = await subtaskRing.evaluate((element) => {
+        const styles = window.getComputedStyle(element as HTMLElement)
+        const borderReference = document.createElement('span')
+        borderReference.style.borderTopWidth = '2px'
+        borderReference.style.borderTopStyle = 'solid'
+        borderReference.style.borderTopColor = 'color-mix(in srgb, #67e8f9 46%, #1e293b 22%)'
+        const fillReference = document.createElement('span')
+        fillReference.style.backgroundColor = 'color-mix(in srgb, #67e8f9 22%, var(--panel-2) 78%)'
+        document.body.appendChild(borderReference)
+        document.body.appendChild(fillReference)
+        const borderReferenceStyles = window.getComputedStyle(borderReference)
+        const fillReferenceStyles = window.getComputedStyle(fillReference)
+        const result = {
+          borderColor: styles.borderTopColor,
+          backgroundColor: styles.backgroundColor,
+          milestoneBorderColor: borderReferenceStyles.borderTopColor,
+          milestoneFillColor: fillReferenceStyles.backgroundColor
+        }
+        borderReference.remove()
+        fillReference.remove()
+        return result
+      })
+
+      expect(subtaskRingAfter.borderColor).toBe(subtaskRingAfter.milestoneBorderColor)
+      expect(subtaskRingAfter.backgroundColor).toBe(subtaskRingAfter.milestoneFillColor)
 
       const subtaskCheckAfter = await subtaskCheck.evaluate((element) => {
         const styles = window.getComputedStyle(element as HTMLElement)

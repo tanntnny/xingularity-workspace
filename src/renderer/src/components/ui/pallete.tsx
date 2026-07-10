@@ -34,7 +34,7 @@ const Pallete = ({
         <DialogPrimitive.Content
           {...contentProps}
           className={cn(
-            'dialog-glass-surface command-palette-panel fixed left-1/2 top-[18vh] z-50 flex w-[min(720px,92vw)] -translate-x-1/2 overflow-hidden rounded-lg border-[var(--accent)] p-0 outline-none',
+            'dialog-glass-surface command-palette-panel fixed left-1/2 top-1/2 z-50 flex w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border-[var(--accent)] p-0 outline-none',
             className
           )}
         >

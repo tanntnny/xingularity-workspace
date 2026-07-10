@@ -5,6 +5,31 @@ import { createAppErrorEvent } from '../shared/appErrors'
 import icon from '../../assets/workspace_letter.png?asset'
 import { createWindowErrorPageHtml } from './windowErrorPage'
 
+interface MainWindowOptions {
+  performanceModeEnabled?: boolean
+}
+
+export function applyMainWindowPerformanceMode(
+  window: BrowserWindow,
+  performanceModeEnabled: boolean
+): void {
+  window.setBackgroundColor(
+    performanceModeEnabled || process.platform !== 'darwin' ? '#f6f7f9' : '#00000000'
+  )
+
+  if (process.platform !== 'darwin') {
+    return
+  }
+
+  const macWindow = window as BrowserWindow & {
+    setVibrancy?: (type: 'sidebar' | null) => void
+    setVisualEffectState?: (state: 'active' | 'inactive' | 'followWindow') => void
+  }
+
+  macWindow.setVibrancy?.(performanceModeEnabled ? null : 'sidebar')
+  macWindow.setVisualEffectState?.(performanceModeEnabled ? 'inactive' : 'active')
+}
+
 export async function loadMainWindowApp(window: BrowserWindow): Promise<void> {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     await window.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -26,8 +51,9 @@ async function showWindowErrorPage(
   await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(markup)}`)
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow {
   const isMac = process.platform === 'darwin'
+  const performanceModeEnabled = options.performanceModeEnabled ?? false
 
   const mainWindow = new BrowserWindow({
     width: 1320,
@@ -38,13 +64,15 @@ export function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     ...(isMac ? { trafficLightPosition: { x: 16, y: 14 } } : {}),
-    backgroundColor: isMac ? '#00000000' : '#f6f7f9',
+    backgroundColor: performanceModeEnabled || !isMac ? '#f6f7f9' : '#00000000',
     ...(isMac
-      ? {
-          transparent: true,
-          vibrancy: 'sidebar',
-          visualEffectState: 'active'
-        }
+      ? performanceModeEnabled
+        ? {}
+        : {
+            transparent: true,
+            vibrancy: 'sidebar',
+            visualEffectState: 'active'
+          }
       : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -56,6 +84,8 @@ export function createMainWindow(): BrowserWindow {
       allowRunningInsecureContent: false
     }
   })
+
+  applyMainWindowPerformanceMode(mainWindow, performanceModeEnabled)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.center()

@@ -101,7 +101,7 @@ interface SettingsPageProps {
   fontOptions: FontOption[]
   selectedFontFamily: string
   profileColor: ProfileColor
-  workspaceVibrancyEnabled: boolean
+  performanceModeEnabled: boolean
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   vaultLocation: string | null
@@ -110,7 +110,7 @@ interface SettingsPageProps {
   onSaveMistralApiKey: (apiKey: string) => void
   onSelectFont: (fontFamily: string) => void
   onSelectProfileColor: (color: ProfileColor) => void
-  onToggleWorkspaceVibrancy: (enabled: boolean) => void
+  onTogglePerformanceMode: (enabled: boolean) => void
   onToggleEditorVimMode: (enabled: boolean) => void
   onUpdateEditorVimKeyMappings: (mappings: NoteVimKeyMapping[]) => void
   onManageVaults: () => void
@@ -125,7 +125,7 @@ export function SettingsPage({
   fontOptions,
   selectedFontFamily,
   profileColor,
-  workspaceVibrancyEnabled,
+  performanceModeEnabled,
   editorVimModeEnabled,
   editorVimKeyMappings,
   vaultLocation,
@@ -134,7 +134,7 @@ export function SettingsPage({
   onSaveMistralApiKey,
   onSelectFont,
   onSelectProfileColor,
-  onToggleWorkspaceVibrancy,
+  onTogglePerformanceMode,
   onToggleEditorVimMode,
   onUpdateEditorVimKeyMappings,
   onManageVaults,
@@ -370,21 +370,20 @@ export function SettingsPage({
           <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--text)]">Workspace Vibrancy</p>
+                <p className="text-sm font-semibold text-[var(--text)]">Performance Mode</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Blur and soften the main workspace and right sidebar with translucent glass
-                  surfaces.
+                  Reduce GPU-heavy blur, transparency, and ambient animation across the workspace.
                 </p>
               </div>
               <Switch
                 className="self-center"
-                checked={workspaceVibrancyEnabled}
-                onChange={(_event, checked) => onToggleWorkspaceVibrancy(checked)}
-                inputProps={{ 'aria-label': 'Toggle workspace vibrancy' }}
+                checked={performanceModeEnabled}
+                onChange={(_event, checked) => onTogglePerformanceMode(checked)}
+                inputProps={{ 'aria-label': 'Toggle performance mode' }}
               />
             </div>
             <p className="text-xs text-[var(--muted)]">
-              Keeps the global sidebar glassy and extends the effect through the workspace shell.
+              Uses more opaque surfaces and simpler overlays to reduce compositor and GPU load.
             </p>
           </div>
 

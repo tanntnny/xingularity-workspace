@@ -112,6 +112,22 @@ function normalizeEditorVimKeyMappings(value: unknown): NoteVimKeyMapping[] {
   return mappings
 }
 
+function resolvePerformanceModeEnabled(parsed: Partial<AppSettings>): boolean {
+  const candidate = parsed as Partial<AppSettings> & {
+    workspaceVibrancyEnabled?: unknown
+  }
+
+  if (typeof parsed.performanceModeEnabled === 'boolean') {
+    return parsed.performanceModeEnabled
+  }
+
+  if (typeof candidate.workspaceVibrancyEnabled === 'boolean') {
+    return !candidate.workspaceVibrancyEnabled
+  }
+
+  return createDefaultAppSettings().performanceModeEnabled
+}
+
 export function createDefaultAppSettings(): AppSettings {
   return {
     isSidebarCollapsed: false,
@@ -128,7 +144,7 @@ export function createDefaultAppSettings(): AppSettings {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
-    workspaceVibrancyEnabled: true,
+    performanceModeEnabled: false,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
@@ -164,10 +180,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsed.ai.mistralApiKey
           : defaults.ai.mistralApiKey
     },
-    workspaceVibrancyEnabled:
-      typeof parsed.workspaceVibrancyEnabled === 'boolean'
-        ? parsed.workspaceVibrancyEnabled
-        : defaults.workspaceVibrancyEnabled,
+    performanceModeEnabled: resolvePerformanceModeEnabled(parsed),
     editorVimModeEnabled:
       typeof parsed.editorVimModeEnabled === 'boolean'
         ? parsed.editorVimModeEnabled
@@ -832,7 +845,7 @@ export class SettingsStore {
       profile: settings.profile,
       ai: settings.ai,
       fontFamily: settings.fontFamily,
-      workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
+      performanceModeEnabled: settings.performanceModeEnabled,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
       gridBoard: settings.gridBoard

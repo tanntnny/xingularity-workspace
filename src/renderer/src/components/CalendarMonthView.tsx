@@ -548,7 +548,10 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="calendar-full min-h-0" data-testid="calendar-month-view">
+    <section
+      className="performance-surface-panel calendar-full min-h-0 overflow-hidden rounded-b-2xl"
+      data-testid="calendar-month-view"
+    >
       <div className="relative overflow-hidden">
         <FullCalendar
           ref={calendarRef}

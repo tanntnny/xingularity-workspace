@@ -2038,7 +2038,7 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     profile: settings.profile,
     ai: settings.ai,
     fontFamily: settings.fontFamily,
-    workspaceVibrancyEnabled: settings.workspaceVibrancyEnabled,
+    performanceModeEnabled: settings.performanceModeEnabled,
     calendarTasks: settings.calendarTasks,
     projectIcons: settings.projectIcons,
     projects: settings.projects,

@@ -178,7 +178,7 @@ function makeSettings(): AppSettings {
     profile: { name: '', color: 'atmosphere' },
     ai: { mistralApiKey: '' },
     fontFamily: 'serif',
-    workspaceVibrancyEnabled: true,
+    performanceModeEnabled: false,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

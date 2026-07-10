@@ -178,8 +178,10 @@ describe('project task row helpers', () => {
 function createTaskRow(
   overrides: Partial<ProjectTaskRow> & Pick<ProjectTaskRow, 'id'>
 ): ProjectTaskRow {
+  const { id, ...rest } = overrides
+
   return {
-    id: overrides.id,
+    id,
     kind: 'milestone',
     title: 'Task',
     completed: false,
@@ -197,6 +199,6 @@ function createTaskRow(
     milestoneCompletedSubtaskCount: 0,
     milestoneSubtaskCount: 0,
     milestoneProgressPercent: 0,
-    ...overrides
+    ...rest
   }
 }

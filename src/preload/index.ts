@@ -13,6 +13,8 @@ const api: RendererVaultApi = {
     platform: process.platform,
     showNativeMenu: (items, position) =>
       ipcRenderer.invoke(IPC_CHANNELS.uiShowNativeMenu, { items, position }),
+    applyPerformanceMode: (enabled) =>
+      ipcRenderer.invoke(IPC_CHANNELS.uiApplyPerformanceMode, enabled),
     reloadApp: () => ipcRenderer.invoke(IPC_CHANNELS.uiReloadApp)
   },
   app: {

@@ -164,6 +164,12 @@
 
     /* Sidebar specific variables */
     --sidebar-background: var(--panel);
+    --performance-sidebar-background: var(--panel-2);
+    --performance-surface-background: color-mix(
+      in srgb,
+      var(--panel-2) 76%,
+      var(--workspace-main-panel)
+    );
     --sidebar-foreground: var(--text);
     --sidebar-primary: var(--accent);
     --sidebar-primary-foreground: #ffffff;
@@ -372,6 +378,12 @@
 
       /* Dark mode sidebar variables */
       --sidebar-background: #0e0e0f;
+      --performance-sidebar-background: var(--sidebar-background);
+      --performance-surface-background: color-mix(
+        in srgb,
+        var(--panel-2) 72%,
+        var(--workspace-main-panel)
+      );
       --sidebar-foreground: var(--text);
       --sidebar-primary: var(--accent);
       --sidebar-primary-foreground: #0b0b0b;
@@ -678,6 +690,14 @@
     background-color: color-mix(in srgb, var(--panel) 22%, transparent);
     border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .workspace-table-row-surface {
+    background-color: color-mix(in srgb, var(--panel) 12%, transparent);
+  }
+
+  .workspace-page-padding {
+    padding: 1.5rem 2rem;
   }
 
   .workspace-subtle-control {
@@ -1291,6 +1311,116 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   }
 }
 
+[data-performance-mode='on'] [data-sidebar='sidebar'] {
+  opacity: 1;
+  background: var(--performance-sidebar-background) !important;
+  border-color: var(--sidebar-border) !important;
+}
+
+[data-performance-mode='on'] .performance-surface-panel {
+  background-color: var(--performance-surface-background);
+  border-color: var(--line);
+  box-shadow: none !important;
+}
+
+[data-performance-mode='on'] .workspace-table-row-surface {
+  background-color: var(--performance-surface-background) !important;
+}
+
+[data-performance-mode='on'] [data-sidebar='sidebar']::before,
+[data-performance-mode='on'] [data-sidebar='sidebar']::after,
+[data-performance-mode='on'] .document-workspace-panel-surface::before,
+[data-performance-mode='on'] .document-workspace-panel-surface::after {
+  display: none;
+}
+
+[data-performance-mode='on'] .workspace-action-button,
+[data-performance-mode='on'] .workspace-action-group,
+[data-performance-mode='on'] .selection-trigger,
+[data-performance-mode='on'] .selection-menu-content,
+[data-performance-mode='on'] .dialog-glass-overlay,
+[data-performance-mode='on'] .dialog-glass-surface,
+[data-performance-mode='on'] .drawer-glass-overlay,
+[data-performance-mode='on'] .drawer-glass-content,
+[data-performance-mode='on'] .command-palette-panel,
+[data-performance-mode='on'] .command-palette-preview,
+[data-performance-mode='on'] .backdrop-blur-md,
+[data-performance-mode='on'] .backdrop-blur-xl,
+[data-performance-mode='on'] .backdrop-saturate-150,
+[data-performance-mode='on'] .search-palette-surface-blur {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+[data-performance-mode='on'] .workspace-action-button,
+[data-performance-mode='on'] .workspace-action-group,
+[data-performance-mode='on'] .selection-trigger,
+[data-performance-mode='on'] .selection-menu-content {
+  background-color: var(--panel) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+[data-performance-mode='on'] .workspace-action-button:hover,
+[data-performance-mode='on'] .workspace-action-button:focus-visible,
+[data-performance-mode='on'] .selection-trigger:hover,
+[data-performance-mode='on'] .selection-trigger:focus-visible {
+  background-color: color-mix(in srgb, var(--accent-soft) 34%, var(--panel-2)) !important;
+  border-color: color-mix(in srgb, var(--accent-line) 72%, var(--line)) !important;
+  color: var(--text) !important;
+}
+
+[data-performance-mode='on'] .workspace-action-button[data-active='true'],
+[data-performance-mode='on'] .workspace-action-button[data-active='true']:hover,
+[data-performance-mode='on'] .workspace-action-button[data-active='true']:focus-visible,
+[data-performance-mode='on'] .selection-trigger[data-open='true'] {
+  background-color: color-mix(in srgb, var(--accent-soft) 54%, var(--panel)) !important;
+  border-color: var(--accent-line) !important;
+}
+
+[data-performance-mode='on'] .dialog-glass-overlay,
+[data-performance-mode='on'] .drawer-glass-overlay,
+[data-performance-mode='on'] .command-palette-overlay {
+  background: rgba(7, 7, 10, 0.54) !important;
+}
+
+[data-performance-mode='on'] .dialog-glass-surface,
+[data-performance-mode='on'] .drawer-glass-content,
+[data-performance-mode='on'] .command-palette-panel,
+[data-performance-mode='on'] .command-palette-preview {
+  background: rgb(var(--panel-r), var(--panel-g), var(--panel-b)) !important;
+  box-shadow: none !important;
+}
+
+[data-performance-mode='on'] .dialog-glass-surface,
+[data-performance-mode='on'] .drawer-glass-content,
+[data-performance-mode='on'] .command-palette-panel,
+[data-performance-mode='on'] .command-palette-preview,
+[data-performance-mode='on'] .command-palette-overlay,
+[data-performance-mode='on'] .page-transition,
+[data-performance-mode='on'] .scroll-reveal-item,
+[data-performance-mode='on'] .right-panel-stagger-item,
+[data-performance-mode='on'] .sidebar-brand-shimmer {
+  animation: none !important;
+}
+
+[data-performance-mode='on'] .command-palette-panel,
+[data-performance-mode='on'] .drawer-glass-content {
+  will-change: auto;
+}
+
+[data-performance-mode='on'] .drawer-glass-content {
+  transform: none !important;
+}
+
+[data-performance-mode='on'] .sidebar-brand-shimmer {
+  color: color-mix(in srgb, var(--sidebar-foreground) 72%, transparent);
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+}
+
 /* FullCalendar skin aligned with Xingularity calendar styling */
 .calendar-full .fc {
   height: auto;
@@ -1534,7 +1664,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   box-shadow: var(--command-palette-shadow) !important;
   -webkit-backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 4px));
   backdrop-filter: saturate(180%) blur(calc(var(--glass-sidebar-blur) + 4px));
-  transform-origin: top center;
+  transform-origin: center center;
   animation: commandPalettePanelIn 240ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform, filter;
 }
@@ -1673,13 +1803,13 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 @keyframes commandPalettePanelIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-18px) scale(0.97);
+    transform: translateX(-50%) translateY(calc(-50% - 18px)) scale(0.97);
     filter: blur(10px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+    transform: translateX(-50%) translateY(-50%) scale(1);
     filter: blur(0);
   }
 }
@@ -1719,7 +1849,6 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
     animation: none !important;
   }
 
-  .command-palette-panel,
   .command-palette-preview,
   .drawer-glass-content {
     transform: none !important;
@@ -1788,10 +1917,10 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .calendar-task-card-shell.beacon-task-event.beacon-task-meeting,
 .beacon-task-surface.beacon-task-event.beacon-task-meeting,
 .calendar-full .fc .beacon-task-event.beacon-task-meeting {
-  --calendar-task-card-bg: var(--calendar-task-meeting-bg);
-  --calendar-task-card-border: var(--calendar-task-meeting-border);
-  --calendar-task-text: var(--calendar-task-meeting-text);
-  --calendar-task-meta: var(--calendar-task-meeting-meta);
+  --calendar-task-card-bg: var(--calendar-task-call-bg);
+  --calendar-task-card-border: var(--calendar-task-call-border);
+  --calendar-task-text: var(--calendar-task-call-text);
+  --calendar-task-meta: var(--calendar-task-call-meta);
 }
 
 .calendar-task-card-shell.beacon-task-event.beacon-task-assignment,
@@ -1824,10 +1953,10 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .calendar-task-card-shell.beacon-task-event.beacon-task-call,
 .beacon-task-surface.beacon-task-event.beacon-task-call,
 .calendar-full .fc .beacon-task-event.beacon-task-call {
-  --calendar-task-card-bg: var(--calendar-task-call-bg);
-  --calendar-task-card-border: var(--calendar-task-call-border);
-  --calendar-task-text: var(--calendar-task-call-text);
-  --calendar-task-meta: var(--calendar-task-call-meta);
+  --calendar-task-card-bg: var(--calendar-task-meeting-bg);
+  --calendar-task-card-border: var(--calendar-task-meeting-border);
+  --calendar-task-text: var(--calendar-task-meeting-text);
+  --calendar-task-meta: var(--calendar-task-meeting-meta);
 }
 
 .calendar-task-card-shell.beacon-task-event.beacon-task-deep-work,
@@ -2582,6 +2711,27 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
 .excalidraw .picker-content,
 .excalidraw .popover {
   backdrop-filter: blur(18px);
+}
+
+[data-performance-mode='on'] .excalidraw .Island,
+[data-performance-mode='on'] .excalidraw .App-menu__left,
+[data-performance-mode='on'] .excalidraw .App-mobile-menu,
+[data-performance-mode='on'] .excalidraw .mobile-misc-tools-container,
+[data-performance-mode='on'] .excalidraw .dropdown-menu,
+[data-performance-mode='on'] .excalidraw .dropdown-menu .dropdown-menu-container,
+[data-performance-mode='on'] .excalidraw .color-picker,
+[data-performance-mode='on'] .excalidraw .picker-content,
+[data-performance-mode='on'] .excalidraw .popover,
+[data-performance-mode='on'] .excalidraw .help-icon,
+[data-performance-mode='on'] .excalidraw .main-menu-trigger,
+[data-performance-mode='on'] .excalidraw .scroll-back-to-content,
+[data-performance-mode='on'] .excalidraw .zoom-actions,
+[data-performance-mode='on'] .excalidraw .undo-redo-buttons,
+[data-performance-mode='on'] .excalidraw .eraser-buttons {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: rgb(var(--panel-r), var(--panel-g), var(--panel-b)) !important;
+  background-color: rgb(var(--panel-r), var(--panel-g), var(--panel-b)) !important;
 }
 
 .excalidraw .Island,

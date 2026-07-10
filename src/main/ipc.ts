@@ -9,7 +9,7 @@ import {
 } from '../shared/types'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
-import { loadMainWindowApp } from './window'
+import { applyMainWindowPerformanceMode, loadMainWindowApp } from './window'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -304,7 +304,7 @@ const settingsUpdateSchema = z.object({
     })
     .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
-  workspaceVibrancyEnabled: z.boolean().optional(),
+  performanceModeEnabled: z.boolean().optional(),
   editorVimModeEnabled: z.boolean().optional(),
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
@@ -357,6 +357,15 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
 
     await loadMainWindowApp(window)
+  })
+
+  handleIpc(IPC_CHANNELS.uiApplyPerformanceMode, async (event, enabled: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) {
+      return
+    }
+
+    applyMainWindowPerformanceMode(window, z.boolean().parse(enabled))
   })
 
   handleIpc(IPC_CHANNELS.vaultOpen, async () => {

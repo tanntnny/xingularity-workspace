@@ -22,6 +22,8 @@
 ## Coding Style & Naming Conventions
 - Use TypeScript throughout. Follow existing style: 2-space indentation, single quotes, and no semicolons.
 - Prefer React function components and hooks. Components/pages use PascalCase filenames like `SettingsPage.tsx`; utilities use camelCase like `calendarTasks.ts`.
+- For UI work, prefer available primitive components first before creating custom ones.
+- When adding or adjusting UI, normalize nearby styling details such as color, border treatment, and roundedness to match surrounding components.
 - Keep shared contracts in `src/shared/` and renderer-only helpers in `src/renderer/src/lib/`.
 - Keep comments sparse. Favor descriptive names over explanatory comments.
 
