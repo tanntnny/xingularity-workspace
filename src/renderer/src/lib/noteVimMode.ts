@@ -22,7 +22,7 @@ interface NoteVimPluginState {
   hasFocus: boolean
   visualAnchor: number | null
   visualHead: number | null
-  preferredColumnX: number | null
+  preferredColumnOffset: number | null
   preferredColumnAnchorPos: number | null
 }
 
@@ -38,7 +38,7 @@ interface NoteVimModePluginOptions {
 
 interface IndexedText {
   text: string
-  positions: number[]
+  positions: Array<number | null>
 }
 
 interface NoteVimRegister {
@@ -68,7 +68,7 @@ const initialVimState: NoteVimPluginState = {
   hasFocus: false,
   visualAnchor: null,
   visualHead: null,
-  preferredColumnX: null,
+  preferredColumnOffset: null,
   preferredColumnAnchorPos: null
 }
 
@@ -82,7 +82,7 @@ function dispatchVimState(view: EditorView, next: Partial<NoteVimPluginState>): 
 
 function resetPreferredColumn(view: EditorView): void {
   dispatchVimState(view, {
-    preferredColumnX: null,
+    preferredColumnOffset: null,
     preferredColumnAnchorPos: null
   })
 }
@@ -153,6 +153,17 @@ function enterNormalMode(view: EditorView, pos = view.state.selection.from): boo
 
 function enterInsertMode(view: EditorView, pos = view.state.selection.from): boolean {
   return setCursorAndVimState(view, pos, { mode: 'insert' })
+}
+
+function resolveInsertModeExitPos(state: EditorState, pos: number): number {
+  const boundedPos = boundedDocPos(state, pos)
+  const bounds = getTextblockCharacterBoundsAtPos(state, boundedPos)
+
+  if (bounds.isEmpty || boundedPos <= bounds.from) {
+    return boundedPos
+  }
+
+  return boundedPos - 1
 }
 
 function getCurrentTextblockBounds(state: EditorState): { from: number; to: number } {
@@ -373,7 +384,8 @@ function appendAfterCursorPos(state: EditorState, pos: number): number {
 
 function buildTextIndex(state: EditorState): IndexedText {
   const textParts: string[] = []
-  const positions: number[] = []
+  const positions: Array<number | null> = []
+  let previousTextEnd: number | null = null
 
   state.doc.descendants((node, pos) => {
     if (!node.isText) {
@@ -381,11 +393,17 @@ function buildTextIndex(state: EditorState): IndexedText {
     }
 
     const text = node.text ?? ''
-    for (let index = 0; index < text.length; index += 1) {
-      textParts.push(text[index] ?? '')
-      positions.push(pos + 1 + index)
+    if (previousTextEnd !== null && pos > previousTextEnd) {
+      textParts.push('\n')
+      positions.push(null)
     }
 
+    for (let index = 0; index < text.length; index += 1) {
+      textParts.push(text[index] ?? '')
+      positions.push(pos + index)
+    }
+
+    previousTextEnd = pos + text.length
     return false
   })
 
@@ -409,15 +427,20 @@ function textIndexAtPos(indexedText: IndexedText, pos: number): number {
     }
   }
 
-  return positions.length - 1
+  for (let index = positions.length - 1; index >= 0; index -= 1) {
+    if (typeof positions[index] === 'number') {
+      return index
+    }
+  }
+
+  return -1
 }
 
 function isWordChar(value: string | undefined): boolean {
   return Boolean(value && /[\p{Letter}\p{Number}_]/u.test(value))
 }
 
-function wordStartAfter(state: EditorState, pos: number): number | null {
-  const indexedText = buildTextIndex(state)
+function wordStartAfterInIndexedText(indexedText: IndexedText, pos: number): number | null {
   const currentIndex = textIndexAtPos(indexedText, pos)
 
   if (currentIndex < 0) {
@@ -439,8 +462,7 @@ function wordStartAfter(state: EditorState, pos: number): number | null {
   return indexedText.positions[nextIndex] ?? null
 }
 
-function wordStartBefore(state: EditorState, pos: number): number | null {
-  const indexedText = buildTextIndex(state)
+function wordStartBeforeInIndexedText(indexedText: IndexedText, pos: number): number | null {
   let currentIndex = textIndexAtPos(indexedText, pos) - 1
 
   if (currentIndex < 0) {
@@ -458,12 +480,32 @@ function wordStartBefore(state: EditorState, pos: number): number | null {
   return indexedText.positions[currentIndex] ?? null
 }
 
-function wordEndAfter(state: EditorState, pos: number): number | null {
-  const indexedText = buildTextIndex(state)
+function wordEndAfterInIndexedText(indexedText: IndexedText, pos: number): number | null {
   let currentIndex = textIndexAtPos(indexedText, pos)
 
   if (currentIndex < 0) {
     return null
+  }
+
+  if (isWordChar(indexedText.text[currentIndex])) {
+    while (
+      currentIndex + 1 < indexedText.text.length &&
+      isWordChar(indexedText.text[currentIndex + 1])
+    ) {
+      currentIndex += 1
+    }
+
+    if (
+      currentIndex + 1 >= indexedText.text.length ||
+      !isWordChar(indexedText.text[currentIndex + 1])
+    ) {
+      const endPos = indexedText.positions[currentIndex]
+      if (typeof endPos === 'number' && endPos > pos) {
+        return endPos
+      }
+
+      currentIndex += 1
+    }
   }
 
   while (currentIndex < indexedText.text.length && !isWordChar(indexedText.text[currentIndex])) {
@@ -479,6 +521,18 @@ function wordEndAfter(state: EditorState, pos: number): number | null {
 
   const endPos = indexedText.positions[currentIndex]
   return typeof endPos === 'number' ? endPos : null
+}
+
+function wordStartAfter(state: EditorState, pos: number): number | null {
+  return wordStartAfterInIndexedText(buildTextIndex(state), pos)
+}
+
+function wordStartBefore(state: EditorState, pos: number): number | null {
+  return wordStartBeforeInIndexedText(buildTextIndex(state), pos)
+}
+
+function wordEndAfter(state: EditorState, pos: number): number | null {
+  return wordEndAfterInIndexedText(buildTextIndex(state), pos)
 }
 
 function currentWordEndExclusive(state: EditorState, pos: number): number | null {
@@ -514,52 +568,34 @@ function lastTextPosition(state: EditorState): number {
   return typeof last === 'number' ? last : state.doc.content.size
 }
 
-function findClosestColumnPosition(
-  view: EditorView,
-  range: TextblockRange,
-  preferredColumnX: number
-): number {
+function findClosestColumnPosition(range: TextblockRange, preferredColumnOffset: number): number {
   if (range.isEmpty) {
     return range.from
   }
 
-  let bestPos = range.from
-  let bestDistance = Number.POSITIVE_INFINITY
-
-  for (let pos = range.from; pos <= range.to; pos += 1) {
-    try {
-      const distance = Math.abs(view.coordsAtPos(pos).left - preferredColumnX)
-      if (distance < bestDistance || (distance === bestDistance && pos < bestPos)) {
-        bestDistance = distance
-        bestPos = pos
-      }
-    } catch {
-      continue
-    }
-  }
-
-  return bestPos
+  return Math.min(range.from + preferredColumnOffset, range.to)
 }
 
-function resolvePreferredColumnX(view: EditorView, pos: number): number {
-  const currentPos = normalizeNormalModePosition(view.state, pos).pos
-  const vimState = getVimState(view.state)
+function resolvePreferredColumnOffset(state: EditorState, pos: number): number {
+  const currentPos = normalizeNormalModePosition(state, pos).pos
+  const vimState = getVimState(state)
 
   if (
-    typeof vimState.preferredColumnX === 'number' &&
+    typeof vimState.preferredColumnOffset === 'number' &&
     vimState.preferredColumnAnchorPos === currentPos
   ) {
-    return vimState.preferredColumnX
+    return vimState.preferredColumnOffset
   }
 
-  return view.coordsAtPos(currentPos).left
+  const currentRange = getTextblockRangeAtPos(state, currentPos)
+  return Math.max(0, currentPos - currentRange.from)
 }
 
 function resolveVerticalTarget(
   view: EditorView,
   pos: number,
   direction: 'up' | 'down'
-): { target: number; preferredColumnX: number } | null {
+): { target: number; preferredColumnOffset: number } | null {
   const currentPos = normalizeNormalModePosition(view.state, pos).pos
   const ranges = getTextblockRanges(view.state)
   const currentRange = getTextblockRangeAtPos(view.state, currentPos)
@@ -575,10 +611,10 @@ function resolveVerticalTarget(
     return null
   }
 
-  const preferredColumnX = resolvePreferredColumnX(view, currentPos)
+  const preferredColumnOffset = resolvePreferredColumnOffset(view.state, currentPos)
   return {
-    target: findClosestColumnPosition(view, targetRange, preferredColumnX),
-    preferredColumnX
+    target: findClosestColumnPosition(targetRange, preferredColumnOffset),
+    preferredColumnOffset
   }
 }
 
@@ -592,7 +628,7 @@ function moveVertically(view: EditorView, direction: 'up' | 'down'): boolean {
   const moved = selectNormalModePosition(view, motion.target)
   if (moved) {
     dispatchVimState(view, {
-      preferredColumnX: motion.preferredColumnX,
+      preferredColumnOffset: motion.preferredColumnOffset,
       preferredColumnAnchorPos: view.state.selection.from
     })
   }
@@ -894,7 +930,7 @@ function runInsertModeMappingAction(
 
   const nextPos = Math.min(deleteFrom, tr.doc.content.size)
   view.dispatch(tr.scrollIntoView())
-  return enterNormalMode(view, nextPos)
+  return enterNormalMode(view, resolveInsertModeExitPos(view.state, nextPos))
 }
 
 function handleInsertModeKey(view: EditorView, event: KeyboardEvent): boolean {
@@ -904,7 +940,7 @@ function handleInsertModeKey(view: EditorView, event: KeyboardEvent): boolean {
 
   event.preventDefault()
   resetPreferredColumn(view)
-  return enterNormalMode(view)
+  return enterNormalMode(view, resolveInsertModeExitPos(view.state, view.state.selection.from))
 }
 
 function handlePendingKey(
@@ -1138,7 +1174,7 @@ function handleVisualModeKey(
 
       if (key === 'j' || key === 'k') {
         dispatchVimState(view, {
-          preferredColumnX: resolvePreferredColumnX(view, head),
+          preferredColumnOffset: resolvePreferredColumnOffset(view.state, head),
           preferredColumnAnchorPos: target
         })
       }
@@ -1319,7 +1355,7 @@ export function createNoteVimModePlugin({
               hasFocus: true,
               visualAnchor: null,
               visualHead: null,
-              preferredColumnX: null,
+              preferredColumnOffset: null,
               preferredColumnAnchorPos: null
             })
           }
@@ -1327,7 +1363,7 @@ export function createNoteVimModePlugin({
         },
         mousedown(view) {
           dispatchVimState(view, {
-            preferredColumnX: null,
+            preferredColumnOffset: null,
             preferredColumnAnchorPos: null
           })
           return false
@@ -1338,7 +1374,7 @@ export function createNoteVimModePlugin({
             pendingCommand: null,
             visualAnchor: null,
             visualHead: null,
-            preferredColumnX: null,
+            preferredColumnOffset: null,
             preferredColumnAnchorPos: null
           })
           return false
@@ -1452,4 +1488,16 @@ export function createNoteVimModePlugin({
       }
     }
   })
+}
+
+export const __noteVimModeTestUtils = {
+  buildTextIndex,
+  textIndexAtPos,
+  resolveInsertModeExitPos,
+  wordStartAfter,
+  wordStartBefore,
+  wordEndAfter,
+  wordStartAfterInIndexedText,
+  wordStartBeforeInIndexedText,
+  wordEndAfterInIndexedText
 }

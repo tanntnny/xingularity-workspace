@@ -1257,6 +1257,30 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
     box-shadow 180ms ease;
 }
 
+.workspace-page-title {
+  color: var(--accent);
+  font-family: var(--app-font-family);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .workspace-page-title {
+    background-image: linear-gradient(
+      135deg,
+      color-mix(in srgb, white 22%, var(--accent)) 0%,
+      color-mix(in srgb, var(--accent) 88%, var(--text)) 46%,
+      color-mix(in srgb, #d97706 36%, var(--accent)) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
 [data-focus-mode='true'] .document-workspace-header {
   padding-left: 96px;
 }

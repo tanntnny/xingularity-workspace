@@ -467,10 +467,6 @@ function App(): ReactElement {
     token: number
   } | null>(null)
   const [newProjectRequest, setNewProjectRequest] = useState<{ token: number } | null>(null)
-  const [newMilestoneRequest, setNewMilestoneRequest] = useState<{
-    projectId: string
-    token: number
-  } | null>(null)
   const [newSubtaskRequest, setNewSubtaskRequest] = useState<{
     projectId: string
     milestoneId: string
@@ -5087,56 +5083,11 @@ function App(): ReactElement {
                 className={`${isStandalonePage ? 'hidden ' : ''}${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
               >
                 <DocumentWorkspaceMainHeader
-                  className={
-                    activePage === 'projects' || activePage === 'calendar'
-                      ? 'workspace-table-row-surface'
-                      : undefined
-                  }
                   breadcrumb={
                     activePage === 'projects' ? (
-                      <TabMenu
-                        variant="toolbar"
-                        value={projectsWorkspaceTab}
-                        onValueChange={(value) =>
-                          setProjectsWorkspaceTab(value as ProjectsWorkspaceTab)
-                        }
-                        fullWidth={false}
-                        withSpacer={false}
-                      >
-                        <TabMenuItem variant="toolbar" value="board">
-                          <span className="inline-flex items-center gap-2">
-                            <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
-                            Project Board
-                          </span>
-                        </TabMenuItem>
-                        <TabMenuItem variant="toolbar" value="taskList">
-                          <span className="inline-flex items-center gap-2">
-                            <ListTodo size={15} className="shrink-0" aria-hidden="true" />
-                            Task List
-                          </span>
-                        </TabMenuItem>
-                      </TabMenu>
+                      <span className="workspace-page-title">Projects</span>
                     ) : activePage === 'calendar' ? (
-                      <TabMenu
-                        variant="toolbar"
-                        value={calendarViewMode}
-                        onValueChange={(value) => setCalendarViewMode(value as CalendarViewMode)}
-                        fullWidth={false}
-                        withSpacer={false}
-                      >
-                        {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
-                          <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
-                            <span className="inline-flex items-center gap-2">
-                              {option.value === 'month' ? (
-                                <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
-                              ) : (
-                                <CalendarDays size={15} className="shrink-0" aria-hidden="true" />
-                              )}
-                              {option.label}
-                            </span>
-                          </TabMenuItem>
-                        ))}
-                      </TabMenu>
+                      <span className="workspace-page-title">Calendar</span>
                     ) : (
                       <Breadcrumb>
                         <BreadcrumbList className="text-[var(--muted)]">
@@ -5375,26 +5326,6 @@ function App(): ReactElement {
                           />
                           <WorkspaceActionButton
                             onClick={() => {
-                              if (!selectedProjectId) {
-                                return
-                              }
-                              setNewMilestoneRequest({
-                                projectId: selectedProjectId,
-                                token: Date.now()
-                              })
-                            }}
-                            icon={<Target size={16} />}
-                            label="New Milestone"
-                            aria-label="New Milestone"
-                            title={
-                              selectedProjectId
-                                ? 'New Milestone'
-                                : 'Select a project for New Milestone'
-                            }
-                            disabled={!selectedProjectId}
-                          />
-                          <WorkspaceActionButton
-                            onClick={() => {
                               if (
                                 !selectedProjectId ||
                                 !projectsWorkspaceMilestoneContext ||
@@ -5409,14 +5340,14 @@ function App(): ReactElement {
                               })
                             }}
                             icon={<ListTodo size={16} />}
-                            label="New Subtask"
-                            aria-label="New Subtask"
+                            label="New Task"
+                            aria-label="New Task"
                             title={
                               selectedProjectId &&
                               projectsWorkspaceMilestoneContext &&
                               projectsWorkspaceMilestoneContext.projectId === selectedProjectId
-                                ? 'New Subtask'
-                                : 'Open a milestone for New Subtask'
+                                ? 'New Task'
+                                : 'Open a milestone for New Task'
                             }
                             disabled={
                               !selectedProjectId ||
@@ -5425,67 +5356,65 @@ function App(): ReactElement {
                             }
                           />
                         </WorkspaceHeaderActionGroup>
+                        <WorkspaceHeaderActionDivider />
+                        <WorkspaceHeaderActionGroup>
+                          <TabMenu
+                            variant="toolbar"
+                            value={projectsWorkspaceTab}
+                            onValueChange={(value) =>
+                              setProjectsWorkspaceTab(value as ProjectsWorkspaceTab)
+                            }
+                            fullWidth={false}
+                            withSpacer={false}
+                          >
+                            <TabMenuItem variant="toolbar" value="board">
+                              <span className="inline-flex items-center gap-2">
+                                <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
+                                Project Board
+                              </span>
+                            </TabMenuItem>
+                            <TabMenuItem variant="toolbar" value="taskList">
+                              <span className="inline-flex items-center gap-2">
+                                <ListTodo size={15} className="shrink-0" aria-hidden="true" />
+                                Task List
+                              </span>
+                            </TabMenuItem>
+                          </TabMenu>
+                        </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'calendar' ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
                           <TabMenu
                             variant="toolbar"
-                            value={calendarContentFilter}
+                            value={calendarViewMode}
                             onValueChange={(value) =>
-                              setCalendarContentFilter(value as CalendarContentFilter)
+                              setCalendarViewMode(value as CalendarViewMode)
                             }
                             fullWidth={false}
                             withSpacer={false}
                           >
-                            {calendarContentFilterOptions.map((option) => (
+                            {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
                               <TabMenuItem
                                 key={option.value}
                                 variant="toolbar"
                                 value={option.value}
                               >
                                 <span className="inline-flex items-center gap-2">
-                                  <span>{option.label}</span>
-                                  <TabMenuCountBadge count={option.count} />
+                                  {option.value === 'month' ? (
+                                    <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
+                                  ) : (
+                                    <CalendarDays
+                                      size={15}
+                                      className="shrink-0"
+                                      aria-hidden="true"
+                                    />
+                                  )}
+                                  {option.label}
                                 </span>
                               </TabMenuItem>
                             ))}
                           </TabMenu>
-                        </WorkspaceHeaderActionGroup>
-                        <WorkspaceHeaderActionDivider />
-                        <WorkspaceHeaderActionGroup>
-                          <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
-                            <WorkspaceActionButton
-                              onClick={goToPrevCalendarPeriod}
-                              title={
-                                calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
-                              }
-                              className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                              icon={<ChevronLeft size={18} />}
-                            />
-                            <WorkspaceActionButton
-                              onClick={goToToday}
-                              title={
-                                calendarViewMode === 'week'
-                                  ? 'Go to current week'
-                                  : 'Go to current month'
-                              }
-                              aria-label={
-                                calendarViewMode === 'week'
-                                  ? 'Go to current week'
-                                  : 'Go to current month'
-                              }
-                              className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
-                              icon={<CalendarDays size={18} />}
-                              label={calendarViewMode === 'week' ? 'Current week' : 'Current month'}
-                            />
-                            <WorkspaceActionButton
-                              onClick={goToNextCalendarPeriod}
-                              title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                              className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
-                              icon={<ChevronRight size={18} />}
-                            />
-                          </div>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
@@ -5588,7 +5517,6 @@ function App(): ReactElement {
                         activeTab={projectsWorkspaceTab}
                         filterMode={projectFilterMode}
                         newProjectRequest={newProjectRequest}
-                        newMilestoneRequest={newMilestoneRequest}
                         newSubtaskRequest={newSubtaskRequest}
                         taskListCollapseAllRequest={projectTaskListCollapseAllRequest}
                         projectDrawerRequest={projectDrawerRequest}
@@ -5669,6 +5597,64 @@ function App(): ReactElement {
                                 <p className="truncate text-sm text-[var(--muted)]">
                                   {calendarCurrentPeriodSubtitle}
                                 </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-3">
+                              <TabMenu
+                                variant="toolbar"
+                                value={calendarContentFilter}
+                                onValueChange={(value) =>
+                                  setCalendarContentFilter(value as CalendarContentFilter)
+                                }
+                                fullWidth={false}
+                                withSpacer={false}
+                              >
+                                {calendarContentFilterOptions.map((option) => (
+                                  <TabMenuItem
+                                    key={option.value}
+                                    variant="toolbar"
+                                    value={option.value}
+                                  >
+                                    <span className="inline-flex items-center gap-2">
+                                      <span>{option.label}</span>
+                                      <TabMenuCountBadge count={option.count} />
+                                    </span>
+                                  </TabMenuItem>
+                                ))}
+                              </TabMenu>
+                              <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
+                                <WorkspaceActionButton
+                                  onClick={goToPrevCalendarPeriod}
+                                  title={
+                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
+                                  }
+                                  className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                                  icon={<ChevronLeft size={18} />}
+                                />
+                                <WorkspaceActionButton
+                                  onClick={goToToday}
+                                  title={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  aria-label={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
+                                  icon={<CalendarDays size={18} />}
+                                  label={
+                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
+                                  }
+                                />
+                                <WorkspaceActionButton
+                                  onClick={goToNextCalendarPeriod}
+                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                                  className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                                  icon={<ChevronRight size={18} />}
+                                />
                               </div>
                             </div>
                           </div>

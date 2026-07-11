@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, protocol, systemPreferences } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { registerScheduleIpcHandlers } from './scheduleIpc'
@@ -49,6 +49,10 @@ process.on('unhandledRejection', (reason) => {
 
 // Register custom protocol to serve vault files
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') {
+    systemPreferences.setUserDefault('ApplePressAndHoldEnabled', 'boolean', false)
+  }
+
   // Register vault-file:// protocol to serve images from vault
   protocol.handle('vault-file', async (request) => {
     try {

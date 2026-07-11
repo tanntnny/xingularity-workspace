@@ -82,6 +82,7 @@ import {
   type ProjectTaskSortKey,
   type ProjectsWorkspaceFilterMode
 } from '../lib/projectTaskRows'
+import { buildProjectBoardGroups, type ProjectBoardGroupBy } from '../lib/projectBoardGroups'
 import { PROJECT_STATUS_META, toLocalIsoDate } from '../lib/projectStatus'
 import { cn } from '../lib/utils'
 
@@ -94,7 +95,6 @@ interface ProjectsWorkspacePageProps {
   activeTab: ProjectsWorkspaceTab
   filterMode: ProjectsWorkspaceFilterMode
   newProjectRequest: { token: number } | null
-  newMilestoneRequest: { projectId: string; token: number } | null
   newSubtaskRequest: { projectId: string; milestoneId: string; token: number } | null
   taskListCollapseAllRequest: { token: number; collapsed: boolean } | null
   projectDrawerRequest: { projectId: string; token: number } | null
@@ -267,13 +267,6 @@ interface TaskListGroup {
   rows: TaskListDisplayRow[]
 }
 
-const BOARD_COLUMNS: Array<{ status: Project['status']; title: string }> = [
-  { status: 'on-track', title: 'On Track' },
-  { status: 'at-risk', title: 'At Risk' },
-  { status: 'blocked', title: 'Blocked' },
-  { status: 'completed', title: 'Completed' }
-]
-
 const PRIORITY_OPTIONS: Array<{ value: '' | TaskPriority; label: string }> = [
   { value: '', label: 'None' },
   { value: 'low', label: 'Low' },
@@ -299,6 +292,19 @@ const TASK_LIST_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
   {
     value: 'dueDate',
     label: 'Group by Due Date',
+    icon: <CalendarDays size={14} aria-hidden="true" />
+  }
+]
+
+const BOARD_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
+  {
+    value: 'status',
+    label: 'Group by Status',
+    icon: <Flag size={14} aria-hidden="true" />
+  },
+  {
+    value: 'updatedAt',
+    label: 'Group by Recent Activity',
     icon: <CalendarDays size={14} aria-hidden="true" />
   }
 ]
@@ -349,7 +355,6 @@ export function ProjectsWorkspacePage({
   activeTab,
   filterMode,
   newProjectRequest,
-  newMilestoneRequest,
   newSubtaskRequest,
   taskListCollapseAllRequest,
   projectDrawerRequest,
@@ -375,6 +380,11 @@ export function ProjectsWorkspacePage({
   onSaveSubtask
 }: ProjectsWorkspacePageProps): ReactElement {
   const [drawerState, setDrawerState] = useState<DrawerState | null>(null)
+  const [boardGroupBy, setBoardGroupBy] = usePersistentState<ProjectBoardGroupBy>(
+    'beacon:projects-workspace:board-group-by',
+    'status',
+    { validate: isBoardGroupBy }
+  )
   const [hideCompletedItems, setHideCompletedItems] = useState(false)
   const [taskListGroupBy, setTaskListGroupBy] = useState<TaskListGroupBy>('project')
   const [taskListSort, setTaskListSort] = usePersistentState<ProjectTaskSortState>(
@@ -435,6 +445,9 @@ export function ProjectsWorkspacePage({
   const taskListDataCellPaddingClass = TASK_LIST_DATA_CELL_PADDING_CLASS[taskListRowHeight]
   const taskListGroupButtonPaddingClass = TASK_LIST_GROUP_BUTTON_PADDING_CLASS[taskListRowHeight]
   const taskListHelperButtonPaddingClass = TASK_LIST_HELPER_BUTTON_PADDING_CLASS[taskListRowHeight]
+  const taskListItemColumnWidth = { width: 'calc((100% - 364px) * 4 / 8)' } as const
+  const taskListProjectColumnWidth = { width: 'calc((100% - 364px) * 2 / 8)' } as const
+  const taskListMilestoneColumnWidth = { width: 'calc((100% - 364px) * 2 / 8)' } as const
   const taskListCollapseScopeToken = taskListCollapseAllRequest?.token ?? 0
   const taskListCollapseBaseline = taskListCollapseAllRequest?.collapsed ?? false
   const effectiveTaskListCollapseOverrides = useMemo(
@@ -452,15 +465,9 @@ export function ProjectsWorkspacePage({
       ),
     [effectiveTaskListCollapseOverrides, taskListCollapseBaseline, taskListGroups]
   )
-  const boardColumns = useMemo(
-    () =>
-      BOARD_COLUMNS.map((column) => ({
-        ...column,
-        projects: filteredProjects
-          .filter((project) => project.status === column.status)
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      })),
-    [filteredProjects]
+  const boardGroups = useMemo(
+    () => buildProjectBoardGroups(filteredProjects, boardGroupBy),
+    [boardGroupBy, filteredProjects]
   )
 
   const toggleTaskListSort = (key: ProjectTaskSortKey): void => {
@@ -490,16 +497,6 @@ export function ProjectsWorkspacePage({
       setDrawerState({ kind: 'project', projectId: projectDrawerRequest.projectId })
     })
   }, [projectDrawerRequest])
-
-  useEffect(() => {
-    if (!newMilestoneRequest) {
-      return
-    }
-
-    startTransition(() => {
-      setDrawerState({ kind: 'new-milestone', projectId: newMilestoneRequest.projectId })
-    })
-  }, [newMilestoneRequest])
 
   useEffect(() => {
     if (!newSubtaskRequest) {
@@ -568,148 +565,248 @@ export function ProjectsWorkspacePage({
   }
 
   return (
-    <div className="workspace-clear-surface flex h-full flex-col">
-      <div className="workspace-page-padding min-h-0 flex-1 overflow-auto">
+    <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
+      <div
+        data-testid="projects-workspace-content"
+        className={cn(
+          'workspace-page-padding min-h-0 flex-1',
+          activeTab === 'board' ? 'flex flex-col overflow-hidden' : 'overflow-auto'
+        )}
+      >
         {activeTab === 'board' ? (
-          <>
-            <div className="mb-4 text-right">
-              <div className="inline-flex text-sm text-[var(--muted)]">
-                {filteredProjects.length} projects
+          <section
+            data-testid="projects-board-shell"
+            className="workspace-table-row-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)]"
+          >
+            <div
+              data-testid="projects-board-toolbar"
+              className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3"
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <SelectionMenu
+                  value={boardGroupBy}
+                  onValueChange={(value) => setBoardGroupBy(value as ProjectBoardGroupBy)}
+                  options={BOARD_GROUP_BY_OPTIONS}
+                  selectedLabel={renderBoardGroupBySelectionLabel(boardGroupBy)}
+                  variant="toolbar"
+                  aria-label={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
+                  title={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
+                  className="min-w-[15rem]"
+                  fullWidth={false}
+                />
+                <TabMenu
+                  variant="toolbar"
+                  value={filterMode}
+                  onValueChange={(value) =>
+                    onFilterModeChange(value as ProjectsWorkspaceFilterMode)
+                  }
+                  fullWidth={false}
+                  withSpacer={false}
+                >
+                  {projectFilterOptions.map((option) => (
+                    <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+                      <span className="inline-flex items-center gap-2">
+                        <span>{option.label}</span>
+                        <TabMenuCountBadge count={option.count} />
+                      </span>
+                    </TabMenuItem>
+                  ))}
+                </TabMenu>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center text-sm text-[var(--muted)]">
+                {filteredProjects.length} {filteredProjects.length === 1 ? 'project' : 'projects'}
               </div>
             </div>
-            <div className="grid min-h-full gap-4 xl:grid-cols-4">
-              {boardColumns.map((column) => (
-                <section
-                  key={column.status}
-                  className="flex min-h-[24rem] flex-col rounded-2xl border border-[var(--line)] bg-[var(--panel)]/60"
-                >
-                  <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text)]">{column.title}</div>
-                      <div className="text-xs text-[var(--muted)]">
-                        {column.projects.length} projects
-                      </div>
-                    </div>
-                    <Badge variant="neutral" tone={PROJECT_STATUS_META[column.status].tone}>
-                      {PROJECT_STATUS_META[column.status].titleLabel}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-3 p-4">
-                    {column.projects.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-6 text-sm text-[var(--muted)]">
-                        No projects in this column.
-                      </div>
-                    ) : (
-                      column.projects.map((project) => {
-                        const isActive =
-                          drawerState?.kind === 'project' && drawerState.projectId === project.id
 
-                        return (
-                          <article
-                            key={project.id}
-                            className={cn(
-                              'rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4 shadow-sm transition-colors hover:border-[var(--accent)]',
-                              (isActive || selectedProjectId === project.id) &&
-                                'border-[var(--accent)] bg-[var(--accent-soft)]/30'
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <button
-                                type="button"
-                                className="flex min-w-0 flex-1 items-start gap-3 text-left"
-                                onClick={() => {
-                                  onSelectProject(project.id)
-                                  onActiveTabChange('board')
-                                  setDrawerState({ kind: 'project', projectId: project.id })
-                                }}
+            <div className="min-h-0 flex-1 overflow-x-auto">
+              <div className="grid h-full min-w-[960px] grid-cols-4">
+                {boardGroups.map((group) => (
+                  <section
+                    key={group.key}
+                    data-testid={`project-board-group:${boardGroupBy}:${group.key}`}
+                    className="flex min-h-0 min-w-0 flex-col rounded-none border-r border-[var(--line)] last:border-r-0"
+                  >
+                    <div className="flex items-center justify-between border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[var(--text)]">
+                          {group.label}
+                        </div>
+                        <div className="text-xs text-[var(--muted)]">
+                          {group.projects.length}{' '}
+                          {group.projects.length === 1 ? 'project' : 'projects'}
+                        </div>
+                      </div>
+                      <Badge variant="neutral" tone={group.badgeTone}>
+                        {group.badgeLabel}
+                      </Badge>
+                    </div>
+                    <div
+                      data-testid={`project-board-group-scroll:${boardGroupBy}:${group.key}`}
+                      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
+                    >
+                      <div className="flex flex-col gap-3">
+                        {group.projects.length === 0 ? (
+                          <div className="rounded-none border border-dashed border-[var(--line)] px-4 py-6 text-sm text-[var(--muted)]">
+                            No projects in this group.
+                          </div>
+                        ) : (
+                          group.projects.map((project) => {
+                            const isActive =
+                              drawerState?.kind === 'project' &&
+                              drawerState.projectId === project.id
+                            const projectProgress = Math.max(0, Math.min(100, project.progress))
+                            const milestoneLabel = `${project.milestones.length} ${
+                              project.milestones.length === 1 ? 'Milestone' : 'Milestones'
+                            }`
+
+                            return (
+                              <article
+                                key={project.id}
+                                className={cn(
+                                  'rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-4 shadow-sm transition-colors hover:border-[var(--accent)]',
+                                  (isActive || selectedProjectId === project.id) &&
+                                    'border-[var(--accent)] bg-[var(--accent-soft)]/30'
+                                )}
                               >
-                                <NoteShapeIcon icon={project.icon} size={24} className="mt-0.5" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-base font-semibold text-[var(--text)]">
-                                    {project.name}
+                                <div className="flex flex-col gap-4">
+                                  <div className="flex items-start gap-3">
+                                    <button
+                                      type="button"
+                                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                                      onClick={() => {
+                                        onSelectProject(project.id)
+                                        onActiveTabChange('board')
+                                        setDrawerState({ kind: 'project', projectId: project.id })
+                                      }}
+                                    >
+                                      <NoteShapeIcon
+                                        icon={project.icon}
+                                        size={24}
+                                        className="mt-0.5 shrink-0"
+                                      />
+                                      <div className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--text)]">
+                                        {project.name}
+                                      </div>
+                                    </button>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]"
+                                          aria-label={`Open actions for ${project.name}`}
+                                        >
+                                          <MoreHorizontal size={16} />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-48">
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            onSelectProject(project.id)
+                                            setDrawerState({
+                                              kind: 'project',
+                                              projectId: project.id
+                                            })
+                                          }}
+                                        >
+                                          Edit project
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => void onOpenProjectFolder(project)}
+                                        >
+                                          {project.folderPath?.trim()
+                                            ? 'Open folder'
+                                            : 'Link folder'}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => void onExportProject(project)}
+                                        >
+                                          Export project
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => onToggleProjectDone(project.id)}
+                                        >
+                                          {project.status === 'completed'
+                                            ? 'Reopen project'
+                                            : 'Mark done'}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => onToggleProjectFavorite(project.id)}
+                                        >
+                                          {favoriteProjectIds.includes(project.id)
+                                            ? 'Remove favorite'
+                                            : 'Add favorite'}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => void onDeleteProject(project.id)}
+                                        >
+                                          Delete project
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   </div>
-                                  <div className="mt-1 line-clamp-2 text-sm text-[var(--muted)]">
-                                    {project.summary || 'No summary yet.'}
-                                  </div>
-                                </div>
-                              </button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]"
-                                    aria-label={`Open actions for ${project.name}`}
-                                  >
-                                    <MoreHorizontal size={16} />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem
+                                    className="flex w-full flex-col gap-4 text-left"
                                     onClick={() => {
                                       onSelectProject(project.id)
+                                      onActiveTabChange('board')
                                       setDrawerState({ kind: 'project', projectId: project.id })
                                     }}
                                   >
-                                    Edit project
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => void onOpenProjectFolder(project)}
-                                  >
-                                    {project.folderPath?.trim() ? 'Open folder' : 'Link folder'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void onExportProject(project)}>
-                                    Export project
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => onToggleProjectDone(project.id)}>
-                                    {project.status === 'completed'
-                                      ? 'Reopen project'
-                                      : 'Mark done'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => onToggleProjectFavorite(project.id)}
-                                  >
-                                    {favoriteProjectIds.includes(project.id)
-                                      ? 'Remove favorite'
-                                      : 'Add favorite'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() => void onDeleteProject(project.id)}
-                                  >
-                                    Delete project
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <Badge
-                                variant="neutral"
-                                tone={PROJECT_STATUS_META[project.status].tone}
-                              >
-                                <Flag size={12} />
-                                {PROJECT_STATUS_META[project.status].titleLabel}
-                              </Badge>
-                              <Badge variant="neutral" tone="info">
-                                {project.progress}% complete
-                              </Badge>
-                              <Badge variant="neutral" tone="neutral">
-                                {project.milestones.length} milestones
-                              </Badge>
-                            </div>
-
-                            <div className="mt-4 text-xs text-[var(--muted)]">
-                              Updated {new Date(project.updatedAt).toLocaleDateString()}
-                            </div>
-                          </article>
-                        )
-                      })
-                    )}
-                  </div>
-                </section>
-              ))}
+                                    <div className="w-full text-sm text-[var(--muted)]">
+                                      {project.summary || 'No summary yet.'}
+                                    </div>
+                                    <div
+                                      className="flex w-full items-center gap-2"
+                                      role="img"
+                                      aria-label={`Project progress: ${projectProgress}% complete`}
+                                      title={`${projectProgress}% complete`}
+                                    >
+                                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--panel)_78%,transparent)]">
+                                        <div
+                                          className="h-full rounded-full bg-[var(--accent)]"
+                                          style={{ width: `${projectProgress}%` }}
+                                        />
+                                      </div>
+                                      <span className="shrink-0 text-[10px] font-medium text-[var(--muted)]">
+                                        {projectProgress}% complete
+                                      </span>
+                                    </div>
+                                    <div className="flex w-full flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                                      <span>
+                                        Updated {new Date(project.updatedAt).toLocaleDateString()}
+                                      </span>
+                                      <Circle
+                                        size={6}
+                                        fill="currentColor"
+                                        stroke="none"
+                                        aria-hidden="true"
+                                        className="shrink-0"
+                                      />
+                                      <span>{PROJECT_STATUS_META[project.status].titleLabel}</span>
+                                      <Circle
+                                        size={6}
+                                        fill="currentColor"
+                                        stroke="none"
+                                        aria-hidden="true"
+                                        className="shrink-0"
+                                      />
+                                      <span>{milestoneLabel}</span>
+                                    </div>
+                                  </button>
+                                </div>
+                              </article>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
             </div>
-          </>
+          </section>
         ) : (
           <section className="workspace-table-row-surface overflow-hidden rounded-2xl border border-[var(--line)]">
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3">
@@ -813,9 +910,9 @@ export function ProjectsWorkspacePage({
             <Table className="projects-task-list-table table-fixed">
               <colgroup>
                 <col style={{ width: '56px' }} />
-                <col style={{ width: 'calc((100% - 364px) * 0.5)' }} />
-                <col style={{ width: 'calc((100% - 364px) * 0.25)' }} />
-                <col style={{ width: 'calc((100% - 364px) * 0.25)' }} />
+                <col style={taskListItemColumnWidth} />
+                <col style={taskListProjectColumnWidth} />
+                <col style={taskListMilestoneColumnWidth} />
                 <col style={{ width: '112px' }} />
                 <col style={{ width: '124px' }} />
                 <col style={{ width: '72px' }} />
@@ -835,6 +932,7 @@ export function ProjectsWorkspacePage({
                   </SortableTableHead>
                   <SortableTableHead
                     className="border-r-0"
+                    style={taskListItemColumnWidth}
                     isActive={taskListSort.key === 'title'}
                     sortDirection={taskListSort.direction}
                     onToggleSort={() => toggleTaskListSort('title')}
@@ -843,6 +941,7 @@ export function ProjectsWorkspacePage({
                   </SortableTableHead>
                   <SortableTableHead
                     className="border-r-0"
+                    style={taskListProjectColumnWidth}
                     isActive={taskListSort.key === 'project'}
                     sortDirection={taskListSort.direction}
                     onToggleSort={() => toggleTaskListSort('project')}
@@ -851,6 +950,7 @@ export function ProjectsWorkspacePage({
                   </SortableTableHead>
                   <SortableTableHead
                     className="border-r-0"
+                    style={taskListMilestoneColumnWidth}
                     isActive={taskListSort.key === 'milestone'}
                     sortDirection={taskListSort.direction}
                     onToggleSort={() => toggleTaskListSort('milestone')}
@@ -943,7 +1043,7 @@ export function ProjectsWorkspacePage({
                                       <button
                                         type="button"
                                         className={cn(
-                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--text)] transition-colors',
+                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--text)]',
                                           taskListHelperButtonPaddingClass
                                         )}
                                         onClick={() => {
@@ -975,7 +1075,7 @@ export function ProjectsWorkspacePage({
                                       <button
                                         type="button"
                                         className={cn(
-                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--text)] transition-colors',
+                                          'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--text)]',
                                           taskListHelperButtonPaddingClass
                                         )}
                                         onClick={() => {
@@ -1082,6 +1182,7 @@ export function ProjectsWorkspacePage({
                                   </TableCell>
                                   <TableCell
                                     className={cn('border-r-0', taskListDataCellPaddingClass)}
+                                    style={taskListItemColumnWidth}
                                   >
                                     <div
                                       className={cn(
@@ -1095,6 +1196,7 @@ export function ProjectsWorkspacePage({
                                   </TableCell>
                                   <TableCell
                                     className={cn('border-r-0', taskListDataCellPaddingClass)}
+                                    style={taskListProjectColumnWidth}
                                   >
                                     <div className="flex min-w-0 items-center gap-2">
                                       <NoteShapeIcon icon={row.projectIcon} size={22} />
@@ -1108,8 +1210,11 @@ export function ProjectsWorkspacePage({
                                       'border-r-0 text-sm text-[var(--muted)]',
                                       taskListDataCellPaddingClass
                                     )}
+                                    style={taskListMilestoneColumnWidth}
                                   >
-                                    {row.kind === 'milestone' ? '—' : row.milestoneTitle}
+                                    <div className="truncate">
+                                      {row.kind === 'milestone' ? '—' : row.milestoneTitle}
+                                    </div>
                                   </TableCell>
                                   <TableCell
                                     className={cn(
@@ -1756,16 +1861,6 @@ function ProjectsDrawer({
                   />
                   {favoriteProjectIds.includes(drawerProject.id) ? 'Favorited' : 'Favorite'}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    persistProjectDraft(drawerProject)
-                    transitionDrawerState({ kind: 'new-milestone', projectId: drawerProject.id })
-                  }}
-                >
-                  <Plus size={14} />
-                  Add Milestone
-                </Button>
               </div>
             </div>
             <DrawerFooter>
@@ -2285,6 +2380,29 @@ function isProjectTaskSortState(value: unknown): value is ProjectTaskSortState {
 
 function isTaskListRowHeight(value: unknown): value is TaskListRowHeight {
   return value === 'compact' || value === 'default' || value === 'comfortable'
+}
+
+function isBoardGroupBy(value: unknown): value is ProjectBoardGroupBy {
+  return value === 'status' || value === 'updatedAt'
+}
+
+function formatBoardGroupByLabel(value: ProjectBoardGroupBy): string {
+  const option = BOARD_GROUP_BY_OPTIONS.find((item) => item.value === value)
+  return typeof option?.label === 'string' ? option.label : value
+}
+
+function renderBoardGroupBySelectionLabel(value: ProjectBoardGroupBy): ReactElement | string {
+  const option = BOARD_GROUP_BY_OPTIONS.find((item) => item.value === value)
+  if (!option) {
+    return value
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      {option.icon ? <span className="shrink-0 text-[var(--muted)]">{option.icon}</span> : null}
+      <span>{option.label}</span>
+    </span>
+  )
 }
 
 function formatTaskListGroupByLabel(value: TaskListGroupBy): string {

@@ -8,7 +8,110 @@ import {
   serializeStoredNoteDocument
 } from '../src/shared/noteDocument'
 
-async function createFixtureVault(): Promise<string> {
+interface FixtureProject {
+  id: string
+  name: string
+  summary: string
+  status: 'on-track' | 'at-risk' | 'off-track' | 'completed'
+  updatedAt: string
+  progress: number
+  milestones: Array<{
+    id: string
+    title: string
+    description: string
+    dueDate: string
+    priority: 'low' | 'medium' | 'high'
+    status: 'pending' | 'in-progress' | 'completed'
+    subtasks: Array<{
+      id: string
+      title: string
+      description: string
+      completed: boolean
+      priority: 'low' | 'medium' | 'high'
+      createdAt: string
+      dueDate: string
+    }>
+  }>
+  icon: {
+    shape: 'circle' | 'square'
+    variant: 'filled'
+    color: string
+  }
+}
+
+function buildDefaultFixtureProjects(): FixtureProject[] {
+  return [
+    {
+      id: 'project-1',
+      name: 'Alpha Project',
+      summary: '',
+      status: 'on-track',
+      updatedAt: '2026-04-02T00:00:00.000Z',
+      progress: 25,
+      milestones: [
+        {
+          id: 'milestone-1',
+          title: 'Launch',
+          description: '',
+          dueDate: '2026-07-10',
+          priority: 'high',
+          status: 'pending',
+          subtasks: [
+            {
+              id: 'subtask-1',
+              title: 'Write copy',
+              description: '',
+              completed: false,
+              priority: 'medium',
+              createdAt: '2026-07-01T00:00:00.000Z',
+              dueDate: '2026-07-09'
+            }
+          ]
+        }
+      ],
+      icon: {
+        shape: 'circle',
+        variant: 'filled',
+        color: '#000000'
+      }
+    },
+    {
+      id: 'project-2',
+      name: 'Beta Project',
+      summary: '',
+      status: 'on-track',
+      updatedAt: '2026-04-03T00:00:00.000Z',
+      progress: 0,
+      milestones: [],
+      icon: {
+        shape: 'square',
+        variant: 'filled',
+        color: '#2563eb'
+      }
+    }
+  ]
+}
+
+function buildScrollableBoardProjects(count: number): FixtureProject[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `project-${index + 1}`,
+    name: `Project ${index + 1}`,
+    summary: `Board card ${index + 1}`,
+    status: 'on-track',
+    updatedAt: `2026-04-${String((index % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
+    progress: (index * 7) % 100,
+    milestones: [],
+    icon: {
+      shape: index % 2 === 0 ? 'circle' : 'square',
+      variant: 'filled',
+      color: index % 2 === 0 ? '#000000' : '#2563eb'
+    }
+  }))
+}
+
+async function createFixtureVault(
+  projects: FixtureProject[] = buildDefaultFixtureProjects()
+): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-project-page-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notebooks', 'Projects', 'Alpha Project'), {
     recursive: true
@@ -30,60 +133,7 @@ async function createFixtureVault(): Promise<string> {
   )
   await fs.writeFile(
     path.join(rootPath, 'projects.json'),
-    JSON.stringify(
-      [
-        {
-          id: 'project-1',
-          name: 'Alpha Project',
-          summary: '',
-          status: 'on-track',
-          updatedAt: '2026-04-02T00:00:00.000Z',
-          progress: 25,
-          milestones: [
-            {
-              id: 'milestone-1',
-              title: 'Launch',
-              description: '',
-              dueDate: '2026-07-10',
-              priority: 'high',
-              status: 'pending',
-              subtasks: [
-                {
-                  id: 'subtask-1',
-                  title: 'Write copy',
-                  description: '',
-                  completed: false,
-                  priority: 'medium',
-                  createdAt: '2026-07-01T00:00:00.000Z',
-                  dueDate: '2026-07-09'
-                }
-              ]
-            }
-          ],
-          icon: {
-            shape: 'circle',
-            variant: 'filled',
-            color: '#000000'
-          }
-        },
-        {
-          id: 'project-2',
-          name: 'Beta Project',
-          summary: '',
-          status: 'on-track',
-          updatedAt: '2026-04-03T00:00:00.000Z',
-          progress: 0,
-          milestones: [],
-          icon: {
-            shape: 'square',
-            variant: 'filled',
-            color: '#2563eb'
-          }
-        }
-      ],
-      null,
-      2
-    ),
+    JSON.stringify(projects, null, 2),
     'utf-8'
   )
 
@@ -118,7 +168,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 }
 
 test.describe('projects workspace', () => {
-  test('shows board and task list tabs and opens the project drawer from the board', async () => {
+  test('shows the board shell, supports board controls, and opens the project drawer from the board', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
@@ -132,7 +182,27 @@ test.describe('projects workspace', () => {
       await expect(page.getByText('Project Notes')).toHaveCount(0)
 
       await page.getByText('Project Board').click()
-      await page
+      const boardShell = page.getByTestId('projects-board-shell')
+      await expect(boardShell).toBeVisible()
+      await expect(page.getByTestId('projects-board-toolbar')).toBeVisible()
+      await expect(page.getByTestId('project-board-group:status:on-track')).toBeVisible()
+      await expect(page.getByTestId('project-board-group:status:completed')).toBeVisible()
+
+      await page.getByRole('button', { name: 'Board grouping: Group by Status' }).click()
+      await page.getByRole('menuitemradio', { name: 'Group by Recent Activity' }).click()
+      await expect(page.getByTestId('project-board-group:updatedAt:today')).toBeVisible()
+      await expect(page.getByTestId('project-board-group:updatedAt:older')).toBeVisible()
+
+      await page.getByText('Favorites').click()
+      await expect(boardShell.locator('article').filter({ hasText: 'Alpha Project' })).toHaveCount(
+        0
+      )
+
+      await page.getByText('All').click()
+      await page.getByRole('button', { name: 'Board grouping: Group by Recent Activity' }).click()
+      await page.getByRole('menuitemradio', { name: 'Group by Status' }).click()
+
+      await boardShell
         .locator('article')
         .filter({ hasText: 'Alpha Project' })
         .first()
@@ -147,7 +217,7 @@ test.describe('projects workspace', () => {
       await expect(page.getByText('Edit project details and workspace actions.')).toHaveCount(0)
       await expect(page.getByText('Alpha Project Updated').first()).toBeVisible()
 
-      await page
+      await boardShell
         .locator('article')
         .filter({ hasText: 'Alpha Project Updated' })
         .first()
@@ -194,6 +264,39 @@ test.describe('projects workspace', () => {
 
       await expect(page.getByRole('button', { name: /Add milestone to/ })).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Add subtask to Launch' })).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps board column scrolling inside each group', async () => {
+    const vaultRoot = await createFixtureVault(buildScrollableBoardProjects(18))
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByText('Project Board').click()
+
+      const workspaceContent = page.getByTestId('projects-workspace-content')
+      const groupScroller = page.getByTestId('project-board-group-scroll:status:on-track')
+
+      await expect(groupScroller).toBeVisible()
+
+      const workspaceOverflowY = await workspaceContent.evaluate(
+        (element) => window.getComputedStyle(element).overflowY
+      )
+      expect(workspaceOverflowY).toBe('hidden')
+
+      const scrollMetrics = await groupScroller.evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        overflowY: window.getComputedStyle(element).overflowY,
+        scrollHeight: element.scrollHeight
+      }))
+
+      expect(scrollMetrics.overflowY).toBe('auto')
+      expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

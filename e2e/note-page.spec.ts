@@ -187,6 +187,16 @@ async function getCurrentNoteSnapshot(page: Page): Promise<NoteSnapshot> {
   return page.evaluate(() => window.__XINGULARITY_E2E__!.getCurrentNoteSnapshot())
 }
 
+async function getCurrentVimCursorChar(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const cursor = document.querySelector(
+      '[data-testid="note-block-editor"] .note-vim-block-cursor-char'
+    )
+
+    return cursor?.textContent ?? null
+  })
+}
+
 async function getEditorSelectionState(page: Page): Promise<{
   anchorInEditor: boolean
   anchorOffset: number | null
@@ -1697,6 +1707,48 @@ test.describe('note page block editor switching', () => {
           }
         )
         .toBe('omega  delta')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports Vim word motions in plain text', async () => {
+    const vaultRoot = await createFixtureVault('map sun wax\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      await page.getByText('map sun wax', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      await page.keyboard.press('0')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('m')
+
+      await page.keyboard.press('e')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('p')
+      await page.keyboard.press('e')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('n')
+      await page.keyboard.press('e')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('x')
+
+      await page.keyboard.press('0')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('m')
+      await page.keyboard.press('w')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('s')
+      await page.keyboard.press('w')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('w')
+      await page.keyboard.press('b')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('s')
+      await page.keyboard.press('b')
+      await expect.poll(async () => getCurrentVimCursorChar(page)).toBe('m')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
