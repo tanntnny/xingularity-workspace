@@ -142,6 +142,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
+import { Shortcut } from './components/ui/kbd'
 import { buildMilestoneCalendarEvents, normalizeCalendarTasks } from './lib/calendarTasks'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
@@ -467,7 +468,7 @@ function App(): ReactElement {
     token: number
   } | null>(null)
   const [newProjectRequest, setNewProjectRequest] = useState<{ token: number } | null>(null)
-  const [newSubtaskRequest, setNewSubtaskRequest] = useState<{
+  const [newSubtaskRequest] = useState<{
     projectId: string
     milestoneId: string
     token: number
@@ -477,7 +478,7 @@ function App(): ReactElement {
     collapsed: boolean
   } | null>(null)
   const [areProjectTaskListGroupsCollapsed, setAreProjectTaskListGroupsCollapsed] = useState(false)
-  const [projectsWorkspaceMilestoneContext, setProjectsWorkspaceMilestoneContext] = useState<{
+  const [, setProjectsWorkspaceMilestoneContext] = useState<{
     projectId: string
     milestoneId: string
   } | null>(null)
@@ -1683,6 +1684,7 @@ function App(): ReactElement {
   useWorkspaceShellShortcuts({
     enabled: hasVault,
     hasRightPanel,
+    activePage,
     onOpenSearchPalette: () => {
       setCommandPaletteInitialQuery('')
       setCommandPaletteOpen(true)
@@ -1702,6 +1704,12 @@ function App(): ReactElement {
     },
     onRunRedo: () => {
       void runHistoryOperation('redo')
+    },
+    onToggleProjectsView: () => {
+      setProjectsWorkspaceTab((current) => (current === 'board' ? 'taskList' : 'board'))
+    },
+    onToggleCalendarView: () => {
+      setCalendarViewMode((current) => (current === 'month' ? 'week' : 'month'))
     },
     onNavigateToPage: (page) => {
       void navigateToPage(page as AppPage)
@@ -5324,37 +5332,6 @@ function App(): ReactElement {
                             aria-label="New Project"
                             title="New Project"
                           />
-                          <WorkspaceActionButton
-                            onClick={() => {
-                              if (
-                                !selectedProjectId ||
-                                !projectsWorkspaceMilestoneContext ||
-                                projectsWorkspaceMilestoneContext.projectId !== selectedProjectId
-                              ) {
-                                return
-                              }
-                              setNewSubtaskRequest({
-                                projectId: projectsWorkspaceMilestoneContext.projectId,
-                                milestoneId: projectsWorkspaceMilestoneContext.milestoneId,
-                                token: Date.now()
-                              })
-                            }}
-                            icon={<ListTodo size={16} />}
-                            label="New Task"
-                            aria-label="New Task"
-                            title={
-                              selectedProjectId &&
-                              projectsWorkspaceMilestoneContext &&
-                              projectsWorkspaceMilestoneContext.projectId === selectedProjectId
-                                ? 'New Task'
-                                : 'Open a milestone for New Task'
-                            }
-                            disabled={
-                              !selectedProjectId ||
-                              !projectsWorkspaceMilestoneContext ||
-                              projectsWorkspaceMilestoneContext.projectId !== selectedProjectId
-                            }
-                          />
                         </WorkspaceHeaderActionGroup>
                         <WorkspaceHeaderActionDivider />
                         <WorkspaceHeaderActionGroup>
@@ -5366,6 +5343,13 @@ function App(): ReactElement {
                             }
                             fullWidth={false}
                             withSpacer={false}
+                            trailingAccessory={
+                              <Shortcut
+                                keys={['option', 'tab']}
+                                data-testid="workspace-shortcut:projects-view-toggle"
+                                className="shrink-0"
+                              />
+                            }
                           >
                             <TabMenuItem variant="toolbar" value="board">
                               <span className="inline-flex items-center gap-2">
@@ -5393,6 +5377,13 @@ function App(): ReactElement {
                             }
                             fullWidth={false}
                             withSpacer={false}
+                            trailingAccessory={
+                              <Shortcut
+                                keys={['option', 'tab']}
+                                data-testid="workspace-shortcut:calendar-view-toggle"
+                                className="shrink-0"
+                              />
+                            }
                           >
                             {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
                               <TabMenuItem

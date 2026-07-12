@@ -184,15 +184,27 @@ export function AppSidebar({
 
   const renderBadge = (pageId: AppPage): ReactElement | null => {
     if (pageId === 'notes' && notesCount > 0) {
-      return <SidebarMenuBadge>{notesCountLabel}</SidebarMenuBadge>
+      return (
+        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
+          {notesCountLabel}
+        </SidebarMenuBadge>
+      )
     }
 
     if (pageId === 'projects' && projectsCount > 0) {
-      return <SidebarMenuBadge>{projectsCountLabel}</SidebarMenuBadge>
+      return (
+        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
+          {projectsCountLabel}
+        </SidebarMenuBadge>
+      )
     }
 
     if (pageId === 'calendar' && calendarUndoneCount > 0) {
-      return <SidebarMenuBadge>{calendarUndoneCountLabel}</SidebarMenuBadge>
+      return (
+        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
+          {calendarUndoneCountLabel}
+        </SidebarMenuBadge>
+      )
     }
 
     return null
@@ -262,6 +274,13 @@ export function AppSidebar({
                       disabled={isLocked}
                     >
                       <span>{page.label}</span>
+                      {page.shortcut ? (
+                        <Shortcut
+                          keys={page.shortcut}
+                          data-testid={`sidebar-shortcut:${page.id}`}
+                          className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
+                        />
+                      ) : null}
                     </Pressable>
                   </SidebarMenuButton>
                   {renderBadge(page.id)}

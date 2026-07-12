@@ -14,10 +14,22 @@ export interface TabMenuProps extends Omit<ButtonGroupProps, 'variant' | 'size'>
   variant?: TabMenuVariant
   fullWidth?: boolean
   withSpacer?: boolean
+  trailingAccessory?: React.ReactNode
 }
 
 const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
-  ({ className, children, variant = 'boxed', fullWidth = true, withSpacer, ...props }, ref) => (
+  (
+    {
+      className,
+      children,
+      variant = 'boxed',
+      fullWidth = true,
+      withSpacer,
+      trailingAccessory,
+      ...props
+    },
+    ref
+  ) => (
     <div
       className={cn(
         'tab-menu-shell flex min-w-0 items-center py-2',
@@ -44,6 +56,16 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
         {...props}
       >
         {children}
+        {trailingAccessory ? (
+          <div
+            className={cn(
+              'tab-menu-accessory flex shrink-0 items-center',
+              variant === 'inline-accent' ? 'pl-3' : variant === 'toolbar' ? 'pl-1 pr-1.5' : 'pl-1'
+            )}
+          >
+            {trailingAccessory}
+          </div>
+        ) : null}
         {variant === 'inline-accent' || withSpacer === false ? null : (
           <div className="tab-menu-spacer" aria-hidden="true" />
         )}
