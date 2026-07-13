@@ -39,7 +39,9 @@ const api: RendererVaultApi = {
   },
   desktop: {
     chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),
-    openPath: (targetPath) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenPath, targetPath)
+    openPath: (targetPath) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenPath, targetPath),
+    openWarpAtNotePath: (relPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.desktopOpenWarpAtNotePath, relPath)
   },
   files: {
     listNotes: () => ipcRenderer.invoke(IPC_CHANNELS.listNotes),

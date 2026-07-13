@@ -955,6 +955,7 @@ export interface RendererVaultApi {
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>
     openPath: (targetPath: string) => Promise<void>
+    openWarpAtNotePath: (relPath: string) => Promise<void>
   }
   files: {
     listNotes: () => Promise<NoteListItem[]>

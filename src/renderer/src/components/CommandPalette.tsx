@@ -14,10 +14,12 @@ import {
   FolderKanban,
   FolderOpen,
   GitBranch,
-  Plus
+  Plus,
+  Terminal
 } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
+import warpLogo from '../assets/warp-logo.png'
 import {
   Command,
   CommandEmpty,
@@ -69,6 +71,7 @@ interface CommandPaletteProps {
   onOpenNote: (relPath: string) => void
   onOpenProject: (projectId: string) => void
   onOpenPage: (page: CommandPalettePage) => void
+  onOpenWarpAtNoteFolder: () => Promise<void>
   onManageVaults?: () => void
   onRunVaultMigration?: () => void
 }
@@ -91,6 +94,7 @@ export function CommandPalette({
   onOpenNote,
   onOpenProject,
   onOpenPage,
+  onOpenWarpAtNoteFolder,
   onManageVaults,
   onRunVaultMigration
 }: CommandPaletteProps): ReactElement | null {
@@ -334,6 +338,17 @@ export function CommandPalette({
         keywords: ['preferences', 'config'],
         icon: FolderKanban
       },
+      {
+        value: '>warp open current note folder',
+        label: 'Warp: Open Current Note Folder',
+        onSelect: () => {
+          void onOpenWarpAtNoteFolder()
+        },
+        keywords: ['warp', 'terminal', 'shell', 'cwd', 'folder', 'current note'],
+        icon: Terminal,
+        logo: warpLogo,
+        disabled: !activeNotePath
+      },
       ...(onManageVaults
         ? [
             {
@@ -357,7 +372,14 @@ export function CommandPalette({
           ]
         : [])
     ],
-    [onCreate, onManageVaults, onOpenPage, onRunVaultMigration]
+    [
+      activeNotePath,
+      onCreate,
+      onManageVaults,
+      onOpenPage,
+      onOpenWarpAtNoteFolder,
+      onRunVaultMigration
+    ]
   )
 
   const filteredCommandItems = useMemo(
@@ -534,10 +556,19 @@ export function CommandPalette({
                       style={revealProps.style}
                       value={item.value}
                       keywords={item.keywords}
+                      disabled={item.disabled}
                       onSelect={handleSelect}
                     >
                       <div className={paletteItemIconClass}>
-                        <Icon className="h-4 w-4" />
+                        {item.logo ? (
+                          <img
+                            src={item.logo}
+                            alt=""
+                            className="h-5 w-5 rounded-[4px]"
+                          />
+                        ) : (
+                          <Icon className="h-4 w-4" />
+                        )}
                       </div>
                       <span>{item.label}</span>
                       {item.shortcutKeys ? <CommandShortcut keys={item.shortcutKeys} /> : null}

@@ -21,6 +21,11 @@ const COMMANDS = [
     value: '>go settings',
     label: 'Go to Settings',
     keywords: ['preferences', 'config']
+  },
+  {
+    value: '>warp open current note folder',
+    label: 'Warp: Open Current Note Folder',
+    keywords: ['warp', 'terminal', 'shell', 'cwd', 'folder', 'current note']
   }
 ] as const
 
@@ -35,7 +40,7 @@ describe('filterCommandPaletteCommands', () => {
     ).toEqual(['>go settings'])
     expect(
       filterCommandPaletteCommands([...COMMANDS], 'new').map((command) => command.value)
-    ).toEqual(['>new note'])
+    ).toEqual(['>new note', '>warp open current note folder'])
   })
 
   it('supports fuzzy subsequence matches for abbreviated command queries', () => {
@@ -48,6 +53,9 @@ describe('filterCommandPaletteCommands', () => {
     expect(
       filterCommandPaletteCommands([...COMMANDS], 'prefs').map((command) => command.value)
     ).toEqual(['>go settings'])
+    expect(
+      filterCommandPaletteCommands([...COMMANDS], 'terminal').map((command) => command.value)
+    ).toEqual(['>warp open current note folder'])
   })
 
   it('returns no commands when nothing matches', () => {

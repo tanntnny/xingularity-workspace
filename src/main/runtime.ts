@@ -32,6 +32,7 @@ import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
+import { createWarpNewTabUri } from './warp'
 import {
   AppSettings,
   AgentChatEvent,
@@ -488,6 +489,13 @@ export class VaultRuntime {
     if (openError) {
       throw new Error(openError)
     }
+  }
+
+  async openWarpAtNotePath(relPath: string): Promise<void> {
+    this.assertReady()
+    const safeRelPath = sanitizeNotePath(relPath)
+    const notePath = assertPathInVault(this.currentPaths!, safeRelPath, 'notes')
+    await shell.openExternal(createWarpNewTabUri(path.dirname(notePath)))
   }
 
   private async showMarkdownExportDialog(

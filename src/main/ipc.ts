@@ -408,6 +408,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     await runtime.openPath(sourcePathSchema.parse(targetPath))
   })
 
+  handleIpc(IPC_CHANNELS.desktopOpenWarpAtNotePath, async (_event, relPath: unknown) => {
+    await runtime.openWarpAtNotePath(notePathSchema.parse(relPath))
+  })
+
   handleIpc(IPC_CHANNELS.listNotes, async () => {
     return runtime.listNotes()
   })

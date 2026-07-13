@@ -3447,6 +3447,25 @@ function App(): ReactElement {
     }
   }
 
+  const openCurrentNoteFolderInWarp = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Warp is only available inside the Electron app')
+      return
+    }
+
+    if (!currentNotePath) {
+      pushToast('error', 'Open a note before opening its folder in Warp')
+      return
+    }
+
+    try {
+      await vaultApi.desktop.openWarpAtNotePath(currentNotePath)
+      pushToast('success', 'Opened current note folder in Warp')
+    } catch (error) {
+      pushToast('error', `Could not open Warp: ${String(error)}`)
+    }
+  }
+
   const toggleCurrentNoteFavorite = (): void => {
     if (!currentNotePath) {
       return
@@ -6074,6 +6093,7 @@ function App(): ReactElement {
         onOpenPage={(page) => {
           void navigateToPage(page)
         }}
+        onOpenWarpAtNoteFolder={openCurrentNoteFolderInWarp}
         onManageVaults={() => {
           setCommandPaletteOpen(false)
           openVaultSwapper()
