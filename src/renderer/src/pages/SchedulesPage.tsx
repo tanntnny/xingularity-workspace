@@ -526,7 +526,7 @@ export function SchedulesPage({
 
   return (
     <>
-      <DocumentWorkspace>
+      <DocumentWorkspace tabLabel="Schedules">
         {/* ── Left: Run history & selection ───────────────────────────── */}
         <DocumentWorkspaceMain>
           <DocumentWorkspaceMainHeader

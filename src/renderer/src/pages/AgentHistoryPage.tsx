@@ -670,7 +670,10 @@ export function AgentHistoryPage({
   const headerTitle = activeSession?.title ?? 'Agent Chat'
 
   return (
-    <DocumentWorkspace>
+    <DocumentWorkspace
+      tabLabel="Agent Chat"
+      style={{ ['--workspace-pane-width' as string]: '340px' }}
+    >
       <DocumentWorkspaceMain>
         <DocumentWorkspaceMainHeader
           breadcrumb={
@@ -1023,10 +1026,7 @@ export function AgentHistoryPage({
         </DocumentWorkspaceMainContent>
       </DocumentWorkspaceMain>
 
-      <DocumentWorkspacePanel
-        className={isRightPanelCollapsed ? 'hidden' : 'flex'}
-        style={{ ['--workspace-pane-width' as string]: '340px' }}
-      >
+      <DocumentWorkspacePanel className={isRightPanelCollapsed ? 'hidden' : 'flex'}>
         <DocumentWorkspacePanelHeader
           leading={
             <div>

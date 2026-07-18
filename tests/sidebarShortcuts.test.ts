@@ -5,6 +5,11 @@ import { AppSidebar } from '../src/renderer/src/components/AppSidebar'
 import { SidebarProvider } from '../src/renderer/src/components/ui/sidebar'
 import { Shortcut } from '../src/renderer/src/components/ui/kbd'
 import { TabMenu, TabMenuItem } from '../src/renderer/src/components/ui/tab-menu'
+import {
+  DocumentWorkspace,
+  DocumentWorkspaceMain,
+  WorkspaceTabManager
+} from '../src/renderer/src/components/ui/document-workspace'
 
 describe('sidebar shortcuts', () => {
   it('renders icon-based Option+Tab shortcut keys', () => {
@@ -61,5 +66,29 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('tab-menu-group')
     expect(markup).toContain('tab-menu-accessory')
     expect(markup).toContain('data-testid="tab-menu-shortcut"')
+  })
+
+  it('renders a static current-route tab above the workspace content', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        DocumentWorkspace,
+        { tabLabel: 'Notebooks' },
+        createElement(DocumentWorkspaceMain, null, 'Workspace content')
+      )
+    )
+
+    expect(markup).toContain('data-testid="workspace-current-tab"')
+    expect(markup).toContain('aria-current="page"')
+    expect(markup).toContain('>Notebooks<')
+    expect(markup.indexOf('document-workspace-tab-manager')).toBeLessThan(
+      markup.indexOf('document-workspace-main-surface')
+    )
+  })
+
+  it('keeps the current-route tab non-interactive', () => {
+    const markup = renderToStaticMarkup(createElement(WorkspaceTabManager, { label: 'Projects' }))
+
+    expect(markup).not.toContain('<button')
+    expect(markup).not.toContain('role="tab"')
   })
 })

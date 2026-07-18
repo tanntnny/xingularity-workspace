@@ -2,17 +2,57 @@ import * as React from 'react'
 
 import { cn } from '../../lib/utils'
 
+interface DocumentWorkspaceProps extends React.HTMLAttributes<HTMLDivElement> {
+  tabLabel?: string
+}
+
+interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
+  label: string
+}
+
+const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerProps>(
+  ({ className, label, ...props }, ref) => (
+    <nav
+      ref={ref}
+      aria-label="Current workspace"
+      className={cn(
+        'document-workspace-tab-manager app-drag-region mb-1 flex h-11 shrink-0 items-end py-1',
+        className
+      )}
+      {...props}
+    >
+      <span
+        aria-current="page"
+        data-testid="workspace-current-tab"
+        className="app-no-drag document-workspace-current-tab inline-flex items-center rounded-t-lg border-y border-r border-b-0 border-[var(--shell-border)] px-3 py-1 text-sm font-medium text-[var(--text)]"
+      >
+        {label}
+      </span>
+    </nav>
+  )
+)
+WorkspaceTabManager.displayName = 'WorkspaceTabManager'
+
 const workspaceMainHeaderClass =
-  'document-workspace-header document-workspace-main-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)] px-3'
+  'document-workspace-header document-workspace-main-header app-drag-region flex h-[72px] shrink-0 items-center gap-2 border-b border-[var(--shell-border)] bg-[var(--shell-breadcrumb-surface)] px-3'
 
 const workspacePanelHeaderClass =
-  'document-workspace-header document-workspace-panel-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)] px-3'
+  'document-workspace-header document-workspace-panel-header app-drag-region flex h-[72px] shrink-0 items-center gap-2 border-b border-[var(--shell-border)] bg-[var(--shell-breadcrumb-surface)] px-3'
 
 const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
 
-const DocumentWorkspace = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('flex h-full w-full min-w-0', className)} {...props} />
+const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProps>(
+  ({ className, tabLabel, children, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn('document-workspace-frame flex h-full w-full min-w-0 flex-col p-2', className)}
+      {...props}
+    >
+      {tabLabel ? <WorkspaceTabManager label={tabLabel} /> : null}
+      <div className="document-workspace-body flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden rounded-xl border border-[var(--shell-border)] p-2">
+        {children}
+      </div>
+    </div>
   )
 )
 DocumentWorkspace.displayName = 'DocumentWorkspace'
@@ -24,7 +64,7 @@ const DocumentWorkspaceMain = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      'document-workspace-main-surface flex min-w-0 flex-1 flex-col bg-[var(--workspace-main-panel)]',
+      'document-workspace-main-surface flex min-w-0 flex-1 flex-col overflow-hidden',
       className
     )}
     {...props}
@@ -36,10 +76,10 @@ const DocumentWorkspacePanel = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <aside
+  <div
     ref={ref}
     className={cn(
-      'document-workspace-panel-surface flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col border-l border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)]',
+      'document-workspace-panel-surface flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--shell-border)] bg-[var(--workspace-main-panel)] p-2',
       className
     )}
     {...props}
@@ -156,7 +196,14 @@ const DocumentWorkspaceMainContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('min-h-0 flex-1 overflow-hidden', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn(
+      'document-workspace-main-content min-h-0 min-w-0 flex-1 overflow-hidden p-2',
+      className
+    )}
+    {...props}
+  />
 ))
 DocumentWorkspaceMainContent.displayName = 'DocumentWorkspaceMainContent'
 
@@ -168,14 +215,36 @@ const DocumentWorkspacePanelContent = React.forwardRef<
 ))
 DocumentWorkspacePanelContent.displayName = 'DocumentWorkspacePanelContent'
 
+interface WorkspaceContextEmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
+  title?: string
+  description: string
+}
+
+const WorkspaceContextEmptyState = React.forwardRef<
+  HTMLDivElement,
+  WorkspaceContextEmptyStateProps
+>(({ className, title = 'Context', description, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('document-workspace-context-empty m-3 rounded-xl p-4', className)}
+    {...props}
+  >
+    <p className="text-sm font-semibold text-[var(--text)]">{title}</p>
+    <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{description}</p>
+  </div>
+))
+WorkspaceContextEmptyState.displayName = 'WorkspaceContextEmptyState'
+
 export {
   DocumentWorkspace,
+  WorkspaceTabManager,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
+  WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,

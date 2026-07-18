@@ -98,12 +98,14 @@ import {
   DropdownMenuTrigger
 } from './components/ui/dropdown-menu'
 import {
+  DocumentWorkspace,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainContent,
   DocumentWorkspaceMainHeader,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceContextEmptyState,
   WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
@@ -556,11 +558,8 @@ function App(): ReactElement {
       activePage === 'notes' ||
       activePage === 'projects' ||
       activePage === 'calendar')
-  const showWorkspacePanel =
-    hasVault && (activePage === 'notes' || activePage === 'calendar' || activePage === 'weeklyPlan')
-  const shouldSlideWorkspacePanelOut = showWorkspacePanel && (isRightPanelCollapsed || isFocusMode)
-  const hasRightPanel =
-    showWorkspacePanel || activePage === 'schedules' || activePage === 'agentHistory'
+  const shouldSlideWorkspacePanelOut = isRightPanelCollapsed || isFocusMode
+  const hasRightPanel = true
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
@@ -5070,6 +5069,7 @@ function App(): ReactElement {
       : hasVault
         ? PAGE_LABELS[activePage]
         : 'Vault'
+  const workspaceTabLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
       void navigateToPage(page)
@@ -5185,9 +5185,12 @@ function App(): ReactElement {
                 isRightPanelCollapsed={isRightPanelCollapsed}
               />
             ) : null}
-            <>
+            <DocumentWorkspace
+              tabLabel={workspaceTabLabel}
+              className={isStandalonePage ? 'hidden' : undefined}
+            >
               <DocumentWorkspaceMain
-                className={`${isStandalonePage ? 'hidden ' : ''}${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
+                className={`${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
               >
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
@@ -5880,15 +5883,16 @@ function App(): ReactElement {
               </DocumentWorkspaceMain>
 
               <DocumentWorkspacePanel
-                className={`${
-                  !showWorkspacePanel || isStandalonePage ? 'hidden' : 'flex'
-                } overflow-hidden border-l border-[var(--line)] transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
+                className={`flex overflow-hidden transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   shouldSlideWorkspacePanelOut
-                    ? 'pointer-events-none translate-x-full border-l-transparent opacity-0'
+                    ? 'pointer-events-none translate-x-full opacity-0'
                     : 'translate-x-0 opacity-100'
                 } ${paletteSurfaceClass}${paletteBlurClass}`}
                 style={
-                  shouldSlideWorkspacePanelOut ? { width: '0px', flexBasis: '0px' } : undefined
+                  shouldSlideWorkspacePanelOut
+                    ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
+                    : undefined
                 }
               >
                 {activePage === 'weeklyPlan' ? (
@@ -5910,7 +5914,7 @@ function App(): ReactElement {
                   >
                     <DocumentWorkspacePanelHeader
                       actions={
-                        activePage === 'notes' ? (
+                        hasVault && activePage === 'notes' ? (
                           <WorkspaceHeaderActions>
                             <WorkspaceHeaderActionGroup>
                               <WorkspaceActionButton
@@ -5974,7 +5978,7 @@ function App(): ReactElement {
                               )}
                             </WorkspaceHeaderActionGroup>
                           </WorkspaceHeaderActions>
-                        ) : activePage === 'calendar' ? (
+                        ) : hasVault && activePage === 'calendar' ? (
                           <WorkspaceHeaderActions>
                             <WorkspaceHeaderActionGroup>
                               <Popover
@@ -6038,7 +6042,7 @@ function App(): ReactElement {
                               </Popover>
                             </WorkspaceHeaderActionGroup>
                           </WorkspaceHeaderActions>
-                        ) : activePage === 'settings' ? (
+                        ) : hasVault && activePage === 'settings' ? (
                           <WorkspaceActionButton
                             onClick={() => {
                               void updateFontFamily(FONT_OPTIONS[0].value)
@@ -6051,7 +6055,9 @@ function App(): ReactElement {
                     />
 
                     <DocumentWorkspacePanelContent>
-                      {activePage === 'notes' ? (
+                      {!hasVault ? (
+                        <WorkspaceContextEmptyState description="Select a vault to see workspace properties and secondary tools." />
+                      ) : activePage === 'notes' ? (
                         <NotesTreeView
                           tree={visibleNoteTree}
                           searchTerm={searchQuery}
@@ -6132,14 +6138,16 @@ function App(): ReactElement {
                             void addUnscheduledFromHeader()
                           }}
                         />
-                      ) : (
+                      ) : activePage === 'settings' ? (
                         <SettingsRightPanelSections />
+                      ) : (
+                        <WorkspaceContextEmptyState description="Properties, activity, and secondary tools for this workspace will appear here." />
                       )}
                     </DocumentWorkspacePanelContent>
                   </div>
                 )}
               </DocumentWorkspacePanel>
-            </>
+            </DocumentWorkspace>
           </div>
 
           <SonnerBridge />

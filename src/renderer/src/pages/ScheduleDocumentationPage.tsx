@@ -12,6 +12,10 @@ import {
   DocumentWorkspaceMain,
   DocumentWorkspaceMainContent,
   DocumentWorkspaceMainHeader,
+  DocumentWorkspacePanel,
+  DocumentWorkspacePanelContent,
+  DocumentWorkspacePanelHeader,
+  WorkspaceContextEmptyState,
   WorkspaceActionButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
@@ -169,8 +173,8 @@ export function ScheduleDocumentationPage({
   onDownload
 }: ScheduleDocumentationPageProps): ReactElement {
   return (
-    <DocumentWorkspace>
-      <DocumentWorkspaceMain className="border-r-0">
+    <DocumentWorkspace tabLabel="Schedule API Guide">
+      <DocumentWorkspaceMain>
         <DocumentWorkspaceMainHeader
           breadcrumb={
             <Breadcrumb>
@@ -361,6 +365,12 @@ print(json.dumps({
           </div>
         </DocumentWorkspaceMainContent>
       </DocumentWorkspaceMain>
+      <DocumentWorkspacePanel>
+        <DocumentWorkspacePanelHeader />
+        <DocumentWorkspacePanelContent>
+          <WorkspaceContextEmptyState description="Properties, activity, and secondary tools for schedule documentation will appear here." />
+        </DocumentWorkspacePanelContent>
+      </DocumentWorkspacePanel>
     </DocumentWorkspace>
   )
 }
