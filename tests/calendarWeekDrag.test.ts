@@ -3,6 +3,7 @@ import { CalendarTask } from '../src/shared/types'
 import {
   buildWeeklyAllDayDropIndicator,
   buildWeeklyAllDayDropSchedule,
+  buildWeeklyTimedCreateSchedule,
   buildWeeklyTimedDropRange,
   buildWeeklyTimedDropSchedule
 } from '../src/renderer/src/lib/calendarWeekDrag'
@@ -54,6 +55,26 @@ describe('buildWeeklyTimedDropRange', () => {
     expect(buildWeeklyTimedDropRange(undefined, 1435, 0)).toEqual({
       startMinutes: 1420,
       endMinutes: 1430
+    })
+  })
+})
+
+describe('buildWeeklyTimedCreateSchedule', () => {
+  it('creates a one-hour schedule snapped to the clicked weekly-grid time', () => {
+    expect(buildWeeklyTimedCreateSchedule('2026-04-15', 605)).toEqual({
+      date: '2026-04-15',
+      endDate: undefined,
+      time: '10:10',
+      endTime: '11:10'
+    })
+  })
+
+  it('keeps a one-hour schedule within the final valid weekly-grid interval', () => {
+    expect(buildWeeklyTimedCreateSchedule('2026-04-15', 1435)).toEqual({
+      date: '2026-04-15',
+      endDate: undefined,
+      time: '22:50',
+      endTime: '23:50'
     })
   })
 })

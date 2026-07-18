@@ -35,6 +35,25 @@ export interface NoteRecord {
   body: StoredNoteDocument
 }
 
+export interface NotePdfExportImage {
+  id: string
+  src: string
+}
+
+export const NOTE_PDF_IMAGE_URI_PREFIX = 'xingularity-export-image://'
+
+export interface NotePdfExportInput {
+  relPath: string
+  title: string
+  html: string
+  images: NotePdfExportImage[]
+}
+
+export interface NotePdfExportResult {
+  path: Maybe<string>
+  warnings: string[]
+}
+
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
 export type ProjectIconSet = 'shape' | 'lucide'
 export type ProjectIconSymbol =
@@ -983,6 +1002,7 @@ export interface RendererVaultApi {
     deletePath: (relPath: string) => Promise<void>
     deletePaths: (relPaths: string[]) => Promise<void>
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>
+    exportNotePdf: (input: NotePdfExportInput) => Promise<NotePdfExportResult>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }
   search: {

@@ -35,6 +35,7 @@ import {
   buildWeeklyAllDayDropIndicator,
   buildWeeklyTimedDropRange,
   buildWeeklyAllDayDropSchedule,
+  buildWeeklyTimedCreateSchedule,
   buildWeeklyTimedDropSchedule
 } from '../lib/calendarWeekDrag'
 import { setCalendarTaskDragPreview } from '../lib/calendarTaskDragPreview'
@@ -60,6 +61,12 @@ interface CalendarWeekViewProps {
   milestoneEvents?: CalendarEventInput[]
   onSelectDate: (date: string) => void
   onOpenMilestone?: (projectId: string, milestoneId: string) => void
+  onCreateTask?: (schedule: {
+    date: string
+    endDate: undefined
+    time: string
+    endTime: string
+  }) => Promise<CalendarTask>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onToggleTask?: (taskId: string) => void
   onDeleteTask?: (taskId: string) => void
@@ -142,6 +149,7 @@ export function CalendarWeekView({
   milestoneEvents = [],
   onSelectDate,
   onOpenMilestone,
+  onCreateTask,
   onRescheduleTask,
   onToggleTask,
   onDeleteTask,
@@ -466,6 +474,43 @@ export function CalendarWeekView({
     })
   }
 
+  const handleTimedCellDoubleClick = (
+    event: ReactMouseEvent<HTMLDivElement>,
+    date: string
+  ): void => {
+    if (!onCreateTask || timedInteractionRef.current || dragStateRef.current) {
+      return
+    }
+
+    const target = event.target
+    if (
+      target instanceof HTMLElement &&
+      target.closest('[data-calendar-week-task="true"], button, [data-weekly-resize-handle="true"]')
+    ) {
+      return
+    }
+
+    const daySurface = daySurfaceRefs.current[date]
+    if (!daySurface) {
+      return
+    }
+
+    event.preventDefault()
+    setHoveredMilestoneCard(null)
+    setHoveredTaskCard(null)
+    onSelectDate(date)
+
+    void onCreateTask(
+      buildWeeklyTimedCreateSchedule(date, getPointerMinutesForClientY(event.clientY, daySurface))
+    )
+      .then((task) => {
+        setEditingTaskId(task.id)
+      })
+      .catch((error) => {
+        console.error('Failed to create weekly calendar task', error)
+      })
+  }
+
   const handleAllDayDrop = (event: DragEvent<HTMLElement>, date: string): void => {
     event.preventDefault()
     const taskId = getDraggedTaskId(event)
@@ -700,6 +745,7 @@ export function CalendarWeekView({
         key={task.id}
         draggable
         tabIndex={0}
+        data-calendar-week-task="true"
         data-testid={`calendar-week-task:${task.id}`}
         style={blockStyle}
         onDragStart={(event) => handleTaskDragStart(event, task, 'timed')}
@@ -967,6 +1013,7 @@ export function CalendarWeekView({
                 key={date}
                 data-testid={`calendar-week-timed-column:${date}`}
                 onClick={() => onSelectDate(date)}
+                onDoubleClick={(event) => handleTimedCellDoubleClick(event, date)}
                 onDragOver={(event) => {
                   event.preventDefault()
                   event.dataTransfer.dropEffect = 'move'

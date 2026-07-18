@@ -410,6 +410,31 @@ async function sampleEditorInstanceCounts(
 }
 
 test.describe('note page block editor switching', () => {
+  test('opens the note export dialog and selects PDF', async () => {
+    const vaultRoot = await createFixtureVault('Export me\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByLabel('Export Note').click()
+      const dialog = page.getByTestId('note-export-dialog')
+      await expect(dialog).toBeVisible()
+      await expect(page.getByTestId('note-export-format:markdown')).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
+
+      await page.getByTestId('note-export-format:pdf').click()
+      await expect(page.getByTestId('note-export-format:pdf')).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
+      await expect(dialog.getByRole('button', { name: 'Export PDF' })).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('does not render duplicate editor content while opening a note', async () => {
     const uniqueContent = 'Unique opening content\nSecond line\n'
     const vaultRoot = await createFixtureVault(uniqueContent)

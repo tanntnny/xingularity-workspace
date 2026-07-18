@@ -125,6 +125,44 @@ async function openWeeklyCalendar(page: Page): Promise<void> {
 }
 
 test.describe('calendar weekly drag preview', () => {
+  test('creates and opens a timed task when double-clicking an empty weekly cell', async () => {
+    const { rootPath, todayIso } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      await page.evaluate((dateIso) => {
+        const column = document.querySelector<HTMLElement>(
+          `[data-testid="calendar-week-timed-column:${dateIso}"]`
+        )
+        if (!column) {
+          throw new Error('Weekly timed column is missing')
+        }
+
+        const rect = column.getBoundingClientRect()
+        column.dispatchEvent(
+          new MouseEvent('dblclick', {
+            bubbles: true,
+            cancelable: true,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + 520
+          })
+        )
+      }, todayIso)
+
+      const dialog = page.getByRole('dialog')
+      await expect(dialog).toBeVisible()
+      await expect(dialog.getByRole('heading', { name: 'Edit task' })).toBeVisible()
+      await expect(dialog.locator('input[type="date"]')).toHaveValue(todayIso)
+      await expect(dialog.locator('input[type="time"]').first()).toHaveValue('06:20')
+      await expect(dialog.locator('input[type="time"]').nth(1)).toHaveValue('07:20')
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   test('shows a timed preview band while dragging a weekly task', async () => {
     const { rootPath, todayIso } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)

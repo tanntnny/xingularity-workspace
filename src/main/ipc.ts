@@ -16,6 +16,22 @@ const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
 const projectNameSchema = z.string().min(1).max(200)
 const contentSchema = z.string().max(2_000_000)
+const notePdfExportInputSchema = z.object({
+  relPath: notePathSchema,
+  title: z.string().trim().min(1).max(512),
+  html: z.string().min(1).max(5_000_000),
+  images: z
+    .array(
+      z.object({
+        id: z
+          .string()
+          .regex(/^[a-z0-9-]+$/i)
+          .max(120),
+        src: z.string().min(1).max(4096)
+      })
+    )
+    .max(200)
+})
 const querySchema = z.string().min(1).max(200)
 const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
@@ -510,6 +526,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.exportNote, async (_event, relPath: unknown, content: unknown) => {
     return runtime.exportNote(notePathSchema.parse(relPath), contentSchema.parse(content))
+  })
+
+  handleIpc(IPC_CHANNELS.exportNotePdf, async (_event, input: unknown) => {
+    return runtime.exportNotePdf(notePdfExportInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.exportProject, async (_event, projectName: unknown, content: unknown) => {

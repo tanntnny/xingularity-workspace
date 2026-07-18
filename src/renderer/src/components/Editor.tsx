@@ -43,7 +43,12 @@ import '@milkdown/crepe/theme/nord.css'
 import katex from 'katex'
 import { Check, Link2 } from 'lucide-react'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
-import type { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
+import {
+  NOTE_PDF_IMAGE_URI_PREFIX,
+  type NoteListItem,
+  type NotePdfExportImage,
+  type NoteVimKeyMapping
+} from '../../../shared/types'
 import {
   createNoteMentionResolver,
   normalizeNoteMentionMarkdown,
@@ -88,6 +93,7 @@ interface EditorProps {
 export interface NoteEditorHandle {
   captureSnapshot: () => Promise<NoteEditorSnapshot>
   flushPendingChanges: () => Promise<NoteEditorSnapshot>
+  capturePrintableDocument: () => { html: string; images: NotePdfExportImage[] } | null
   focus: () => void
   hasFocusIntent: () => boolean
   blur: () => void
@@ -117,6 +123,56 @@ interface SlashPickerState {
   top: number
   left: number
 }
+
+const PRINT_STYLE_PROPERTIES = [
+  'align-items',
+  'background-color',
+  'border-bottom',
+  'border-collapse',
+  'border-left',
+  'border-radius',
+  'border-right',
+  'border-spacing',
+  'border-top',
+  'box-sizing',
+  'color',
+  'column-gap',
+  'display',
+  'flex',
+  'flex-direction',
+  'flex-grow',
+  'flex-shrink',
+  'flex-wrap',
+  'font-family',
+  'font-size',
+  'font-style',
+  'font-weight',
+  'gap',
+  'height',
+  'justify-content',
+  'letter-spacing',
+  'line-height',
+  'list-style-position',
+  'list-style-type',
+  'margin-bottom',
+  'margin-left',
+  'margin-right',
+  'margin-top',
+  'max-width',
+  'min-width',
+  'overflow-wrap',
+  'padding-bottom',
+  'padding-left',
+  'padding-right',
+  'padding-top',
+  'text-align',
+  'text-decoration',
+  'text-indent',
+  'vertical-align',
+  'white-space',
+  'width',
+  'word-break'
+] as const
 
 function buildMentionSuggestions(
   notes: NoteListItem[],
@@ -189,6 +245,23 @@ const noteArrowInputPluginKey = new PluginKey('note-arrow-input')
 
 function isMissingEditorViewError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Context "editorView" not found')
+}
+
+function inlinePrintableStyles(source: HTMLElement, target: HTMLElement): void {
+  const sourceElements = [source, ...Array.from(source.querySelectorAll<HTMLElement>('*'))]
+  const targetElements = [target, ...Array.from(target.querySelectorAll<HTMLElement>('*'))]
+
+  sourceElements.forEach((sourceElement, index) => {
+    const targetElement = targetElements[index]
+    if (!targetElement) {
+      return
+    }
+
+    const styles = window.getComputedStyle(sourceElement)
+    for (const property of PRINT_STYLE_PROPERTIES) {
+      targetElement.style.setProperty(property, styles.getPropertyValue(property))
+    }
+  })
 }
 
 function inlineLatexPreviewPlugin(): Plugin {
@@ -658,6 +731,51 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [createSnapshot]
   )
 
+  const capturePrintableDocument = useCallback((): {
+    html: string
+    images: NotePdfExportImage[]
+  } | null => {
+    const renderedDocument = rootRef.current?.querySelector<HTMLElement>('.ProseMirror')
+    if (!renderedDocument) {
+      return null
+    }
+
+    const clone = renderedDocument.cloneNode(true) as HTMLElement
+    inlinePrintableStyles(renderedDocument, clone)
+    clone.removeAttribute('contenteditable')
+    clone.querySelectorAll('script, iframe, object, embed, form, button').forEach((element) => {
+      element.remove()
+    })
+    clone.querySelectorAll<HTMLElement>('*').forEach((element) => {
+      for (const attribute of element.getAttributeNames()) {
+        if (attribute.startsWith('on')) {
+          element.removeAttribute(attribute)
+        }
+      }
+      element.removeAttribute('contenteditable')
+    })
+
+    const images: NotePdfExportImage[] = []
+    clone.querySelectorAll<HTMLImageElement>('img').forEach((image, index) => {
+      const source = image.currentSrc || image.getAttribute('src')
+      if (!source) {
+        image.remove()
+        return
+      }
+
+      const id = `image-${index + 1}`
+      images.push({ id, src: source })
+      image.setAttribute('src', `${NOTE_PDF_IMAGE_URI_PREFIX}${id}`)
+      image.setAttribute('data-export-image-id', id)
+    })
+
+    clone.style.minHeight = 'auto'
+    clone.style.height = 'auto'
+    clone.style.paddingBottom = '0'
+
+    return { html: clone.innerHTML, images }
+  }, [])
+
   const hasFocusIntent = useCallback(
     (): boolean => editorHasFocus() || hasFocusIntentRef.current,
     [editorHasFocus]
@@ -994,6 +1112,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     () => ({
       captureSnapshot,
       flushPendingChanges,
+      capturePrintableDocument,
       focus,
       hasFocusIntent,
       blur,
@@ -1004,6 +1123,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [
       blur,
       captureSnapshot,
+      capturePrintableDocument,
       flushPendingChanges,
       focus,
       hasFocusIntent,

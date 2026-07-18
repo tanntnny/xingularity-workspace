@@ -37,6 +37,29 @@ export function buildWeeklyTimedDropSchedule(
   }
 }
 
+export function buildWeeklyTimedCreateSchedule(
+  date: string,
+  pointerMinutes: number
+): {
+  date: string
+  endDate: undefined
+  time: string
+  endTime: string
+} {
+  const range = buildMovedTimedRange({
+    pointerMinutes,
+    pointerOffsetMinutes: 0,
+    durationMinutes: 60
+  })
+
+  return {
+    date,
+    endDate: undefined,
+    time: minutesToTime(range.startMinutes),
+    endTime: minutesToTime(range.endMinutes)
+  }
+}
+
 export function buildWeeklyTimedDropRange(
   task: Pick<CalendarTask, 'time' | 'endTime'> | undefined,
   pointerMinutes: number,

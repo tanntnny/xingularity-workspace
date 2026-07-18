@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { app, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { Mistral } from '@mistralai/mistralai'
 import type {
   Tool as MistralTool,
@@ -33,6 +34,7 @@ import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
 import { createWarpNewTabUri } from './warp'
+import { buildNotePdfHtml } from './notePdfExport'
 import {
   AppSettings,
   AgentChatEvent,
@@ -61,7 +63,9 @@ import {
   HistoryStatus,
   LegacyExcalidrawImportResult,
   ExcalidrawSession,
-  StoredExcalidrawFileDocument
+  StoredExcalidrawFileDocument,
+  NotePdfExportInput,
+  NotePdfExportResult
 } from '../shared/types'
 
 export class VaultRuntime {
@@ -453,6 +457,60 @@ export class VaultRuntime {
     return result.filePath
   }
 
+  async exportNotePdf(input: NotePdfExportInput): Promise<NotePdfExportResult> {
+    this.assertReady()
+    const safeRelPath = sanitizeNotePath(input.relPath)
+    const suggestedName = `${path.basename(stripNoteExtension(safeRelPath))}.pdf`
+    const result = await this.showPdfExportDialog(
+      'Export note as PDF',
+      this.currentPaths!.rootPath,
+      suggestedName
+    )
+
+    if (result.canceled || !result.filePath) {
+      return { path: null, warnings: [] }
+    }
+
+    const printable = await buildNotePdfHtml(
+      input.title,
+      input.html,
+      input.images,
+      this.currentPaths!.rootPath
+    )
+    const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-note-pdf-'))
+    const documentPath = path.join(temporaryDirectory, 'note.html')
+    let printWindow: BrowserWindow | null = null
+
+    try {
+      await fs.writeFile(documentPath, printable.html, 'utf-8')
+      printWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true
+        }
+      })
+      await printWindow.loadFile(documentPath)
+      const imageWarnings = await waitForPdfImages(printWindow)
+      const pdf = await printWindow.webContents.printToPDF({
+        printBackground: true,
+        preferCSSPageSize: true
+      })
+      await fs.writeFile(result.filePath, pdf)
+
+      return {
+        path: result.filePath,
+        warnings: [...printable.warnings, ...imageWarnings]
+      }
+    } finally {
+      if (printWindow && !printWindow.isDestroyed()) {
+        printWindow.destroy()
+      }
+      await fs.rm(temporaryDirectory, { recursive: true, force: true })
+    }
+  }
+
   async exportProject(projectName: string, content: string): Promise<string | null> {
     this.assertReady()
     const downloadsPath = app.getPath('downloads')
@@ -507,6 +565,18 @@ export class VaultRuntime {
       title,
       defaultPath: path.join(basePath, suggestedName),
       filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+  }
+
+  private async showPdfExportDialog(
+    title: string,
+    basePath: string,
+    suggestedName: string
+  ): Promise<Electron.SaveDialogReturnValue> {
+    return dialog.showSaveDialog({
+      title,
+      defaultPath: path.join(basePath, suggestedName),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
   }
 
@@ -2060,6 +2130,39 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
 
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+async function waitForPdfImages(window: BrowserWindow): Promise<string[]> {
+  const failedImageIds = await window.webContents.executeJavaScript(`
+    Promise.all(
+      Array.from(document.images).map((image) => {
+        if (image.complete) {
+          return Promise.resolve(image.naturalWidth > 0 ? null : image.dataset.exportImageId || 'image')
+        }
+
+        return new Promise((resolve) => {
+          const timeoutId = window.setTimeout(
+            () => resolve(image.dataset.exportImageId || 'image'),
+            10000
+          )
+          image.addEventListener('load', () => {
+            window.clearTimeout(timeoutId)
+            resolve(null)
+          }, { once: true })
+          image.addEventListener('error', () => {
+            window.clearTimeout(timeoutId)
+            resolve(image.dataset.exportImageId || 'image')
+          }, { once: true })
+        })
+      })
+    ).then((results) => results.filter((value) => typeof value === 'string'))
+  `)
+
+  if (!Array.isArray(failedImageIds)) {
+    return []
+  }
+
+  return failedImageIds.map((imageId) => `Could not load image ${String(imageId)} for PDF export`)
 }
 
 function deriveSettingsHistoryLabel(

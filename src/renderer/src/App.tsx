@@ -128,6 +128,7 @@ import {
 } from './pages/ScheduleDocumentationPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
+import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
@@ -417,6 +418,9 @@ function App(): ReactElement {
     relPath: string
     token: number
   } | null>(null)
+  const [isNoteExportDialogOpen, setIsNoteExportDialogOpen] = useState(false)
+  const [noteExportFormat, setNoteExportFormat] = useState<NoteExportFormat>('markdown')
+  const [isNoteExporting, setIsNoteExporting] = useState(false)
 
   useEffect(() => {
     const rootStyle = document.documentElement.style
@@ -1968,12 +1972,19 @@ function App(): ReactElement {
 
   // (was addCalendarTask) Add scheduled task via modal prompt — removed in favor of header input for unscheduled tasks
 
-  const createCalendarTask = async (title: string, date?: string): Promise<CalendarTask> => {
+  const createCalendarTask = async (
+    title: string,
+    date?: string,
+    time?: string,
+    endTime?: string
+  ): Promise<CalendarTask> => {
     const trimmed = title.trim() || 'New Task'
     const nextTask: CalendarTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: trimmed,
       date,
+      time,
+      endTime,
       completed: false,
       createdAt: new Date().toISOString(),
       priority: 'low',
@@ -1996,6 +2007,15 @@ function App(): ReactElement {
 
   const createTaskForDate = async (date: string): Promise<CalendarTask> => {
     return createCalendarTask('New Task', date)
+  }
+
+  const createTaskForWeeklyTime = async (schedule: {
+    date: string
+    endDate: undefined
+    time: string
+    endTime: string
+  }): Promise<CalendarTask> => {
+    return createCalendarTask('New Task', schedule.date, schedule.time, schedule.endTime)
   }
 
   const toggleCalendarTask = async (taskId: string): Promise<void> => {
@@ -3236,23 +3256,51 @@ function App(): ReactElement {
     await deleteNoteByPath(currentNotePath)
   }
 
-  const exportCurrentNote = async (): Promise<void> => {
+  const exportCurrentNote = async (format: NoteExportFormat): Promise<void> => {
     if (!vaultApi || !currentNotePath) {
       return
     }
 
     try {
+      setIsNoteExporting(true)
       await flushCurrentNote({ force: true })
-      const exportedPath = await vaultApi.files.exportNote(
-        currentNotePath,
-        currentNoteContentRef.current
-      )
-      if (!exportedPath) {
+      if (format === 'markdown') {
+        const exportedPath = await vaultApi.files.exportNote(
+          currentNotePath,
+          currentNoteContentRef.current
+        )
+        if (!exportedPath) {
+          return
+        }
+        pushToast('success', `Note exported to ${exportedPath}`)
+        setIsNoteExportDialogOpen(false)
         return
       }
-      pushToast('success', `Note exported to ${exportedPath}`)
+
+      const printableDocument = currentNoteEditorRef.current?.capturePrintableDocument()
+      if (!printableDocument) {
+        pushToast('error', 'The note editor is not ready for PDF export')
+        return
+      }
+
+      const result = await vaultApi.files.exportNotePdf({
+        relPath: currentNotePath,
+        title: getNoteDisplayName(currentNotePath),
+        ...printableDocument
+      })
+      if (!result.path) {
+        return
+      }
+
+      pushToast('success', `Note exported to ${result.path}`)
+      if (result.warnings.length > 0) {
+        pushToast('info', `PDF exported with ${result.warnings.length} image warning(s)`)
+      }
+      setIsNoteExportDialogOpen(false)
     } catch (error) {
       pushToast('error', String(error))
+    } finally {
+      setIsNoteExporting(false)
     }
   }
 
@@ -5203,7 +5251,7 @@ function App(): ReactElement {
                           />
                           <WorkspaceActionButton
                             onClick={() => {
-                              void exportCurrentNote()
+                              setIsNoteExportDialogOpen(true)
                             }}
                             title="Export Note"
                             aria-label="Export Note"
@@ -5676,6 +5724,7 @@ function App(): ReactElement {
                                 milestoneEvents={visibleMilestoneCalendarEvents}
                                 onSelectDate={setSelectedCalendarDate}
                                 onOpenMilestone={openMilestoneFromCalendar}
+                                onCreateTask={createTaskForWeeklyTime}
                                 onRescheduleTask={(taskId, newDate) => {
                                   void rescheduleCalendarTask(taskId, newDate)
                                 }}
@@ -6061,6 +6110,16 @@ function App(): ReactElement {
           <SonnerBridge />
         </SidebarInset>
       </SidebarProvider>
+      <NoteExportDialog
+        open={isNoteExportDialogOpen}
+        format={noteExportFormat}
+        isExporting={isNoteExporting}
+        onOpenChange={setIsNoteExportDialogOpen}
+        onFormatChange={setNoteExportFormat}
+        onExport={() => {
+          void exportCurrentNote(noteExportFormat)
+        }}
+      />
       <CommandPalette
         open={hasVault && commandPaletteOpen}
         initialQuery={commandPaletteInitialQuery}

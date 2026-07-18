@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
   deletePath: 'files:delete-path',
   deletePaths: 'files:delete-paths',
   exportNote: 'files:export-note',
+  exportNotePdf: 'files:export-note-pdf',
   exportProject: 'files:export-project',
   searchQuery: 'search:query',
   aiCompleteNote: 'ai:complete-note',
