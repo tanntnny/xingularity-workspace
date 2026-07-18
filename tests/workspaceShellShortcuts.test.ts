@@ -19,6 +19,9 @@ function createBindings(
     onRunRedo: vi.fn(),
     onToggleProjectsView: vi.fn(),
     onToggleCalendarView: vi.fn(),
+    onCreateWorkspaceTab: vi.fn(),
+    onCloseActiveWorkspaceTab: vi.fn(),
+    onSelectWorkspaceTab: vi.fn(),
     onNavigateToPage: vi.fn(),
     isPageAvailable: () => true,
     isTypingTarget: () => false,
@@ -41,7 +44,7 @@ function createEvent(overrides: Partial<KeyboardEvent> = {}): KeyboardEvent {
 }
 
 describe('dispatchWorkspaceShellShortcut', () => {
-  it('navigates to notebooks for Cmd+1', () => {
+  it('selects the first workspace tab for Cmd+1', () => {
     const bindings = createBindings()
     const event = createEvent({ key: '1', code: 'Digit1', metaKey: true })
 
@@ -49,10 +52,10 @@ describe('dispatchWorkspaceShellShortcut', () => {
 
     expect(handled).toBe(true)
     expect(event.preventDefault).toHaveBeenCalledOnce()
-    expect(bindings.onNavigateToPage).toHaveBeenCalledWith('notes')
+    expect(bindings.onSelectWorkspaceTab).toHaveBeenCalledWith(0)
   })
 
-  it('navigates to weekly plan for Cmd+4', () => {
+  it('selects the fourth workspace tab for Cmd+4', () => {
     const bindings = createBindings()
     const event = createEvent({ key: '4', code: 'Digit4', metaKey: true })
 
@@ -60,7 +63,40 @@ describe('dispatchWorkspaceShellShortcut', () => {
 
     expect(handled).toBe(true)
     expect(event.preventDefault).toHaveBeenCalledOnce()
-    expect(bindings.onNavigateToPage).toHaveBeenCalledWith('weeklyPlan')
+    expect(bindings.onSelectWorkspaceTab).toHaveBeenCalledWith(3)
+  })
+
+  it('creates a workspace tab for Cmd+T', () => {
+    const bindings = createBindings()
+    const event = createEvent({ key: 't', code: 'KeyT', metaKey: true })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(bindings.onCreateWorkspaceTab).toHaveBeenCalledOnce()
+  })
+
+  it('closes the active workspace tab for Cmd+W', () => {
+    const bindings = createBindings()
+    const event = createEvent({ key: 'w', code: 'KeyW', metaKey: true })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(bindings.onCloseActiveWorkspaceTab).toHaveBeenCalledOnce()
+  })
+
+  it('closes the active workspace tab even when page shortcuts are disabled', () => {
+    const bindings = createBindings({ enabled: false })
+    const event = createEvent({ key: 'w', code: 'KeyW', metaKey: true })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(bindings.onCloseActiveWorkspaceTab).toHaveBeenCalledOnce()
   })
 
   it('toggles the projects view for Option+Tab on the projects page', () => {
@@ -99,7 +135,7 @@ describe('dispatchWorkspaceShellShortcut', () => {
     expect(bindings.onToggleCalendarView).not.toHaveBeenCalled()
   })
 
-  it('does not navigate pages while typing in an editable target', () => {
+  it('selects tabs while typing in an editable target', () => {
     const typingTarget = { kind: 'input' }
     const bindings = createBindings({
       isTypingTarget: (target) => target === typingTarget
@@ -113,8 +149,8 @@ describe('dispatchWorkspaceShellShortcut', () => {
 
     const handled = dispatchWorkspaceShellShortcut(event, bindings)
 
-    expect(handled).toBe(false)
-    expect(event.preventDefault).not.toHaveBeenCalled()
-    expect(bindings.onNavigateToPage).not.toHaveBeenCalled()
+    expect(handled).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(bindings.onSelectWorkspaceTab).toHaveBeenCalledWith(1)
   })
 })

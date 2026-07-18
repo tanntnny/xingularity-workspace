@@ -14,6 +14,7 @@ import {
   FolderKanban,
   FolderOpen,
   GitBranch,
+  Paintbrush,
   Plus,
   Terminal
 } from 'lucide-react'
@@ -51,6 +52,7 @@ type CommandPalettePage =
   | 'projects'
   | 'subscriptions'
   | 'calendar'
+  | 'designAudit'
   | 'weeklyPlan'
   | 'schedules'
   | 'settings'
@@ -318,6 +320,13 @@ export function CommandPalette({
         icon: FolderKanban
       },
       {
+        value: '>go design audit',
+        label: 'Go to Design Audit',
+        onSelect: () => onOpenPage('designAudit'),
+        keywords: ['design system', 'components', 'colors', 'tokens', 'ui'],
+        icon: Paintbrush
+      },
+      {
         value: '>go weekly plan',
         label: 'Go to Weekly Plan',
         onSelect: () => onOpenPage('weeklyPlan'),
@@ -497,6 +506,7 @@ export function CommandPalette({
     <Pallete
       open={open}
       aria-label="Command palette"
+      className="command-palette-top-aligned !top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           onClose()
@@ -513,7 +523,7 @@ export function CommandPalette({
             setHoveredResult(result)
           }}
         >
-          <PalleteSearchBar data-cmdk-input-wrapper="">
+          <PalleteSearchBar data-cmdk-input-wrapper="" className="command-palette-search-bar">
             <CommandInput
               bare
               ref={inputRef}
@@ -561,11 +571,7 @@ export function CommandPalette({
                     >
                       <div className={paletteItemIconClass}>
                         {item.logo ? (
-                          <img
-                            src={item.logo}
-                            alt=""
-                            className="h-5 w-5 rounded-[4px]"
-                          />
+                          <img src={item.logo} alt="" className="h-5 w-5 rounded-[4px]" />
                         ) : (
                           <Icon className="h-4 w-4" />
                         )}

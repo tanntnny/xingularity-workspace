@@ -147,6 +147,8 @@ Grant only the permissions your script needs:
 interface ScheduleDocumentationPageProps {
   onBack: () => void
   onDownload: () => void
+  isRightPanelCollapsed: boolean
+  onToggleRightPanel: () => void
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): ReactElement {
@@ -170,10 +172,12 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
 
 export function ScheduleDocumentationPage({
   onBack,
-  onDownload
+  onDownload,
+  isRightPanelCollapsed,
+  onToggleRightPanel
 }: ScheduleDocumentationPageProps): ReactElement {
   return (
-    <DocumentWorkspace tabLabel="Schedule API Guide">
+    <DocumentWorkspace panelCollapsed={isRightPanelCollapsed} onTogglePanel={onToggleRightPanel}>
       <DocumentWorkspaceMain>
         <DocumentWorkspaceMainHeader
           breadcrumb={

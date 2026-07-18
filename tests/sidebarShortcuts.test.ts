@@ -5,11 +5,7 @@ import { AppSidebar } from '../src/renderer/src/components/AppSidebar'
 import { SidebarProvider } from '../src/renderer/src/components/ui/sidebar'
 import { Shortcut } from '../src/renderer/src/components/ui/kbd'
 import { TabMenu, TabMenuItem } from '../src/renderer/src/components/ui/tab-menu'
-import {
-  DocumentWorkspace,
-  DocumentWorkspaceMain,
-  WorkspaceTabManager
-} from '../src/renderer/src/components/ui/document-workspace'
+import { WorkspaceTabManager } from '../src/renderer/src/components/ui/document-workspace'
 
 describe('sidebar shortcuts', () => {
   it('renders icon-based Option+Tab shortcut keys', () => {
@@ -21,7 +17,7 @@ describe('sidebar shortcuts', () => {
     expect(markup).not.toContain('>Tab<')
   })
 
-  it('renders shortcut hints for the main home pages in the sidebar', () => {
+  it('does not render page shortcut hints for tabs selected with Cmd+number', () => {
     const markup = renderToStaticMarkup(
       createElement(
         SidebarProvider,
@@ -38,10 +34,13 @@ describe('sidebar shortcuts', () => {
       )
     )
 
-    expect(markup).toContain('data-testid="sidebar-shortcut:notes"')
-    expect(markup).toContain('data-testid="sidebar-shortcut:projects"')
-    expect(markup).toContain('data-testid="sidebar-shortcut:calendar"')
-    expect(markup).toContain('data-testid="sidebar-shortcut:weeklyPlan"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:notes"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:projects"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:calendar"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:weeklyPlan"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:schedules"')
+    expect(markup).toContain('data-testid="sidebar-page:designAudit"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:designAudit"')
   })
 
   it('renders a trailing shortcut inside the tab menu group', () => {
@@ -68,27 +67,25 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-testid="tab-menu-shortcut"')
   })
 
-  it('renders a static current-route tab above the workspace content', () => {
+  it('renders interactive workspace tabs with a create control', () => {
     const markup = renderToStaticMarkup(
-      createElement(
-        DocumentWorkspace,
-        { tabLabel: 'Notebooks' },
-        createElement(DocumentWorkspaceMain, null, 'Workspace content')
-      )
+      createElement(WorkspaceTabManager, {
+        tabs: [
+          { id: 'notes', label: 'Notebooks' },
+          { id: 'projects', label: 'Projects' }
+        ],
+        activeTabId: 'projects',
+        onSelectTab: () => undefined,
+        onCloseTab: () => undefined,
+        onAddTab: () => undefined
+      })
     )
 
-    expect(markup).toContain('data-testid="workspace-current-tab"')
-    expect(markup).toContain('aria-current="page"')
-    expect(markup).toContain('>Notebooks<')
-    expect(markup.indexOf('document-workspace-tab-manager')).toBeLessThan(
-      markup.indexOf('document-workspace-main-surface')
-    )
-  })
-
-  it('keeps the current-route tab non-interactive', () => {
-    const markup = renderToStaticMarkup(createElement(WorkspaceTabManager, { label: 'Projects' }))
-
-    expect(markup).not.toContain('<button')
-    expect(markup).not.toContain('role="tab"')
+    expect(markup).toContain('role="tablist"')
+    expect(markup).toContain('data-testid="workspace-tab:notes"')
+    expect(markup).toContain('data-testid="workspace-tab:projects"')
+    expect(markup).toContain('data-testid="workspace-tab-close:projects"')
+    expect(markup).toContain('data-testid="workspace-tab-add"')
+    expect(markup).toContain('data-active="true"')
   })
 })

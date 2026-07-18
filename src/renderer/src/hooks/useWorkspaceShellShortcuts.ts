@@ -12,6 +12,9 @@ export interface WorkspaceShellShortcutBindings {
   onRunRedo: () => void
   onToggleProjectsView: () => void
   onToggleCalendarView: () => void
+  onCreateWorkspaceTab: () => void
+  onCloseActiveWorkspaceTab: () => void
+  onSelectWorkspaceTab: (index: number) => void
   onNavigateToPage: (page: string) => void
   isPageAvailable: (page: string) => boolean
   isTypingTarget: (target: EventTarget | null) => boolean
@@ -36,16 +39,35 @@ export function dispatchWorkspaceShellShortcut(
     onRunRedo,
     onToggleProjectsView,
     onToggleCalendarView,
+    onCreateWorkspaceTab,
+    onCloseActiveWorkspaceTab,
+    onSelectWorkspaceTab,
     onNavigateToPage,
     isPageAvailable,
     isTypingTarget
   }: WorkspaceShellShortcutBindings
 ): boolean {
+  const isModifierPressed = event.metaKey || event.ctrlKey
+  const isCloseWorkspaceTab =
+    isModifierPressed && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'w'
+  if (isCloseWorkspaceTab) {
+    event.preventDefault()
+    onCloseActiveWorkspaceTab()
+    return true
+  }
+
   if (!enabled) {
     return false
   }
 
-  const isModifierPressed = event.metaKey || event.ctrlKey
+  const isCreateWorkspaceTab =
+    isModifierPressed && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 't'
+  if (isCreateWorkspaceTab) {
+    event.preventDefault()
+    onCreateWorkspaceTab()
+    return true
+  }
+
   const isSearchPalette = isModifierPressed && !event.shiftKey && event.key.toLowerCase() === 'p'
   if (isSearchPalette) {
     event.preventDefault()
@@ -123,25 +145,25 @@ export function dispatchWorkspaceShellShortcut(
     return true
   }
 
-  const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
+  const tabNumber =
+    !event.altKey && !event.shiftKey && /^Digit[1-9]$/.test(event.code)
+      ? Number(event.code.slice(-1))
+      : null
+  if (tabNumber !== null) {
+    event.preventDefault()
+    onSelectWorkspaceTab(tabNumber - 1)
+    return true
+  }
+
   const pageByCode: Partial<Record<string, string>> = {
-    Digit1: 'notes',
-    Digit2: 'projects',
-    Digit3: 'calendar',
-    Digit4: 'weeklyPlan',
-    Digit5: 'schedules',
     KeyI: 'agentHistory',
     Comma: 'settings'
   }
   const pageByKey: Partial<Record<string, string>> = {
-    '1': 'notes',
-    '2': 'projects',
-    '3': 'calendar',
-    '4': 'weeklyPlan',
-    '5': 'schedules',
     i: 'agentHistory',
     ',': 'settings'
   }
+  const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
   const nextPage = pageByKey[normalizedKey] ?? pageByCode[event.code]
   if (nextPage && isPageAvailable(nextPage) && !typingTarget) {
     event.preventDefault()
@@ -164,6 +186,9 @@ export function useWorkspaceShellShortcuts({
   onRunRedo,
   onToggleProjectsView,
   onToggleCalendarView,
+  onCreateWorkspaceTab,
+  onCloseActiveWorkspaceTab,
+  onSelectWorkspaceTab,
   onNavigateToPage,
   isPageAvailable,
   isTypingTarget
@@ -182,6 +207,9 @@ export function useWorkspaceShellShortcuts({
         onRunRedo,
         onToggleProjectsView,
         onToggleCalendarView,
+        onCreateWorkspaceTab,
+        onCloseActiveWorkspaceTab,
+        onSelectWorkspaceTab,
         onNavigateToPage,
         isPageAvailable,
         isTypingTarget
@@ -202,8 +230,11 @@ export function useWorkspaceShellShortcuts({
     onRunRedo,
     onRunUndo,
     onToggleCalendarView,
+    onCloseActiveWorkspaceTab,
+    onCreateWorkspaceTab,
     onToggleFocusMode,
     onToggleProjectsView,
-    onToggleRightPanel
+    onToggleRightPanel,
+    onSelectWorkspaceTab
   ])
 }

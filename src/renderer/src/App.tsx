@@ -105,6 +105,7 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceTabManager,
   WorkspaceContextEmptyState,
   WorkspaceActionButton,
   WorkspaceHeaderActions,
@@ -132,6 +133,7 @@ import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
 import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
 import { KnowledgePage } from './pages/KnowledgePage'
+import { DesignAuditPage } from './pages/DesignAuditPage'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { useWeeklyPlan } from './hooks/useWeeklyPlan'
@@ -165,6 +167,7 @@ import {
 import { hideManagedProjectTree } from './lib/noteTreeVisibility'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 import { type ProjectsWorkspaceFilterMode } from './lib/projectTaskRows'
+import { getNextActiveWorkspaceTabId } from './lib/workspaceTabs'
 
 const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
@@ -173,6 +176,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   subscriptions: 'Subscriptions',
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
+  designAudit: 'Design Audit',
   settings: 'Settings',
   schedules: 'Schedules',
   scheduleDocs: 'Schedule API Guide',
@@ -181,6 +185,11 @@ const PAGE_LABELS: Record<AppPage, string> = {
 
 type CalendarViewMode = 'month' | 'week'
 type CalendarContentFilter = 'all' | 'tasks' | 'milestones'
+
+type WorkspacePageTab = {
+  id: string
+  page: AppPage
+}
 
 type PageLeaveSaveDebug = {
   requestedPage: AppPage | null
@@ -366,6 +375,11 @@ function App(): ReactElement {
   const setSettings = useVaultStore((state) => state.setSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePageTab[]>([
+    { id: 'workspace-tab-1', page: 'notes' }
+  ])
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState('workspace-tab-1')
+  const workspaceTabSequenceRef = useRef(1)
   const [knowledgeOrphanRingRadiusInput, setKnowledgeOrphanRingRadiusInput] = useState('')
   const availablePages = useMemo(() => getAvailablePages(platform), [platform])
   const useNativeMenus = platform.capabilities.supportsNativeMenus && canUseNativeMenus()
@@ -558,8 +572,8 @@ function App(): ReactElement {
       activePage === 'notes' ||
       activePage === 'projects' ||
       activePage === 'calendar')
-  const shouldSlideWorkspacePanelOut = isRightPanelCollapsed || isFocusMode
-  const hasRightPanel = true
+  const hasRightPanel = activePage !== 'designAudit' && activePage !== 'projects'
+  const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
@@ -1564,7 +1578,7 @@ function App(): ReactElement {
   )
 
   const navigateToPage = useCallback(
-    async (page: AppPage): Promise<void> => {
+    async (page: AppPage, tabId = activeWorkspaceTabId): Promise<void> => {
       const runNavigation = async (): Promise<void> => {
         if (!hasVault) {
           return
@@ -1573,6 +1587,7 @@ function App(): ReactElement {
         const targetPage = normalizePageForPlatform(platform, page)
         const currentPage = activePageRef.current
         if (targetPage === currentPage) {
+          setActiveWorkspaceTabId(tabId)
           return
         }
 
@@ -1589,6 +1604,10 @@ function App(): ReactElement {
 
         activePageRef.current = targetPage
         setActivePage(targetPage)
+        setWorkspaceTabs((tabs) =>
+          tabs.map((tab) => (tab.id === tabId ? { ...tab, page: targetPage } : tab))
+        )
+        setActiveWorkspaceTabId(tabId)
         pushNoteSaveTrace('navigate:done', {
           from: currentPage,
           to: targetPage,
@@ -1603,7 +1622,70 @@ function App(): ReactElement {
       pageNavigationQueueRef.current = queuedNavigation
       await queuedNavigation
     },
-    [hasVault, persistCurrentNoteForPageLeave, platform]
+    [activeWorkspaceTabId, hasVault, persistCurrentNoteForPageLeave, platform]
+  )
+
+  const createWorkspaceTabId = useCallback((): string => {
+    workspaceTabSequenceRef.current += 1
+    return `workspace-tab-${workspaceTabSequenceRef.current}`
+  }, [])
+
+  const handleCreateWorkspaceTab = useCallback((): void => {
+    if (!hasVault) {
+      return
+    }
+
+    const tabId = createWorkspaceTabId()
+    setWorkspaceTabs((tabs) => [...tabs, { id: tabId, page: 'notes' }])
+    void navigateToPage('notes', tabId)
+  }, [createWorkspaceTabId, hasVault, navigateToPage])
+
+  const handleSelectWorkspaceTab = useCallback(
+    (tabId: string): void => {
+      const tab = workspaceTabs.find((candidate) => candidate.id === tabId)
+      if (!tab) {
+        return
+      }
+
+      void navigateToPage(tab.page, tab.id)
+    },
+    [navigateToPage, workspaceTabs]
+  )
+
+  const handleSelectWorkspaceTabByIndex = useCallback(
+    (index: number): void => {
+      const tab = workspaceTabs[index]
+      if (tab) {
+        handleSelectWorkspaceTab(tab.id)
+      }
+    },
+    [handleSelectWorkspaceTab, workspaceTabs]
+  )
+
+  const handleCloseWorkspaceTab = useCallback(
+    (tabId: string): void => {
+      const tabIds = workspaceTabs.map((tab) => tab.id)
+      const nextTabId = getNextActiveWorkspaceTabId(tabIds, tabId)
+
+      if (tabId !== activeWorkspaceTabId) {
+        setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
+        return
+      }
+
+      const nextTab = workspaceTabs.find((tab) => tab.id === nextTabId)
+      if (nextTab) {
+        void navigateToPage(nextTab.page, nextTab.id).then(() => {
+          setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
+        })
+        return
+      }
+
+      const replacementTabId = createWorkspaceTabId()
+      void navigateToPage('notes', replacementTabId).then(() => {
+        setWorkspaceTabs([{ id: replacementTabId, page: 'notes' }])
+      })
+    },
+    [activeWorkspaceTabId, createWorkspaceTabId, navigateToPage, workspaceTabs]
   )
 
   const refreshAfterHistoryOperation = useCallback(
@@ -1715,6 +1797,9 @@ function App(): ReactElement {
     onToggleCalendarView: () => {
       setCalendarViewMode((current) => (current === 'month' ? 'week' : 'month'))
     },
+    onCreateWorkspaceTab: handleCreateWorkspaceTab,
+    onCloseActiveWorkspaceTab: () => handleCloseWorkspaceTab(activeWorkspaceTabId),
+    onSelectWorkspaceTab: handleSelectWorkspaceTabByIndex,
     onNavigateToPage: (page) => {
       void navigateToPage(page as AppPage)
     },
@@ -5069,7 +5154,6 @@ function App(): ReactElement {
       : hasVault
         ? PAGE_LABELS[activePage]
         : 'Vault'
-  const workspaceTabLabel = hasVault ? PAGE_LABELS[activePage] : 'Vault'
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
       void navigateToPage(page)
@@ -5155,13 +5239,26 @@ function App(): ReactElement {
           data-performance-mode={performanceModeEnabled ? 'on' : 'off'}
           className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]"
         >
-          <div className="workspace-vibrancy-scope flex h-full min-w-0">
+          <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
+            <WorkspaceTabManager
+              className="mx-2 mt-1"
+              tabs={workspaceTabs.map((tab) => ({
+                id: tab.id,
+                label: hasVault ? PAGE_LABELS[tab.page] : 'Vault'
+              }))}
+              activeTabId={activeWorkspaceTabId}
+              onSelectTab={handleSelectWorkspaceTab}
+              onCloseTab={handleCloseWorkspaceTab}
+              onAddTab={handleCreateWorkspaceTab}
+              addDisabled={!hasVault}
+            />
             {hasVault && activePage === 'schedules' ? (
               <SchedulesPage
-                vaultApi={vaultApi}
-                pushToast={pushToast}
-                isRightPanelCollapsed={isRightPanelCollapsed}
-                onOpenDocumentation={() => {
+              vaultApi={vaultApi}
+              pushToast={pushToast}
+              isRightPanelCollapsed={isRightPanelCollapsed}
+              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
+              onOpenDocumentation={() => {
                   void navigateToPage('scheduleDocs')
                 }}
               />
@@ -5171,9 +5268,11 @@ function App(): ReactElement {
                 onBack={() => {
                   void navigateToPage('schedules')
                 }}
-                onDownload={() => {
-                  void downloadScheduleDocumentation()
-                }}
+              onDownload={() => {
+                void downloadScheduleDocumentation()
+              }}
+              isRightPanelCollapsed={isRightPanelCollapsed}
+              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
               />
             ) : null}
             {hasVault && activePage === 'agentHistory' ? (
@@ -5181,12 +5280,15 @@ function App(): ReactElement {
                 vaultApi={vaultApi}
                 pushToast={pushToast}
                 notes={notes}
-                projects={projects}
-                isRightPanelCollapsed={isRightPanelCollapsed}
-              />
-            ) : null}
+              projects={projects}
+              isRightPanelCollapsed={isRightPanelCollapsed}
+              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
+            />
+          ) : null}
             <DocumentWorkspace
-              tabLabel={workspaceTabLabel}
+              hasPanel={hasRightPanel}
+              panelCollapsed={isRightPanelCollapsed}
+              onTogglePanel={() => setIsRightPanelCollapsed((current) => !current)}
               className={isStandalonePage ? 'hidden' : undefined}
             >
               <DocumentWorkspaceMain
@@ -5194,11 +5296,7 @@ function App(): ReactElement {
               >
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
-                    activePage === 'projects' ? (
-                      <span className="workspace-page-title">Projects</span>
-                    ) : activePage === 'calendar' ? (
-                      <span className="workspace-page-title">Calendar</span>
-                    ) : (
+                    activePage === 'projects' || activePage === 'calendar' ? null : (
                       <Breadcrumb>
                         <BreadcrumbList className="text-[var(--muted)]">
                           <BreadcrumbItem>
@@ -5662,14 +5760,14 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      <div className="workspace-page-padding calendar-full flex min-h-full flex-col">
+                      <div className="calendar-full flex min-h-full flex-col">
                         <section
                           data-testid={
                             calendarViewMode === 'week'
                               ? 'calendar-week-shell'
                               : 'calendar-month-shell'
                           }
-                          className="workspace-table-row-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line)]"
+                          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line)]"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
                             <div className="min-w-0 flex flex-1 items-center gap-4">
@@ -5829,6 +5927,8 @@ function App(): ReactElement {
                           </div>
                         </section>
                       </div>
+                    ) : activePage === 'designAudit' ? (
+                      <DesignAuditPage themeVersion={`${profileColor}:${isDarkMode}:${fontFamily}`} />
                     ) : activePage === 'settings' ? (
                       <SettingsPage
                         profileName={profileName}
@@ -5884,7 +5984,7 @@ function App(): ReactElement {
 
               <DocumentWorkspacePanel
                 data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
-                className={`flex overflow-hidden transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                className={`${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   shouldSlideWorkspacePanelOut
                     ? 'pointer-events-none translate-x-full opacity-0'
                     : 'translate-x-0 opacity-100'

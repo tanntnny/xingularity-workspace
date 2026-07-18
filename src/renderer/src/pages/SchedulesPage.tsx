@@ -64,6 +64,7 @@ interface SchedulesPageProps {
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
   isRightPanelCollapsed?: boolean
+  onToggleRightPanel: () => void
   onOpenDocumentation: () => void
 }
 
@@ -229,6 +230,7 @@ export function SchedulesPage({
   vaultApi,
   pushToast,
   isRightPanelCollapsed = false,
+  onToggleRightPanel,
   onOpenDocumentation
 }: SchedulesPageProps): ReactElement {
   const [jobs, setJobs] = useState<ScheduleJob[]>([])
@@ -526,7 +528,7 @@ export function SchedulesPage({
 
   return (
     <>
-      <DocumentWorkspace tabLabel="Schedules">
+      <DocumentWorkspace panelCollapsed={isRightPanelCollapsed} onTogglePanel={onToggleRightPanel}>
         {/* ── Left: Run history & selection ───────────────────────────── */}
         <DocumentWorkspaceMain>
           <DocumentWorkspaceMainHeader

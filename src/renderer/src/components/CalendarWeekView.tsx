@@ -824,7 +824,7 @@ export function CalendarWeekView({
   return (
     <section
       data-testid="calendar-week-view"
-      className="performance-surface-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl"
     >
       <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
         <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-4" />

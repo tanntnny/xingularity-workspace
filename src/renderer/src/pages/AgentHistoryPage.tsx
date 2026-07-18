@@ -75,6 +75,7 @@ interface AgentHistoryPageProps {
   notes: NoteListItem[]
   projects: Project[]
   isRightPanelCollapsed?: boolean
+  onToggleRightPanel: () => void
 }
 
 interface MentionSuggestion {
@@ -218,7 +219,8 @@ export function AgentHistoryPage({
   pushToast,
   notes,
   projects,
-  isRightPanelCollapsed = false
+  isRightPanelCollapsed = false,
+  onToggleRightPanel
 }: AgentHistoryPageProps): ReactElement {
   const [sessions, setSessions] = useState<AgentChatSession[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
@@ -671,7 +673,8 @@ export function AgentHistoryPage({
 
   return (
     <DocumentWorkspace
-      tabLabel="Agent Chat"
+      panelCollapsed={isRightPanelCollapsed}
+      onTogglePanel={onToggleRightPanel}
       style={{ ['--workspace-pane-width' as string]: '340px' }}
     >
       <DocumentWorkspaceMain>

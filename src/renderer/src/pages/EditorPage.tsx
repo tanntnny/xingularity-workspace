@@ -2,15 +2,14 @@ import { ReactElement, RefObject, useCallback, useEffect, useRef, useState } fro
 import { Plus } from 'lucide-react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
-import vimLogo from '../assets/vim-logo.svg'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
+import { DocumentWorkspaceFooterStatus } from '../components/ui/document-workspace'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { NoteOutlineRail } from '../components/NoteOutlineRail'
 import { TagChip } from '../components/TagChip'
 import type { NoteVimMode } from '../lib/noteVimMode'
 import type { NoteOutlineItem } from '../lib/noteOutline'
-import { cn } from '../lib/utils'
 
 interface EditorPageProps {
   editorRef?: RefObject<NoteEditorHandle | null>
@@ -30,17 +29,6 @@ interface EditorPageProps {
   titleEditToken?: number
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-}
-
-const VIM_MODE_BADGE_CLASSES: Record<NoteVimMode, string> = {
-  insert:
-    'border-orange-500/35 bg-[color:color-mix(in_srgb,var(--panel)_58%,rgb(249_115_22/0.32))] text-orange-950 shadow-[0_10px_28px_rgba(249,115,22,0.18)] dark:text-orange-100',
-  normal:
-    'border-sky-500/35 bg-[color:color-mix(in_srgb,var(--panel)_58%,rgb(14_165_233/0.3))] text-sky-950 shadow-[0_10px_28px_rgba(14,165,233,0.18)] dark:text-sky-100',
-  visual:
-    'border-emerald-500/30 bg-[color:color-mix(in_srgb,var(--panel)_58%,rgb(16_185_129/0.28))] text-emerald-950 shadow-[0_10px_28px_rgba(16,185,129,0.18)] dark:text-emerald-100',
-  visualLine:
-    'border-teal-500/30 bg-[color:color-mix(in_srgb,var(--panel)_58%,rgb(20_184_166/0.28))] text-teal-950 shadow-[0_10px_28px_rgba(20,184,166,0.18)] dark:text-teal-100'
 }
 
 const VIM_MODE_BADGE_LABELS: Record<NoteVimMode, string> = {
@@ -220,29 +208,11 @@ export function EditorPage({
           <NoteOutlineRail items={outlineItems} onJumpToIndex={handleJumpToOutlineIndex} />
         </div>
       </div>
-      <div className="flex shrink-0 items-center justify-end px-8 py-3">
-        {vimModeEnabled ? (
-          <div className="pointer-events-none flex justify-end">
-            <div
-              className={cn(
-                'inline-flex min-w-[5.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-2.5 text-xs font-semibold leading-none backdrop-blur-md backdrop-saturate-150',
-                'ring-1 ring-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]',
-                VIM_MODE_BADGE_CLASSES[vimMode]
-              )}
-              data-testid="note-vim-mode-badge"
-            >
-              <img
-                src={vimLogo}
-                alt=""
-                aria-hidden="true"
-                data-testid="note-vim-mode-badge-icon"
-                className="h-3.5 w-3.5 shrink-0"
-              />
-              <span>{VIM_MODE_BADGE_LABELS[vimMode]}</span>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      {vimModeEnabled ? (
+        <DocumentWorkspaceFooterStatus>
+          <span data-testid="note-vim-mode-badge">{VIM_MODE_BADGE_LABELS[vimMode]}</span>
+        </DocumentWorkspaceFooterStatus>
+      ) : null}
     </div>
   )
 }

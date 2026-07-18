@@ -603,7 +603,7 @@ export function ProjectsWorkspacePage({
         {activeTab === 'board' ? (
           <section
             data-testid="projects-board-shell"
-            className="workspace-table-row-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)]"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)]"
           >
             <div
               data-testid="projects-board-toolbar"
@@ -835,7 +835,7 @@ export function ProjectsWorkspacePage({
             </div>
           </section>
         ) : (
-          <section className="workspace-table-row-surface overflow-hidden rounded-2xl border border-[var(--line)]">
+          <section className="overflow-hidden rounded-2xl border border-[var(--line)]">
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <SelectionMenu
@@ -929,7 +929,7 @@ export function ProjectsWorkspacePage({
               </div>
             </div>
             <div
-              className="table-no-ripple-scope performance-surface-panel relative w-full overflow-auto rounded-b-2xl border"
+              className="table-no-ripple-scope relative w-full overflow-auto rounded-b-2xl border"
               data-no-ripple-scope
             >
               <div className="min-w-full">

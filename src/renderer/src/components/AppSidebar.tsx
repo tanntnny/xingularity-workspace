@@ -60,16 +60,17 @@ const BOARD_PAGES: SidebarPageItem[] = [
 ]
 
 const HOME_PAGES: SidebarPageItem[] = [
-  { id: 'notes', label: 'Notebooks', shortcut: ['cmd', '1'] },
-  { id: 'projects', label: 'Projects', shortcut: ['cmd', '2'] },
-  { id: 'calendar', label: 'Calendar', shortcut: ['cmd', '3'] },
-  { id: 'weeklyPlan', label: 'Weekly Plan', shortcut: ['cmd', '4'] }
+  { id: 'notes', label: 'Notebooks' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'weeklyPlan', label: 'Weekly Plan' },
+  { id: 'designAudit', label: 'Design Audit' }
 ]
 
 const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscriptions' }]
 
 const DOCUMENT_PAGES: SidebarPageItem[] = [
-  { id: 'schedules', label: 'Schedules', shortcut: ['cmd', '5'] },
+  { id: 'schedules', label: 'Schedules' },
   { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] }
 ]
 

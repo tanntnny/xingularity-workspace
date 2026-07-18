@@ -5,6 +5,7 @@ export type AppPage =
   | 'subscriptions'
   | 'weeklyPlan'
   | 'calendar'
+  | 'designAudit'
   | 'settings'
   | 'schedules'
   | 'scheduleDocs'
@@ -17,6 +18,7 @@ export const ALL_APP_PAGES: AppPage[] = [
   'subscriptions',
   'weeklyPlan',
   'calendar',
+  'designAudit',
   'settings',
   'schedules',
   'scheduleDocs',

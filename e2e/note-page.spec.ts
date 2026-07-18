@@ -1346,7 +1346,7 @@ test.describe('note page block editor switching', () => {
 
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
-      await expect(page.getByTestId('note-vim-mode-badge-icon')).toBeVisible()
+      await expect(page.getByTestId('note-vim-mode-badge-icon')).toHaveCount(0)
       await expect(page.getByTestId('note-block-editor')).toHaveAttribute('data-vim-mode', 'normal')
       await expect(
         page.locator(
@@ -1366,8 +1366,8 @@ test.describe('note page block editor switching', () => {
           whiteSpace: window.getComputedStyle(element).whiteSpace
         }
       })
-      expect(badgeMetrics.width).toBeGreaterThan(64)
-      expect(badgeMetrics.height).toBeGreaterThan(18)
+      expect(badgeMetrics.width).toBeGreaterThan(20)
+      expect(badgeMetrics.height).toBeGreaterThan(10)
       expect(badgeMetrics.scrollWidth).toBeLessThanOrEqual(badgeMetrics.clientWidth + 1)
       expect(badgeMetrics.scrollHeight).toBeLessThanOrEqual(badgeMetrics.clientHeight + 1)
       expect(badgeMetrics.whiteSpace).toBe('nowrap')
