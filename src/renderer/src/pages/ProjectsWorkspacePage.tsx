@@ -596,7 +596,7 @@ export function ProjectsWorkspacePage({
       <div
         data-testid="projects-workspace-content"
         className={cn(
-          'workspace-page-padding min-h-0 flex-1',
+          'min-h-0 flex-1',
           activeTab === 'board' ? 'flex flex-col overflow-hidden' : 'overflow-auto'
         )}
       >

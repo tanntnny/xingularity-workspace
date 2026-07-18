@@ -52,6 +52,10 @@ const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProp
       <div className="document-workspace-body flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden rounded-xl border border-[var(--shell-border)] p-2">
         {children}
       </div>
+      <div
+        aria-hidden="true"
+        className="document-workspace-footer app-drag-region mt-1 h-11 shrink-0"
+      />
     </div>
   )
 )
@@ -199,7 +203,7 @@ const DocumentWorkspaceMainContent = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'document-workspace-main-content min-h-0 min-w-0 flex-1 overflow-hidden p-2',
+      'document-workspace-main-content min-h-0 min-w-0 flex-1 overflow-hidden',
       className
     )}
     {...props}

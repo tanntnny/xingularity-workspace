@@ -257,11 +257,11 @@
 @layer base {
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #050505;
-      --bg-radial-a: #050505;
-      --bg-radial-b: #050505;
+      --bg: #060606;
+      --bg-radial-a: #060606;
+      --bg-radial-b: #060606;
 
-      --panel: #050505;
+      --panel: #060606;
       --panel-2: #101010;
       --panel-3: #181818;
       --workspace-main-panel: #000000;
@@ -272,7 +272,7 @@
 
       --shell-root-surface: #060606;
       --shell-sidebar-surface: var(--shell-root-surface);
-      --shell-tab-surface: #0c0c0c;
+      --shell-tab-surface: #060606;
       --shell-breadcrumb-surface: #121212;
       --shell-main-surface: #121212;
       --shell-context-surface: #1e1e1e;
@@ -393,7 +393,7 @@
       --destructive-foreground: #0b0b0b;
 
       /* Dark mode sidebar variables */
-      --sidebar-background: #0e0e0e;
+      --sidebar-background: #060606;
       --performance-sidebar-background: var(--sidebar-background);
       --performance-surface-background: color-mix(
         in srgb,
@@ -412,9 +412,9 @@
       --sidebar-active-border-start: #424242;
       --sidebar-active-border-end: #2a2a2a;
       /* Dark overrides for RGB helpers */
-      --panel-r: 7;
-      --panel-g: 8;
-      --panel-b: 10;
+      --panel-r: 6;
+      --panel-g: 6;
+      --panel-b: 6;
 
       --glass-sidebar-alpha: 0.4;
       --glass-workspace-alpha: 0.6;
@@ -1481,6 +1481,10 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-surface::after {
 }
 
 .document-workspace-tab-manager {
+  background: var(--shell-tab-surface);
+}
+
+.document-workspace-footer {
   background: var(--shell-tab-surface);
 }
 
