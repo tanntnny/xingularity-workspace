@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { NOTE_PDF_IMAGE_URI_PREFIX } from '../src/shared/types'
-import { buildNotePdfHtml } from '../src/main/notePdfExport'
+import { buildFolderPdfHtml, buildNotePdfHtml } from '../src/main/notePdfExport'
 
 const temporaryDirectories: string[] = []
 
@@ -65,5 +65,31 @@ describe('buildNotePdfHtml', () => {
 
     expect(result.warnings).toHaveLength(1)
     expect(result.html).toContain('src="" data-export-image-id="image-1"')
+  })
+
+  it('builds a formatted, page-separated document for nested notes', async () => {
+    const result = await buildFolderPdfHtml(
+      'Archive',
+      [
+        {
+          relPath: 'archive/alpha.md',
+          markdown:
+            '---\ntags: [alpha]\n---\n# Alpha\n\n- First item\n\n| A | B |\n| - | - |\n| 1 | 2 |'
+        },
+        {
+          relPath: 'archive/nested/beta.md',
+          markdown: '## Beta\n\n```ts\nconst value = 1\n```'
+        }
+      ],
+      '/tmp/vault'
+    )
+
+    expect(result.warnings).toEqual([])
+    expect(result.html).toContain('folder-pdf-document-title">Archive')
+    expect(result.html).toContain('folder-pdf-note-title">Alpha')
+    expect(result.html).toContain('archive/nested/beta.md')
+    expect(result.html).toContain('<table>')
+    expect(result.html).toContain('page-break-before: always')
+    expect(result.html).not.toContain('tags: [alpha]')
   })
 })

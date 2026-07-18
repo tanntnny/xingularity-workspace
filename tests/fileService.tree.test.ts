@@ -91,6 +91,31 @@ describe('FileService tree operations', () => {
     })
   })
 
+  it('collects only nested Markdown documents in deterministic path order', async () => {
+    const { notesDir, service } = await makeService()
+    await fs.mkdir(path.join(notesDir, 'archive', 'nested'), { recursive: true })
+    await fs.writeFile(
+      path.join(notesDir, 'archive', 'zeta.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Zeta')),
+      'utf-8'
+    )
+    await fs.writeFile(
+      path.join(notesDir, 'archive', 'nested', 'alpha.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha')),
+      'utf-8'
+    )
+    await fs.writeFile(path.join(notesDir, 'archive', 'sketch.excalidraw'), '{}', 'utf-8')
+    await fs.writeFile(path.join(notesDir, 'archive', 'ignored.txt'), 'ignore me', 'utf-8')
+
+    const notes = await service.listNoteDocumentsInFolder('archive')
+
+    expect(notes.map((note) => note.relPath)).toEqual([
+      'archive/nested/alpha.md',
+      'archive/zeta.md'
+    ])
+    expect(notes.map((note) => note.document.markdown)).toEqual(['Alpha', 'Zeta'])
+  })
+
   it('creates, renames, and deletes folders and notes by path', async () => {
     const { notesDir, service } = await makeService()
 

@@ -54,6 +54,16 @@ export interface NotePdfExportResult {
   warnings: string[]
 }
 
+export interface FolderPdfExportInput {
+  folderPath: string
+}
+
+export interface FolderPdfExportResult {
+  path: Maybe<string>
+  noteCount: number
+  warnings: string[]
+}
+
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
 export type ProjectIconSet = 'shape' | 'lucide'
 export type ProjectIconSymbol =
@@ -1003,6 +1013,7 @@ export interface RendererVaultApi {
     deletePaths: (relPaths: string[]) => Promise<void>
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>
     exportNotePdf: (input: NotePdfExportInput) => Promise<NotePdfExportResult>
+    exportFolderPdf: (input: FolderPdfExportInput) => Promise<FolderPdfExportResult>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }
   search: {

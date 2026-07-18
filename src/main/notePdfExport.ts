@@ -1,5 +1,10 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { extractNoteTitleFromMarkdown } from '../shared/noteDocument'
+import { splitNoteContent } from '../shared/noteContent'
 import { NOTE_PDF_IMAGE_URI_PREFIX, NotePdfExportImage } from '../shared/types'
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -12,11 +17,34 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   '.bmp': 'image/bmp'
 }
 
+// Electron's production main bundle loads these ESM packages through CommonJS require.
+const { default: ReactMarkdown } = require('react-markdown') as typeof import('react-markdown')
+const { default: remarkGfm } = require('remark-gfm') as typeof import('remark-gfm')
+
+const FOLDER_PDF_STYLES = `
+      .folder-pdf-document-title { margin: 0 0 8px; font-size: 28px; }
+      .folder-pdf-note { break-inside: avoid; }
+      .folder-pdf-note + .folder-pdf-note { break-before: page; page-break-before: always; }
+      .folder-pdf-note-header { margin-bottom: 24px; border-bottom: 1px solid #000; }
+      .folder-pdf-note-title { margin: 0; font-size: 22px; }
+      .folder-pdf-note-path { margin: 6px 0 12px; color: #444 !important; font-size: 12px; }
+      pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+      table { border-collapse: collapse; max-width: 100%; }
+      th, td { border: 1px solid #000; padding: 6px; vertical-align: top; }
+      blockquote { margin-left: 0; padding-left: 12px; border-left: 3px solid #000; }
+`
+
+export interface FolderPdfNote {
+  relPath: string
+  markdown: string
+}
+
 export async function buildNotePdfHtml(
   title: string,
   contentHtml: string,
   images: NotePdfExportImage[],
-  vaultRoot: string
+  vaultRoot: string,
+  additionalStyles = ''
 ): Promise<{ html: string; warnings: string[] }> {
   const warnings: string[] = []
   let resolvedHtml = contentHtml
@@ -77,12 +105,76 @@ export async function buildNotePdfHtml(
       }
       article { max-width: 100%; }
       img { max-width: 100%; page-break-inside: avoid; }
+      ${additionalStyles}
     </style>
   </head>
   <body><article>${resolvedHtml}</article></body>
 </html>`,
     warnings
   }
+}
+
+export async function buildFolderPdfHtml(
+  folderName: string,
+  notes: FolderPdfNote[],
+  vaultRoot: string
+): Promise<{ html: string; warnings: string[] }> {
+  const images: NotePdfExportImage[] = []
+  const sections = notes
+    .map((note) => {
+      const title = extractNoteTitleFromMarkdown(note.markdown, note.relPath)
+      const body = splitNoteContent(note.markdown).body
+      const contentHtml = renderFolderMarkdown(body, images)
+
+      return `<section class="folder-pdf-note">
+        <header class="folder-pdf-note-header">
+          <h1 class="folder-pdf-note-title">${escapeHtml(title)}</h1>
+          <p class="folder-pdf-note-path">${escapeHtml(note.relPath)}</p>
+        </header>
+        ${contentHtml}
+      </section>`
+    })
+    .join('\n')
+
+  return buildNotePdfHtml(
+    folderName,
+    `<header><h1 class="folder-pdf-document-title">${escapeHtml(folderName)}</h1></header>${sections}`,
+    images,
+    vaultRoot,
+    FOLDER_PDF_STYLES
+  )
+}
+
+function renderFolderMarkdown(markdown: string, images: NotePdfExportImage[]): string {
+  return renderToStaticMarkup(
+    createElement(
+      ReactMarkdown,
+      {
+        remarkPlugins: [remarkGfm],
+        urlTransform: transformFolderPdfUrl,
+        components: {
+          img: ({ alt, src }) => {
+            if (!src) {
+              return null
+            }
+
+            const id = `folder-image-${images.length + 1}`
+            images.push({ id, src })
+            return createElement('img', {
+              alt: alt ?? '',
+              src: `${NOTE_PDF_IMAGE_URI_PREFIX}${id}`,
+              'data-export-image-id': id
+            })
+          }
+        }
+      },
+      markdown
+    )
+  )
+}
+
+function transformFolderPdfUrl(url: string): string {
+  return /^(https?:|data:image\/|vault-file:)/i.test(url) ? url : ''
 }
 
 function escapeHtml(value: string): string {

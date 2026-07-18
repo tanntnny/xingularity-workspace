@@ -13,6 +13,7 @@ import {
 import { useElementSize } from '@mantine/hooks'
 import {
   ChevronRight,
+  FileDown,
   FileText,
   Folder,
   FolderOpen,
@@ -37,9 +38,15 @@ import {
   ContextMenuContent,
   ContextMenuDestructiveItem,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger
 } from './ui/context-menu'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './ui/dropdown-menu'
 import {
   canUseNativeMenus,
   getElementMenuPosition,
@@ -91,11 +98,8 @@ interface NotesTreeViewProps {
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
-  onRenamePath: (
-    relPath: string,
-    nextName: string,
-    kind: 'note' | 'excalidraw' | 'folder'
-  ) => void
+  onExportFolderPdf: (folderPath: string) => void
+  onRenamePath: (relPath: string, nextName: string, kind: 'note' | 'excalidraw' | 'folder') => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
 }
@@ -113,6 +117,7 @@ export function NotesTreeView({
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
+  onExportFolderPdf,
   onRenamePath,
   onDeleteEntries,
   onMoveEntries
@@ -493,6 +498,7 @@ export function NotesTreeView({
               onCreateNote={onCreateNote}
               onCreateExcalidraw={onCreateExcalidraw}
               onCreateFolder={onCreateFolder}
+              onExportFolderPdf={onExportFolderPdf}
               onCancelEditing={() => setEditingId(null)}
               onCommitRename={(value) => {
                 setEditingId(null)
@@ -518,6 +524,7 @@ function TreeNode({
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
+  onExportFolderPdf,
   onCancelEditing,
   onCommitRename,
   onStartEditing,
@@ -529,6 +536,7 @@ function TreeNode({
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
+  onExportFolderPdf: (folderPath: string) => void
   onCancelEditing: () => void
   onCommitRename: (value: string) => void
   onStartEditing: () => void
@@ -623,6 +631,13 @@ function TreeNode({
       onCreateFolder(parentDir)
       return
     }
+    if (actionId === 'export-folder-pdf') {
+      if (!isFolder || isProtected) {
+        return
+      }
+      onExportFolderPdf(node.data.relPath)
+      return
+    }
     if (actionId === 'rename') {
       handleRenameRequest()
       return
@@ -670,7 +685,7 @@ function TreeNode({
   ): Promise<void> => {
     event.preventDefault()
     const actionId = await showNativeMenu(
-      buildNotesTreeMenuItems(isProtected, canCreateChildren),
+      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder),
       getMouseMenuPosition(event)
     )
     if (actionId) {
@@ -684,7 +699,7 @@ function TreeNode({
     event.preventDefault()
     event.stopPropagation()
     const actionId = await showNativeMenu(
-      buildNotesTreeMenuItems(isProtected, canCreateChildren),
+      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder),
       getElementMenuPosition(event.currentTarget)
     )
     if (actionId) {
@@ -845,9 +860,7 @@ function TreeNode({
                           handleDropdownMenuAction(event, 'create-excalidraw')
                         }
                         onClick={(event) => handleDropdownMenuAction(event, 'create-excalidraw')}
-                        onKeyDown={(event) =>
-                          handleDropdownMenuKeyDown(event, 'create-excalidraw')
-                        }
+                        onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'create-excalidraw')}
                       >
                         <PenTool className="mr-2 h-4 w-4" />
                         New drawing
@@ -868,6 +881,25 @@ function TreeNode({
                       </button>
                     </>
                   ) : null}
+                  {isFolder && !isProtected ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid={`note-tree-export-folder-pdf:${node.data.relPath}`}
+                        className={TREE_DROPDOWN_ITEM_CLASS}
+                        onPointerDownCapture={(event) =>
+                          handleDropdownMenuAction(event, 'export-folder-pdf')
+                        }
+                        onClick={(event) => handleDropdownMenuAction(event, 'export-folder-pdf')}
+                        onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'export-folder-pdf')}
+                      >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        Export nested notes as PDF…
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     role="menuitem"
@@ -880,6 +912,7 @@ function TreeNode({
                     <Pencil className="mr-2 h-4 w-4" />
                     Rename
                   </button>
+                  {isFolder ? <DropdownMenuSeparator /> : null}
                   <button
                     type="button"
                     role="menuitem"
@@ -926,6 +959,16 @@ function TreeNode({
         ) : null}
         {!isProtected ? (
           <>
+            {isFolder ? (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => handleMenuAction('export-folder-pdf')}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Export nested notes as PDF…
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+              </>
+            ) : null}
             <ContextMenuItem
               onClick={handleRenameRequest}
               onSelect={() => handleMenuAction('rename')}
@@ -1056,7 +1099,8 @@ function areNoteTreeSelectionsEqual(left: NoteTreeSelection, right: NoteTreeSele
 
 function buildNotesTreeMenuItems(
   isProtected: boolean,
-  canCreateChildren: boolean
+  canCreateChildren: boolean,
+  isFolder: boolean
 ): NativeMenuItemDescriptor[] {
   const items: NativeMenuItemDescriptor[] = []
 
@@ -1066,6 +1110,13 @@ function buildNotesTreeMenuItems(
       { id: 'create-excalidraw', label: 'New drawing' },
       { id: 'create-folder', label: 'New folder' }
     )
+  }
+
+  if (isFolder && !isProtected) {
+    if (items.length > 0) {
+      items.push({ type: 'separator' })
+    }
+    items.push({ id: 'export-folder-pdf', label: 'Export nested notes as PDF…' })
   }
 
   if (!isProtected) {

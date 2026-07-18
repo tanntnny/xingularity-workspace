@@ -225,6 +225,9 @@ test.describe('notes tree view', () => {
       await archiveRow.hover()
       await page.getByTestId('note-tree-menu:archive').click()
       await expect(page.getByRole('menuitem', { name: 'New folder' })).toBeVisible()
+      await expect(
+        page.getByRole('menuitem', { name: 'Export nested notes as PDF…' })
+      ).toBeVisible()
       await expect(nestedRow).toHaveCount(0)
 
       await page.getByTestId('note-tree-create-folder:archive').click()

@@ -32,6 +32,9 @@ const notePdfExportInputSchema = z.object({
     )
     .max(200)
 })
+const folderPdfExportInputSchema = z.object({
+  folderPath: z.string().min(1).max(512)
+})
 const querySchema = z.string().min(1).max(200)
 const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
@@ -530,6 +533,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.exportNotePdf, async (_event, input: unknown) => {
     return runtime.exportNotePdf(notePdfExportInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.exportFolderPdf, async (_event, input: unknown) => {
+    return runtime.exportFolderPdf(folderPdfExportInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.exportProject, async (_event, projectName: unknown, content: unknown) => {

@@ -78,6 +78,29 @@ export class FileService {
     return parseStoredNoteDocument(raw)
   }
 
+  async listNoteDocumentsInFolder(
+    folderRelPathInput: string
+  ): Promise<Array<{ relPath: string; document: StoredNoteDocument }>> {
+    const folderRelPath = sanitizeEntryPath(folderRelPathInput)
+    const folderPath = joinSafe(this.notesRoot, folderRelPath)
+    const stats = await fs.stat(folderPath)
+
+    if (!stats.isDirectory()) {
+      throw new Error('Folder PDF export requires a folder path')
+    }
+
+    const notePaths = await listNotePaths(folderPath)
+    return Promise.all(
+      notePaths.map(async (absolutePath) => {
+        const raw = await fs.readFile(absolutePath, 'utf-8')
+        return {
+          relPath: normalizeRelativePath(path.relative(this.notesRoot, absolutePath)),
+          document: parseStoredNoteDocument(raw)
+        }
+      })
+    )
+  }
+
   async readExcalidrawFileDocument(relPathInput: string): Promise<StoredExcalidrawFileDocument> {
     const relPath = sanitizeExcalidrawPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)

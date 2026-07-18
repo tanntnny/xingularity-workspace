@@ -11,7 +11,12 @@ import type { Messages as MistralChatMessage } from '@mistralai/mistralai/models
 import { AgentChatStore } from './agentChatStore'
 import { AgentHistoryStore } from './agentHistoryStore'
 import { ExcalidrawSessionStore } from './excalidrawSessionStore'
-import { FileService, findAvailableExcalidrawRelPath, sanitizeNotePath } from './fileService'
+import {
+  FileService,
+  findAvailableExcalidrawRelPath,
+  sanitizeEntryPath,
+  sanitizeNotePath
+} from './fileService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import {
   createEmptyExcalidrawFileDocument,
@@ -34,7 +39,7 @@ import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
 import { createWarpNewTabUri } from './warp'
-import { buildNotePdfHtml } from './notePdfExport'
+import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
 import {
   AppSettings,
   AgentChatEvent,
@@ -65,7 +70,9 @@ import {
   ExcalidrawSession,
   StoredExcalidrawFileDocument,
   NotePdfExportInput,
-  NotePdfExportResult
+  NotePdfExportResult,
+  FolderPdfExportInput,
+  FolderPdfExportResult
 } from '../shared/types'
 
 export class VaultRuntime {
@@ -477,12 +484,56 @@ export class VaultRuntime {
       input.images,
       this.currentPaths!.rootPath
     )
+    const imageWarnings = await this.writePdfExport(result.filePath, printable.html)
+
+    return {
+      path: result.filePath,
+      warnings: [...printable.warnings, ...imageWarnings]
+    }
+  }
+
+  async exportFolderPdf(input: FolderPdfExportInput): Promise<FolderPdfExportResult> {
+    this.assertReady()
+    const safeFolderPath = sanitizeEntryPath(input.folderPath)
+    const notes = await this.fileService!.listNoteDocumentsInFolder(safeFolderPath)
+
+    if (notes.length === 0) {
+      return { path: null, noteCount: 0, warnings: [] }
+    }
+
+    const folderName = path.basename(safeFolderPath)
+    const suggestedName = `${this.sanitizeExportFileName(folderName)}.pdf`
+    const result = await this.showPdfExportDialog(
+      'Export nested notes as PDF',
+      this.currentPaths!.rootPath,
+      suggestedName
+    )
+
+    if (result.canceled || !result.filePath) {
+      return { path: null, noteCount: notes.length, warnings: [] }
+    }
+
+    const printable = await buildFolderPdfHtml(
+      folderName,
+      notes.map(({ relPath, document }) => ({ relPath, markdown: document.markdown })),
+      this.currentPaths!.rootPath
+    )
+    const imageWarnings = await this.writePdfExport(result.filePath, printable.html)
+
+    return {
+      path: result.filePath,
+      noteCount: notes.length,
+      warnings: [...printable.warnings, ...imageWarnings]
+    }
+  }
+
+  private async writePdfExport(filePath: string, html: string): Promise<string[]> {
     const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-note-pdf-'))
     const documentPath = path.join(temporaryDirectory, 'note.html')
     let printWindow: BrowserWindow | null = null
 
     try {
-      await fs.writeFile(documentPath, printable.html, 'utf-8')
+      await fs.writeFile(documentPath, html, 'utf-8')
       printWindow = new BrowserWindow({
         show: false,
         webPreferences: {
@@ -497,12 +548,9 @@ export class VaultRuntime {
         printBackground: true,
         preferCSSPageSize: true
       })
-      await fs.writeFile(result.filePath, pdf)
+      await fs.writeFile(filePath, pdf)
 
-      return {
-        path: result.filePath,
-        warnings: [...printable.warnings, ...imageWarnings]
-      }
+      return imageWarnings
     } finally {
       if (printWindow && !printWindow.isDestroyed()) {
         printWindow.destroy()

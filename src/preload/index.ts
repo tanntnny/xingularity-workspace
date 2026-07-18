@@ -75,6 +75,7 @@ const api: RendererVaultApi = {
     deletePaths: (relPaths) => ipcRenderer.invoke(IPC_CHANNELS.deletePaths, relPaths),
     exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content),
     exportNotePdf: (input) => ipcRenderer.invoke(IPC_CHANNELS.exportNotePdf, input),
+    exportFolderPdf: (input) => ipcRenderer.invoke(IPC_CHANNELS.exportFolderPdf, input),
     exportProject: (projectName, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
   },

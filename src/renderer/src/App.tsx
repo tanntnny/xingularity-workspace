@@ -421,6 +421,7 @@ function App(): ReactElement {
   const [isNoteExportDialogOpen, setIsNoteExportDialogOpen] = useState(false)
   const [noteExportFormat, setNoteExportFormat] = useState<NoteExportFormat>('markdown')
   const [isNoteExporting, setIsNoteExporting] = useState(false)
+  const [isFolderPdfExporting, setIsFolderPdfExporting] = useState(false)
 
   useEffect(() => {
     const rootStyle = document.documentElement.style
@@ -3304,6 +3305,37 @@ function App(): ReactElement {
     }
   }
 
+  const exportFolderPdf = async (folderPath: string): Promise<void> => {
+    if (!vaultApi || isFolderPdfExporting) {
+      return
+    }
+
+    try {
+      setIsFolderPdfExporting(true)
+      await flushCurrentNote({ force: true })
+      const result = await vaultApi.files.exportFolderPdf({ folderPath })
+
+      if (result.noteCount === 0) {
+        pushToast('info', 'No Markdown notes found in the selected folder')
+        return
+      }
+
+      if (!result.path) {
+        return
+      }
+
+      const noteLabel = result.noteCount === 1 ? 'note' : 'notes'
+      pushToast('success', `Exported ${result.noteCount} nested ${noteLabel} to ${result.path}`)
+      if (result.warnings.length > 0) {
+        pushToast('info', `PDF exported with ${result.warnings.length} image warning(s)`)
+      }
+    } catch (error) {
+      pushToast('error', String(error))
+    } finally {
+      setIsFolderPdfExporting(false)
+    }
+  }
+
   const copyCurrentNoteMarkdown = async (): Promise<void> => {
     if (!currentNotePath) {
       return
@@ -6051,6 +6083,9 @@ function App(): ReactElement {
                               parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
                             )
                             void createFolderFromTree(parentDir)
+                          }}
+                          onExportFolderPdf={(folderPath) => {
+                            void exportFolderPdf(folderPath)
                           }}
                           onRenamePath={(relPath, nextName, kind) => {
                             void renameTreePath(relPath, nextName, kind)
