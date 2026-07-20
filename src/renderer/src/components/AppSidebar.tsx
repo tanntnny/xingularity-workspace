@@ -23,7 +23,7 @@ import {
 } from './ui/sidebar'
 import { Pressable } from './ui'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
-import appLogo from '../../../../assets/workspace_letter.png'
+import appLogo from '../../../../assets/logo.png'
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
 
 interface AppSidebarProps {

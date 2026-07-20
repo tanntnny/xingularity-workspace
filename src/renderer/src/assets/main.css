@@ -765,6 +765,22 @@
     justify-content: center;
   }
 
+  .workspace-action-button-group > .workspace-action-button {
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-radius: 0;
+    border-top-width: 0;
+    height: 100%;
+  }
+
+  .workspace-action-button-group > .workspace-action-button:not(:last-child) {
+    border-right-width: 1px;
+  }
+
+  .workspace-action-button-group > .workspace-action-button:last-child {
+    border-right-width: 0;
+  }
+
   .button-icon {
     border: 1px solid color-mix(in srgb, var(--accent-line) 60%, var(--line));
   }
@@ -1090,6 +1106,57 @@
       0 0 0 1px color-mix(in srgb, var(--accent-line) 12%, transparent);
     -webkit-backdrop-filter: saturate(160%) blur(var(--glass-sidebar-blur));
     backdrop-filter: saturate(160%) blur(var(--glass-sidebar-blur));
+  }
+
+  .calendar-dialog-field,
+  .selection-trigger.calendar-dialog-field,
+  .calendar-dialog-selection-menu,
+  .dialog-input-surface {
+    background-color: color-mix(in srgb, var(--panel) 92%, white) !important;
+    border-color: var(--line-strong) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .calendar-dialog-field-surface {
+    background-color: color-mix(in srgb, var(--panel) 78%, white) !important;
+    border-color: color-mix(in srgb, var(--panel) 64%, white) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .workspace-action-button.calendar-dialog-action {
+    background-color: color-mix(in srgb, var(--panel) 92%, white) !important;
+    border-color: var(--line-strong) !important;
+  }
+
+  .workspace-action-button.calendar-dialog-action > svg {
+    height: 0.875rem;
+    width: 0.875rem;
+  }
+
+  .workspace-action-button.calendar-dialog-done-action {
+    background-color: #2563eb !important;
+    border-color: #2563eb !important;
+    color: #ffffff !important;
+  }
+
+  .workspace-action-button.calendar-dialog-action:hover,
+  .workspace-action-button.calendar-dialog-action:focus-visible {
+    background-color: color-mix(in srgb, var(--panel) 92%, white) !important;
+    border-color: var(--line-strong) !important;
+  }
+
+  .workspace-action-button.calendar-dialog-done-action:hover,
+  .workspace-action-button.calendar-dialog-done-action:focus-visible {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+  }
+
+  .calendar-dialog-field:focus-visible,
+  .selection-trigger.calendar-dialog-field:focus-visible {
+    border-color: var(--accent-line) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 2px color-mix(in srgb, var(--accent-soft) 68%, transparent);
   }
 
   .drawer-glass-overlay {
@@ -1505,6 +1572,27 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   background-image: none;
   -webkit-background-clip: initial;
   background-clip: initial;
+}
+
+[data-performance-mode='on'] .selection-trigger.calendar-dialog-field,
+[data-performance-mode='on'] .selection-trigger.calendar-dialog-field:hover,
+[data-performance-mode='on'] .selection-trigger.calendar-dialog-field:focus-visible,
+[data-performance-mode='on'] .selection-trigger.calendar-dialog-field[data-open='true'],
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-action,
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-action:hover,
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-action:focus-visible,
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-action[data-active='true'],
+[data-performance-mode='on'] .selection-menu-content.calendar-dialog-selection-menu {
+  background-color: color-mix(in srgb, var(--panel) 92%, white) !important;
+  border-color: var(--line-strong) !important;
+}
+
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-done-action,
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-done-action:hover,
+[data-performance-mode='on'] .workspace-action-button.calendar-dialog-done-action:focus-visible {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
 }
 
 /* Nested workspace shell: each visible layer becomes subtly lighter as it moves inward. */
@@ -3474,4 +3562,17 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header,
 .note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button svg {
   color: currentColor;
   fill: currentColor;
+}
+
+.toolbar-shortcut-tab-menu.workspace-action-group {
+  background-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+.toolbar-shortcut-tab-menu.workspace-action-group > .tab-menu-item {
+  border-bottom-width: 0 !important;
+  border-top-width: 0 !important;
 }

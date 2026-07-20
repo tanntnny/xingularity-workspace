@@ -2,7 +2,7 @@ import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { createAppErrorEvent } from '../shared/appErrors'
-import icon from '../../assets/workspace_letter.png?asset'
+import icon from '../../assets/logo.png?asset'
 import { createWindowErrorPageHtml } from './windowErrorPage'
 
 interface MainWindowOptions {

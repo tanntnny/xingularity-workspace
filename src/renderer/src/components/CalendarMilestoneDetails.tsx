@@ -1,10 +1,12 @@
 import { ReactElement } from 'react'
-import { ArrowUpRight, Milestone } from 'lucide-react'
+import { ArrowUpRight, Check, Milestone } from 'lucide-react'
 import { ProjectIconStyle, ProjectMilestone } from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { FloatingHoverCard } from './ui/floating-hover-card'
 import {
   Dialog,
+  DialogActionButton,
+  DialogCloseAction,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -140,7 +142,11 @@ export function CalendarMilestoneDialog({
         }
       }}
     >
-      <DialogContent className="max-w-lg" data-testid="calendar-milestone-dialog">
+      <DialogContent
+        className="max-w-lg"
+        data-testid="calendar-milestone-dialog"
+        showCloseButton={false}
+      >
         <DialogHeader>
           <div className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent-soft)_76%,var(--panel))] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -160,7 +166,7 @@ export function CalendarMilestoneDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="workspace-subtle-surface rounded-xl border border-[var(--line)] p-4">
+          <div className="calendar-dialog-field-surface rounded-xl border p-4">
             <div className="flex items-center gap-3">
               {milestone.projectIcon ? (
                 <NoteShapeIcon icon={milestone.projectIcon} size={24} className="shrink-0" />
@@ -208,24 +214,32 @@ export function CalendarMilestoneDialog({
             <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Description
             </div>
-            <div className="mt-1 rounded-xl border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_86%,transparent)] p-4 text-sm leading-6 text-[var(--text)]">
+            <div className="calendar-dialog-field-surface mt-1 rounded-xl border p-4 text-sm leading-6 text-[var(--text)]">
               {milestone.milestoneDescription?.trim() || 'No milestone description.'}
             </div>
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              onOpenMilestone?.(milestone.projectId, milestone.milestoneId)
-              onClose()
-            }}
-            className="workspace-subtle-control inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--line)] px-3 text-sm font-medium text-[var(--text)]"
-          >
-            Open in Projects
-            <ArrowUpRight size={16} />
-          </button>
+        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+          <DialogCloseAction label="Close milestone details" />
+          <div className="flex items-center gap-2">
+            <DialogActionButton
+              onClick={() => {
+                onOpenMilestone?.(milestone.projectId, milestone.milestoneId)
+                onClose()
+              }}
+              title="Open in Projects"
+              aria-label="Open in Projects"
+              icon={<ArrowUpRight />}
+            />
+            <DialogActionButton
+              onClick={onClose}
+              title="Done"
+              aria-label="Done"
+              icon={<Check />}
+              tone="primary"
+            />
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

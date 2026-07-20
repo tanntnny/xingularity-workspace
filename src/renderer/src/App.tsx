@@ -24,14 +24,12 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
-  Target,
   FolderOpen,
   ChevronUp,
   Star,
   SlidersHorizontal
 } from 'lucide-react'
 import {
-  CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CreateWeeklyPlanWeekInput,
   NoteVimKeyMapping,
@@ -116,8 +114,9 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
-import { SelectionMenu, type SelectionMenuOption } from './components/ui/selection-menu'
+import { type SelectionMenuOption } from './components/ui/selection-menu'
 import { TabMenu, TabMenuCountBadge, TabMenuItem } from './components/ui/tab-menu'
+import { ActionButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
@@ -267,23 +266,10 @@ const FONT_OPTIONS: FontOption[] = [
   { label: 'Charter', value: "'Charter', 'Georgia', 'Times New Roman', serif" }
 ]
 
-const CALENDAR_BULK_SCOPE_OPTIONS = [
-  { value: 'day', label: 'This day' },
-  { value: 'week', label: 'This week' },
-  { value: 'month', label: 'This month' }
-] as const
-
 const CALENDAR_VIEW_MODE_OPTIONS: SelectionMenuOption[] = [
   { value: 'month', label: 'Monthly' },
   { value: 'week', label: 'Weekly' }
 ]
-
-const CALENDAR_BULK_SCOPE_SELECTION_OPTIONS: SelectionMenuOption[] =
-  CALENDAR_BULK_SCOPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))
-
-const CALENDAR_TASK_TYPE_SELECTION_OPTIONS: SelectionMenuOption[] = CALENDAR_TASK_TYPE_OPTIONS.map(
-  (option) => ({ value: option.value, label: option.label })
-)
 
 const NOTE_AUTOSAVE_DELAY_MS = 1200
 
@@ -423,10 +409,6 @@ function App(): ReactElement {
     token: number
   } | null>(null)
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
-  const [calendarBulkTaskType, setCalendarBulkTaskType] = useState<CalendarTaskType>('assignment')
-  const [calendarBulkScope, setCalendarBulkScope] =
-    useState<(typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']>('day')
-  const [isCalendarBulkActionOpen, setIsCalendarBulkActionOpen] = useState(false)
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
   const [currentExcalidrawPath, setCurrentExcalidrawPath] = useState<string | null>(null)
@@ -2300,36 +2282,6 @@ function App(): ReactElement {
     },
     [navigateToPage, selectProject, setProjectsWorkspaceTab]
   )
-
-  const reassignCalendarTaskTypeForScope = async (
-    scope: (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value'],
-    taskType: CalendarTaskType
-  ): Promise<void> => {
-    let updatedCount = 0
-    const range = getCalendarScopeRange(scope, selectedCalendarDate)
-
-    await updateCalendarTasks((tasks) =>
-      tasks.map((task) => {
-        if (
-          !calendarTaskOverlapsRange(task, range.start, range.end) ||
-          task.taskType === taskType
-        ) {
-          return task
-        }
-
-        updatedCount += 1
-        return { ...task, taskType }
-      })
-    )
-
-    if (updatedCount === 0) {
-      pushToast('info', `No tasks found for ${scope}`)
-      return
-    }
-
-    setIsCalendarBulkActionOpen(false)
-    pushToast('success', `Updated ${updatedCount} task${updatedCount === 1 ? '' : 's'}`)
-  }
 
   const openVaultSwapper = useCallback((): void => {
     if (!platform.capabilities.supportsVaultPicker || !vaultApi) {
@@ -5343,55 +5295,53 @@ function App(): ReactElement {
                   actions={
                     noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
                       <WorkspaceHeaderActions>
-                        <WorkspaceHeaderActionGroup>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <WorkspaceActionButton
-                                title="Show backlinks"
-                                aria-label="Show backlinks"
-                                icon={<Link2 size={18} />}
-                              />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-72">
-                              {currentNoteBacklinks.length > 0 ? (
-                                currentNoteBacklinks.map((note) => (
-                                  <DropdownMenuItem
-                                    key={note.relPath}
-                                    onSelect={() => {
-                                      void openNote(note.relPath)
-                                    }}
-                                    className="flex flex-col items-start gap-0.5"
-                                  >
-                                    <span className="max-w-full truncate font-medium">
-                                      {getNoteDisplayName(note.relPath)}
-                                    </span>
-                                    <span className="max-w-full truncate text-xs text-[var(--muted)]">
-                                      {stripNoteExtension(note.relPath)}
-                                    </span>
-                                  </DropdownMenuItem>
-                                ))
-                              ) : (
-                                <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <WorkspaceActionButton
-                            onClick={() => {
-                              void copyCurrentNoteMarkdown()
-                            }}
-                            title="Copy Raw Markdown"
-                            aria-label="Copy Raw Markdown"
-                            icon={<Copy size={18} />}
-                          />
-                          <WorkspaceActionButton
-                            onClick={() => {
-                              setIsNoteExportDialogOpen(true)
-                            }}
-                            title="Export Note"
-                            aria-label="Export Note"
-                            icon={<Download size={18} />}
-                          />
-                        </WorkspaceHeaderActionGroup>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <WorkspaceActionButton
+                              title="Show backlinks"
+                              aria-label="Show backlinks"
+                              icon={<Link2 size={18} />}
+                            />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-72">
+                            {currentNoteBacklinks.length > 0 ? (
+                              currentNoteBacklinks.map((note) => (
+                                <DropdownMenuItem
+                                  key={note.relPath}
+                                  onSelect={() => {
+                                    void openNote(note.relPath)
+                                  }}
+                                  className="flex flex-col items-start gap-0.5"
+                                >
+                                  <span className="max-w-full truncate font-medium">
+                                    {getNoteDisplayName(note.relPath)}
+                                  </span>
+                                  <span className="max-w-full truncate text-xs text-[var(--muted)]">
+                                    {stripNoteExtension(note.relPath)}
+                                  </span>
+                                </DropdownMenuItem>
+                              ))
+                            ) : (
+                              <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <WorkspaceActionButton
+                          onClick={() => {
+                            void copyCurrentNoteMarkdown()
+                          }}
+                          title="Copy Raw Markdown"
+                          aria-label="Copy Raw Markdown"
+                          icon={<Copy size={18} />}
+                        />
+                        <WorkspaceActionButton
+                          onClick={() => {
+                            setIsNoteExportDialogOpen(true)
+                          }}
+                          title="Export Note"
+                          aria-label="Export Note"
+                          icon={<Download size={18} />}
+                        />
                         <WorkspaceHeaderActionDivider />
                         <WorkspaceHeaderActionGroup>
                           <WorkspaceActionButton
@@ -5544,6 +5494,7 @@ function App(): ReactElement {
                             }
                             fullWidth={false}
                             withSpacer={false}
+                            className="toolbar-shortcut-tab-menu"
                             trailingAccessory={
                               <Shortcut
                                 keys={['option', 'tab']}
@@ -5578,6 +5529,7 @@ function App(): ReactElement {
                             }
                             fullWidth={false}
                             withSpacer={false}
+                            className="toolbar-shortcut-tab-menu"
                             trailingAccessory={
                               <Shortcut
                                 keys={['option', 'tab']}
@@ -5814,13 +5766,12 @@ function App(): ReactElement {
                                   </TabMenuItem>
                                 ))}
                               </TabMenu>
-                              <div className="workspace-subtle-surface flex items-center gap-0 overflow-hidden rounded-lg p-0">
+                              <ActionButtonGroup size="sm" aria-label="Calendar period navigation">
                                 <WorkspaceActionButton
                                   onClick={goToPrevCalendarPeriod}
                                   title={
                                     calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
                                   }
-                                  className="rounded-none border-y-0 border-l-0 border-r border-[var(--line)] hover:bg-[var(--accent-soft)]"
                                   icon={<ChevronLeft size={18} />}
                                 />
                                 <WorkspaceActionButton
@@ -5835,7 +5786,6 @@ function App(): ReactElement {
                                       ? 'Go to current week'
                                       : 'Go to current month'
                                   }
-                                  className="rounded-none border-0 hover:bg-[var(--accent-soft)]"
                                   icon={<CalendarDays size={18} />}
                                   label={
                                     calendarViewMode === 'week' ? 'Current week' : 'Current month'
@@ -5844,10 +5794,9 @@ function App(): ReactElement {
                                 <WorkspaceActionButton
                                   onClick={goToNextCalendarPeriod}
                                   title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                                  className="rounded-none border-y-0 border-r-0 border-l border-[var(--line)] hover:bg-[var(--accent-soft)]"
                                   icon={<ChevronRight size={18} />}
                                 />
-                              </div>
+                              </ActionButtonGroup>
                             </div>
                           </div>
                           <div className="min-h-0 flex-1">
@@ -6017,146 +5966,80 @@ function App(): ReactElement {
                       actions={
                         hasVault && activePage === 'notes' ? (
                           <WorkspaceHeaderActions>
-                            <WorkspaceHeaderActionGroup>
+                            <WorkspaceActionButton
+                              aria-label={
+                                areAllNoteFoldersCollapsed
+                                  ? 'Expand all folders'
+                                  : 'Collapse all folders'
+                              }
+                              title={
+                                areAllNoteFoldersCollapsed
+                                  ? 'Expand all folders'
+                                  : 'Collapse all folders'
+                              }
+                              icon={
+                                areAllNoteFoldersCollapsed ? (
+                                  <ChevronDown size={18} aria-hidden="true" />
+                                ) : (
+                                  <ChevronUp size={18} aria-hidden="true" />
+                                )
+                              }
+                              onClick={() => {
+                                setAreAllNoteFoldersCollapsed((current) => !current)
+                                setCollapseAllNotesTreeToken((current) => current + 1)
+                              }}
+                            />
+                            {useNativeMenus ? (
                               <WorkspaceActionButton
-                                aria-label={
-                                  areAllNoteFoldersCollapsed
-                                    ? 'Expand all folders'
-                                    : 'Collapse all folders'
-                                }
-                                title={
-                                  areAllNoteFoldersCollapsed
-                                    ? 'Expand all folders'
-                                    : 'Collapse all folders'
-                                }
-                                icon={
-                                  areAllNoteFoldersCollapsed ? (
-                                    <ChevronDown size={18} aria-hidden="true" />
-                                  ) : (
-                                    <ChevronUp size={18} aria-hidden="true" />
-                                  )
-                                }
+                                ref={noteActionsButtonRef}
                                 onClick={() => {
-                                  setAreAllNoteFoldersCollapsed((current) => !current)
-                                  setCollapseAllNotesTreeToken((current) => current + 1)
+                                  void openNativeNoteActionsMenu()
                                 }}
+                                aria-label="Notebook actions"
+                                title="Notebook actions"
+                                icon={<Plus size={18} aria-hidden="true" />}
                               />
-                              {useNativeMenus ? (
-                                <WorkspaceActionButton
-                                  ref={noteActionsButtonRef}
-                                  onClick={() => {
-                                    void openNativeNoteActionsMenu()
-                                  }}
-                                  aria-label="Notebook actions"
-                                  title="Notebook actions"
-                                  icon={<Plus size={18} aria-hidden="true" />}
-                                />
-                              ) : (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <WorkspaceActionButton
-                                      aria-label="Notebook actions"
-                                      title="Notebook actions"
-                                      icon={<Plus size={18} aria-hidden="true" />}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        void createNoteFromTree()
-                                      }}
-                                    >
-                                      New note
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        void createExcalidrawFromTree()
-                                      }}
-                                    >
-                                      New drawing
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        void createFolderFromTree()
-                                      }}
-                                    >
-                                      New folder
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        void importNotes()
-                                      }}
-                                    >
-                                      Import markdown
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </WorkspaceHeaderActionGroup>
-                          </WorkspaceHeaderActions>
-                        ) : hasVault && activePage === 'calendar' ? (
-                          <WorkspaceHeaderActions>
-                            <WorkspaceHeaderActionGroup>
-                              <Popover
-                                open={isCalendarBulkActionOpen}
-                                onOpenChange={setIsCalendarBulkActionOpen}
-                              >
-                                <PopoverTrigger asChild>
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
                                   <WorkspaceActionButton
-                                    title="Calendar bulk actions"
-                                    aria-label="Calendar bulk actions"
-                                    icon={<Target size={18} className="inline-block" />}
+                                    aria-label="Notebook actions"
+                                    title="Notebook actions"
+                                    icon={<Plus size={18} aria-hidden="true" />}
                                   />
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  align="start"
-                                  className="w-64 border border-[var(--line)] bg-[var(--panel)] p-3 text-[var(--text)] shadow-xl"
-                                >
-                                  <div className="space-y-3">
-                                    <label className="flex flex-col gap-1">
-                                      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                        Scope
-                                      </span>
-                                      <SelectionMenu
-                                        value={calendarBulkScope}
-                                        onValueChange={(value) =>
-                                          setCalendarBulkScope(
-                                            value as (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value']
-                                          )
-                                        }
-                                        options={CALENDAR_BULK_SCOPE_SELECTION_OPTIONS}
-                                        aria-label="Bulk action scope"
-                                      />
-                                    </label>
-                                    <label className="flex flex-col gap-1">
-                                      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                        Task Type
-                                      </span>
-                                      <SelectionMenu
-                                        value={calendarBulkTaskType}
-                                        onValueChange={(value) =>
-                                          setCalendarBulkTaskType(value as CalendarTaskType)
-                                        }
-                                        options={CALENDAR_TASK_TYPE_SELECTION_OPTIONS}
-                                        aria-label="Bulk action task type"
-                                      />
-                                    </label>
-                                    <button
-                                      type="button"
-                                      className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-medium hover:border-[var(--accent)]"
-                                      onClick={() => {
-                                        void reassignCalendarTaskTypeForScope(
-                                          calendarBulkScope,
-                                          calendarBulkTaskType
-                                        )
-                                      }}
-                                    >
-                                      Apply
-                                    </button>
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            </WorkspaceHeaderActionGroup>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void createNoteFromTree()
+                                    }}
+                                  >
+                                    New note
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void createExcalidrawFromTree()
+                                    }}
+                                  >
+                                    New drawing
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void createFolderFromTree()
+                                    }}
+                                  >
+                                    New folder
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      void importNotes()
+                                    }}
+                                  >
+                                    Import markdown
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </WorkspaceHeaderActions>
                         ) : hasVault && activePage === 'settings' ? (
                           <WorkspaceActionButton
@@ -6407,37 +6290,6 @@ function getNextWeeklyPlanStart(weeks: WeeklyPlanWeek[]): string {
     return startOfWeekIso(new Date())
   }
   return startOfWeekIso(parseIsoDate(addIsoDays(weeks[weeks.length - 1]!.endDate, 1)))
-}
-
-function getCalendarScopeRange(
-  scope: (typeof CALENDAR_BULK_SCOPE_OPTIONS)[number]['value'],
-  selectedDate: string
-): { start: string; end: string } {
-  if (scope === 'day') {
-    return { start: selectedDate, end: selectedDate }
-  }
-
-  if (scope === 'week') {
-    const start = startOfWeekIso(parseIsoDate(selectedDate))
-    return { start, end: addIsoDays(start, 6) }
-  }
-
-  const current = parseIsoDate(selectedDate)
-  const monthStart = new Date(current.getFullYear(), current.getMonth(), 1)
-  const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0)
-  return {
-    start: toIsoDate(monthStart),
-    end: toIsoDate(monthEnd)
-  }
-}
-
-function calendarTaskOverlapsRange(task: CalendarTask, start: string, end: string): boolean {
-  if (!task.date) {
-    return false
-  }
-
-  const taskEnd = task.endDate && task.endDate >= task.date ? task.endDate : task.date
-  return task.date <= end && taskEnd >= start
 }
 
 function startOfWeekIso(date: Date): string {

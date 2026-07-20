@@ -12,6 +12,7 @@ type SelectOptionElement = React.ReactElement<{
 interface SelectProps {
   children?: React.ReactNode
   className?: string
+  contentClassName?: string
   value?: string | number
   defaultValue?: string | number
   disabled?: boolean
@@ -57,6 +58,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
   (
     {
       className,
+      contentClassName,
       children,
       onChange,
       value,
@@ -117,6 +119,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
         tabIndex={tabIndex}
         aria-label={ariaLabel}
         className={cn('w-full', className)}
+        contentClassName={contentClassName}
       />
     )
   }

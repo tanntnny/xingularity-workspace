@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const rootDir = path.resolve(__dirname, '..')
-const source = path.join(rootDir, 'assets', 'workspace_letter.png')
+const source = path.join(rootDir, 'assets', 'logo.png')
 const targets = [
   path.join(rootDir, 'build', 'icon.png'),
   path.join(rootDir, 'resources', 'icon.png')

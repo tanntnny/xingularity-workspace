@@ -26,8 +26,12 @@ import {
   CardHeader,
   CardTitle,
   Dialog,
+  DialogActionButton,
+  DialogClose,
+  DialogCloseAction,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -538,13 +542,24 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                   <DialogTrigger asChild>
                     <Button variant="outline">Open dialog</Button>
                   </DialogTrigger>
-                  <DialogContent data-testid="design-audit-dialog">
+                  <DialogContent data-testid="design-audit-dialog" showCloseButton={false}>
                     <DialogHeader>
                       <DialogTitle>Dialog specimen</DialogTitle>
                       <DialogDescription>
                         Shared modal surface and focus behavior.
                       </DialogDescription>
                     </DialogHeader>
+                    <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+                      <DialogCloseAction label="Close dialog specimen" />
+                      <DialogClose asChild>
+                        <DialogActionButton
+                          icon={<Check />}
+                          tone="primary"
+                          title="Done"
+                          aria-label="Done"
+                        />
+                      </DialogClose>
+                    </DialogFooter>
                   </DialogContent>
                 </Dialog>
                 <AlertDialog>

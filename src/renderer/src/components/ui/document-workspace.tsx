@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { PanelRightClose, PanelRightOpen, Plus, X } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
+import { ActionButtonGroup } from './button-group'
 
 type WorkspaceTab = {
   id: string
@@ -304,11 +305,11 @@ WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 
 const WorkspaceHeaderActionGroup = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  React.ComponentPropsWithoutRef<typeof ActionButtonGroup>
 >(({ className, ...props }, ref) => (
-  <div
+  <ActionButtonGroup
     ref={ref}
-    className={cn('workspace-header-action-group flex items-center gap-1.5', className)}
+    className={cn('workspace-header-action-group', className)}
     {...props}
   />
 ))

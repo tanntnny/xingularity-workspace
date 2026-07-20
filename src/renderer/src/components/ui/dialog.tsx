@@ -74,6 +74,49 @@ const DialogFooter = ({
 )
 DialogFooter.displayName = 'DialogFooter'
 
+interface DialogActionButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'children'
+> {
+  icon: React.ReactNode
+  label?: string
+  tone?: 'default' | 'primary'
+}
+
+const DialogActionButton = React.forwardRef<HTMLButtonElement, DialogActionButtonProps>(
+  ({ className, icon, label, tone = 'default', type = 'button', ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type}
+      data-no-ripple
+      className={cn(
+        'workspace-action-button calendar-dialog-action inline-flex shrink-0 items-center justify-center overflow-hidden border text-[var(--text)] [&>svg]:h-3.5 [&>svg]:w-3.5 disabled:cursor-not-allowed disabled:opacity-50',
+        label ? 'h-7 gap-1.5 rounded-full px-2.5 text-xs font-medium' : 'h-8 w-8 rounded-full',
+        tone === 'primary' && 'calendar-dialog-done-action',
+        className
+      )}
+      {...props}
+    >
+      {icon}
+      {label ? <span>{label}</span> : null}
+    </button>
+  )
+)
+DialogActionButton.displayName = 'DialogActionButton'
+
+interface DialogCloseActionProps extends Omit<DialogActionButtonProps, 'icon' | 'label' | 'tone'> {
+  label?: string
+}
+
+const DialogCloseAction = React.forwardRef<HTMLButtonElement, DialogCloseActionProps>(
+  ({ label = 'Close dialog', ...props }, ref) => (
+    <DialogPrimitive.Close asChild>
+      <DialogActionButton ref={ref} icon={<X />} title={label} aria-label={label} {...props} />
+    </DialogPrimitive.Close>
+  )
+)
+DialogCloseAction.displayName = 'DialogCloseAction'
+
 const DialogTitle = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
@@ -107,6 +150,8 @@ export {
   DialogContent,
   DialogHeader,
   DialogFooter,
+  DialogActionButton,
+  DialogCloseAction,
   DialogTitle,
   DialogDescription
 }

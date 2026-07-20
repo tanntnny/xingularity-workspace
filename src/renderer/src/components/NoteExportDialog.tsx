@@ -2,6 +2,8 @@ import { FileDown, FileText } from 'lucide-react'
 import { ReactElement } from 'react'
 import {
   Dialog,
+  DialogActionButton,
+  DialogCloseAction,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -50,7 +52,7 @@ export function NoteExportDialog({
 }: NoteExportDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl" data-testid="note-export-dialog">
+      <DialogContent className="max-w-xl" data-testid="note-export-dialog" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Export note</DialogTitle>
           <DialogDescription>Choose a file format for the current note.</DialogDescription>
@@ -71,7 +73,7 @@ export function NoteExportDialog({
                 className={`rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
                   isSelected
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                    : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent-line)] hover:bg-[var(--panel-2)]'
+                    : 'dialog-input-surface hover:border-[var(--accent-line)] hover:bg-[var(--panel-2)]'
                 }`}
               >
                 <Icon className="mb-3 h-6 w-6 text-[var(--accent)]" aria-hidden="true" />
@@ -82,23 +84,15 @@ export function NoteExportDialog({
           })}
         </div>
 
-        <DialogFooter>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            disabled={isExporting}
-            className="workspace-subtle-control rounded-lg border border-[var(--line)] px-4 py-2 text-sm font-medium text-[var(--text)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
+        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+          <DialogCloseAction label="Close export dialog" disabled={isExporting} />
+          <DialogActionButton
+            icon={<FileDown />}
+            label={isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}
+            tone="primary"
             onClick={onExport}
             disabled={isExporting}
-            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}
-          </button>
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

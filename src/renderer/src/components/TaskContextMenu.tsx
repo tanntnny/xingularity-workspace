@@ -33,6 +33,8 @@ import {
 } from './ui/context-menu'
 import {
   Dialog,
+  DialogActionButton,
+  DialogCloseAction,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -356,7 +358,7 @@ export function TaskContextMenu({
       )}
 
       <Dialog open={isTimeDialogOpen} onOpenChange={setIsTimeDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Set task time</DialogTitle>
             <DialogDescription>Choose a time for this task.</DialogDescription>
@@ -365,25 +367,26 @@ export function TaskContextMenu({
             type="time"
             value={timeInputValue}
             onChange={(event) => setTimeInputValue(event.target.value)}
-            className="w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] outline-none"
+            className="calendar-dialog-field w-full rounded-lg border px-3 py-2 text-sm text-[var(--text)] outline-none"
           />
-          <DialogFooter>
-            <button
-              type="button"
+          <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+            <DialogCloseAction label="Close time dialog" />
+            <DialogActionButton
               onClick={() => {
                 onUpdateTime(task.id, timeInputValue || undefined)
                 setIsTimeDialogOpen(false)
               }}
-              className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white"
-            >
-              Save
-            </button>
+              title="Done"
+              aria-label="Done"
+              icon={<Check />}
+              tone="primary"
+            />
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Task reminders</DialogTitle>
             <DialogDescription>Manage notifications for this task.</DialogDescription>
@@ -439,14 +442,15 @@ export function TaskContextMenu({
                   onChange={(event) =>
                     setNewReminderValue(Math.max(1, Number(event.target.value) || 1))
                   }
-                  className="w-16 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none"
+                  className="calendar-dialog-field w-16 rounded-lg border px-2 py-1 text-xs text-[var(--text)] outline-none"
                 />
                 <Select
                   value={newReminderType}
                   onChange={(event) =>
                     setNewReminderType(event.target.value as 'minutes' | 'hours' | 'days')
                   }
-                  className="flex-1 text-xs"
+                  className="calendar-dialog-field flex-1 text-xs"
+                  contentClassName="calendar-dialog-selection-menu"
                 >
                   <option value="minutes">minutes</option>
                   <option value="hours">hours</option>
@@ -455,13 +459,23 @@ export function TaskContextMenu({
                 <button
                   type="button"
                   onClick={handleAddReminder}
-                  className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-medium text-white"
+                  className="workspace-action-button calendar-dialog-action inline-flex h-7 rounded-full px-2.5 text-xs font-medium"
                 >
                   Add
                 </button>
               </div>
             </div>
           </div>
+          <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+            <DialogCloseAction label="Close reminders" />
+            <DialogActionButton
+              onClick={() => setIsReminderDialogOpen(false)}
+              title="Done"
+              aria-label="Done"
+              icon={<Check />}
+              tone="primary"
+            />
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

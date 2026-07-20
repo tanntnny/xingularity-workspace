@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -38,6 +38,8 @@ import { toIsoDate } from '../lib/calendarDate'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import {
   Dialog,
+  DialogActionButton,
+  DialogCloseAction,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -796,13 +798,17 @@ export function TaskEditDialog({
     onClose()
   }
 
+  const handleClose = (): void => {
+    handleAutoSave()
+    onClose()
+  }
+
   return (
     <Dialog
       open
       onOpenChange={(open) => {
         if (!open) {
-          handleAutoSave()
-          onClose()
+          handleClose()
         }
       }}
     >
@@ -819,7 +825,7 @@ export function TaskEditDialog({
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="mt-1"
+              className="dialog-input-surface mt-1"
               placeholder="Task title"
             />
           </div>
@@ -830,7 +836,8 @@ export function TaskEditDialog({
             <Select
               value={priority}
               onChange={(event) => setPriority(event.target.value as TaskPriority)}
-              className="mt-1 w-full"
+              className="calendar-dialog-field mt-1 w-full"
+              contentClassName="calendar-dialog-selection-menu"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -844,7 +851,8 @@ export function TaskEditDialog({
             <Select
               value={taskType}
               onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
-              className="mt-1 w-full"
+              className="calendar-dialog-field mt-1 w-full"
+              contentClassName="calendar-dialog-selection-menu"
             >
               {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -862,7 +870,7 @@ export function TaskEditDialog({
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
-                className="mt-1"
+                className="calendar-dialog-field mt-1"
               />
             </div>
             <div>
@@ -873,7 +881,7 @@ export function TaskEditDialog({
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
-                className="mt-1"
+                className="calendar-dialog-field mt-1"
               />
             </div>
           </div>
@@ -886,7 +894,7 @@ export function TaskEditDialog({
                 type="date"
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
-                className="mt-1"
+                className="calendar-dialog-field mt-1"
               />
             </div>
             <div>
@@ -897,21 +905,28 @@ export function TaskEditDialog({
                 type="time"
                 value={endTime}
                 onChange={(event) => setEndTime(event.target.value)}
-                className="mt-1"
+                className="calendar-dialog-field mt-1"
               />
             </div>
           </div>
         </div>
-        <DialogFooter className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="workspace-subtle-control flex h-9 w-9 items-center justify-center rounded border border-[var(--line)] p-1.5 text-[var(--text)]"
-            title="Delete task"
-          >
-            <Trash2 size={18} />
-            <span className="sr-only">Delete task</span>
-          </button>
+        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
+          <div className="flex items-center gap-2">
+            <DialogCloseAction label="Close task editor" />
+            <DialogActionButton
+              onClick={handleDelete}
+              title="Delete task"
+              aria-label="Delete task"
+              icon={<Trash2 />}
+            />
+          </div>
+          <DialogActionButton
+            onClick={handleClose}
+            title="Done"
+            aria-label="Done"
+            icon={<Check />}
+            tone="primary"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
