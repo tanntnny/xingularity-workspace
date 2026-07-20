@@ -37,7 +37,7 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
         variant === 'inline-accent'
           ? 'border-b border-[var(--line)] py-0'
           : variant === 'toolbar'
-            ? 'h-8 py-0'
+            ? 'h-7 py-0'
             : null
       )}
     >
@@ -49,7 +49,7 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
           variant === 'inline-accent'
             ? 'tab-menu-group min-h-10 gap-5 rounded-none border-0 bg-transparent p-0 shadow-none'
             : variant === 'toolbar'
-              ? 'tab-menu-group workspace-action-group h-full w-auto gap-0 rounded-lg p-0'
+              ? 'tab-menu-group workspace-action-group h-full w-auto gap-0 rounded-full p-0'
               : 'tab-menu-group rounded-md p-1',
           className
         )}
@@ -93,7 +93,7 @@ const TabMenuItem = React.forwardRef<HTMLButtonElement, TabMenuItemProps>(
         variant === 'inline-accent'
           ? 'tab-menu-item relative h-10 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-0 text-[var(--muted)] shadow-none hover:bg-transparent hover:text-[var(--text)] data-[active=true]:border-[var(--accent)] data-[active=true]:bg-transparent data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-none'
           : variant === 'toolbar'
-            ? 'tab-menu-item relative h-full rounded-lg border border-transparent px-3 text-sm font-medium text-[var(--control-glass-muted-text)] shadow-none hover:border-[var(--control-glass-border-hover)] hover:bg-[var(--control-glass-bg-hover)] hover:text-[var(--control-glass-text)] data-[active=true]:border-[var(--control-glass-border-active)] data-[active=true]:bg-[var(--control-glass-bg-active)] data-[active=true]:text-[var(--control-glass-text)] data-[active=true]:shadow-none'
+            ? 'tab-menu-item relative h-full rounded-full border border-transparent px-3 text-sm font-medium text-[var(--control-glass-muted-text)] shadow-none hover:border-[var(--control-glass-border-hover)] hover:bg-[var(--control-glass-bg-hover)] hover:text-[var(--control-glass-text)] data-[active=true]:border-[var(--control-glass-border-active)] data-[active=true]:bg-[var(--control-glass-bg-active)] data-[active=true]:text-[var(--control-glass-text)] data-[active=true]:shadow-none'
             : 'tab-menu-item relative data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--accent)] data-[active=true]:shadow-[inset_0_0_0_1px_var(--accent-line)]',
         className
       )}

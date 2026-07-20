@@ -91,6 +91,7 @@ interface NotesTreeViewProps {
   activeNotePath: string | null
   selectedEntries: NoteTreeSelection
   collapseAllToken?: number
+  shouldCollapseAllFolders?: boolean
   pendingEditId: string | null
   onPendingEditHandled: () => void
   onSelectionChange: (entries: NoteTreeSelection) => void
@@ -110,6 +111,7 @@ export function NotesTreeView({
   activeNotePath,
   selectedEntries,
   collapseAllToken = 0,
+  shouldCollapseAllFolders = false,
   pendingEditId,
   onPendingEditHandled,
   onSelectionChange,
@@ -242,8 +244,13 @@ export function NotesTreeView({
       return
     }
 
-    treeRef.current?.closeAll()
-  }, [collapseAllToken])
+    if (shouldCollapseAllFolders) {
+      treeRef.current?.closeAll()
+      return
+    }
+
+    treeRef.current?.openAll()
+  }, [collapseAllToken, shouldCollapseAllFolders])
 
   const stopAutoScroll = useCallback((): void => {
     dragClientYRef.current = null
@@ -385,7 +392,7 @@ export function NotesTreeView({
   return (
     <div
       ref={sizeContainerRef}
-      className="h-full min-h-0 p-2"
+      className="h-full min-h-0"
       data-testid="notes-tree-view"
       onKeyDownCapture={(event) => {
         if (isDeleteShortcut(event) && !isEditingTextInput(event.target)) {
@@ -735,7 +742,7 @@ function TreeNode({
       <div
         data-testid={`note-tree-row:${node.data.relPath}`}
         className={cn(
-          'relative flex h-full w-full min-w-0 items-center text-sm transition-[background-color,color,box-shadow] duration-150 ease-out',
+          'relative flex h-full w-full min-w-0 items-center rounded-md text-sm transition-[background-color,color,box-shadow] duration-150 ease-out',
           node.isDragging && 'opacity-30',
           isDropTarget
             ? TREE_DROP_TARGET_ROW_CLASS
@@ -802,7 +809,7 @@ function TreeNode({
               <button
                 type="button"
                 data-testid={`note-tree-menu:${node.data.relPath}`}
-                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
+                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
                 onPointerDown={(event) => {
                   event.stopPropagation()
                 }}
@@ -818,7 +825,7 @@ function TreeNode({
                   <button
                     type="button"
                     data-testid={`note-tree-menu:${node.data.relPath}`}
-                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
+                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
                     onPointerDown={(event) => {
                       event.stopPropagation()
                     }}

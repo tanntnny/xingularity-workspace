@@ -27,6 +27,9 @@
     --shell-breadcrumb-surface: #f6f6f6;
     --shell-main-surface: #f6f6f6;
     --shell-context-surface: #fcfcfc;
+    --note-toolbar-item-hover-surface: #ffffff;
+    --note-toolbar-item-active-surface: #fefefe;
+    --workspace-topbar-action-highlight: #ffffff;
     --shell-border: #e2e2e2;
 
     --line: #d8d8d8;
@@ -272,6 +275,9 @@
       --shell-breadcrumb-surface: #121212;
       --shell-main-surface: #121212;
       --shell-context-surface: #1e1e1e;
+      --note-toolbar-item-hover-surface: #292929;
+      --note-toolbar-item-active-surface: #303030;
+      --workspace-topbar-action-highlight: #2a2a2a;
       --shell-border: #282828;
 
       --line: #262626;
@@ -749,8 +755,18 @@
       color 160ms ease;
   }
 
+  .workspace-action-button,
+  .workspace-action-group,
+  .selection-trigger-toolbar {
+    border-color: color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+  }
+
   .workspace-action-button {
     justify-content: center;
+  }
+
+  .button-icon {
+    border: 1px solid color-mix(in srgb, var(--accent-line) 60%, var(--line));
   }
 
   .workspace-action-button:hover,
@@ -761,12 +777,33 @@
     box-shadow: none;
   }
 
+  .workspace-action-button:hover,
+  .workspace-action-button:focus-visible {
+    background-color: color-mix(
+      in srgb,
+      var(--control-glass-bg-hover) 68%,
+      var(--shell-context-surface)
+    );
+    border-color: var(--control-glass-border-hover);
+  }
+
+  .button-icon:hover,
+  .button-icon:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-line) 78%, var(--line));
+  }
+
   .workspace-action-button[data-active='true'],
   .workspace-action-button[data-active='true']:hover,
   .workspace-action-button[data-active='true']:focus-visible,
   .selection-trigger[data-open='true'] {
     background-color: var(--control-glass-bg-active);
     box-shadow: none;
+  }
+
+  .workspace-action-button[data-active='true'],
+  .workspace-action-button[data-active='true']:hover,
+  .workspace-action-button[data-active='true']:focus-visible {
+    border-color: var(--control-glass-border-active);
   }
 
   .workspace-action-button:focus-visible,
@@ -1399,8 +1436,22 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header {
   box-shadow: none !important;
 }
 
+[data-performance-mode='on'] .workspace-action-button,
+[data-performance-mode='on'] .workspace-action-group,
+[data-performance-mode='on'] .selection-trigger-toolbar {
+  border-color: color-mix(in srgb, var(--accent-line) 60%, var(--line)) !important;
+}
+
 [data-performance-mode='on'] .workspace-action-button:hover,
-[data-performance-mode='on'] .workspace-action-button:focus-visible,
+[data-performance-mode='on'] .workspace-action-button:focus-visible {
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--accent-soft) 34%, var(--panel-2)) 68%,
+    var(--shell-context-surface)
+  ) !important;
+  color: var(--text) !important;
+}
+
 [data-performance-mode='on'] .selection-trigger:hover,
 [data-performance-mode='on'] .selection-trigger:focus-visible {
   background-color: color-mix(in srgb, var(--accent-soft) 34%, var(--panel-2)) !important;
@@ -1522,6 +1573,23 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-surface::after {
   .workspace-action-button:not(:hover):not(:focus-visible):not([data-active='true']) {
   background-color: transparent !important;
   box-shadow: none !important;
+}
+
+.document-workspace-main-header .workspace-header-actions .workspace-action-button:hover,
+.document-workspace-main-header .workspace-header-actions .workspace-action-button:focus-visible,
+.document-workspace-main-header .workspace-header-actions .workspace-action-button:active,
+.document-workspace-main-header .workspace-header-actions .workspace-action-button[data-active='true'],
+.document-workspace-main-header
+  .workspace-header-actions
+  .workspace-action-button[data-active='true']:hover,
+.document-workspace-main-header
+  .workspace-header-actions
+  .workspace-action-button[data-active='true']:focus-visible,
+.document-workspace-main-header .workspace-topbar-action-button:hover,
+.document-workspace-main-header .workspace-topbar-action-button:focus-visible,
+.document-workspace-main-header .workspace-topbar-action-button:active,
+.document-workspace-main-header .workspace-topbar-action-button[data-active='true'] {
+  background-color: var(--workspace-topbar-action-highlight) !important;
 }
 
 .document-workspace-panel-action-row {
@@ -3224,7 +3292,7 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header,
   color: var(--text) !important;
 }
 
-.note-milkdown-editor .milkdown-toolbar,
+.note-milkdown-editor .milkdown .milkdown-toolbar,
 .note-milkdown-editor .milkdown-slash-menu,
 .note-milkdown-editor .milkdown-link-tooltip,
 .note-milkdown-editor .milkdown-block-handle,
@@ -3236,4 +3304,174 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header,
 .note-milkdown-editor button,
 .note-milkdown-editor [role='button'] {
   border-radius: 4px;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar {
+  background: var(--shell-context-surface);
+  border: 1px solid color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+  border-radius: 0.75rem;
+  box-shadow: none;
+  gap: 0.375rem;
+  padding: 0.25rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .divider {
+  background: color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+  margin: 0 0.125rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  box-shadow: none;
+  color: var(--text);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  margin: 0;
+  overflow: hidden;
+  padding: 0.25rem;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+  width: 2rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:hover,
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:focus-visible {
+  background: var(--note-toolbar-item-hover-surface);
+  border-color: transparent;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:active,
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active {
+  background: var(--note-toolbar-item-active-surface);
+  border-color: transparent;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:focus-visible {
+  outline: none;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item svg {
+  color: currentColor;
+  fill: currentColor;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: var(--accent);
+  fill: currentColor;
+}
+
+[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar {
+  border-color: color-mix(in srgb, var(--accent-line) 60%, var(--line));
+}
+
+[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:hover,
+[data-performance-mode='on']
+  .note-milkdown-editor
+  .milkdown
+  .milkdown-toolbar
+  .toolbar-item:focus-visible {
+  background-color: color-mix(
+    in srgb,
+    var(--note-toolbar-item-hover-surface) 100%,
+    transparent
+  ) !important;
+  color: var(--text) !important;
+}
+
+[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:active,
+[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active {
+  background-color: var(--note-toolbar-item-active-surface) !important;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle,
+.note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button {
+  background: var(--shell-context-surface);
+  border: 1px solid color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+  border-radius: 0.375rem;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group {
+  background: var(--shell-context-surface);
+  border: 1px solid color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+  border-radius: 0.75rem;
+  box-shadow: none;
+  gap: 0.375rem;
+  padding: 0.25rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: var(--text);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  margin: 0;
+  padding: 0.25rem;
+  width: 2rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle:hover {
+  background: var(--note-toolbar-item-hover-surface);
+  border-color: transparent;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle:has(.button-group:hover) {
+  background: var(--shell-context-surface);
+  border-color: color-mix(in srgb, var(--control-glass-border) 64%, var(--accent));
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group button:hover,
+.note-milkdown-editor
+  .milkdown
+  .milkdown-table-block
+  .cell-handle
+  .button-group
+  button:focus-visible,
+.note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button:hover,
+.note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button:focus-visible {
+  background: var(--note-toolbar-item-hover-surface);
+  border-color: transparent;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group button:active,
+.note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button:active {
+  background: var(--note-toolbar-item-active-surface);
+  border-color: transparent;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group button svg {
+  color: currentColor;
+  fill: currentColor;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.note-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button svg {
+  color: currentColor;
+  fill: currentColor;
 }

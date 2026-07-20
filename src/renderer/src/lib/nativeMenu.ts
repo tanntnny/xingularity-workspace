@@ -11,7 +11,7 @@ function getUiApi(): RendererVaultApi['ui'] | undefined {
 }
 
 export function canUseNativeMenus(): boolean {
-  return getUiApi()?.platform === 'darwin' && typeof getUiApi()?.showNativeMenu === 'function'
+  return false
 }
 
 export function getMouseMenuPosition(
@@ -43,8 +43,5 @@ export async function showNativeMenu(
     return null
   }
 
-  return uiApi.showNativeMenu(
-    items,
-    position
-  ) as Promise<string | null>
+  return uiApi.showNativeMenu(items, position) as Promise<string | null>
 }

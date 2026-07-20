@@ -185,27 +185,15 @@ export function AppSidebar({
 
   const renderBadge = (pageId: AppPage): ReactElement | null => {
     if (pageId === 'notes' && notesCount > 0) {
-      return (
-        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
-          {notesCountLabel}
-        </SidebarMenuBadge>
-      )
+      return <SidebarMenuBadge className="right-2">{notesCountLabel}</SidebarMenuBadge>
     }
 
     if (pageId === 'projects' && projectsCount > 0) {
-      return (
-        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
-          {projectsCountLabel}
-        </SidebarMenuBadge>
-      )
+      return <SidebarMenuBadge className="right-2">{projectsCountLabel}</SidebarMenuBadge>
     }
 
     if (pageId === 'calendar' && calendarUndoneCount > 0) {
-      return (
-        <SidebarMenuBadge className="right-14 group-data-[collapsible=icon]:right-3">
-          {calendarUndoneCountLabel}
-        </SidebarMenuBadge>
-      )
+      return <SidebarMenuBadge className="right-2">{calendarUndoneCountLabel}</SidebarMenuBadge>
     }
 
     return null

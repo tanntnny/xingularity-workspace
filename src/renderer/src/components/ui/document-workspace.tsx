@@ -230,6 +230,7 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
             <div ref={panelActionSlotRef} className="flex shrink-0 items-center gap-1.5" />
             {hasPanel && onTogglePanel ? (
               <WorkspaceActionButton
+                className="workspace-topbar-action-button"
                 aria-label={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
                 title={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
                 icon={panelCollapsed ? <PanelRightOpen /> : <PanelRightClose />}
@@ -293,7 +294,11 @@ const WorkspaceHeaderActions = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center gap-1.5', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('workspace-header-actions flex items-center gap-1.5', className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 
@@ -301,7 +306,11 @@ const WorkspaceHeaderActionGroup = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center gap-1.5', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('workspace-header-action-group flex items-center gap-1.5', className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActionGroup.displayName = 'WorkspaceHeaderActionGroup'
 

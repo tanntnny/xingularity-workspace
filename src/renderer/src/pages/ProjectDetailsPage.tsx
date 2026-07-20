@@ -1,5 +1,4 @@
 import {
-  Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
   useEffect,
@@ -13,12 +12,14 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDashed,
+  Copy,
   FileText,
   Flag,
   Funnel,
   MoreHorizontal,
   Plus,
-  Tag
+  Tag,
+  Trash2
 } from 'lucide-react'
 import { type NativeMenuItemDescriptor, type NoteListItem } from '../../../shared/types'
 import { generateProjectTag, isProjectTag } from '../../../shared/noteTags'
@@ -32,6 +33,14 @@ import { Calendar } from '../components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuDestructiveItem,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '../components/ui/context-menu'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -538,69 +547,78 @@ export function ProjectDetailsPage({
                   </TableRow>
                 ) : null}
                 {projectNoteRows.map((row) => (
-                  <TableRow
-                    key={row.relPath}
-                    onContextMenu={
-                      useNativeMenus
-                        ? (event) => void handleProjectNoteContextMenu(event, row.relPath)
-                        : undefined
-                    }
-                  >
-                    <TableCell className="p-0">
-                      <button
-                        type="button"
-                        className="flex h-full w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:text-[var(--accent)]"
-                        onClick={() => onOpenNote(row.relPath)}
+                  <ContextMenu key={row.relPath}>
+                    <ContextMenuTrigger asChild>
+                      <TableRow
+                        onContextMenu={
+                          useNativeMenus
+                            ? (event) => void handleProjectNoteContextMenu(event, row.relPath)
+                            : undefined
+                        }
                       >
-                        <span>{row.name}</span>
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {row.tags
-                          .filter((tag) => !isProjectTag(tag))
-                          .slice(0, 3)
-                          .map((tag) => (
-                            <TagChip key={tag} tag={tag} />
-                          ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-2 py-1 text-left">
-                      {useNativeMenus ? (
-                        <button
-                          type="button"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                          aria-label="Open note actions"
-                          onClick={(event) => {
-                            void openProjectNoteMenu(
-                              buildProjectNoteMenuItems(),
-                              row.relPath,
-                              getElementMenuPosition(event.currentTarget)
-                            )
-                          }}
-                        >
-                          <MoreHorizontal size={14} />
-                        </button>
-                      ) : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                        <TableCell className="p-0">
+                          <button
+                            type="button"
+                            className="flex h-full w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:text-[var(--accent)]"
+                            onClick={() => onOpenNote(row.relPath)}
+                          >
+                            <span>{row.name}</span>
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {row.tags
+                              .filter((tag) => !isProjectTag(tag))
+                              .slice(0, 3)
+                              .map((tag) => (
+                                <TagChip key={tag} tag={tag} />
+                              ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-2 py-1 text-left">
+                          {useNativeMenus ? (
                             <button
                               type="button"
                               className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
                               aria-label="Open note actions"
+                              onClick={(event) => {
+                                void openProjectNoteMenu(
+                                  buildProjectNoteMenuItems(),
+                                  row.relPath,
+                                  getElementMenuPosition(event.currentTarget)
+                                )
+                              }}
                             >
                               <MoreHorizontal size={14} />
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
-                              Open note
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                  aria-label="Open note actions"
+                                >
+                                  <MoreHorizontal size={14} />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
+                                  Open note
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-44">
+                      <ContextMenuItem onClick={() => onOpenNote(row.relPath)}>
+                        <FileText />
+                        Open note
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 ))}
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">
                   <TableCell colSpan={3} className="p-0">
@@ -678,281 +696,338 @@ export function ProjectDetailsPage({
                   const milestoneProgressPercent = getMilestoneProgressPercent(milestone)
 
                   return (
-                    <Fragment key={milestone.id}>
-                      <TableRow
-                        ref={(node) => {
-                          milestoneRowRefs.current[milestone.id] = node
-                        }}
-                        className={cn(
-                          'bg-[var(--accent-soft)] transition-colors',
-                          highlightedMilestoneId === milestone.id
-                            ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
-                            : undefined
-                        )}
-                        onContextMenu={
-                          useNativeMenus
-                            ? (event) => void handleMilestoneContextMenu(event, milestone)
-                            : undefined
-                        }
-                      >
-                        <TableCell className="px-3 py-2 text-center">
-                          <button
-                            type="button"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onToggleMilestoneCollapsed(milestone.id)
-                            }}
-                            aria-label={
-                              milestone.collapsed
-                                ? 'Expand milestone subtasks'
-                                : 'Collapse milestone subtasks'
-                            }
-                          >
-                            {milestone.collapsed ? (
-                              <ChevronRight size={14} />
-                            ) : (
-                              <ChevronDown size={14} />
-                            )}
-                          </button>
-                        </TableCell>
-                        <TableCell className="p-0">
-                          <div className="flex min-w-0">
-                            <InlineEditableText
-                              value={milestone.title}
-                              onCommit={(nextTitle) => onRenameMilestone(milestone.id, nextTitle)}
-                              displayAs="span"
-                              displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-left font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                              inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-[var(--text)] outline-none"
-                              title="Click to rename milestone"
-                              renderDisplay={(value) => (
-                                <>
-                                  {value}
-                                  <span className="ml-2 text-[0.82em] font-medium text-[var(--muted)]">
-                                    {milestoneProgressPercent}% complete
-                                  </span>
-                                </>
-                              )}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
-                          <MilestoneCalendarPicker
-                            value={milestone.dueDate}
-                            onChange={(nextDate) =>
-                              onUpdateMilestoneDueDate(milestone.id, nextDate)
-                            }
-                            aria-label="Milestone due date"
-                            className="h-8 justify-start bg-transparent px-2 text-xs hover:bg-transparent"
-                          />
-                        </TableCell>
-                        <TableCell className="px-2 py-1">
-                          <div className="flex items-center justify-start gap-1">
+                    <ContextMenu key={milestone.id}>
+                      <ContextMenuTrigger asChild>
+                        <TableRow
+                          ref={(node) => {
+                            milestoneRowRefs.current[milestone.id] = node
+                          }}
+                          className={cn(
+                            'bg-[var(--accent-soft)] transition-colors',
+                            highlightedMilestoneId === milestone.id
+                              ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
+                              : undefined
+                          )}
+                          onContextMenu={
+                            useNativeMenus
+                              ? (event) => void handleMilestoneContextMenu(event, milestone)
+                              : undefined
+                          }
+                        >
+                          <TableCell className="px-3 py-2 text-center">
                             <button
                               type="button"
-                              className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(milestone.priority)}`}
-                              onClick={() => onCycleMilestonePriority(milestone.id)}
-                              title={`Priority: ${formatSubtaskPriority(milestone.priority)}. Click to change priority.`}
-                              aria-label={`Change priority for ${milestone.title}`}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                onToggleMilestoneCollapsed(milestone.id)
+                              }}
+                              aria-label={
+                                milestone.collapsed
+                                  ? 'Expand milestone subtasks'
+                                  : 'Collapse milestone subtasks'
+                              }
                             >
-                              <Flag size={13} />
+                              {milestone.collapsed ? (
+                                <ChevronRight size={14} />
+                              ) : (
+                                <ChevronDown size={14} />
+                              )}
                             </button>
-                            {useNativeMenus ? (
+                          </TableCell>
+                          <TableCell className="p-0">
+                            <div className="flex min-w-0">
+                              <InlineEditableText
+                                value={milestone.title}
+                                onCommit={(nextTitle) => onRenameMilestone(milestone.id, nextTitle)}
+                                displayAs="span"
+                                displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-left font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]"
+                                inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-[var(--text)] outline-none"
+                                title="Click to rename milestone"
+                                renderDisplay={(value) => (
+                                  <>
+                                    {value}
+                                    <span className="ml-2 text-[0.82em] font-medium text-[var(--muted)]">
+                                      {milestoneProgressPercent}% complete
+                                    </span>
+                                  </>
+                                )}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
+                            <MilestoneCalendarPicker
+                              value={milestone.dueDate}
+                              onChange={(nextDate) =>
+                                onUpdateMilestoneDueDate(milestone.id, nextDate)
+                              }
+                              aria-label="Milestone due date"
+                              className="h-8 justify-start bg-transparent px-2 text-xs hover:bg-transparent"
+                            />
+                          </TableCell>
+                          <TableCell className="px-2 py-1">
+                            <div className="flex items-center justify-start gap-1">
+                              <button
+                                type="button"
+                                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(milestone.priority)}`}
+                                onClick={() => onCycleMilestonePriority(milestone.id)}
+                                title={`Priority: ${formatSubtaskPriority(milestone.priority)}. Click to change priority.`}
+                                aria-label={`Change priority for ${milestone.title}`}
+                              >
+                                <Flag size={13} />
+                              </button>
+                              {useNativeMenus ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                  aria-label="Open milestone actions"
+                                  onClick={async (event) => {
+                                    await openMilestoneMenu(
+                                      buildMilestoneMenuItems({
+                                        canDuplicate: Boolean(onDuplicateMilestone),
+                                        canCopyLink: Boolean(onCopyMilestoneLink)
+                                      }),
+                                      milestone.id,
+                                      getElementMenuPosition(event.currentTarget)
+                                    )
+                                  }}
+                                >
+                                  <MoreHorizontal size={14} />
+                                </button>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                      aria-label="Open milestone actions"
+                                    >
+                                      <MoreHorizontal size={14} />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-44">
+                                    {onDuplicateMilestone ? (
+                                      <DropdownMenuItem
+                                        onClick={() => onDuplicateMilestone(milestone.id)}
+                                      >
+                                        Duplicate
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                    {onCopyMilestoneLink ? (
+                                      <DropdownMenuItem
+                                        onClick={() => onCopyMilestoneLink(milestone.id)}
+                                      >
+                                        Copy link
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        onUpdateMilestoneDueDate(milestone.id, undefined)
+                                      }
+                                    >
+                                      Make unscheduled
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => _onRemoveMilestone(milestone.id)}
+                                    >
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                               <button
                                 type="button"
                                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                aria-label="Open milestone actions"
-                                onClick={async (event) => {
-                                  await openMilestoneMenu(
-                                    buildMilestoneMenuItems({
-                                      canDuplicate: Boolean(onDuplicateMilestone),
-                                      canCopyLink: Boolean(onCopyMilestoneLink)
-                                    }),
-                                    milestone.id,
-                                    getElementMenuPosition(event.currentTarget)
-                                  )
-                                }}
+                                onClick={() => startCreatingSubtask(milestone.id)}
+                                aria-label="Add subtask"
                               >
-                                <MoreHorizontal size={14} />
+                                <Plus size={14} />
                               </button>
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                    aria-label="Open milestone actions"
-                                  >
-                                    <MoreHorizontal size={14} />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                  {onDuplicateMilestone ? (
-                                    <DropdownMenuItem
-                                      onClick={() => onDuplicateMilestone(milestone.id)}
-                                    >
-                                      Duplicate
-                                    </DropdownMenuItem>
-                                  ) : null}
-                                  {onCopyMilestoneLink ? (
-                                    <DropdownMenuItem
-                                      onClick={() => onCopyMilestoneLink(milestone.id)}
-                                    >
-                                      Copy link
-                                    </DropdownMenuItem>
-                                  ) : null}
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      onUpdateMilestoneDueDate(milestone.id, undefined)
-                                    }
-                                  >
-                                    Make unscheduled
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={() => _onRemoveMilestone(milestone.id)}
-                                  >
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                            <button
-                              type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                              onClick={() => startCreatingSubtask(milestone.id)}
-                              aria-label="Add subtask"
-                            >
-                              <Plus size={14} />
-                            </button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-44">
+                        {onDuplicateMilestone ? (
+                          <ContextMenuItem onClick={() => onDuplicateMilestone(milestone.id)}>
+                            <Copy />
+                            Duplicate
+                          </ContextMenuItem>
+                        ) : null}
+                        {onCopyMilestoneLink ? (
+                          <ContextMenuItem onClick={() => onCopyMilestoneLink(milestone.id)}>
+                            <Copy />
+                            Copy link
+                          </ContextMenuItem>
+                        ) : null}
+                        <ContextMenuItem
+                          onClick={() => onUpdateMilestoneDueDate(milestone.id, undefined)}
+                        >
+                          <CalendarDays />
+                          Make unscheduled
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuDestructiveItem
+                          onClick={() => _onRemoveMilestone(milestone.id)}
+                        >
+                          <Trash2 />
+                          Delete
+                        </ContextMenuDestructiveItem>
+                      </ContextMenuContent>
                       {milestone.collapsed
                         ? null
                         : milestone.subtasks.map((subtask) => (
-                            <Fragment key={`subtask-fragment-${milestone.id}-${subtask.id}`}>
-                              <TableRow
-                                key={`subtask-${milestone.id}-${subtask.id}`}
-                                onContextMenu={
-                                  useNativeMenus
-                                    ? (event) =>
-                                        void handleSubtaskContextMenu(
-                                          event,
-                                          milestone.id,
-                                          subtask.id
-                                        )
-                                    : undefined
-                                }
-                              >
-                                <TableCell className="px-3 py-2 text-center">
-                                  <div className="flex items-center justify-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={subtask.completed}
-                                      onChange={() => {
-                                        onToggleSubtask(milestone.id, subtask.id)
-                                      }}
-                                      className="h-4 w-4 rounded border-[var(--line-strong)]"
-                                    />
-                                  </div>
-                                </TableCell>
-                                <TableCell className="p-0">
-                                  <div className="flex min-w-0 items-center gap-2 px-3 py-2">
-                                    <InlineEditableText
-                                      value={subtask.title}
-                                      onCommit={(nextTitle) => {
-                                        onRenameSubtask(milestone.id, subtask.id, nextTitle)
-                                      }}
-                                      displayAs="span"
-                                      displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                                      inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-[var(--text)] outline-none"
-                                      title="Click to rename subtask"
-                                    />
-                                  </div>
-                                </TableCell>
-                                <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
-                                  <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
-                                    -
-                                  </span>
-                                </TableCell>
-                                <TableCell className="px-2 py-1 text-left">
-                                  <div className="flex items-center justify-start gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        onCycleSubtaskPriority(milestone.id, subtask.id)
-                                      }
-                                      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
-                                      title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
-                                      aria-label={`Change priority for ${subtask.title}`}
-                                    >
-                                      <Flag size={13} />
-                                    </button>
-                                    {useNativeMenus ? (
+                            <ContextMenu key={`subtask-context-menu-${milestone.id}-${subtask.id}`}>
+                              <ContextMenuTrigger asChild>
+                                <TableRow
+                                  onContextMenu={
+                                    useNativeMenus
+                                      ? (event) =>
+                                          void handleSubtaskContextMenu(
+                                            event,
+                                            milestone.id,
+                                            subtask.id
+                                          )
+                                      : undefined
+                                  }
+                                >
+                                  <TableCell className="px-3 py-2 text-center">
+                                    <div className="flex items-center justify-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={subtask.completed}
+                                        onChange={() => {
+                                          onToggleSubtask(milestone.id, subtask.id)
+                                        }}
+                                        className="h-4 w-4 rounded border-[var(--line-strong)]"
+                                      />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="p-0">
+                                    <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+                                      <InlineEditableText
+                                        value={subtask.title}
+                                        onCommit={(nextTitle) => {
+                                          onRenameSubtask(milestone.id, subtask.id, nextTitle)
+                                        }}
+                                        displayAs="span"
+                                        displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-[var(--text)] transition-colors hover:text-[var(--accent)]"
+                                        inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-[var(--text)] outline-none"
+                                        title="Click to rename subtask"
+                                      />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
+                                    <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
+                                      -
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="px-2 py-1 text-left">
+                                    <div className="flex items-center justify-start gap-1">
                                       <button
                                         type="button"
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                        aria-label="Open subtask actions"
-                                        onClick={async (event) => {
-                                          await openSubtaskMenu(
-                                            buildSubtaskMenuItems({
-                                              canDuplicate: Boolean(onDuplicateSubtask),
-                                              canCopyLink: Boolean(onCopySubtaskLink)
-                                            }),
-                                            milestone.id,
-                                            subtask.id,
-                                            getElementMenuPosition(event.currentTarget)
-                                          )
-                                        }}
+                                        onClick={() =>
+                                          onCycleSubtaskPriority(milestone.id, subtask.id)
+                                        }
+                                        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
+                                        title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
+                                        aria-label={`Change priority for ${subtask.title}`}
                                       >
-                                        <MoreHorizontal size={14} />
+                                        <Flag size={13} />
                                       </button>
-                                    ) : (
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <button
-                                            type="button"
-                                            className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
-                                            aria-label="Open subtask actions"
-                                          >
-                                            <MoreHorizontal size={14} />
-                                          </button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-44">
-                                          {onDuplicateSubtask ? (
+                                      {useNativeMenus ? (
+                                        <button
+                                          type="button"
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                          aria-label="Open subtask actions"
+                                          onClick={async (event) => {
+                                            await openSubtaskMenu(
+                                              buildSubtaskMenuItems({
+                                                canDuplicate: Boolean(onDuplicateSubtask),
+                                                canCopyLink: Boolean(onCopySubtaskLink)
+                                              }),
+                                              milestone.id,
+                                              subtask.id,
+                                              getElementMenuPosition(event.currentTarget)
+                                            )
+                                          }}
+                                        >
+                                          <MoreHorizontal size={14} />
+                                        </button>
+                                      ) : (
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                              aria-label="Open subtask actions"
+                                            >
+                                              <MoreHorizontal size={14} />
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end" className="w-44">
+                                            {onDuplicateSubtask ? (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  onDuplicateSubtask(milestone.id, subtask.id)
+                                                }
+                                              >
+                                                Duplicate
+                                              </DropdownMenuItem>
+                                            ) : null}
+                                            {onCopySubtaskLink ? (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  onCopySubtaskLink(milestone.id, subtask.id)
+                                                }
+                                              >
+                                                Copy link
+                                              </DropdownMenuItem>
+                                            ) : null}
+                                            <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                               onClick={() =>
-                                                onDuplicateSubtask(milestone.id, subtask.id)
+                                                onRemoveSubtask(milestone.id, subtask.id)
                                               }
                                             >
-                                              Duplicate
+                                              Delete
                                             </DropdownMenuItem>
-                                          ) : null}
-                                          {onCopySubtaskLink ? (
-                                            <DropdownMenuItem
-                                              onClick={() =>
-                                                onCopySubtaskLink(milestone.id, subtask.id)
-                                              }
-                                            >
-                                              Copy link
-                                            </DropdownMenuItem>
-                                          ) : null}
-                                          <DropdownMenuSeparator />
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              onRemoveSubtask(milestone.id, subtask.id)
-                                            }
-                                          >
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            </Fragment>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-44">
+                                {onDuplicateSubtask ? (
+                                  <ContextMenuItem
+                                    onClick={() => onDuplicateSubtask(milestone.id, subtask.id)}
+                                  >
+                                    <Copy />
+                                    Duplicate
+                                  </ContextMenuItem>
+                                ) : null}
+                                {onCopySubtaskLink ? (
+                                  <ContextMenuItem
+                                    onClick={() => onCopySubtaskLink(milestone.id, subtask.id)}
+                                  >
+                                    <Copy />
+                                    Copy link
+                                  </ContextMenuItem>
+                                ) : null}
+                                {onDuplicateSubtask || onCopySubtaskLink ? (
+                                  <ContextMenuSeparator />
+                                ) : null}
+                                <ContextMenuDestructiveItem
+                                  onClick={() => onRemoveSubtask(milestone.id, subtask.id)}
+                                >
+                                  <Trash2 />
+                                  Delete
+                                </ContextMenuDestructiveItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
                           ))}
                       {milestone.collapsed || !isCreatingSubtask ? null : (
                         <TableRow className="hover:bg-[var(--accent-soft)]/60">
@@ -999,7 +1074,7 @@ export function ProjectDetailsPage({
                           </TableCell>
                         </TableRow>
                       )}
-                    </Fragment>
+                    </ContextMenu>
                   )
                 })}
                 <TableRow className="hover:bg-[var(--accent-soft)]/60">

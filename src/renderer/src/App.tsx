@@ -452,6 +452,7 @@ function App(): ReactElement {
     }
   }, [accentCssVars])
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
+  const [areAllNoteFoldersCollapsed, setAreAllNoteFoldersCollapsed] = useState(false)
   const knowledgeOrphanRingRadiusPx = useMemo(() => {
     const trimmed = knowledgeOrphanRingRadiusInput.trim()
     if (!trimmed) {
@@ -6018,12 +6019,27 @@ function App(): ReactElement {
                           <WorkspaceHeaderActions>
                             <WorkspaceHeaderActionGroup>
                               <WorkspaceActionButton
-                                aria-label="Collapse all folders"
-                                title="Collapse all folders"
-                                icon={<ChevronUp size={18} aria-hidden="true" />}
-                                onClick={() =>
-                                  setCollapseAllNotesTreeToken((current) => current + 1)
+                                aria-label={
+                                  areAllNoteFoldersCollapsed
+                                    ? 'Expand all folders'
+                                    : 'Collapse all folders'
                                 }
+                                title={
+                                  areAllNoteFoldersCollapsed
+                                    ? 'Expand all folders'
+                                    : 'Collapse all folders'
+                                }
+                                icon={
+                                  areAllNoteFoldersCollapsed ? (
+                                    <ChevronDown size={18} aria-hidden="true" />
+                                  ) : (
+                                    <ChevronUp size={18} aria-hidden="true" />
+                                  )
+                                }
+                                onClick={() => {
+                                  setAreAllNoteFoldersCollapsed((current) => !current)
+                                  setCollapseAllNotesTreeToken((current) => current + 1)
+                                }}
                               />
                               {useNativeMenus ? (
                                 <WorkspaceActionButton
@@ -6164,6 +6180,7 @@ function App(): ReactElement {
                           activeNotePath={currentNotePath ?? currentExcalidrawPath}
                           selectedEntries={selectedNoteTreeEntries}
                           collapseAllToken={collapseAllNotesTreeToken}
+                          shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
                           pendingEditId={pendingNoteTreeEditId}
                           onPendingEditHandled={handlePendingNoteTreeEditHandled}
                           onSelectionChange={setSelectedNoteTreeEntries}

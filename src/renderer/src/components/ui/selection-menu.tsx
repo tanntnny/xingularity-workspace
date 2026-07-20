@@ -47,7 +47,8 @@ function setRef<T>(ref: React.ForwardedRef<T>, value: T | null): void {
 }
 
 const selectionTriggerVariants: Record<SelectionMenuVariant, string> = {
-  toolbar: 'selection-trigger selection-trigger-toolbar h-8 max-w-full min-w-0 rounded-lg text-sm',
+  toolbar:
+    'selection-trigger selection-trigger-toolbar h-7 max-w-full min-w-0 rounded-full text-sm',
   field: 'selection-trigger selection-trigger-field h-8 w-full rounded-lg text-sm'
 }
 

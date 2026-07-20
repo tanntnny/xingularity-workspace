@@ -97,7 +97,7 @@ export function UnscheduledTaskList({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="shrink-0 px-4 py-4">
+      <div className="shrink-0 p-2 pb-4">
         <WorkspacePanelSectionHeader
           icon={<CalendarPlus size={16} aria-hidden="true" />}
           iconContainerClassName="bg-amber-500/12 text-amber-500"
@@ -106,7 +106,7 @@ export function UnscheduledTaskList({
         />
       </div>
 
-      <div className="shrink-0 px-4 pb-3">
+      <div className="shrink-0 px-2 pb-4">
         <div className="mb-2 flex items-center gap-2">
           <input
             type="text"
@@ -135,7 +135,7 @@ export function UnscheduledTaskList({
 
       <div className="mx-4 border-t border-[var(--line)]" />
 
-      <div ref={containerRef} className="flex-1 overflow-auto px-4 py-3">
+      <div ref={containerRef} className="flex-1 overflow-auto px-2 pt-4">
         <div
           data-unscheduled-drop-zone="true"
           data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
