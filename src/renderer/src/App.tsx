@@ -88,7 +88,6 @@ import {
   normalizePageForPlatform
 } from './platform/pageAvailability'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
-import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1056,10 +1055,6 @@ function App(): ReactElement {
       year: 'numeric'
     })
   }, [calendarViewMode, selectedCalendarDate])
-  const calendarCurrentPeriodSubtitle = useMemo(
-    () => (calendarViewMode === 'week' ? 'Week view' : 'Month view'),
-    [calendarViewMode]
-  )
   const calendarTodayHeader = useMemo(() => getCalendarHeaderDateParts(todayIso), [todayIso])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
@@ -5207,11 +5202,11 @@ function App(): ReactElement {
             />
             {hasVault && activePage === 'schedules' ? (
               <SchedulesPage
-              vaultApi={vaultApi}
-              pushToast={pushToast}
-              isRightPanelCollapsed={isRightPanelCollapsed}
-              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
-              onOpenDocumentation={() => {
+                vaultApi={vaultApi}
+                pushToast={pushToast}
+                isRightPanelCollapsed={isRightPanelCollapsed}
+                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
+                onOpenDocumentation={() => {
                   void navigateToPage('scheduleDocs')
                 }}
               />
@@ -5221,11 +5216,11 @@ function App(): ReactElement {
                 onBack={() => {
                   void navigateToPage('schedules')
                 }}
-              onDownload={() => {
-                void downloadScheduleDocumentation()
-              }}
-              isRightPanelCollapsed={isRightPanelCollapsed}
-              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
+                onDownload={() => {
+                  void downloadScheduleDocumentation()
+                }}
+                isRightPanelCollapsed={isRightPanelCollapsed}
+                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
               />
             ) : null}
             {hasVault && activePage === 'agentHistory' ? (
@@ -5233,11 +5228,11 @@ function App(): ReactElement {
                 vaultApi={vaultApi}
                 pushToast={pushToast}
                 notes={notes}
-              projects={projects}
-              isRightPanelCollapsed={isRightPanelCollapsed}
-              onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
-            />
-          ) : null}
+                projects={projects}
+                isRightPanelCollapsed={isRightPanelCollapsed}
+                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
+              />
+            ) : null}
             <DocumentWorkspace
               hasPanel={hasRightPanel}
               panelCollapsed={isRightPanelCollapsed}
@@ -5291,6 +5286,75 @@ function App(): ReactElement {
                         </BreadcrumbList>
                       </Breadcrumb>
                     )
+                  }
+                  secondaryActions={
+                    activePage === 'calendar' ? (
+                      <div
+                        data-testid="calendar-workspace-toolbar"
+                        className="flex min-w-max items-center gap-3"
+                      >
+                        <div className="overflow-hidden rounded-md border border-[#d32f2f] shadow-[0_4px_12px_rgba(15,23,42,0.08)]">
+                          <div className="flex h-3.5 items-center justify-center bg-[#d32f2f] px-2 text-center text-[9px] font-extrabold leading-none text-white">
+                            {calendarTodayHeader.monthShort}
+                          </div>
+                          <div className="flex h-4.5 items-center justify-center border-t border-[color:rgba(217,90,78,0.28)] px-2 text-center">
+                            <span className="block text-sm font-medium leading-none text-[var(--text)]">
+                              {calendarTodayHeader.dayNumber}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold leading-4 text-[var(--text)]">
+                            {calendarCurrentPeriodTitle}
+                          </p>
+                        </div>
+                        <TabMenu
+                          variant="toolbar"
+                          value={calendarContentFilter}
+                          onValueChange={(value) =>
+                            setCalendarContentFilter(value as CalendarContentFilter)
+                          }
+                          fullWidth={false}
+                          withSpacer={false}
+                        >
+                          {calendarContentFilterOptions.map((option) => (
+                            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+                              <span className="inline-flex items-center gap-2">
+                                <span>{option.label}</span>
+                                <TabMenuCountBadge count={option.count} />
+                              </span>
+                            </TabMenuItem>
+                          ))}
+                        </TabMenu>
+                        <ActionButtonGroup size="sm" aria-label="Calendar period navigation">
+                          <WorkspaceActionButton
+                            onClick={goToPrevCalendarPeriod}
+                            title={calendarViewMode === 'week' ? 'Previous week' : 'Previous month'}
+                            icon={<ChevronLeft size={18} />}
+                          />
+                          <WorkspaceActionButton
+                            onClick={goToToday}
+                            title={
+                              calendarViewMode === 'week'
+                                ? 'Go to current week'
+                                : 'Go to current month'
+                            }
+                            aria-label={
+                              calendarViewMode === 'week'
+                                ? 'Go to current week'
+                                : 'Go to current month'
+                            }
+                            icon={<CalendarDays size={18} />}
+                            label={calendarViewMode === 'week' ? 'Current week' : 'Current month'}
+                          />
+                          <WorkspaceActionButton
+                            onClick={goToNextCalendarPeriod}
+                            title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                            icon={<ChevronRight size={18} />}
+                          />
+                        </ActionButtonGroup>
+                      </div>
+                    ) : null
                   }
                   actions={
                     noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
@@ -5371,77 +5435,6 @@ function App(): ReactElement {
                             title="Delete Note"
                             icon={<Trash2 size={18} />}
                           />
-                        </WorkspaceHeaderActionGroup>
-                      </WorkspaceHeaderActions>
-                    ) : activePage === 'knowledge' ? (
-                      <WorkspaceHeaderActions>
-                        <WorkspaceHeaderActionGroup>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <WorkspaceActionButton
-                                title="Open graph editor"
-                                aria-label="Open graph editor"
-                                icon={<SlidersHorizontal size={18} />}
-                                data-testid="knowledge-graph-editor-trigger"
-                              />
-                            </PopoverTrigger>
-                            <PopoverContent
-                              align="end"
-                              className="w-80 border border-[var(--line)] bg-[var(--panel)] p-4 text-[var(--text)] shadow-xl"
-                            >
-                              <div className="space-y-1">
-                                <h2 className="text-sm font-semibold text-[var(--text)]">
-                                  Graph editor
-                                </h2>
-                                <p className="text-xs text-[var(--muted)]">
-                                  Configure the orphan ring radius in pixels. Leave blank to use the
-                                  automatic canvas radius.
-                                </p>
-                              </div>
-                              <div className="mt-4 space-y-2">
-                                <label
-                                  htmlFor="knowledge-orphan-radius-input"
-                                  className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
-                                >
-                                  Orphan ring radius
-                                </label>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    id="knowledge-orphan-radius-input"
-                                    data-testid="knowledge-orphan-radius-input"
-                                    type="number"
-                                    min={72}
-                                    step={1}
-                                    value={knowledgeOrphanRingRadiusInput}
-                                    onChange={(event) => {
-                                      setKnowledgeOrphanRingRadiusInput(event.target.value)
-                                    }}
-                                    placeholder="Auto"
-                                    className="w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                                    aria-label="Orphan ring radius in pixels"
-                                  />
-                                  <span className="text-xs text-[var(--muted)]">px</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-xs text-[var(--muted)]">
-                                    Applied radius:{' '}
-                                    {knowledgeOrphanRingRadiusPx == null
-                                      ? 'Auto'
-                                      : `${knowledgeOrphanRingRadiusPx}px`}
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                                    onClick={() => {
-                                      setKnowledgeOrphanRingRadiusInput('')
-                                    }}
-                                  >
-                                    Reset
-                                  </button>
-                                </div>
-                              </div>
-                            </PopoverContent>
-                          </Popover>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'projects' ? (
@@ -5722,83 +5715,6 @@ function App(): ReactElement {
                           }
                           className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line)]"
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
-                            <div className="min-w-0 flex flex-1 items-center gap-4">
-                              <div className="overflow-hidden rounded-lg border-2 border-[#d32f2f] shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-                                <div className="flex h-6 items-center justify-center bg-[#d32f2f] px-3 text-center text-[13px] font-extrabold text-white">
-                                  {calendarTodayHeader.monthShort}
-                                </div>
-                                <div className="flex h-6 items-center justify-center border-t-2 border-[color:rgba(217,90,78,0.28)] px-3 text-center">
-                                  <span className="block text-lg font-medium leading-none text-[var(--text)]">
-                                    {calendarTodayHeader.dayNumber}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-lg font-semibold text-[var(--text)]">
-                                  {calendarCurrentPeriodTitle}
-                                </p>
-                                <p className="truncate text-sm text-[var(--muted)]">
-                                  {calendarCurrentPeriodSubtitle}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-3">
-                              <TabMenu
-                                variant="toolbar"
-                                value={calendarContentFilter}
-                                onValueChange={(value) =>
-                                  setCalendarContentFilter(value as CalendarContentFilter)
-                                }
-                                fullWidth={false}
-                                withSpacer={false}
-                              >
-                                {calendarContentFilterOptions.map((option) => (
-                                  <TabMenuItem
-                                    key={option.value}
-                                    variant="toolbar"
-                                    value={option.value}
-                                  >
-                                    <span className="inline-flex items-center gap-2">
-                                      <span>{option.label}</span>
-                                      <TabMenuCountBadge count={option.count} />
-                                    </span>
-                                  </TabMenuItem>
-                                ))}
-                              </TabMenu>
-                              <ActionButtonGroup size="sm" aria-label="Calendar period navigation">
-                                <WorkspaceActionButton
-                                  onClick={goToPrevCalendarPeriod}
-                                  title={
-                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
-                                  }
-                                  icon={<ChevronLeft size={18} />}
-                                />
-                                <WorkspaceActionButton
-                                  onClick={goToToday}
-                                  title={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  aria-label={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  icon={<CalendarDays size={18} />}
-                                  label={
-                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
-                                  }
-                                />
-                                <WorkspaceActionButton
-                                  onClick={goToNextCalendarPeriod}
-                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                                  icon={<ChevronRight size={18} />}
-                                />
-                              </ActionButtonGroup>
-                            </div>
-                          </div>
                           <div className="min-h-0 flex-1">
                             {calendarViewMode === 'week' ? (
                               <CalendarWeekView
@@ -5878,7 +5794,9 @@ function App(): ReactElement {
                         </section>
                       </div>
                     ) : activePage === 'designAudit' ? (
-                      <DesignAuditPage themeVersion={`${profileColor}:${isDarkMode}:${fontFamily}`} />
+                      <DesignAuditPage
+                        themeVersion={`${profileColor}:${isDarkMode}:${fontFamily}`}
+                      />
                     ) : activePage === 'settings' ? (
                       <SettingsPage
                         profileName={profileName}
@@ -5921,6 +5839,9 @@ function App(): ReactElement {
                         }}
                         onImportLegacyExcalidrawSessions={() => {
                           void importLegacyExcalidrawSessions()
+                        }}
+                        onOpenDesignAudit={() => {
+                          void navigateToPage('designAudit')
                         }}
                       />
                     ) : (
@@ -6053,7 +5974,9 @@ function App(): ReactElement {
                       }
                     />
 
-                    <DocumentWorkspacePanelContent>
+                    <DocumentWorkspacePanelContent
+                      className={activePage === 'knowledge' ? 'p-3' : undefined}
+                    >
                       {!hasVault ? (
                         <WorkspaceContextEmptyState description="Select a vault to see workspace properties and secondary tools." />
                       ) : activePage === 'notes' ? (
@@ -6101,6 +6024,57 @@ function App(): ReactElement {
                           }}
                           onMoveEntries={moveTreeEntries}
                         />
+                      ) : activePage === 'knowledge' ? (
+                        <WorkspacePanelSection data-testid="knowledge-graph-editor">
+                          <WorkspacePanelSectionHeader
+                            icon={<SlidersHorizontal size={16} aria-hidden="true" />}
+                            iconContainerClassName="bg-[var(--accent-soft)] text-[var(--accent)]"
+                            heading="Graph view"
+                            description="Configure how disconnected notes are arranged."
+                          />
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="knowledge-orphan-radius-input"
+                              className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
+                            >
+                              Orphan ring radius
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                id="knowledge-orphan-radius-input"
+                                data-testid="knowledge-orphan-radius-input"
+                                type="number"
+                                min={72}
+                                step={1}
+                                value={knowledgeOrphanRingRadiusInput}
+                                onChange={(event) => {
+                                  setKnowledgeOrphanRingRadiusInput(event.target.value)
+                                }}
+                                placeholder="Auto"
+                                className="workspace-subtle-control h-9 min-w-0 flex-1 rounded-md border border-[var(--line)] px-3 text-sm text-[var(--text)] outline-none transition hover:border-[var(--accent)] focus:border-[var(--accent)]"
+                                aria-label="Orphan ring radius in pixels"
+                              />
+                              <span className="text-xs text-[var(--muted)]">px</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3">
+                            <p className="text-xs text-[var(--muted)]">
+                              Applied radius:{' '}
+                              {knowledgeOrphanRingRadiusPx == null
+                                ? 'Auto'
+                                : `${knowledgeOrphanRingRadiusPx}px`}
+                            </p>
+                            <button
+                              type="button"
+                              className="workspace-subtle-control rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              onClick={() => {
+                                setKnowledgeOrphanRingRadiusInput('')
+                              }}
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </WorkspacePanelSection>
                       ) : activePage === 'calendar' ? (
                         <UnscheduledTaskList
                           tasks={unscheduledTasks}

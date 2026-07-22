@@ -36,18 +36,21 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction(() => typeof window.vaultApi?.vault?.restoreLast === 'function')
   await page.evaluate(() => window.vaultApi.vault.restoreLast())
-  await expect(page.getByTestId('sidebar-page:designAudit')).toBeEnabled({ timeout: 20_000 })
+  await expect(page.getByTestId('sidebar-page:settings')).toBeEnabled({ timeout: 20_000 })
 
   return { electronApp, page }
 }
 
 test.describe('design audit page', () => {
-  test('opens from navigation and presents live primitive specimens', async () => {
+  test('opens from Settings and presents live primitive specimens', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await page.getByTestId('sidebar-page:designAudit').click()
+      await expect(page.getByTestId('sidebar-page:designAudit')).toHaveCount(0)
+      await page.getByTestId('sidebar-page:settings').click()
+      await page.getByRole('radio', { name: 'Developer' }).click()
+      await page.getByTestId('settings-open-design-audit').click()
       await expect(page.getByTestId('design-audit-page')).toBeVisible()
       await expect(page.getByTestId('design-audit-section:foundations')).toBeVisible()
       await expect(page.getByTestId('design-audit-component:button')).toBeVisible()

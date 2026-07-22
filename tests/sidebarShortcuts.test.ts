@@ -35,12 +35,18 @@ describe('sidebar shortcuts', () => {
     )
 
     expect(markup).not.toContain('data-testid="sidebar-shortcut:notes"')
+    expect(markup).not.toContain('data-testid="sidebar-shortcut:knowledge"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:projects"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:calendar"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:weeklyPlan"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:schedules"')
-    expect(markup).toContain('data-testid="sidebar-page:designAudit"')
-    expect(markup).not.toContain('data-testid="sidebar-shortcut:designAudit"')
+    expect(markup).not.toContain('data-testid="sidebar-page:designAudit"')
+
+    const weeklyPlanIndex = markup.indexOf('data-testid="sidebar-page:weeklyPlan"')
+    expect(weeklyPlanIndex).toBeGreaterThanOrEqual(0)
+    expect(markup.slice(Math.max(0, weeklyPlanIndex - 500), weeklyPlanIndex + 500)).toContain(
+      'disabled=""'
+    )
   })
 
   it('renders a trailing shortcut inside the tab menu group', () => {

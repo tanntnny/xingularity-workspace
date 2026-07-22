@@ -59,7 +59,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '../components/ui/dropdown-menu'
-import { WorkspaceActionButton } from '../components/ui/document-workspace'
+import {
+  WorkspaceActionButton,
+  WorkspaceHeaderSecondaryActions
+} from '../components/ui/document-workspace'
 import { Field } from '../components/ui/field'
 import { Input } from '../components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
@@ -591,8 +594,128 @@ export function ProjectsWorkspacePage({
     }))
   }
 
+  const projectToolbar =
+    activeTab === 'board' ? (
+      <div data-testid="projects-board-toolbar" className="flex min-w-max items-center gap-3">
+        <SelectionMenu
+          value={boardGroupBy}
+          onValueChange={(value) => setBoardGroupBy(value as ProjectBoardGroupBy)}
+          options={BOARD_GROUP_BY_OPTIONS}
+          selectedLabel={renderBoardGroupBySelectionLabel(boardGroupBy)}
+          variant="toolbar"
+          aria-label={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
+          title={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
+          className="min-w-[15rem]"
+          fullWidth={false}
+        />
+        <TabMenu
+          variant="toolbar"
+          value={filterMode}
+          onValueChange={(value) => onFilterModeChange(value as ProjectsWorkspaceFilterMode)}
+          fullWidth={false}
+          withSpacer={false}
+        >
+          {projectFilterOptions.map((option) => (
+            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+              <span className="inline-flex items-center gap-2">
+                <span>{option.label}</span>
+                <TabMenuCountBadge count={option.count} />
+              </span>
+            </TabMenuItem>
+          ))}
+        </TabMenu>
+        <span className="shrink-0 text-sm text-[var(--muted)]">
+          {filteredProjects.length} {filteredProjects.length === 1 ? 'project' : 'projects'}
+        </span>
+      </div>
+    ) : (
+      <div data-testid="projects-task-list-toolbar" className="flex min-w-max items-center gap-3">
+        <SelectionMenu
+          value={taskListGroupBy}
+          onValueChange={(value) => setTaskListGroupBy(value as TaskListGroupBy)}
+          options={TASK_LIST_GROUP_BY_OPTIONS}
+          selectedLabel={renderTaskListGroupBySelectionLabel(taskListGroupBy)}
+          variant="toolbar"
+          aria-label={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
+          title={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
+          className="min-w-[13rem]"
+          fullWidth={false}
+        />
+        <TabMenu
+          variant="toolbar"
+          value={filterMode}
+          onValueChange={(value) => onFilterModeChange(value as ProjectsWorkspaceFilterMode)}
+          fullWidth={false}
+          withSpacer={false}
+        >
+          {projectFilterOptions.map((option) => (
+            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+              <span className="inline-flex items-center gap-2">
+                <span>{option.label}</span>
+                <TabMenuCountBadge count={option.count} />
+              </span>
+            </TabMenuItem>
+          ))}
+        </TabMenu>
+        <WorkspaceActionButton
+          active={hideCompletedItems}
+          icon={<Rows3 size={16} />}
+          label={hideCompletedItems ? 'Show Completed' : 'Hide Completed'}
+          aria-label={hideCompletedItems ? 'Show completed items' : 'Hide completed items'}
+          aria-pressed={hideCompletedItems}
+          onClick={() => setHideCompletedItems((current) => !current)}
+        />
+        <Popover open={isTaskListViewMenuOpen} onOpenChange={setIsTaskListViewMenuOpen}>
+          <PopoverTrigger asChild>
+            <WorkspaceActionButton
+              active={isTaskListViewMenuOpen}
+              label="View Settings"
+              icon={<SlidersHorizontal size={16} />}
+              aria-label="Open task list view settings"
+            />
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="w-96 border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_86%,transparent)] p-3 text-[var(--text)] shadow-xl backdrop-blur-xl"
+          >
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-[var(--text)]">View Settings</h2>
+              <p className="text-xs text-[var(--muted)]">Adjust how the task list is displayed.</p>
+            </div>
+            <div className="mt-3 rounded-lg border border-[var(--line)]/80 bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[var(--text)]">Row height</div>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Control the spacing for task rows in this list.
+                </p>
+              </div>
+              <div className="mt-3">
+                <SelectionMenu
+                  value={taskListRowHeight}
+                  onValueChange={(value) => setTaskListRowHeight(value as TaskListRowHeight)}
+                  options={TASK_LIST_ROW_HEIGHT_OPTIONS}
+                  variant="toolbar"
+                  align="end"
+                  className="min-w-[10.5rem]"
+                  selectedLabel={
+                    TASK_LIST_ROW_HEIGHT_OPTIONS.find(
+                      (option) => option.value === taskListRowHeight
+                    )?.label ?? 'Default'
+                  }
+                  aria-label="Task list row height"
+                  title="Task list row height"
+                  fullWidth={false}
+                />
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    )
+
   return (
     <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
+      <WorkspaceHeaderSecondaryActions>{projectToolbar}</WorkspaceHeaderSecondaryActions>
       <div
         data-testid="projects-workspace-content"
         className={cn(
@@ -605,46 +728,6 @@ export function ProjectsWorkspacePage({
             data-testid="projects-board-shell"
             className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)]"
           >
-            <div
-              data-testid="projects-board-toolbar"
-              className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3"
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <SelectionMenu
-                  value={boardGroupBy}
-                  onValueChange={(value) => setBoardGroupBy(value as ProjectBoardGroupBy)}
-                  options={BOARD_GROUP_BY_OPTIONS}
-                  selectedLabel={renderBoardGroupBySelectionLabel(boardGroupBy)}
-                  variant="toolbar"
-                  aria-label={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
-                  title={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
-                  className="min-w-[15rem]"
-                  fullWidth={false}
-                />
-                <TabMenu
-                  variant="toolbar"
-                  value={filterMode}
-                  onValueChange={(value) =>
-                    onFilterModeChange(value as ProjectsWorkspaceFilterMode)
-                  }
-                  fullWidth={false}
-                  withSpacer={false}
-                >
-                  {projectFilterOptions.map((option) => (
-                    <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
-                      <span className="inline-flex items-center gap-2">
-                        <span>{option.label}</span>
-                        <TabMenuCountBadge count={option.count} />
-                      </span>
-                    </TabMenuItem>
-                  ))}
-                </TabMenu>
-              </div>
-              <div className="ml-auto flex shrink-0 items-center text-sm text-[var(--muted)]">
-                {filteredProjects.length} {filteredProjects.length === 1 ? 'project' : 'projects'}
-              </div>
-            </div>
-
             <div className="min-h-0 flex-1 overflow-x-auto">
               <div className="grid h-full min-w-[960px] grid-cols-4">
                 {boardGroups.map((group) => (
@@ -836,98 +919,6 @@ export function ProjectsWorkspacePage({
           </section>
         ) : (
           <section className="overflow-hidden rounded-2xl border border-[var(--line)]">
-            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-transparent px-4 py-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <SelectionMenu
-                  value={taskListGroupBy}
-                  onValueChange={(value) => setTaskListGroupBy(value as TaskListGroupBy)}
-                  options={TASK_LIST_GROUP_BY_OPTIONS}
-                  selectedLabel={renderTaskListGroupBySelectionLabel(taskListGroupBy)}
-                  variant="toolbar"
-                  aria-label={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
-                  title={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
-                  className="min-w-[13rem]"
-                  fullWidth={false}
-                />
-                <TabMenu
-                  variant="toolbar"
-                  value={filterMode}
-                  onValueChange={(value) =>
-                    onFilterModeChange(value as ProjectsWorkspaceFilterMode)
-                  }
-                  fullWidth={false}
-                  withSpacer={false}
-                >
-                  {projectFilterOptions.map((option) => (
-                    <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
-                      <span className="inline-flex items-center gap-2">
-                        <span>{option.label}</span>
-                        <TabMenuCountBadge count={option.count} />
-                      </span>
-                    </TabMenuItem>
-                  ))}
-                </TabMenu>
-                <WorkspaceActionButton
-                  active={hideCompletedItems}
-                  icon={<Rows3 size={16} />}
-                  label={hideCompletedItems ? 'Show Completed' : 'Hide Completed'}
-                  aria-label={hideCompletedItems ? 'Show completed items' : 'Hide completed items'}
-                  aria-pressed={hideCompletedItems}
-                  onClick={() => setHideCompletedItems((current) => !current)}
-                />
-              </div>
-              <div className="ml-auto flex shrink-0 items-center">
-                <Popover open={isTaskListViewMenuOpen} onOpenChange={setIsTaskListViewMenuOpen}>
-                  <PopoverTrigger asChild>
-                    <WorkspaceActionButton
-                      active={isTaskListViewMenuOpen}
-                      label="View Settings"
-                      icon={<SlidersHorizontal size={16} />}
-                      aria-label="Open task list view settings"
-                    />
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    className="w-96 border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_86%,transparent)] p-3 text-[var(--text)] shadow-xl backdrop-blur-xl"
-                  >
-                    <div className="space-y-1">
-                      <h2 className="text-sm font-semibold text-[var(--text)]">View Settings</h2>
-                      <p className="text-xs text-[var(--muted)]">
-                        Adjust how the task list is displayed.
-                      </p>
-                    </div>
-                    <div className="mt-3 rounded-lg border border-[var(--line)]/80 bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-[var(--text)]">Row height</div>
-                        <p className="mt-1 text-xs text-[var(--muted)]">
-                          Control the spacing for task rows in this list.
-                        </p>
-                      </div>
-                      <div className="mt-3">
-                        <SelectionMenu
-                          value={taskListRowHeight}
-                          onValueChange={(value) =>
-                            setTaskListRowHeight(value as TaskListRowHeight)
-                          }
-                          options={TASK_LIST_ROW_HEIGHT_OPTIONS}
-                          variant="toolbar"
-                          align="end"
-                          className="min-w-[10.5rem]"
-                          selectedLabel={
-                            TASK_LIST_ROW_HEIGHT_OPTIONS.find(
-                              (option) => option.value === taskListRowHeight
-                            )?.label ?? 'Default'
-                          }
-                          aria-label="Task list row height"
-                          title="Task list row height"
-                          fullWidth={false}
-                        />
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
             <div
               className="table-no-ripple-scope relative w-full overflow-auto rounded-b-2xl border"
               data-no-ripple-scope

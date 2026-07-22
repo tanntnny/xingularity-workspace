@@ -55,16 +55,13 @@ type SidebarSection = {
   items: SidebarPageItem[]
 }
 
-const BOARD_PAGES: SidebarPageItem[] = [
-  { id: 'knowledge', label: 'Knowledge', shortcut: ['cmd', 'k'] }
-]
+const BOARD_PAGES: SidebarPageItem[] = [{ id: 'knowledge', label: 'Knowledge' }]
 
 const HOME_PAGES: SidebarPageItem[] = [
   { id: 'notes', label: 'Notebooks' },
   { id: 'projects', label: 'Projects' },
   { id: 'calendar', label: 'Calendar' },
-  { id: 'weeklyPlan', label: 'Weekly Plan' },
-  { id: 'designAudit', label: 'Design Audit' }
+  { id: 'weeklyPlan', label: 'Weekly Plan' }
 ]
 
 const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscriptions' }]
@@ -79,6 +76,8 @@ const SETTINGS_PAGE: SidebarPageItem = {
   label: 'Settings',
   shortcut: ['cmd', ',']
 }
+
+const FOOTER_PAGES: SidebarPageItem[] = [SETTINGS_PAGE]
 
 const SIDEBAR_SECTIONS: SidebarSection[] = [
   { id: 'board', label: 'Board', icon: LayoutDashboard, items: BOARD_PAGES },
@@ -179,6 +178,8 @@ export function AppSidebar({
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
 
+  const isPageDisabled = (page: SidebarPageItem): boolean => isLocked || page.id === 'weeklyPlan'
+
   const toggleSection = (sectionId: SidebarSection['id']): void => {
     setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }))
   }
@@ -253,14 +254,15 @@ export function AppSidebar({
                     asChild
                     isActive={activePage === page.id}
                     showLeadingRail
-                    onClick={() => onChange(page.id)}
+                    onClick={isPageDisabled(page) ? undefined : () => onChange(page.id)}
+                    disabled={isPageDisabled(page)}
                     tooltip={page.label}
                   >
                     <Pressable
                       className="sidebar-menu-card sidebar-menu-card-nested"
                       data-testid={`sidebar-page:${page.id}`}
                       sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isLocked}
+                      disabled={isPageDisabled(page)}
                     >
                       <span>{page.label}</span>
                       {page.shortcut ? (
@@ -346,32 +348,37 @@ export function AppSidebar({
         ).map(renderSection)}
       </SidebarContent>
 
-      {availablePageSet.has(SETTINGS_PAGE.id) ? (
+      {FOOTER_PAGES.some((page) => availablePageSet.has(page.id)) ? (
         <>
           <SidebarSeparator />
           <SidebarFooter>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={activePage === SETTINGS_PAGE.id}
-                  onClick={() => onChange(SETTINGS_PAGE.id)}
-                  tooltip={SETTINGS_PAGE.label}
-                >
-                  <Pressable
-                    className="sidebar-menu-card"
-                    data-testid={`sidebar-page:${SETTINGS_PAGE.id}`}
-                    sx={SIDEBAR_MENU_BUTTON_SX}
-                    disabled={isLocked}
+              {FOOTER_PAGES.filter((page) => availablePageSet.has(page.id)).map((page) => (
+                <SidebarMenuItem key={page.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activePage === page.id}
+                    onClick={isPageDisabled(page) ? undefined : () => onChange(page.id)}
+                    disabled={isPageDisabled(page)}
+                    tooltip={page.label}
                   >
-                    <span>{SETTINGS_PAGE.label}</span>
-                    <Shortcut
-                      keys={SETTINGS_PAGE.shortcut}
-                      className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
-                    />
-                  </Pressable>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                    <Pressable
+                      className="sidebar-menu-card"
+                      data-testid={`sidebar-page:${page.id}`}
+                      sx={SIDEBAR_MENU_BUTTON_SX}
+                      disabled={isPageDisabled(page)}
+                    >
+                      <span>{page.label}</span>
+                      {page.shortcut ? (
+                        <Shortcut
+                          keys={page.shortcut}
+                          className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
+                        />
+                      ) : null}
+                    </Pressable>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarFooter>
         </>

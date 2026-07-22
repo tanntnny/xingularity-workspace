@@ -104,6 +104,8 @@ const workspacePanelHeaderClass =
 const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-1.5'
 
 interface WorkspaceHeaderContextValue {
+  mainActionSlot: HTMLDivElement | null
+  setMainActionSlot: (slot: HTMLDivElement | null) => void
   panelActionSlot: HTMLDivElement | null
   setPanelActionSlot: (slot: HTMLDivElement | null) => void
   footerSlot: HTMLDivElement | null
@@ -114,6 +116,8 @@ interface WorkspaceHeaderContextValue {
 }
 
 const WorkspaceHeaderContext = React.createContext<WorkspaceHeaderContextValue>({
+  mainActionSlot: null,
+  setMainActionSlot: () => undefined,
   panelActionSlot: null,
   setPanelActionSlot: () => undefined,
   footerSlot: null,
@@ -133,10 +137,13 @@ const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProp
     { className, children, hasPanel = true, panelCollapsed = false, onTogglePanel, ...props },
     ref
   ) => {
+    const [mainActionSlot, setMainActionSlot] = React.useState<HTMLDivElement | null>(null)
     const [panelActionSlot, setPanelActionSlot] = React.useState<HTMLDivElement | null>(null)
     const [footerSlot, setFooterSlot] = React.useState<HTMLDivElement | null>(null)
     const headerContextValue = React.useMemo(
       () => ({
+        mainActionSlot,
+        setMainActionSlot,
         panelActionSlot,
         setPanelActionSlot,
         footerSlot,
@@ -145,7 +152,7 @@ const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProp
         panelCollapsed,
         onTogglePanel
       }),
-      [footerSlot, hasPanel, onTogglePanel, panelActionSlot, panelCollapsed]
+      [footerSlot, hasPanel, mainActionSlot, onTogglePanel, panelActionSlot, panelCollapsed]
     )
 
     return (
@@ -208,12 +215,17 @@ DocumentWorkspacePanel.displayName = 'DocumentWorkspacePanel'
 interface DocumentWorkspaceMainHeaderProps extends React.HTMLAttributes<HTMLElement> {
   breadcrumb?: React.ReactNode
   actions?: React.ReactNode
+  secondaryActions?: React.ReactNode
 }
 
 const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorkspaceMainHeaderProps>(
-  ({ className, breadcrumb, actions, ...props }, ref) => {
-    const { hasPanel, onTogglePanel, panelCollapsed, setPanelActionSlot } =
+  ({ className, breadcrumb, actions, secondaryActions, ...props }, ref) => {
+    const { hasPanel, onTogglePanel, panelCollapsed, setMainActionSlot, setPanelActionSlot } =
       React.useContext(WorkspaceHeaderContext)
+    const mainActionSlotRef = React.useCallback(
+      (slot: HTMLDivElement | null) => setMainActionSlot(slot),
+      [setMainActionSlot]
+    )
     const panelActionSlotRef = React.useCallback(
       (slot: HTMLDivElement | null) => setPanelActionSlot(slot),
       [setPanelActionSlot]
@@ -226,7 +238,10 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
         </div>
         <div className="document-workspace-panel-action-row app-drag-region">
-          <div aria-hidden="true" />
+          <div className="document-workspace-main-action-slot app-no-drag">
+            <div ref={mainActionSlotRef} className="flex min-w-max items-center gap-1.5" />
+            {secondaryActions}
+          </div>
           <div className="document-workspace-panel-action-slot app-no-drag">
             <div ref={panelActionSlotRef} className="flex shrink-0 items-center gap-1.5" />
             {hasPanel && onTogglePanel ? (
@@ -245,6 +260,32 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
   }
 )
 DocumentWorkspaceMainHeader.displayName = 'DocumentWorkspaceMainHeader'
+
+const WorkspaceHeaderSecondaryActions = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, children, ...props }, ref) => {
+  const { mainActionSlot } = React.useContext(WorkspaceHeaderContext)
+
+  if (!mainActionSlot) {
+    return null
+  }
+
+  return createPortal(
+    <div
+      ref={ref}
+      className={cn(
+        'workspace-header-secondary-actions flex min-w-max items-center gap-1.5',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>,
+    mainActionSlot
+  )
+})
+WorkspaceHeaderSecondaryActions.displayName = 'WorkspaceHeaderSecondaryActions'
 
 interface DocumentWorkspacePanelHeaderProps extends React.HTMLAttributes<HTMLElement> {
   leading?: React.ReactNode
@@ -416,6 +457,7 @@ export {
   type WorkspaceTab,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
+  WorkspaceHeaderSecondaryActions,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,

@@ -117,6 +117,7 @@ interface SettingsPageProps {
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
   onImportLegacyExcalidrawSessions: () => void
+  onOpenDesignAudit: () => void
 }
 
 export function SettingsPage({
@@ -140,14 +141,15 @@ export function SettingsPage({
   onManageVaults,
   onMigrateBlockNoteNotes,
   onMigrateTaggedNoteBodyFrontmatter,
-  onImportLegacyExcalidrawSessions
+  onImportLegacyExcalidrawSessions,
+  onOpenDesignAudit
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
   const [vimMappingDrafts, setVimMappingDrafts] =
     useState<NoteVimKeyMapping[]>(editorVimKeyMappings)
   const [activeTab, setActiveTab] = useState<
-    'profile' | 'workspace' | 'appearance' | 'editor' | 'agent'
+    'profile' | 'workspace' | 'appearance' | 'editor' | 'agent' | 'developer'
   >('profile')
 
   useEffect(() => {
@@ -269,6 +271,9 @@ export function SettingsPage({
         </TabMenuItem>
         <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="agent">
           Agent
+        </TabMenuItem>
+        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="developer">
+          Developer
         </TabMenuItem>
       </TabMenu>
 
@@ -625,6 +630,34 @@ export function SettingsPage({
               spellCheck={false}
             />
           </Field>
+        </div>
+      ) : null}
+
+      {activeTab === 'developer' ? (
+        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
+          <div className="grid gap-1">
+            <h3 className="text-lg font-semibold text-[var(--text)]">Developer</h3>
+            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+              Inspect the app's design-system primitives, tokens, and component states.
+            </p>
+          </div>
+
+          <div className="workspace-subtle-surface flex flex-wrap items-center justify-between gap-4 rounded-lg p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--text)]">Design Audit</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Review the live visual language and interactive component specimens.
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid="settings-open-design-audit"
+              className="workspace-subtle-control shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+              onClick={onOpenDesignAudit}
+            >
+              Open Design Audit
+            </button>
+          </div>
         </div>
       ) : null}
     </section>

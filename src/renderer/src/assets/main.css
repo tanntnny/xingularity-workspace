@@ -1666,7 +1666,9 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-surface::after {
 .document-workspace-main-header .workspace-header-actions .workspace-action-button:hover,
 .document-workspace-main-header .workspace-header-actions .workspace-action-button:focus-visible,
 .document-workspace-main-header .workspace-header-actions .workspace-action-button:active,
-.document-workspace-main-header .workspace-header-actions .workspace-action-button[data-active='true'],
+.document-workspace-main-header
+  .workspace-header-actions
+  .workspace-action-button[data-active='true'],
 .document-workspace-main-header
   .workspace-header-actions
   .workspace-action-button[data-active='true']:hover,
@@ -1688,6 +1690,19 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-surface::after {
       --workspace-header-panel-width,
       var(--workspace-pane-width)
     );
+}
+
+.document-workspace-main-action-slot {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow-x: auto;
+  padding: 0 0.75rem;
+  scrollbar-width: none;
+}
+
+.document-workspace-main-action-slot::-webkit-scrollbar {
+  display: none;
 }
 
 .document-workspace-panel-action-slot {
@@ -3487,7 +3502,11 @@ main[data-workspace-vibrancy='on'] .document-workspace-panel-header,
 }
 
 [data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:active,
-[data-performance-mode='on'] .note-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active {
+[data-performance-mode='on']
+  .note-milkdown-editor
+  .milkdown
+  .milkdown-toolbar
+  .toolbar-item.active {
   background-color: var(--note-toolbar-item-active-surface) !important;
 }
 
