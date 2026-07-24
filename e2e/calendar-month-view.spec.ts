@@ -21,9 +21,25 @@ function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-async function createFixtureVault(): Promise<{ rootPath: string; todayIso: string }> {
+function getMonthDayCellCount(date: Date): number {
+  const monthStart = new Date(date.getFullYear(), date.getMonth(), 1)
+  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  return Math.ceil((monthStart.getDay() + daysInMonth) / 7) * 7
+}
+
+async function createFixtureVault(taskCount = 1): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-month-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
+  const calendarTasks = Array.from({ length: taskCount }, (_, index) => ({
+    id: `task-month-visible-${index}`,
+    title: taskCount === 1 ? 'Month view task' : `Overflow task ${index + 1}`,
+    date: todayIso,
+    completed: false,
+    createdAt: new Date().toISOString(),
+    priority: 'medium',
+    taskType: 'assignment',
+    reminders: []
+  }))
 
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
@@ -31,18 +47,7 @@ async function createFixtureVault(): Promise<{ rootPath: string; todayIso: strin
     path.join(rootPath, 'settings.json'),
     JSON.stringify(
       {
-        calendarTasks: [
-          {
-            id: 'task-month-visible',
-            title: 'Month view task',
-            date: todayIso,
-            completed: false,
-            createdAt: new Date().toISOString(),
-            priority: 'medium',
-            taskType: 'assignment',
-            reminders: []
-          }
-        ]
+        calendarTasks
       },
       null,
       2
@@ -135,7 +140,7 @@ test.describe('calendar monthly view', () => {
 
       const dayCells = page.locator('.calendar-full .fc .fc-daygrid-day')
       await expect(dayCells.first()).toBeVisible()
-      await expect(dayCells).toHaveCount(42)
+      await expect(dayCells).toHaveCount(getMonthDayCellCount(new Date()))
       await expect(dayCells.last()).toBeVisible()
 
       const metrics = await page.evaluate(() => {
@@ -151,13 +156,49 @@ test.describe('calendar monthly view', () => {
         return {
           rowCount: uniqueRowTops.length,
           firstCellHeight: firstCell?.getBoundingClientRect().height ?? 0,
-          shellHeight: shell?.getBoundingClientRect().height ?? 0
+          shellHeight: shell?.getBoundingClientRect().height ?? 0,
+          shellBottom: shell?.getBoundingClientRect().bottom ?? 0,
+          lastCellBottom: cells.at(-1)?.getBoundingClientRect().bottom ?? 0
         }
       })
 
       expect(metrics.rowCount).toBeGreaterThanOrEqual(5)
-      expect(metrics.firstCellHeight).toBeGreaterThan(40)
+      expect(metrics.firstCellHeight).toBeGreaterThanOrEqual(132)
       expect(metrics.shellHeight).toBeGreaterThan(500)
+      expect(metrics.lastCellBottom).toBeLessThanOrEqual(metrics.shellBottom + 1)
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps every task reachable when a day has many tasks', async () => {
+    const { rootPath } = await createFixtureVault(18)
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const workspaceContent = page.locator('.document-workspace-main-content')
+      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+
+      const weekdayHeader = page
+        .locator('.calendar-full .fc .fc-scrollgrid-section-header > th')
+        .first()
+      const weekdayHeaderTop = await weekdayHeader.evaluate(
+        (element) => element.getBoundingClientRect().top
+      )
+      await workspaceContent.evaluate((element) => {
+        element.scrollTop = 240
+      })
+      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      expect(await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(
+        weekdayHeaderTop - 4
+      )
+
+      const lastTask = page.getByText('Overflow task 18', { exact: true })
+      await lastTask.scrollIntoViewIfNeeded()
+      await expect(lastTask).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

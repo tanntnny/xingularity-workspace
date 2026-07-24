@@ -824,9 +824,12 @@ export function CalendarWeekView({
   return (
     <section
       data-testid="calendar-week-view"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl"
+      className="flex min-h-full flex-1 flex-col rounded-b-2xl"
     >
-      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
+      <div
+        data-testid="calendar-week-weekday-header"
+        className="sticky top-0 z-20 grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)] bg-[var(--panel)]"
+      >
         <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-4" />
         {weekDays.map(({ date, value }) => {
           const isSelected = date === selectedDate
@@ -962,7 +965,7 @@ export function CalendarWeekView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div data-testid="calendar-week-timed-scroller" className="flex-1 overflow-visible">
         <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
           <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]">
             <div className="relative" style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}>
@@ -989,7 +992,7 @@ export function CalendarWeekView({
               {currentTimeIndicator ? (
                 <div
                   data-testid="calendar-week-current-time-label"
-                  className="pointer-events-none absolute inset-x-0 z-[30]"
+                  className="pointer-events-none absolute inset-x-0 z-10"
                   style={{ top: `${currentTimeIndicator.topPx}px` }}
                 >
                   <div className="relative -translate-y-1/2">
@@ -1108,7 +1111,7 @@ export function CalendarWeekView({
           {currentTimeIndicator ? (
             <div
               data-testid="calendar-week-current-time-line"
-              className="pointer-events-none absolute right-0 z-[30] -translate-y-1/2"
+              className="pointer-events-none absolute right-0 z-10 -translate-y-1/2"
               style={{
                 top: `${currentTimeIndicator.topPx}px`,
                 left: `${WEEKLY_TIME_GUTTER_WIDTH_PX}px`

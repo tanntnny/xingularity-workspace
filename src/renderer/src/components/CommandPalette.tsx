@@ -75,7 +75,6 @@ interface CommandPaletteProps {
   onOpenPage: (page: CommandPalettePage) => void
   onOpenWarpAtNoteFolder: () => Promise<void>
   onManageVaults?: () => void
-  onRunVaultMigration?: () => void
 }
 
 type CommandPaletteShortcutKey = 'cmd' | 'Enter' | string
@@ -97,8 +96,7 @@ export function CommandPalette({
   onOpenProject,
   onOpenPage,
   onOpenWarpAtNoteFolder,
-  onManageVaults,
-  onRunVaultMigration
+  onManageVaults
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
     'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)] transition-colors group-data-[selected=true]:text-[var(--accent)]'
@@ -368,17 +366,6 @@ export function CommandPalette({
               icon: FolderOpen
             }
           ]
-        : []),
-      ...(onRunVaultMigration
-        ? [
-            {
-              value: '>run vault migration',
-              label: 'Run Vault Migration',
-              onSelect: () => onRunVaultMigration(),
-              keywords: ['vault', 'migration', 'migrate', 'upgrade', 'storage'],
-              icon: FolderOpen
-            }
-          ]
         : [])
     ],
     [
@@ -386,8 +373,7 @@ export function CommandPalette({
       onCreate,
       onManageVaults,
       onOpenPage,
-      onOpenWarpAtNoteFolder,
-      onRunVaultMigration
+      onOpenWarpAtNoteFolder
     ]
   )
 

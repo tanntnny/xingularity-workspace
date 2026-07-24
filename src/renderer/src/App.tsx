@@ -10,8 +10,11 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import {
+  Bot,
+  BookOpen,
   ChevronDown,
   Copy,
+  CreditCard,
   Download,
   Keyboard,
   LayoutGrid,
@@ -25,6 +28,8 @@ import {
   ChevronRight,
   CalendarDays,
   FolderOpen,
+  FolderKanban,
+  NotebookPen,
   ChevronUp,
   Star,
   SlidersHorizontal
@@ -179,6 +184,20 @@ const PAGE_LABELS: Record<AppPage, string> = {
   schedules: 'Schedules',
   scheduleDocs: 'Schedule API Guide',
   agentHistory: 'Agent Chat'
+}
+
+const PAGE_TAB_ICONS: Record<AppPage, typeof LayoutGrid> = {
+  knowledge: LayoutGrid,
+  notes: NotebookPen,
+  projects: FolderKanban,
+  subscriptions: CreditCard,
+  weeklyPlan: ListTodo,
+  calendar: CalendarDays,
+  designAudit: Paintbrush,
+  settings: SlidersHorizontal,
+  schedules: CalendarDays,
+  scheduleDocs: BookOpen,
+  agentHistory: Bot
 }
 
 type CalendarViewMode = 'month' | 'week'
@@ -2549,26 +2568,6 @@ function App(): ReactElement {
       setVault
     ]
   )
-
-  const runVaultMigration = useCallback(async (): Promise<void> => {
-    if (!vaultApi) {
-      pushToast('error', 'Vault migration is only available inside the Electron app')
-      return
-    }
-
-    if (!vault) {
-      pushToast('error', 'Select a vault in Settings before running migration')
-      void navigateToPage('settings')
-      return
-    }
-
-    try {
-      const result = await vaultApi.vault.runMigration()
-      await applyVaultActivationResult(result, `Migrated vault ${result.info.rootPath}`)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }, [applyVaultActivationResult, navigateToPage, pushToast, vault, vaultApi])
 
   const clearActiveVaultState = useCallback(
     async (successMessage?: string): Promise<void> => {
@@ -5190,9 +5189,11 @@ function App(): ReactElement {
           <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
             <WorkspaceTabManager
               className="mx-2 mt-1"
-              tabs={workspaceTabs.map((tab) => ({
+              tabs={workspaceTabs.map((tab, index) => ({
                 id: tab.id,
-                label: hasVault ? PAGE_LABELS[tab.page] : 'Vault'
+                label: hasVault ? PAGE_LABELS[tab.page] : 'Vault',
+                icon: hasVault ? PAGE_TAB_ICONS[tab.page] : FolderOpen,
+                shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
               }))}
               activeTabId={activeWorkspaceTabId}
               onSelectTab={handleSelectWorkspaceTab}
@@ -5706,16 +5707,16 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      <div className="calendar-full flex min-h-full flex-col">
+                      <div className="calendar-full min-h-full">
                         <section
                           data-testid={
                             calendarViewMode === 'week'
                               ? 'calendar-week-shell'
                               : 'calendar-month-shell'
                           }
-                          className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line)]"
+                          className="min-h-full rounded-lg border border-[var(--line)]"
                         >
-                          <div className="min-h-0 flex-1">
+                          <div>
                             {calendarViewMode === 'week' ? (
                               <CalendarWeekView
                                 selectedDate={selectedCalendarDate}
@@ -6173,10 +6174,6 @@ function App(): ReactElement {
         onManageVaults={() => {
           setCommandPaletteOpen(false)
           openVaultSwapper()
-        }}
-        onRunVaultMigration={() => {
-          setCommandPaletteOpen(false)
-          void runVaultMigration()
         }}
       />
       <VaultSwapperDialog

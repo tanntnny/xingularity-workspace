@@ -118,13 +118,42 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
 async function openWeeklyCalendar(page: Page): Promise<void> {
   await page.getByTestId('sidebar-page:calendar').click()
-  await expect(page.getByLabel(/Calendar view:/)).toBeVisible()
-  await page.getByLabel(/Calendar view:/).click()
-  await page.getByRole('menuitemradio', { name: 'Weekly' }).click()
+  const weeklyViewButton = page.getByText('Weekly', { exact: true })
+  await expect(weeklyViewButton).toBeVisible()
+  await weeklyViewButton.click()
   await expect(page.getByTestId('calendar-week-view')).toBeVisible()
 }
 
 test.describe('calendar weekly drag preview', () => {
+  test('keeps weekday headers visible while scrolling the time grid', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      const weekdayHeader = page.getByTestId('calendar-week-weekday-header')
+      await expect(weekdayHeader).toBeVisible()
+      await expect(weekdayHeader).toHaveCSS('position', 'sticky')
+      const weekdayHeaderTop = await weekdayHeader.evaluate(
+        (element) => element.getBoundingClientRect().top
+      )
+
+      const workspaceContent = page.locator('.document-workspace-main-content')
+      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+      await workspaceContent.evaluate((element) => {
+        element.scrollTop = 240
+      })
+      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      expect(await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(
+        weekdayHeaderTop - 4
+      )
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   test('creates and opens a timed task when double-clicking an empty weekly cell', async () => {
     const { rootPath, todayIso } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
@@ -154,7 +183,7 @@ test.describe('calendar weekly drag preview', () => {
       const dialog = page.getByRole('dialog')
       await expect(dialog).toBeVisible()
       await expect(dialog.getByRole('heading', { name: 'Edit task' })).toBeVisible()
-      await expect(dialog.locator('input[type="date"]')).toHaveValue(todayIso)
+      await expect(dialog.locator('input[type="date"]').first()).toHaveValue(todayIso)
       await expect(dialog.locator('input[type="time"]').first()).toHaveValue('06:20')
       await expect(dialog.locator('input[type="time"]').nth(1)).toHaveValue('07:20')
     } finally {

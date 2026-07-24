@@ -11,7 +11,12 @@ This repo now has two renderer UI layers inside the app, plus one reusable packa
 
 ## Source Of Truth
 
-- Visual tokens and shell utilities live in [main.css](../../src/renderer/src/assets/main.css).
+- The reusable light/dark tokens and shell utilities live in
+  [`packages/workspace-template`](../../packages/workspace-template). New apps should import
+  its stylesheet and compose their shell from its exports.
+- [main.css](../../src/renderer/src/assets/main.css) remains the reference implementation while
+  Xingularity is migrated to consume the package directly. Do not create new one-off shell
+  patterns there that cannot be promoted into the package.
 - Behavioral shell and style rules live in [docs/ai/ui.yaml](../ai/ui.yaml).
 - Feature pages should prefer shared components over raw utility-class composition when a matching primitive exists.
 - Cross-project reuse should start from `packages/workspace-template`, not `templates/workspace-app`.
@@ -22,6 +27,13 @@ This repo now has two renderer UI layers inside the app, plus one reusable packa
 - Use `components/workspace` for workspace shell, page sections, empty states, and shared shell composition.
 - Do not import `@mui/*` or `@radix-ui/*` directly from feature pages/components.
 
+For Tailwind applications, include the installed package in the content scan so its utility
+classes are emitted:
+
+```ts
+content: ['./src/**/*.{ts,tsx}', './node_modules/@xingularity/workspace-template/dist/**/*.{js,mjs}']
+```
+
 ## Current Canonical Patterns
 
 - Global shell: `SidebarProvider` + `AppSidebar` + `SidebarInset`
@@ -30,6 +42,8 @@ This repo now has two renderer UI layers inside the app, plus one reusable packa
 - Empty states: `WorkspaceEmptyState`
 - Settings/forms: `Field` + `Input`/`Select`/`Switch`/`Textarea`
 - Shell shortcuts: `useWorkspaceShellShortcuts`
+- Cross-app shell: `WorkspaceAppShell` + `WorkspaceSidebar` + `WorkspaceCommandPalette` +
+  `WorkspaceTabManager`
 
 ## Migration Goal
 
@@ -40,3 +54,4 @@ The target state is consistent design through composition, not more one-off clas
 - shared spacing and card language
 - shared keyboard behaviors
 - shared docs for human and agent reuse
+- no copy-and-modify versions of the global sidebar, command palette, or document shell

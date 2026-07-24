@@ -1,13 +1,16 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { PanelRightClose, PanelRightOpen, Plus, X } from 'lucide-react'
+import { type LucideIcon, PanelRightClose, PanelRightOpen, Plus, X } from 'lucide-react'
 
 import { cn } from '../../lib/utils'
 import { ActionButtonGroup } from './button-group'
+import { Shortcut, type ShortcutKey } from './kbd'
 
 type WorkspaceTab = {
   id: string
   label: string
+  icon?: LucideIcon
+  shortcut?: readonly ShortcutKey[]
 }
 
 interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
@@ -46,6 +49,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
         <div className="flex min-w-max items-center gap-1.5 pr-1">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId
+            const TabIcon = tab.icon
 
             return (
               <div
@@ -59,10 +63,27 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   id={`workspace-tab:${tab.id}`}
                   aria-selected={isActive}
                   data-testid={`workspace-tab:${tab.id}`}
-                  className="min-w-0 flex-1 truncate px-2 text-left text-xs font-medium text-[var(--text)]"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-xs font-medium text-[var(--text)]"
                   onClick={() => onSelectTab(tab.id)}
                 >
-                  {tab.label}
+                  {TabIcon ? (
+                    <TabIcon
+                      size={14}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      data-testid={`workspace-tab-icon:${tab.id}`}
+                      className="shrink-0 text-[var(--muted)]"
+                    />
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  {tab.shortcut ? (
+                    <Shortcut
+                      keys={tab.shortcut}
+                      data-testid={`workspace-tab-shortcut:${tab.id}`}
+                      className="pointer-events-none h-4 min-w-0 shrink-0 px-1 text-[9px]"
+                      keyClassName="[&_svg]:h-2 [&_svg]:w-2"
+                    />
+                  ) : null}
                 </button>
                 <button
                   type="button"

@@ -1,5 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { NotebookPen } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
 import { AppSidebar } from '../src/renderer/src/components/AppSidebar'
 import { SidebarProvider } from '../src/renderer/src/components/ui/sidebar'
@@ -77,7 +78,7 @@ describe('sidebar shortcuts', () => {
     const markup = renderToStaticMarkup(
       createElement(WorkspaceTabManager, {
         tabs: [
-          { id: 'notes', label: 'Notebooks' },
+          { id: 'notes', label: 'Notebooks', icon: NotebookPen, shortcut: ['cmd', '1'] },
           { id: 'projects', label: 'Projects' }
         ],
         activeTabId: 'projects',
@@ -92,6 +93,10 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-testid="workspace-tab:projects"')
     expect(markup).toContain('data-testid="workspace-tab-close:projects"')
     expect(markup).toContain('data-testid="workspace-tab-add"')
+    expect(markup).toContain('data-testid="workspace-tab-icon:notes"')
+    expect(markup).toContain('data-testid="workspace-tab-shortcut:notes"')
+    expect(markup).toContain('aria-label="Command"')
+    expect(markup).toContain('aria-label="1"')
     expect(markup).toContain('data-active="true"')
   })
 })

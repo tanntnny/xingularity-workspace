@@ -182,6 +182,7 @@ export {
 
 export {
   DocumentWorkspace,
+  WorkspaceTabManager,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
@@ -191,7 +192,9 @@ export {
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
-  WorkspaceActionButton
+  WorkspaceActionButton,
+  type WorkspaceTab,
+  type WorkspaceTabManagerProps
 } from './document-workspace'
 
 export { WorkspacePanelSection, WorkspacePanelSectionHeader } from './workspace-panel-section'

@@ -1,6 +1,113 @@
 import * as React from 'react'
+import { type LucideIcon, Plus, X } from 'lucide-react'
 
 import { cn } from '../lib/utils'
+import { Shortcut, type ShortcutKey } from './kbd'
+
+export interface WorkspaceTab {
+  id: string
+  label: string
+  icon?: LucideIcon
+  shortcut?: readonly ShortcutKey[]
+}
+
+export interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
+  tabs: readonly WorkspaceTab[]
+  activeTabId: string
+  onSelectTab: (tabId: string) => void
+  onCloseTab: (tabId: string) => void
+  onAddTab: () => void
+  addDisabled?: boolean
+}
+
+const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerProps>(
+  (
+    {
+      className,
+      tabs,
+      activeTabId,
+      onSelectTab,
+      onCloseTab,
+      onAddTab,
+      addDisabled = false,
+      ...props
+    },
+    ref
+  ) => (
+    <nav
+      ref={ref}
+      aria-label="Workspace tabs"
+      className={cn(
+        'document-workspace-tab-manager app-drag-region mb-1 flex h-9 min-w-0 shrink-0 items-center',
+        className
+      )}
+      {...props}
+    >
+      <div className="min-w-0 flex-1 overflow-x-auto" role="tablist" aria-label="Open pages">
+        <div className="flex min-w-max items-center gap-1.5 pr-1">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId
+            const TabIcon = tab.icon
+
+            return (
+              <div
+                key={tab.id}
+                data-active={isActive ? 'true' : 'false'}
+                className="document-workspace-tab group app-no-drag flex h-7 w-52 shrink-0 items-center rounded-md border border-[var(--shell-border)]"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  id={`workspace-tab:${tab.id}`}
+                  aria-selected={isActive}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-xs font-medium text-[var(--text)]"
+                  onClick={() => onSelectTab(tab.id)}
+                >
+                  {TabIcon ? (
+                    <TabIcon
+                      size={14}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      className="shrink-0 text-[var(--muted)]"
+                    />
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  {tab.shortcut ? (
+                    <Shortcut
+                      keys={tab.shortcut}
+                      className="pointer-events-none h-4 min-w-0 shrink-0 px-1 text-[9px]"
+                      keyClassName="[&_svg]:h-2 [&_svg]:w-2"
+                    />
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Close ${tab.label} tab`}
+                  title={`Close ${tab.label} tab`}
+                  className="mr-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+                  onClick={() => onCloseTab(tab.id)}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            )
+          })}
+          <button
+            type="button"
+            aria-label="New tab"
+            title="New tab (Cmd+T)"
+            disabled={addDisabled}
+            className="app-no-drag inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--shell-border)] text-[var(--text)] transition hover:bg-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onAddTab}
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </nav>
+  )
+)
+WorkspaceTabManager.displayName = 'WorkspaceTabManager'
 
 const workspaceMainHeaderClass =
   'document-workspace-header document-workspace-main-header app-drag-region flex h-[80px] shrink-0 items-center gap-2 border-b border-[var(--sidebar-border)] bg-[var(--workspace-main-panel)] px-3'
@@ -170,6 +277,7 @@ const DocumentWorkspacePanelContent = React.forwardRef<
 DocumentWorkspacePanelContent.displayName = 'DocumentWorkspacePanelContent'
 
 export {
+  WorkspaceTabManager,
   DocumentWorkspace,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,

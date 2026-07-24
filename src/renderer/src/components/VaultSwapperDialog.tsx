@@ -21,11 +21,9 @@ interface VaultSwapperDialogProps {
 const paletteRowClassName =
   'relative flex min-w-0 items-center gap-2 select-none rounded-lg px-2 py-1.5 text-sm outline-none transition-[background-color,color,box-shadow] disabled:pointer-events-none disabled:opacity-50'
 
-const paletteRowHoverClassName =
-  'hover:bg-[var(--accent-color)] hover:shadow-[inset_0_0_0_1px_var(--accent-line)]'
+const paletteRowHoverClassName = 'hover:bg-[var(--accent-color)]'
 
-const paletteRowSelectedClassName =
-  'bg-[var(--accent-color)] shadow-[inset_0_0_0_1px_var(--accent-line)]'
+const paletteRowSelectedClassName = 'bg-[var(--accent-color)]'
 
 type VaultPaletteSelectionItem =
   | {
@@ -345,6 +343,7 @@ export function VaultSwapperDialog({
     <Pallete
       open={open}
       aria-label="Manage vaults"
+      className="command-palette-top-aligned !top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={(nextOpen) => {
         onOpenChange(nextOpen)
       }}
@@ -360,7 +359,7 @@ export function VaultSwapperDialog({
           />
         </PalleteSearchBar>
 
-        <div className="max-h-[360px] overflow-y-auto p-2">
+        <div className="max-h-[360px] overflow-y-auto p-1">
           {loading && !savedVaultState ? (
             <div className="rounded-lg px-3 py-3 text-sm text-[var(--muted)]">
               Loading saved vaults...

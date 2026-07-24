@@ -98,6 +98,7 @@ export function CalendarMonthView({
 }: CalendarMonthViewProps): ReactElement {
   const calendarRef = useRef<FullCalendar | null>(null)
   const mirrorParent = typeof document === 'undefined' ? undefined : document.body
+  const todayIso = toIsoDate(new Date())
   const [hoveredTaskCard, setHoveredTaskCard] = useState<{
     task: CalendarTask
     x: number
@@ -550,18 +551,18 @@ export function CalendarMonthView({
   }
 
   return (
-    <section
-      className="calendar-full min-h-0 overflow-hidden rounded-b-2xl"
-      data-testid="calendar-month-view"
-    >
-      <div className="relative overflow-hidden">
+    <section className="calendar-full min-h-full rounded-b-2xl" data-testid="calendar-month-view">
+      <div className="relative">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           initialDate={selectedDate}
           headerToolbar={false}
+          height="auto"
           firstDay={0}
+          fixedWeekCount={false}
+          stickyHeaderDates
           editable
           droppable
           eventResizableFromStart
@@ -572,6 +573,29 @@ export function CalendarMonthView({
           dayMaxEventRows={false}
           dayMaxEvents={false}
           displayEventTime={false}
+          dayHeaderContent={(arg) => {
+            const date = toIsoDate(arg.date)
+            const isHighlighted = date === selectedDate || date === todayIso
+            const isToday = date === todayIso
+
+            return (
+              <div
+                className={`flex w-full flex-col items-center px-3 py-3 text-center transition-colors ${
+                  isHighlighted
+                    ? 'bg-[var(--accent-soft)]'
+                    : 'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)]'
+                }`}
+              >
+                <span
+                  className={`text-sm font-semibold ${
+                    isToday ? 'text-[var(--accent)]' : 'text-[var(--text)]'
+                  }`}
+                >
+                  {formatWeekdayHeaderLabel(arg.date)}
+                </span>
+              </div>
+            )
+          }}
           drop={handleExternalDrop}
           eventDragStart={handleEventDragStart}
           eventDrop={handleEventDrop}
@@ -937,6 +961,12 @@ function addIsoDays(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
   return next
+}
+
+function formatWeekdayHeaderLabel(date: Date): string {
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long'
+  })
 }
 
 function setUnscheduledDragState(isActive: boolean): void {
