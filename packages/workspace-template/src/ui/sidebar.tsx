@@ -275,7 +275,7 @@ const Sidebar = React.forwardRef<
             // Adjust the padding for floating and inset variants.
             variant === 'floating' || variant === 'inset'
               ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]'
-              : 'group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l border-sidebar-border',
+              : 'group-data-[collapsible=icon]:w-[--sidebar-width-icon]',
             className
           )}
           {...props}
@@ -594,19 +594,10 @@ const SidebarMenuButton = React.forwardRef<
         className={cn(
           sidebarMenuButtonVariants({ variant, size }),
           showLeadingRail &&
-            "relative before:pointer-events-none before:absolute before:bottom-[0.34rem] before:left-[0.67rem] before:top-[0.34rem] before:w-[1.5px] before:rounded-full before:bg-[var(--sidebar-menu-rail-color)] before:content-[''] data-[active=true]:before:bg-[var(--sidebar-menu-rail-active-color)] group-data-[collapsible=icon]:before:hidden",
+            "relative before:pointer-events-none before:absolute before:bottom-[0.34rem] before:left-[var(--sidebar-section-rail-left,0.84rem)] before:top-[0.34rem] before:w-[var(--sidebar-section-rail-width,1px)] before:rounded-full before:bg-[var(--sidebar-section-rail-active-color,var(--accent))] before:opacity-0 before:content-[''] before:transition-opacity data-[active=true]:before:opacity-100 group-data-[collapsible=icon]:before:hidden",
           className
         )}
-        style={
-          showLeadingRail
-            ? ({
-                '--sidebar-menu-rail-color':
-                  'color-mix(in srgb, var(--sidebar-section-icon-color, var(--sidebar-border)) 52%, transparent)',
-                '--sidebar-menu-rail-active-color': 'var(--accent)',
-                ...style
-              } as React.CSSProperties)
-            : style
-        }
+        style={style}
         {...props}
       />
     )

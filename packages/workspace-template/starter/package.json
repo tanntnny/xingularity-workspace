@@ -8,6 +8,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "predev": "node scripts/ensure-electron.cjs",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "start": "electron-vite preview"
@@ -32,5 +33,10 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vite": "^7.2.6"
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true,
+    "fsevents": true
   }
 }

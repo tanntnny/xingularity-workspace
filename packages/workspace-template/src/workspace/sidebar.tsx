@@ -1,4 +1,11 @@
-import { type ReactElement, type ReactNode, useMemo, useState } from 'react'
+import {
+  type CSSProperties,
+  type PointerEventHandler,
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useState
+} from 'react'
 import { ChevronDown, ChevronRight, Search, type LucideIcon } from 'lucide-react'
 
 import { Pressable } from '../ui/pressable'
@@ -24,6 +31,8 @@ export interface WorkspaceSidebarItem {
   badge?: ReactNode
   shortcut?: readonly ShortcutKey[]
   disabled?: boolean
+  testId?: string
+  shortcutTestId?: string
 }
 
 export interface WorkspaceSidebarSection {
@@ -56,7 +65,56 @@ export interface WorkspaceSidebarProps {
   disabled?: boolean
   className?: string
   collapsible?: 'offcanvas' | 'icon' | 'none'
+  onPointerDownCapture?: PointerEventHandler<HTMLDivElement>
 }
+
+const SIDEBAR_MENU_BUTTON_SX = {
+  width: '100%',
+  minHeight: '100%',
+  justifyContent: 'flex-start',
+  alignItems: 'center',
+  gap: 1,
+  borderRadius: '0.5rem',
+  padding: '1.025rem 0.9rem 1.025rem 1.75rem',
+  border: '1px solid transparent',
+  color: 'color-mix(in srgb, var(--sidebar-foreground) 60%, transparent)',
+  background: 'transparent',
+  fontWeight: 400,
+  '.group[data-collapsible="icon"] &': {
+    padding: 0,
+    borderRadius: '0.75rem'
+  },
+  '&[data-active="true"]': {
+    background:
+      'linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end)) padding-box, linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end)) border-box',
+    color: 'var(--sidebar-foreground)',
+    fontWeight: 500
+  },
+  '&[data-active="true"]:hover': {
+    background:
+      'linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end)) padding-box, linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end)) border-box'
+  }
+} as const
+
+const SIDEBAR_SECTION_BUTTON_SX = {
+  width: '100%',
+  justifyContent: 'flex-start',
+  alignItems: 'center',
+  gap: 0.6,
+  borderRadius: '0.5rem',
+  padding: '0.35rem 0.15rem 0.35rem 0.42rem',
+  border: '1px solid transparent',
+  background: 'transparent',
+  color: 'color-mix(in srgb, var(--sidebar-foreground) 72%, transparent)',
+  '.group[data-collapsible="icon"] &': {
+    padding: '0.5rem 0',
+    justifyContent: 'center',
+    borderRadius: '0.75rem'
+  },
+  '&[data-active="true"]': {
+    color: 'var(--sidebar-foreground)'
+  }
+} as const
 
 function isItemDisabled(item: WorkspaceSidebarItem, disabled: boolean): boolean {
   return disabled || item.disabled === true
@@ -72,7 +130,8 @@ export function WorkspaceSidebar({
   onOpenCommandPalette,
   disabled = false,
   className,
-  collapsible = 'icon'
+  collapsible = 'icon',
+  onPointerDownCapture
 }: WorkspaceSidebarProps): ReactElement {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(sections.map((section) => [section.id, section.defaultOpen ?? true]))
@@ -91,14 +150,17 @@ export function WorkspaceSidebar({
         <SidebarMenuButton
           asChild
           isActive={activeItemId === item.id}
+          showLeadingRail={nested}
+          onClick={itemDisabled ? undefined : () => onSelect(item.id)}
           disabled={itemDisabled}
           tooltip={item.label}
         >
           <Pressable
-            className={`sidebar-menu-card ${nested ? 'sidebar-menu-card-nested' : 'px-3 py-2'}`}
+            className={`sidebar-menu-card ${nested ? 'sidebar-menu-card-nested' : ''}`}
+            data-testid={item.testId}
             data-active={activeItemId === item.id}
+            sx={SIDEBAR_MENU_BUTTON_SX}
             disabled={itemDisabled}
-            onClick={() => onSelect(item.id)}
           >
             {ItemIcon ? <ItemIcon size={15} className="shrink-0" aria-hidden="true" /> : null}
             <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -106,6 +168,7 @@ export function WorkspaceSidebar({
             {item.shortcut ? (
               <Shortcut
                 keys={item.shortcut}
+                data-testid={item.shortcutTestId}
                 className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
               />
             ) : null}
@@ -116,8 +179,12 @@ export function WorkspaceSidebar({
   }
 
   return (
-    <Sidebar collapsible={collapsible} className={`app-sidebar-glass ${className ?? ''}`.trim()}>
-      <SidebarHeader className="mt-3 flex h-[96px] shrink-0 items-center justify-center border-b border-[var(--line)] px-3 pb-0">
+    <Sidebar
+      collapsible={collapsible}
+      className={`app-sidebar-glass ${className ?? ''}`.trim()}
+      onPointerDownCapture={onPointerDownCapture}
+    >
+      <SidebarHeader className="flex h-[96px] shrink-0 items-center justify-center border-b border-[var(--line)] px-3 pb-0 mt-3">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           {brand.logo ? <span className="shrink-0">{brand.logo}</span> : null}
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
@@ -147,7 +214,8 @@ export function WorkspaceSidebar({
           type="button"
           onClick={onOpenCommandPalette}
           disabled={disabled}
-          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--accent-line)] px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ borderColor: 'var(--accent-line)' }}
           aria-label="Open command palette"
           title="Open command palette"
         >
@@ -168,15 +236,26 @@ export function WorkspaceSidebar({
           const ChevronIcon = isOpen ? ChevronDown : ChevronRight
 
           return (
-            <SidebarGroup key={section.id} className="sidebar-section-group px-3 py-2">
+            <SidebarGroup
+              key={section.id}
+              className="sidebar-section-group px-3 py-2"
+              style={
+                {
+                  '--sidebar-section-icon-color':
+                    'color-mix(in srgb, var(--sidebar-foreground) 82%, transparent)'
+                } as CSSProperties
+              }
+            >
               <Pressable
-                className="sidebar-section-trigger flex items-center gap-2 rounded-md px-1 py-1"
+                className="sidebar-section-trigger"
                 data-active={activeInSection}
                 data-open={isOpen}
                 disabled={disabled}
                 onClick={() =>
                   setOpenSections((current) => ({ ...current, [section.id]: !isOpen }))
                 }
+                title={section.label}
+                sx={SIDEBAR_SECTION_BUTTON_SX}
                 data-no-ripple
               >
                 <span className="sidebar-section-icon">

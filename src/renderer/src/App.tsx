@@ -5188,7 +5188,6 @@ function App(): ReactElement {
         >
           <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
             <WorkspaceTabManager
-              className="mx-2 mt-1"
               tabs={workspaceTabs.map((tab, index) => ({
                 id: tab.id,
                 label: hasVault ? PAGE_LABELS[tab.page] : 'Vault',

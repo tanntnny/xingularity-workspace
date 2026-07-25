@@ -43,6 +43,8 @@ export {
   DialogContent,
   DialogHeader,
   DialogFooter,
+  DialogActionButton,
+  DialogCloseAction,
   DialogTitle,
   DialogDescription
 } from './dialog'
@@ -119,13 +121,17 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
-export { TabMenu, TabMenuItem } from './tab-menu'
+export { TabMenu, TabMenuItem, TabMenuCountBadge } from './tab-menu'
 export {
+  ActionButtonGroup,
   ButtonGroup,
   ButtonGroupItem,
   buttonGroupVariants,
   buttonGroupItemVariants
 } from './button-group'
+export type { ActionButtonGroupProps } from './button-group'
+export { SelectionMenu } from './selection-menu'
+export type { SelectionMenuOption } from './selection-menu'
 
 export {
   Table,
@@ -185,16 +191,18 @@ export {
   WorkspaceTabManager,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
+  WorkspaceHeaderSecondaryActions,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
+  DocumentWorkspaceFooterStatus,
+  WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
   WorkspaceActionButton,
-  type WorkspaceTab,
-  type WorkspaceTabManagerProps
+  type WorkspaceTab
 } from './document-workspace'
 
 export { WorkspacePanelSection, WorkspacePanelSectionHeader } from './workspace-panel-section'

@@ -1,6 +1,5 @@
 import * as React from 'react'
 import * as DrawerPrimitive from '@radix-ui/react-dialog'
-import { X } from 'lucide-react'
 
 import { cn } from '../lib/utils'
 
@@ -48,18 +47,14 @@ const DrawerContent = React.forwardRef<
       <DrawerPrimitive.Content
         ref={ref}
         className={cn(
-          'drawer-glass-content fixed z-50 flex flex-col border-[var(--line-strong)]',
+          'drawer-glass-content fixed z-50 flex flex-col overflow-hidden border-[var(--line-strong)] transform-gpu',
           sideClasses[side],
           className
         )}
         style={{ ...dimensionStyle, ...style }}
         {...props}
       >
-        <div className="relative flex h-full flex-col">{children}</div>
-        <DrawerPrimitive.Close className="absolute right-4 top-4 rounded-full border border-transparent p-1 text-[var(--muted)] transition-colors hover:border-[var(--line)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </DrawerPrimitive.Close>
+        <div className="flex h-full min-h-0 flex-col">{children}</div>
       </DrawerPrimitive.Content>
     </DrawerPortal>
   )
@@ -68,9 +63,12 @@ DrawerContent.displayName = DrawerPrimitive.Content.displayName
 
 const DrawerHeader = ({
   className,
+  children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>): React.ReactElement => (
-  <div className={cn('flex flex-col gap-1.5 px-6 py-5 text-left', className)} {...props} />
+  <div className={cn('px-6 py-5 text-left', className)} {...props}>
+    <div className="min-w-0 space-y-1.5">{children}</div>
+  </div>
 )
 DrawerHeader.displayName = 'DrawerHeader'
 

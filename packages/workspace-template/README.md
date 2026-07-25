@@ -58,4 +58,10 @@ Build before publishing or linking outside this workspace:
 npm --workspace @xingularity/workspace-template run build
 ```
 
+While developing this repository, keep the package visually identical to Xingularity with:
+
+```bash
+npm --workspace @xingularity/workspace-template run verify:renderer-sync
+```
+
 The Codex scaffold plugin copies this starter plus the package source into a new project.

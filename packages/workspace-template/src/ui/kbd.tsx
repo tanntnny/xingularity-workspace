@@ -1,4 +1,4 @@
-import { Command } from 'lucide-react'
+import { ArrowRightToLine, Command, Option } from 'lucide-react'
 import { HTMLAttributes, ReactElement, ReactNode } from 'react'
 import { cn } from '../lib/utils'
 
@@ -10,7 +10,10 @@ type ShortcutDefinition = {
 }
 
 const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
-  alt: { ariaLabel: 'Option', label: 'Opt' },
+  alt: {
+    ariaLabel: 'Option',
+    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+  },
   backspace: { ariaLabel: 'Backspace', label: '⌫' },
   cmd: {
     ariaLabel: 'Command',
@@ -32,13 +35,22 @@ const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
     ariaLabel: 'Command',
     label: <Command className="h-2.5 w-2.5" aria-hidden="true" />
   },
-  opt: { ariaLabel: 'Option', label: 'Opt' },
-  option: { ariaLabel: 'Option', label: 'Opt' },
+  opt: {
+    ariaLabel: 'Option',
+    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+  },
+  option: {
+    ariaLabel: 'Option',
+    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+  },
   return: { ariaLabel: 'Enter', label: 'Enter' },
   right: { ariaLabel: 'Right Arrow', label: '→' },
   shift: { ariaLabel: 'Shift', label: 'Shift' },
   space: { ariaLabel: 'Space', label: 'Space' },
-  tab: { ariaLabel: 'Tab', label: 'Tab' },
+  tab: {
+    ariaLabel: 'Tab',
+    label: <ArrowRightToLine className="h-2.5 w-2.5" aria-hidden="true" />
+  },
   up: { ariaLabel: 'Up Arrow', label: '↑' }
 }
 

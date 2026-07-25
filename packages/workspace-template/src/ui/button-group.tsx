@@ -22,17 +22,33 @@ const buttonGroupVariants = cva('inline-flex items-center', {
   }
 })
 
+const actionButtonGroupVariants = cva(
+  'workspace-action-group workspace-action-button-group inline-flex items-center gap-0 overflow-hidden rounded-full p-0',
+  {
+    variants: {
+      size: {
+        default: 'h-8',
+        sm: 'h-7',
+        lg: 'h-9'
+      }
+    },
+    defaultVariants: {
+      size: 'default'
+    }
+  }
+)
+
 const buttonGroupItemVariants = cva(
   'inline-flex items-center justify-center whitespace-nowrap font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         default:
-          'rounded-md text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--panel)_18%,transparent)] hover:text-[var(--text)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
+          'rounded-md border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_42%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--panel)_18%,transparent)] hover:text-[var(--text)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         outline:
-          'rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
+          'rounded-md border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_46%,transparent)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)] data-[active=true]:shadow-sm',
         ghost:
-          'rounded-lg border border-transparent text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)]'
+          'rounded-lg border border-transparent text-[var(--muted)] hover:border-[color:color-mix(in_srgb,var(--accent-line)_46%,transparent)] hover:text-[var(--text)] hover:bg-[var(--panel-2)] data-[active=true]:border-[var(--accent-line)] data-[active=true]:bg-[var(--accent-soft)] data-[active=true]:text-[var(--text)]'
       },
       size: {
         default: 'h-8 px-3 text-sm',
@@ -79,6 +95,21 @@ const ButtonGroup = React.forwardRef<HTMLDivElement, ButtonGroupProps>(
 )
 ButtonGroup.displayName = 'ButtonGroup'
 
+export interface ActionButtonGroupProps
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof actionButtonGroupVariants> {}
+
+const ActionButtonGroup = React.forwardRef<HTMLDivElement, ActionButtonGroupProps>(
+  ({ className, size, ...props }, ref) => (
+    <div
+      ref={ref}
+      role="group"
+      className={cn(actionButtonGroupVariants({ size }), className)}
+      {...props}
+    />
+  )
+)
+ActionButtonGroup.displayName = 'ActionButtonGroup'
+
 export interface ButtonGroupItemProps
   extends
     React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -120,4 +151,10 @@ const ButtonGroupItem = React.forwardRef<HTMLButtonElement, ButtonGroupItemProps
 )
 ButtonGroupItem.displayName = 'ButtonGroupItem'
 
-export { ButtonGroup, ButtonGroupItem, buttonGroupVariants, buttonGroupItemVariants }
+export {
+  ActionButtonGroup,
+  ButtonGroup,
+  ButtonGroupItem,
+  buttonGroupVariants,
+  buttonGroupItemVariants
+}

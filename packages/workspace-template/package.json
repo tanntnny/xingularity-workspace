@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
+    "verify:renderer-sync": "node ../../scripts/verify-workspace-template-sync.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src starter --ext .ts,.tsx",
     "scaffold:verify": "tsc --noEmit -p starter/tsconfig.node.json --composite false && tsc --noEmit -p starter/tsconfig.web.json --composite false"

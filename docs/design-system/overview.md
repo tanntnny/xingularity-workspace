@@ -14,9 +14,10 @@ This repo now has two renderer UI layers inside the app, plus one reusable packa
 - The reusable light/dark tokens and shell utilities live in
   [`packages/workspace-template`](../../packages/workspace-template). New apps should import
   its stylesheet and compose their shell from its exports.
-- [main.css](../../src/renderer/src/assets/main.css) remains the reference implementation while
-  Xingularity is migrated to consume the package directly. Do not create new one-off shell
-  patterns there that cannot be promoted into the package.
+- [main.css](../../src/renderer/src/assets/main.css) and `components/ui` are the live reference
+  implementation. The package is required to mirror them; run
+  `npm --workspace @xingularity/workspace-template run verify:renderer-sync` after changing the
+  shell, tokens, or a shared primitive.
 - Behavioral shell and style rules live in [docs/ai/ui.yaml](../ai/ui.yaml).
 - Feature pages should prefer shared components over raw utility-class composition when a matching primitive exists.
 - Cross-project reuse should start from `packages/workspace-template`, not `templates/workspace-app`.

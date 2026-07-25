@@ -26,7 +26,7 @@ const ContextMenuSubTrigger = React.forwardRef<
   <ContextMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-[var(--accent-color)] data-[state=open]:bg-[var(--accent-color)] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+      'flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm text-[var(--text)] outline-none focus:bg-[var(--accent-color)] focus:text-[var(--text)] data-[state=open]:bg-[var(--accent-color)] data-[state=open]:text-[var(--text)] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:!text-[var(--muted)]',
       inset && 'pl-8',
       className
     )}
@@ -45,7 +45,7 @@ const ContextMenuSubContent = React.forwardRef<
   <ContextMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--popover)] p-1 text-[var(--popover-foreground)] shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+      'z-50 min-w-[8rem] overflow-hidden rounded-md border border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--shell-context-surface)_96%,white)] p-1 text-[var(--text)] shadow-lg [&_svg]:!text-[var(--muted)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
       className
     )}
     {...props}
@@ -61,7 +61,7 @@ const ContextMenuContent = React.forwardRef<
     <ContextMenuPrimitive.Content
       ref={ref}
       className={cn(
-        'z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--popover)] p-1 text-[var(--popover-foreground)] shadow-md',
+        'z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--shell-context-surface)_96%,white)] p-1 text-[var(--text)] shadow-md [&_svg]:!text-[var(--muted)]',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
         className
       )}
@@ -80,7 +80,7 @@ const ContextMenuItem = React.forwardRef<
   <ContextMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--accent-foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0',
+      'relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text)] outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--text)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:!text-[var(--muted)]',
       inset && 'pl-8',
       className
     )}
@@ -95,14 +95,7 @@ const ContextMenuDestructiveItem = React.forwardRef<
     inset?: boolean
   }
 >(({ className, ...props }, ref) => (
-  <ContextMenuItem
-    ref={ref}
-    className={cn(
-      'text-[var(--danger)] focus:bg-[rgba(220,38,38,0.14)] focus:text-[var(--danger)] data-[highlighted]:bg-[rgba(220,38,38,0.14)] data-[highlighted]:text-[var(--danger)]',
-      className
-    )}
-    {...props}
-  />
+  <ContextMenuItem ref={ref} className={cn(className)} {...props} />
 ))
 ContextMenuDestructiveItem.displayName = 'ContextMenuDestructiveItem'
 
@@ -113,7 +106,7 @@ const ContextMenuCheckboxItem = React.forwardRef<
   <ContextMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--accent-foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-[var(--text)] outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--text)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:!text-[var(--muted)]',
       className
     )}
     checked={checked}
@@ -136,7 +129,7 @@ const ContextMenuRadioItem = React.forwardRef<
   <ContextMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--accent-foreground)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-[var(--text)] outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--text)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:!text-[var(--muted)]',
       className
     )}
     {...props}
@@ -160,7 +153,7 @@ const ContextMenuLabel = React.forwardRef<
   <ContextMenuPrimitive.Label
     ref={ref}
     className={cn(
-      'px-2 py-1.5 text-sm font-semibold text-[var(--foreground)]',
+      'px-2 py-1.5 text-sm font-semibold text-[var(--text)]',
       inset && 'pl-8',
       className
     )}
@@ -175,7 +168,10 @@ const ContextMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-[var(--border)]', className)}
+    className={cn(
+      '-mx-1 my-1 h-px origin-center scale-y-50 bg-[color-mix(in_srgb,var(--text)_28%,transparent)]',
+      className
+    )}
     {...props}
   />
 ))

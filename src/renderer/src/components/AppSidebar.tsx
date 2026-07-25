@@ -1,28 +1,11 @@
-import { type CSSProperties, ReactElement, useMemo, useState } from 'react'
+import { type ReactElement, useMemo } from 'react'
+import { Bot, CreditCard, House, LayoutDashboard } from 'lucide-react'
 import {
-  Bot,
-  ChevronDown,
-  ChevronRight,
-  CreditCard,
-  LayoutDashboard,
-  House,
-  Search
-} from 'lucide-react'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarSeparator
-} from './ui/sidebar'
-import { Pressable } from './ui'
-import { Shortcut, type ShortcutKey } from './ui/kbd'
+  WorkspaceSidebar,
+  type WorkspaceSidebarItem,
+  type WorkspaceSidebarSection
+} from '../../../../packages/workspace-template/src/workspace/sidebar'
+
 import appLogo from '../../../../assets/logo.png'
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
 
@@ -42,104 +25,48 @@ interface AppSidebarProps {
   collapsible?: 'offcanvas' | 'icon' | 'none'
 }
 
-type SidebarPageItem = {
-  id: AppPage
-  label: string
-  shortcut?: readonly ShortcutKey[]
-}
+type SidebarPageItem = WorkspaceSidebarItem & { id: AppPage }
 
-type SidebarSection = {
-  id: 'board' | 'home' | 'finance' | 'automations'
-  label: string
-  icon: typeof LayoutDashboard | typeof House | typeof CreditCard | typeof Bot
-  items: SidebarPageItem[]
-}
-
-const BOARD_PAGES: SidebarPageItem[] = [{ id: 'knowledge', label: 'Knowledge' }]
-
-const HOME_PAGES: SidebarPageItem[] = [
-  { id: 'notes', label: 'Notebooks' },
-  { id: 'projects', label: 'Projects' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'weeklyPlan', label: 'Weekly Plan' }
-]
-
-const FINANCE_PAGES: SidebarPageItem[] = [{ id: 'subscriptions', label: 'Subscriptions' }]
-
-const DOCUMENT_PAGES: SidebarPageItem[] = [
-  { id: 'schedules', label: 'Schedules' },
-  { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] }
-]
-
-const SETTINGS_PAGE: SidebarPageItem = {
-  id: 'settings',
-  label: 'Settings',
-  shortcut: ['cmd', ',']
-}
-
-const FOOTER_PAGES: SidebarPageItem[] = [SETTINGS_PAGE]
-
-const SIDEBAR_SECTIONS: SidebarSection[] = [
-  { id: 'board', label: 'Board', icon: LayoutDashboard, items: BOARD_PAGES },
-  { id: 'home', label: 'Home', icon: House, items: HOME_PAGES },
-  { id: 'finance', label: 'Finance', icon: CreditCard, items: FINANCE_PAGES },
-  { id: 'automations', label: 'Automations', icon: Bot, items: DOCUMENT_PAGES }
-]
-
-const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
-  board: true,
-  home: true,
-  finance: true,
-  automations: true
-}
-
-const SIDEBAR_MENU_BUTTON_SX = {
-  width: '100%',
-  minHeight: '100%',
-  justifyContent: 'flex-start',
-  alignItems: 'center',
-  gap: 1,
-  borderRadius: '0.5rem',
-  padding: '1.025rem 0.9rem 1.025rem 1.75rem',
-  border: '1px solid transparent',
-  color: 'color-mix(in srgb, var(--sidebar-foreground) 60%, transparent)',
-  background: 'transparent',
-  fontWeight: 400,
-  '.group[data-collapsible="icon"] &': {
-    padding: 0,
-    borderRadius: '0.75rem'
+const SIDEBAR_SECTIONS: ReadonlyArray<
+  Omit<WorkspaceSidebarSection, 'items'> & { items: readonly SidebarPageItem[] }
+> = [
+  {
+    id: 'board',
+    label: 'Board',
+    icon: LayoutDashboard,
+    items: [{ id: 'knowledge', label: 'Knowledge' }]
   },
-  '&[data-active="true"]': {
-    background:
-      'linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end)) padding-box, linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end)) border-box',
-    color: 'var(--sidebar-foreground)',
-    fontWeight: 500
+  {
+    id: 'home',
+    label: 'Home',
+    icon: House,
+    items: [
+      { id: 'notes', label: 'Notebooks' },
+      { id: 'projects', label: 'Projects' },
+      { id: 'calendar', label: 'Calendar' },
+      { id: 'weeklyPlan', label: 'Weekly Plan' }
+    ]
   },
-  '&[data-active="true"]:hover': {
-    background:
-      'linear-gradient(135deg, var(--sidebar-active-bg-start), var(--sidebar-active-bg-end)) padding-box, linear-gradient(135deg, var(--sidebar-active-border-start), var(--sidebar-active-border-end)) border-box'
+  {
+    id: 'finance',
+    label: 'Finance',
+    icon: CreditCard,
+    items: [{ id: 'subscriptions', label: 'Subscriptions' }]
+  },
+  {
+    id: 'automations',
+    label: 'Automations',
+    icon: Bot,
+    items: [
+      { id: 'schedules', label: 'Schedules' },
+      { id: 'agentHistory', label: 'Agent Chat', shortcut: ['cmd', 'i'] }
+    ]
   }
-} as const
+]
 
-const SIDEBAR_SECTION_BUTTON_SX = {
-  width: '100%',
-  justifyContent: 'flex-start',
-  alignItems: 'center',
-  gap: 0.6,
-  borderRadius: '0.5rem',
-  padding: '0.35rem 0.15rem 0.35rem 0.42rem',
-  border: '1px solid transparent',
-  background: 'transparent',
-  color: 'color-mix(in srgb, var(--sidebar-foreground) 72%, transparent)',
-  '.group[data-collapsible="icon"] &': {
-    padding: '0.5rem 0',
-    justifyContent: 'center',
-    borderRadius: '0.75rem'
-  },
-  '&[data-active="true"]': {
-    color: 'var(--sidebar-foreground)'
-  }
-} as const
+const FOOTER_ITEMS: readonly SidebarPageItem[] = [
+  { id: 'settings', label: 'Settings', shortcut: ['cmd', ','] }
+]
 
 function getVaultDisplayName(activeVaultPath: string | null): string {
   if (!activeVaultPath) {
@@ -168,221 +95,76 @@ export function AppSidebar({
   collapsible = 'icon'
 }: AppSidebarProps): ReactElement {
   const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
-  const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
-  const notesCountLabel = toBadgeLabel(notesCount)
-  const projectsCountLabel = toBadgeLabel(projectsCount)
-  const calendarUndoneCountLabel = toBadgeLabel(calendarUndoneCount)
   const welcomeName = profileName.trim() || 'there'
   const sidebarVaultTitle = isLocked ? 'Select vault' : (activeVaultPath ?? 'No vault selected')
   const sidebarVaultLabel = isLocked ? 'Select vault' : getVaultDisplayName(activeVaultPath)
-  const [openSections, setOpenSections] =
-    useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
+  const countLabel = (count: number): string => (count > 99 ? '99+' : String(count))
 
-  const isPageDisabled = (page: SidebarPageItem): boolean => isLocked || page.id === 'weeklyPlan'
+  const sections = useMemo<WorkspaceSidebarSection[]>(
+    () =>
+      SIDEBAR_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items
+          .filter((item) => availablePageSet.has(item.id))
+          .map((item) => ({
+            ...item,
+            badge:
+              item.id === 'notes' && notesCount > 0
+                ? countLabel(notesCount)
+                : item.id === 'projects' && projectsCount > 0
+                  ? countLabel(projectsCount)
+                  : item.id === 'calendar' && calendarUndoneCount > 0
+                    ? countLabel(calendarUndoneCount)
+                    : undefined,
+            disabled: isLocked || item.id === 'weeklyPlan',
+            testId: `sidebar-page:${item.id}`,
+            shortcutTestId: item.shortcut ? `sidebar-shortcut:${item.id}` : undefined
+          }))
+      })),
+    [availablePageSet, calendarUndoneCount, isLocked, notesCount, projectsCount]
+  )
 
-  const toggleSection = (sectionId: SidebarSection['id']): void => {
-    setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }))
-  }
-
-  const renderBadge = (pageId: AppPage): ReactElement | null => {
-    if (pageId === 'notes' && notesCount > 0) {
-      return <SidebarMenuBadge className="right-2">{notesCountLabel}</SidebarMenuBadge>
-    }
-
-    if (pageId === 'projects' && projectsCount > 0) {
-      return <SidebarMenuBadge className="right-2">{projectsCountLabel}</SidebarMenuBadge>
-    }
-
-    if (pageId === 'calendar' && calendarUndoneCount > 0) {
-      return <SidebarMenuBadge className="right-2">{calendarUndoneCountLabel}</SidebarMenuBadge>
-    }
-
-    return null
-  }
-
-  const renderSection = (section: SidebarSection): ReactElement | null => {
-    const visibleItems = section.items.filter((item) => availablePageSet.has(item.id))
-    const isOpen = openSections[section.id]
-    const activeInSection = visibleItems.some((item) => item.id === activePage)
-    const ChevronIcon = isOpen ? ChevronDown : ChevronRight
-
-    if (visibleItems.length === 0) {
-      return null
-    }
-
-    return (
-      <SidebarGroup
-        key={section.id}
-        className="sidebar-section-group px-3 py-2"
-        style={
-          {
-            '--sidebar-section-icon-color':
-              'color-mix(in srgb, var(--sidebar-foreground) 82%, transparent)'
-          } as CSSProperties
-        }
-      >
-        <Pressable
-          className="sidebar-section-trigger"
-          data-active={activeInSection}
-          data-open={isOpen}
-          onClick={() => toggleSection(section.id)}
-          disabled={isLocked}
-          title={section.label}
-          sx={SIDEBAR_SECTION_BUTTON_SX}
-          data-no-ripple
-        >
-          <span className="sidebar-section-icon">
-            <section.icon size={14} strokeWidth={2} />
-          </span>
-          <span className="sidebar-section-label">{section.label}</span>
-          <ChevronIcon
-            size={13}
-            strokeWidth={2.2}
-            className="sidebar-section-chevron ml-auto shrink-0"
-          />
-        </Pressable>
-        <SidebarGroupContent
-          className="pt-0.5 group-data-[collapsible=icon]:hidden"
-          hidden={!isOpen}
-        >
-          <div className="sidebar-section-stack">
-            <span className="sidebar-section-rail" aria-hidden="true" />
-            <SidebarMenu className="sidebar-section-items">
-              {visibleItems.map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    showLeadingRail
-                    onClick={isPageDisabled(page) ? undefined : () => onChange(page.id)}
-                    disabled={isPageDisabled(page)}
-                    tooltip={page.label}
-                  >
-                    <Pressable
-                      className="sidebar-menu-card sidebar-menu-card-nested"
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isPageDisabled(page)}
-                    >
-                      <span>{page.label}</span>
-                      {page.shortcut ? (
-                        <Shortcut
-                          keys={page.shortcut}
-                          data-testid={`sidebar-shortcut:${page.id}`}
-                          className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
-                        />
-                      ) : null}
-                    </Pressable>
-                  </SidebarMenuButton>
-                  {renderBadge(page.id)}
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    )
-  }
+  const footerItems = useMemo<WorkspaceSidebarItem[]>(
+    () =>
+      FOOTER_ITEMS.filter((item) => availablePageSet.has(item.id)).map((item) => ({
+        ...item,
+        disabled: isLocked,
+        testId: `sidebar-page:${item.id}`,
+        shortcutTestId: item.shortcut ? `sidebar-shortcut:${item.id}` : undefined
+      })),
+    [availablePageSet, isLocked]
+  )
 
   return (
-    <Sidebar
-      collapsible={collapsible}
-      className={`app-sidebar-glass ${className ?? ''}`.trim()}
-      onPointerDownCapture={() => onSidebarInteract?.()}
-    >
-      <SidebarHeader className="flex h-[96px] shrink-0 items-center justify-center border-b border-[var(--line)] px-3 mt-3 pb-0">
-        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+    <WorkspaceSidebar
+      activeItemId={activePage}
+      sections={sections}
+      footerItems={footerItems}
+      brand={{
+        logo: (
           <img
             src={appLogo}
             alt="Xingularity logo"
             className="h-11 w-11 shrink-0 rounded-lg border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
           />
-          <div className="leading-tight group-data-[collapsible=icon]:hidden">
-            <p className="sidebar-brand-shimmer text-sm font-semibold tracking-[0.12em] text-sidebar-foreground/70">
-              XINGULARITY
-            </p>
-            <p className="sidebar-brand-shimmer sidebar-brand-shimmer-subtle text-[11px] uppercase tracking-[0.3em] text-sidebar-foreground/45">
-              Workspace
-            </p>
-          </div>
-        </div>
-      </SidebarHeader>
-
-      <div className="px-4 py-6 leading-tight group-data-[collapsible=icon]:hidden">
-        <div className="flex items-center">
-          <div className="min-w-0">
-            <p className="text-[1.1rem] font-semibold text-sidebar-foreground">
-              Welcome back, <span style={{ color: 'var(--accent)' }}>{welcomeName}</span>
-            </p>
-            <div className="flex items-center gap-1.5 pt-1 text-xs tracking-[0.01em] text-sidebar-foreground/60">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
-              <span className="min-w-0 truncate" title={sidebarVaultTitle}>
-                {sidebarVaultLabel}
-              </span>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenSearchPalette}
-          disabled={isLocked}
-          className="mt-4 flex w-full items-center gap-2 rounded-xl border border-[var(--line)] px-2.5 py-1.5 text-left text-sidebar-foreground transition hover:border-[var(--accent)]"
-          style={{
-            borderColor: 'var(--accent-line)'
-          }}
-          aria-label="Open command palette"
-          title="Open command palette"
-        >
-          <Search size={15} className="shrink-0 opacity-70" style={{ color: 'var(--accent)' }} />
-          <span className="min-w-0 flex-1 whitespace-nowrap text-sm text-sidebar-foreground/70">
-            Command palette...
-          </span>
-          <Shortcut keys={['cmd', 'p']} className="ml-auto shrink-0" />
-        </button>
-      </div>
-      <SidebarSeparator />
-
-      <SidebarContent>
-        {SIDEBAR_SECTIONS.filter((section) =>
-          section.items.some((item) => availablePageSet.has(item.id))
-        ).map(renderSection)}
-      </SidebarContent>
-
-      {FOOTER_PAGES.some((page) => availablePageSet.has(page.id)) ? (
-        <>
-          <SidebarSeparator />
-          <SidebarFooter>
-            <SidebarMenu>
-              {FOOTER_PAGES.filter((page) => availablePageSet.has(page.id)).map((page) => (
-                <SidebarMenuItem key={page.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={activePage === page.id}
-                    onClick={isPageDisabled(page) ? undefined : () => onChange(page.id)}
-                    disabled={isPageDisabled(page)}
-                    tooltip={page.label}
-                  >
-                    <Pressable
-                      className="sidebar-menu-card"
-                      data-testid={`sidebar-page:${page.id}`}
-                      sx={SIDEBAR_MENU_BUTTON_SX}
-                      disabled={isPageDisabled(page)}
-                    >
-                      <span>{page.label}</span>
-                      {page.shortcut ? (
-                        <Shortcut
-                          keys={page.shortcut}
-                          className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
-                        />
-                      ) : null}
-                    </Pressable>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarFooter>
-        </>
-      ) : null}
-    </Sidebar>
+        ),
+        name: 'XINGULARITY',
+        subtitle: 'Workspace'
+      }}
+      context={{
+        heading: (
+          <>
+            Welcome back, <span className="text-[var(--accent)]">{welcomeName}</span>
+          </>
+        ),
+        detail: <span title={sidebarVaultTitle}>{sidebarVaultLabel}</span>
+      }}
+      onSelect={(pageId) => onChange(pageId as AppPage)}
+      onOpenCommandPalette={onOpenSearchPalette}
+      disabled={isLocked}
+      className={className}
+      collapsible={collapsible}
+      onPointerDownCapture={onSidebarInteract}
+    />
   )
 }
