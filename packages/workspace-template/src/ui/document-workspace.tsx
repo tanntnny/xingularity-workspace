@@ -40,7 +40,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       ref={ref}
       aria-label="Workspace tabs"
       className={cn(
-        'document-workspace-tab-manager app-drag-region mb-1 flex h-9 min-w-0 shrink-0 items-center',
+        'document-workspace-tab-manager app-drag-region mb-1 flex h-9 min-w-0 shrink-0 items-center px-2',
         className
       )}
       {...props}
