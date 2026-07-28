@@ -59,11 +59,11 @@ export function WorkspaceCommandPalette({
     <Pallete
       open={open}
       aria-label="Command palette"
-      className="command-palette-top-aligned !top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
+      className="!top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={onOpenChange}
     >
       <Command className="flex-1">
-        <PalleteSearchBar data-cmdk-input-wrapper="" className="command-palette-search-bar">
+        <PalleteSearchBar data-cmdk-input-wrapper="">
           <CommandInput bare ref={inputRef} placeholder={placeholder} />
         </PalleteSearchBar>
         <CommandList className="max-h-[min(52vh,32rem)] px-1 py-2">
@@ -84,7 +84,7 @@ export function WorkspaceCommandPalette({
                     }}
                   >
                     {item.icon ? (
-                      <span className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)]">
+                      <span className="mr-2 flex size-8 shrink-0 items-center justify-center text-primary">
                         {item.icon}
                       </span>
                     ) : null}

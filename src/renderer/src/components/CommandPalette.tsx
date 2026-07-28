@@ -17,7 +17,7 @@ import {
   Paintbrush,
   Plus,
   Terminal
-} from 'lucide-react'
+} from './ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import warpLogo from '../assets/warp-logo.png'
@@ -99,7 +99,7 @@ export function CommandPalette({
   onManageVaults
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
-    'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)] transition-colors group-data-[selected=true]:text-[var(--accent)]'
+    'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-primary transition-colors group-data-[selected=true]:text-primary'
   const [query, setQuery] = useState('')
   const [hoveredResult, setHoveredResult] = useState<CommandPaletteSearchResult | null>(null)
   const [isWaitingForSearch, setIsWaitingForSearch] = useState(false)
@@ -368,13 +368,7 @@ export function CommandPalette({
           ]
         : [])
     ],
-    [
-      activeNotePath,
-      onCreate,
-      onManageVaults,
-      onOpenPage,
-      onOpenWarpAtNoteFolder
-    ]
+    [activeNotePath, onCreate, onManageVaults, onOpenPage, onOpenWarpAtNoteFolder]
   )
 
   const filteredCommandItems = useMemo(
@@ -492,7 +486,7 @@ export function CommandPalette({
     <Pallete
       open={open}
       aria-label="Command palette"
-      className="command-palette-top-aligned !top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
+      className="!top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           onClose()
@@ -509,7 +503,7 @@ export function CommandPalette({
             setHoveredResult(result)
           }}
         >
-          <PalleteSearchBar data-cmdk-input-wrapper="" className="command-palette-search-bar">
+          <PalleteSearchBar data-cmdk-input-wrapper="">
             <CommandInput
               bare
               ref={inputRef}
@@ -557,7 +551,7 @@ export function CommandPalette({
                     >
                       <div className={paletteItemIconClass}>
                         {item.logo ? (
-                          <img src={item.logo} alt="" className="h-5 w-5 rounded-[4px]" />
+                          <img src={item.logo} alt="" className="size-5 rounded-sm" />
                         ) : (
                           <Icon className="h-4 w-4" />
                         )}
@@ -592,7 +586,7 @@ export function CommandPalette({
                               ? `Continue ${aiNoteLabel}`
                               : `Complete ${aiNoteLabel}`}
                         </div>
-                        <div className="truncate text-xs text-[var(--muted)]">
+                        <div className="truncate text-xs text-muted-foreground">
                           {activeNotePath
                             ? searchQuery || 'Describe how AI should continue the note.'
                             : 'Open a note first to send its content to Mistral.'}
@@ -676,7 +670,7 @@ export function CommandPalette({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{result.title}</div>
-                              <div className="truncate text-xs text-[var(--muted)]">
+                              <div className="truncate text-xs text-muted-foreground">
                                 {result.subtitle}
                               </div>
                             </div>
@@ -705,7 +699,7 @@ export function CommandPalette({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{stripNoteExtension(note.name)}</div>
-                              <div className="truncate text-xs text-[var(--muted)]">
+                              <div className="truncate text-xs text-muted-foreground">
                                 {note.relPath}
                               </div>
                             </div>
@@ -732,7 +726,7 @@ export function CommandPalette({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{result.title}</div>
-                              <div className="truncate text-xs text-[var(--muted)]">
+                              <div className="truncate text-xs text-muted-foreground">
                                 {result.subtitle}
                               </div>
                             </div>
@@ -771,24 +765,22 @@ export function CommandPalette({
 
         {/* Note Preview Panel */}
         {hoveredResult && (
-          <div className="command-palette-preview hidden w-[260px] shrink-0 border-l border-[color:color-mix(in_srgb,var(--accent-line)_20%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)] p-4 md:block">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:color-mix(in_srgb,var(--accent-line)_24%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_82%,var(--panel))] text-[var(--accent)]">
+          <div className="hidden w-64 shrink-0 border-l bg-muted/30 p-4 md:block">
+            <div className="mb-3 inline-flex size-10 items-center justify-center rounded-md border bg-background text-primary">
               {hoveredResult.kind === 'project' ? (
                 <FolderKanban className="h-4 w-4" />
               ) : (
                 <FileText className="h-4 w-4" />
               )}
             </div>
-            <div className="mb-2 text-sm font-semibold text-[var(--text)]">
-              {hoveredResult.title}
-            </div>
-            <div className="mb-3 text-xs text-[var(--muted)]">{hoveredResult.subtitle}</div>
+            <div className="mb-2 text-sm font-semibold text-foreground">{hoveredResult.title}</div>
+            <div className="mb-3 text-xs text-muted-foreground">{hoveredResult.subtitle}</div>
             {hoveredResult.tags && hoveredResult.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {hoveredResult.tags.slice(0, 5).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full border border-[color:color-mix(in_srgb,var(--accent-line)_22%,var(--line))] bg-[color:color-mix(in_srgb,var(--accent-soft)_90%,var(--panel))] px-2 py-0.5 text-xs text-[var(--accent)]"
+                    className="rounded-md border border-border bg-accent px-2 py-0.5 text-xs text-primary"
                   >
                     {tag}
                   </span>
@@ -796,7 +788,7 @@ export function CommandPalette({
               </div>
             )}
             {hoveredResult.updatedAt ? (
-              <div className="mt-3 text-xs text-[var(--muted)]">
+              <div className="mt-3 text-xs text-muted-foreground">
                 Updated: {new Date(hoveredResult.updatedAt).toLocaleDateString()}
               </div>
             ) : null}

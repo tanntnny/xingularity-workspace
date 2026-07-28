@@ -1,6 +1,5 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
-import { PROFILE_COLOR_VALUES } from '../shared/profileColors'
 import { IPC_CHANNELS } from '../shared/ipc'
 import {
   CALENDAR_TASK_TYPE_VALUES,
@@ -9,7 +8,7 @@ import {
 } from '../shared/types'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
-import { applyMainWindowPerformanceMode, loadMainWindowApp } from './window'
+import { loadMainWindowApp } from './window'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -313,8 +312,7 @@ const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
     .object({
-      name: z.string().trim().min(1).max(100).optional(),
-      color: z.enum(PROFILE_COLOR_VALUES).optional()
+      name: z.string().trim().min(1).max(100).optional()
     })
     .optional(),
   ai: z
@@ -323,7 +321,6 @@ const settingsUpdateSchema = z.object({
     })
     .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
-  performanceModeEnabled: z.boolean().optional(),
   editorVimModeEnabled: z.boolean().optional(),
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
@@ -376,15 +373,6 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     }
 
     await loadMainWindowApp(window)
-  })
-
-  handleIpc(IPC_CHANNELS.uiApplyPerformanceMode, async (event, enabled: unknown) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    if (!window) {
-      return
-    }
-
-    applyMainWindowPerformanceMode(window, z.boolean().parse(enabled))
   })
 
   handleIpc(IPC_CHANNELS.vaultOpen, async () => {

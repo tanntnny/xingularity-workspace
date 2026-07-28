@@ -24,7 +24,7 @@ This repo now has two renderer UI layers inside the app, plus one reusable packa
 
 ## Import Rules
 
-- Use `components/ui` for controls such as `Button`, `Input`, `Select`, `Switch`, `Textarea`, `Field`, `TabMenu`, and sidebar primitives.
+- Use `components/ui` for controls such as `Button`, `Input`, `Select`, `ToggleGroup`, `Switch`, `Textarea`, `Field`, and sidebar primitives.
 - Use `components/workspace` for workspace shell, page sections, empty states, and shared shell composition.
 - Do not import `@mui/*` or `@radix-ui/*` directly from feature pages/components.
 

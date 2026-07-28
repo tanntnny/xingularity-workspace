@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight } from '../ui/icons'
 
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
@@ -16,15 +16,15 @@ const pageWidthClass: Record<NonNullable<WorkspacePageProps['width']>, string> =
 
 const WorkspacePage = React.forwardRef<HTMLElement, WorkspacePageProps>(
   ({ className, width = 'default', children, ...props }, ref) => (
-    <section ref={ref} className={cn('h-full overflow-y-auto px-8 py-7', className)} {...props}>
+    <main ref={ref} className={cn('h-full overflow-y-auto p-2', className)} {...props}>
       <div className={cn('mx-auto flex flex-col gap-6', pageWidthClass[width])}>{children}</div>
-    </section>
+    </main>
   )
 )
 
 WorkspacePage.displayName = 'WorkspacePage'
 
-interface WorkspacePageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+interface WorkspacePageHeaderProps extends React.HTMLAttributes<HTMLElement> {
   eyebrow?: React.ReactNode
   heading: React.ReactNode
   description?: React.ReactNode
@@ -32,35 +32,100 @@ interface WorkspacePageHeaderProps extends React.HTMLAttributes<HTMLDivElement> 
   icon?: React.ReactNode
 }
 
-const WorkspacePageHeader = React.forwardRef<HTMLDivElement, WorkspacePageHeaderProps>(
+const WorkspacePageHeader = React.forwardRef<HTMLElement, WorkspacePageHeaderProps>(
   ({ className, eyebrow, heading, description, actions, icon, ...props }, ref) => (
-    <div
+    <header
       ref={ref}
       className={cn('flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between', className)}
       {...props}
     >
       <div className="min-w-0">
-        {eyebrow ? <p className="workspace-eyebrow">{eyebrow}</p> : null}
-        <h1 className="mt-2 inline-flex items-center gap-3 text-4xl font-semibold tracking-[-0.03em] text-[var(--text)]">
+        {eyebrow ? <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p> : null}
+        <h1 className="mt-2 inline-flex items-center gap-3 text-3xl font-semibold tracking-tight text-foreground">
           {icon}
           <span>{heading}</span>
         </h1>
         {description ? (
-          <p className="mt-3 max-w-2xl text-sm workspace-meta">{description}</p>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
-    </div>
+    </header>
   )
 )
 
 WorkspacePageHeader.displayName = 'WorkspacePageHeader'
 
+interface WorkspacePageLayoutProps extends React.HTMLAttributes<HTMLElement> {
+  heading?: React.ReactNode
+  description?: React.ReactNode
+  toolbar?: React.ReactNode
+  aside?: React.ReactNode
+  asideLabel?: string
+  width?: WorkspacePageProps['width']
+}
+
+const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutProps>(
+  (
+    {
+      className,
+      heading,
+      description,
+      toolbar,
+      aside,
+      asideLabel = 'Context panel',
+      width = 'default',
+      children,
+      ...props
+    },
+    ref
+  ) => (
+    <section
+      ref={ref}
+      className={cn(
+        'grid h-full min-w-0 grid-cols-1 overflow-hidden',
+        aside && 'lg:grid-cols-[minmax(0,1fr)_18rem]',
+        className
+      )}
+      {...props}
+    >
+      <div className="min-w-0 overflow-y-auto p-3">
+        <div className={cn('mx-auto flex min-h-full flex-col gap-6', pageWidthClass[width])}>
+          {heading || description || toolbar ? (
+            <header className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                {heading ? (
+                  <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
+                ) : null}
+                {description ? (
+                  <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+                ) : null}
+              </div>
+              {toolbar ? <div className="flex shrink-0 items-center gap-2">{toolbar}</div> : null}
+            </header>
+          ) : null}
+          {children}
+        </div>
+      </div>
+      {aside ? (
+        <aside
+          aria-label={asideLabel}
+          className="min-h-0 overflow-y-auto border-t bg-muted p-3 lg:border-l lg:border-t-0"
+        >
+          {aside}
+        </aside>
+      ) : null}
+    </section>
+  )
+)
+
+WorkspacePageLayout.displayName = 'WorkspacePageLayout'
+
 const WorkspaceSectionCard = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
   ({ className, ...props }, ref) => (
     <section
       ref={ref}
-      className={cn('workspace-subtle-surface rounded-lg p-6', className)}
+      className={cn('rounded-lg border bg-card p-6 text-card-foreground', className)}
       {...props}
     />
   )
@@ -81,21 +146,21 @@ const WorkspaceEmptyState = React.forwardRef<HTMLDivElement, WorkspaceEmptyState
     <div
       ref={ref}
       className={cn(
-        'workspace-subtle-surface rounded-lg border border-dashed border-[var(--line)] px-4 py-6',
+        'rounded-lg border border-dashed bg-card px-4 py-6 text-card-foreground',
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-2 text-[var(--text)]">
+      <div className="flex items-center gap-2">
         {icon}
         <p className="font-medium">{heading}</p>
       </div>
-      <p className="mt-2 text-sm workspace-meta">{description}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       {actionLabel && onAction ? (
         <Button
           type="button"
           variant="outline"
-          className="workspace-subtle-control mt-4 inline-flex gap-1 border-[var(--line)]"
+          className="mt-4 inline-flex gap-1"
           onClick={onAction}
         >
           <span>{actionLabel}</span>
@@ -108,4 +173,10 @@ const WorkspaceEmptyState = React.forwardRef<HTMLDivElement, WorkspaceEmptyState
 
 WorkspaceEmptyState.displayName = 'WorkspaceEmptyState'
 
-export { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard, WorkspaceEmptyState }
+export {
+  WorkspacePage,
+  WorkspacePageHeader,
+  WorkspacePageLayout,
+  WorkspaceSectionCard,
+  WorkspaceEmptyState
+}

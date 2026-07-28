@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from './icons'
 import { DayPicker } from 'react-day-picker'
 
 import { cn } from '../lib/utils'
@@ -24,7 +24,7 @@ function Calendar({
         caption_label: 'select-none whitespace-nowrap text-sm font-medium',
         dropdowns: 'flex h-7 items-center justify-center gap-1.5 whitespace-nowrap',
         dropdown_root:
-          'relative inline-flex items-center whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--background)] shadow-sm has-[select:focus-visible]:outline-none has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-[var(--ring)] has-[select:focus-visible]:ring-offset-2 has-[select:focus-visible]:ring-offset-[var(--background)]',
+          'relative inline-flex items-center whitespace-nowrap rounded-md border border-input bg-background shadow-sm has-[select:focus-visible]:outline-none has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring has-[select:focus-visible]:ring-offset-2 has-[select:focus-visible]:ring-offset-background',
         dropdown: 'absolute inset-0 opacity-0',
         nav: 'absolute inset-x-0 top-0 flex items-center justify-between',
         button_previous: cn(
@@ -37,9 +37,9 @@ function Calendar({
         ),
         month_grid: 'w-full border-collapse',
         weekdays: 'flex',
-        weekday: 'w-8 rounded-md text-[0.8rem] font-normal text-[var(--muted-foreground)]',
+        weekday: 'w-8 rounded-md text-xs font-normal text-muted-foreground',
         week: 'mt-2 flex w-full',
-        day: 'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-[color-mix(in_srgb,var(--accent-color)_50%,transparent)] [&:has([aria-selected])]:bg-[var(--accent-color)] [&:has([aria-selected])]:rounded-md',
+        day: 'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-md',
         day_button: cn(
           buttonVariants({ variant: 'ghost' }),
           'h-8 w-8 p-0 font-normal aria-selected:opacity-100'
@@ -47,13 +47,12 @@ function Calendar({
         range_start: 'day-range-start',
         range_end: 'day-range-end',
         selected:
-          'bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)] focus:bg-[var(--primary)] focus:text-[var(--primary-foreground)]',
-        today: 'bg-[var(--accent-color)] text-[var(--accent-foreground)]',
+          'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
+        today: 'bg-accent text-accent-foreground',
         outside:
-          'text-[var(--muted-foreground)] aria-selected:bg-[color-mix(in_srgb,var(--accent-color)_50%,transparent)] aria-selected:text-[var(--muted-foreground)]',
-        disabled: 'text-[var(--muted-foreground)] opacity-50',
-        range_middle:
-          'aria-selected:bg-[var(--accent-color)] aria-selected:text-[var(--accent-foreground)]',
+          'text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground',
+        disabled: 'text-muted-foreground opacity-50',
+        range_middle: 'aria-selected:bg-accent aria-selected:text-accent-foreground',
         hidden: 'invisible',
         ...classNames
       }}

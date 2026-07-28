@@ -3,10 +3,9 @@
 
 export { Button, buttonVariants } from './button'
 export type { ButtonProps } from './button'
-export { Pressable } from './pressable'
 
 export { Input } from './input'
-export { Select } from './select'
+export { Checkbox } from './checkbox'
 export { Textarea } from './textarea'
 export { Field } from './field'
 export { Switch } from './switch'
@@ -99,7 +98,6 @@ export {
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuDestructiveItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioItem,
   ContextMenuLabel,
@@ -121,17 +119,20 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
-export { TabMenu, TabMenuItem, TabMenuCountBadge } from './tab-menu'
 export {
-  ActionButtonGroup,
-  ButtonGroup,
-  ButtonGroupItem,
-  buttonGroupVariants,
-  buttonGroupItemVariants
-} from './button-group'
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+  SelectScrollUpButton,
+  SelectScrollDownButton
+} from './select'
+export { ActionButtonGroup, ButtonGroup } from './button-group'
 export type { ActionButtonGroupProps } from './button-group'
-export { SelectionMenu } from './selection-menu'
-export type { SelectionMenuOption } from './selection-menu'
 
 export {
   Table,
@@ -191,7 +192,6 @@ export {
   WorkspaceTabManager,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
-  WorkspaceHeaderSecondaryActions,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   DocumentWorkspacePanelHeader,
@@ -201,7 +201,7 @@ export {
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   type WorkspaceTab
 } from './document-workspace'
 

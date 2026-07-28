@@ -11,7 +11,7 @@ import {
   useRef,
   useState
 } from 'react'
-import { PenTool, Plus, Trash2 } from 'lucide-react'
+import { PenTool, Plus, Trash2 } from '../components/ui/icons'
 import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type {
@@ -22,7 +22,7 @@ import type {
 import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -523,13 +523,13 @@ export function ExcalidrawPage(): ReactElement {
 
   return (
     <div
-      className={`excalidraw-app-shell workspace-clear-surface h-full min-w-0 ${
+      className={`bg-transparent h-full min-w-0 ${
         activeToolType === 'eraser' ? 'excalidraw-tool-eraser' : ''
       }`.trim()}
     >
       <div className="h-full min-h-0">
         {isLoading || !initialData ? (
-          <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading drawing...
           </div>
         ) : (
@@ -568,7 +568,7 @@ export function ExcalidrawSidebar(): ReactElement {
         actions={
           <WorkspaceHeaderActions>
             <WorkspaceHeaderActionGroup>
-              <WorkspaceActionButton
+              <WorkspaceIconButton
                 onClick={() => {
                   void handleCreateSession()
                 }}
@@ -579,7 +579,7 @@ export function ExcalidrawSidebar(): ReactElement {
             </WorkspaceHeaderActionGroup>
             <WorkspaceHeaderActionDivider />
             <WorkspaceHeaderActionGroup>
-              <WorkspaceActionButton
+              <WorkspaceIconButton
                 onClick={() => {
                   if (!selectedSessionId) {
                     return
@@ -596,30 +596,24 @@ export function ExcalidrawSidebar(): ReactElement {
         }
       />
       <DocumentWorkspacePanelContent className="p-3">
-        <div
-          className="right-panel-stagger-item"
-          style={{ ['--right-panel-stagger-delay' as string]: '0ms' }}
-        >
+        <div>
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<PenTool size={16} aria-hidden="true" />}
-              iconContainerClassName="bg-fuchsia-500/12 text-fuchsia-500"
+              iconContainerClassName="bg-accent text-accent-foreground"
               heading="Saved drawings"
               description={`${sessions.length} saved drawings in this vault`}
             />
             <div className="space-y-2">
-              {sessions.map((session, index) => {
+              {sessions.map((session) => {
                 const isActive = session.id === selectedSessionId
                 const isEditing = session.id === editingSessionId
 
                 return (
                   <div
                     key={session.id}
-                    style={{
-                      ['--right-panel-stagger-delay' as string]: `${(index + 1) * 32}ms`
-                    }}
                     data-active={isActive}
-                    className="right-panel-stagger-item sidebar-menu-card right-panel-menu-card flex-col px-3 py-2.5"
+                    className="rounded-lg border bg-card text-card-foreground flex-col px-3 py-2.5"
                   >
                     {isEditing ? (
                       <div className="min-w-0">
@@ -641,9 +635,9 @@ export function ExcalidrawSidebar(): ReactElement {
                               handleCancelRenameSession()
                             }
                           }}
-                          className="workspace-subtle-control w-full rounded-md border border-[var(--accent)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text)] outline-none"
+                          className="border border-input bg-card text-foreground w-full rounded-md border border-primary px-2.5 py-1.5 text-sm font-semibold text-foreground outline-none"
                         />
-                        <div className="mt-1 text-xs text-[var(--muted)]">
+                        <div className="mt-1 text-xs text-muted-foreground">
                           Updated {formatUpdatedAt(session.updatedAt)}
                         </div>
                       </div>
@@ -670,10 +664,10 @@ export function ExcalidrawSidebar(): ReactElement {
                         }}
                         className="w-full text-left"
                       >
-                        <div className="truncate text-sm font-semibold text-[var(--text)]">
+                        <div className="truncate text-sm font-semibold text-foreground">
                           {session.title}
                         </div>
-                        <div className="mt-1 text-xs text-[var(--muted)]">
+                        <div className="mt-1 text-xs text-muted-foreground">
                           Updated {formatUpdatedAt(session.updatedAt)}
                         </div>
                       </button>

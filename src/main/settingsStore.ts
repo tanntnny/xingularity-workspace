@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeProjectIcon } from '../shared/projectIcons'
-import { normalizeProfileColor } from '../shared/profileColors'
 import {
   AppSettings,
   AppSettingsUpdate,
@@ -112,20 +111,19 @@ function normalizeEditorVimKeyMappings(value: unknown): NoteVimKeyMapping[] {
   return mappings
 }
 
-function resolvePerformanceModeEnabled(parsed: Partial<AppSettings>): boolean {
-  const candidate = parsed as Partial<AppSettings> & {
-    workspaceVibrancyEnabled?: unknown
+function hasLegacyAppearanceSettings(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false
   }
 
-  if (typeof parsed.performanceModeEnabled === 'boolean') {
-    return parsed.performanceModeEnabled
-  }
+  const candidate = value as Record<string, unknown>
+  const profile = candidate.profile
 
-  if (typeof candidate.workspaceVibrancyEnabled === 'boolean') {
-    return !candidate.workspaceVibrancyEnabled
-  }
-
-  return createDefaultAppSettings().performanceModeEnabled
+  return (
+    Object.hasOwn(candidate, 'performanceModeEnabled') ||
+    Object.hasOwn(candidate, 'workspaceVibrancyEnabled') ||
+    (profile !== null && typeof profile === 'object' && Object.hasOwn(profile, 'color'))
+  )
 }
 
 export function createDefaultAppSettings(): AppSettings {
@@ -137,14 +135,12 @@ export function createDefaultAppSettings(): AppSettings {
     favoriteNotePaths: [],
     favoriteProjectIds: [],
     profile: {
-      name: '',
-      color: 'atmosphere'
+      name: ''
     },
     ai: {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
-    performanceModeEnabled: false,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
@@ -164,15 +160,26 @@ export function createDefaultAppSettings(): AppSettings {
 function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   const defaults = createDefaultAppSettings()
   const parsedGridBoard = parsed.gridBoard
+  const sanitizedParsed = { ...(parsed as Partial<AppSettings> & Record<string, unknown>) }
+  delete sanitizedParsed.performanceModeEnabled
+  delete sanitizedParsed.workspaceVibrancyEnabled
+
+  if (sanitizedParsed.profile && typeof sanitizedParsed.profile === 'object') {
+    const sanitizedProfile = { ...(sanitizedParsed.profile as Record<string, unknown>) }
+    delete sanitizedProfile.color
+    sanitizedParsed.profile = sanitizedProfile as AppSettings['profile']
+  }
+
+  const parsedProfile = sanitizedParsed.profile as Partial<AppSettings['profile']> | undefined
+
   return {
     ...defaults,
-    ...parsed,
+    ...sanitizedParsed,
     profile: {
       name:
-        typeof parsed.profile?.name === 'string' && parsed.profile.name.trim().length > 0
-          ? parsed.profile.name
+        typeof parsedProfile?.name === 'string' && parsedProfile.name.trim().length > 0
+          ? parsedProfile.name
           : defaults.profile.name,
-      color: normalizeProfileColor(parsed.profile?.color, defaults.profile.color)
     },
     ai: {
       mistralApiKey:
@@ -180,7 +187,6 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsed.ai.mistralApiKey
           : defaults.ai.mistralApiKey
     },
-    performanceModeEnabled: resolvePerformanceModeEnabled(parsed),
     editorVimModeEnabled:
       typeof parsed.editorVimModeEnabled === 'boolean'
         ? parsed.editorVimModeEnabled
@@ -739,13 +745,6 @@ export class SettingsStore {
         resolvedLegacyTasks?.calendarTasks ?? resolvedCore?.calendarTasks,
         hasMaterialTasksData
       )
-      const needsProfileColorMigration =
-        typeof resolvedCore?.profile?.color === 'string' &&
-        normalizeProfileColor(
-          resolvedCore.profile.color,
-          createDefaultAppSettings().profile.color
-        ) !== resolvedCore.profile.color
-
       const needsSplitMigration =
         coreParsed === null ||
         projectsData === null ||
@@ -756,7 +755,7 @@ export class SettingsStore {
         legacyProjectsData !== null ||
         legacyPageTasksData !== null ||
         legacyTasksData !== null ||
-        needsProfileColorMigration ||
+        hasLegacyAppearanceSettings(resolvedCore) ||
         resolvedCore !== coreParsed ||
         resolvedProjects !== projectsData ||
         resolvedProjectIcons !== projectIconsData ||
@@ -845,7 +844,6 @@ export class SettingsStore {
       profile: settings.profile,
       ai: settings.ai,
       fontFamily: settings.fontFamily,
-      performanceModeEnabled: settings.performanceModeEnabled,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
       gridBoard: settings.gridBoard

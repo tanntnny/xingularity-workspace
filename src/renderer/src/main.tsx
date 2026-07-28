@@ -7,10 +7,7 @@ import type { AppErrorEvent } from '../../shared/types'
 import App from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AppErrorPage } from './components/AppErrorPage'
-import { installGlobalButtonRipple } from './lib/buttonRipple'
 import { AppPlatformProvider, useAppPlatform } from './platform'
-
-installGlobalButtonRipple()
 
 function AppRoot() {
   const platform = useAppPlatform()

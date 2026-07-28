@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { createDirectoryAncestors, getDirectoryTraversal } from '../directoryTraversal'
 import { sha256 } from '../../shared/hash'
 import { isNotePath } from '../../shared/noteDocument'
 import { FileMap, SearchResult } from '../../shared/types'
@@ -311,13 +312,15 @@ function toFtsQuery(input: string, scope: 'all' | 'body'): string {
   return terms.join(' AND ')
 }
 
-async function listNoteFiles(root: string): Promise<string[]> {
+async function listNoteFiles(root: string, ancestors?: ReadonlySet<string>): Promise<string[]> {
+  const currentAncestors = ancestors ?? (await createDirectoryAncestors(root))
   const entries = await fs.readdir(root, { withFileTypes: true })
   const files: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...(await listNoteFiles(absolutePath)))
+    const directory = await getDirectoryTraversal(entry, absolutePath, currentAncestors)
+    if (directory.nextAncestors) {
+      files.push(...(await listNoteFiles(absolutePath, directory.nextAncestors)))
       continue
     }
     if (entry.isFile() && isNotePath(entry.name)) {

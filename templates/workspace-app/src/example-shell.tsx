@@ -14,8 +14,8 @@ import {
 export function ExampleWorkspaceShell(): ReactElement {
   return (
     <SidebarProvider className="h-full">
-      <SidebarInset className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]">
-        <div className="workspace-vibrancy-scope flex h-full min-w-0">
+      <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased">
+        <div className="flex h-full min-w-0">
           <WorkspaceShell>
             <WorkspaceMain>
               <WorkspaceMainHeader />

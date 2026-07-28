@@ -122,11 +122,7 @@ export function resolveAppPlatform(target?: Window): AppPlatform {
 
 const AppPlatformContext = createContext<AppPlatform>(FALLBACK_PLATFORM)
 
-export function AppPlatformProvider({
-  children
-}: {
-  children: ReactNode
-}): ReactElement {
+export function AppPlatformProvider({ children }: { children: ReactNode }): ReactElement {
   const platform = useMemo(() => resolveAppPlatform(), [])
   return createElement(AppPlatformContext.Provider, { value: platform }, children)
 }

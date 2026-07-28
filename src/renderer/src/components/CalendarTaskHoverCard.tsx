@@ -12,17 +12,17 @@ interface CalendarTaskHoverCardProps {
 export function CalendarTaskHoverCard({ task, x, y }: CalendarTaskHoverCardProps): ReactElement {
   return (
     <FloatingHoverCard x={x} y={y} className="w-72">
-      <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">{task.title}</div>
-      <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+      <div className="mb-1.5 text-sm font-semibold text-foreground">{task.title}</div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{task.completed ? 'Completed' : 'Pending'}</span>
         <span>{formatCalendarTaskTimeLabel(task)}</span>
       </div>
-      <div className="mt-2 text-xs text-[var(--muted)]">Date: {task.date ?? 'Unscheduled'}</div>
-      <div className="mt-1 text-xs text-[var(--muted)]">
+      <div className="mt-2 text-xs text-muted-foreground">Date: {task.date ?? 'Unscheduled'}</div>
+      <div className="mt-1 text-xs text-muted-foreground">
         Type: {formatCalendarTaskType(task.taskType || 'assignment')}
       </div>
       {(task.reminders || []).some((reminder) => reminder.enabled) && (
-        <div className="mt-1 text-xs text-[var(--muted)]">Reminders enabled</div>
+        <div className="mt-1 text-xs text-muted-foreground">Reminders enabled</div>
       )}
     </FloatingHoverCard>
   )

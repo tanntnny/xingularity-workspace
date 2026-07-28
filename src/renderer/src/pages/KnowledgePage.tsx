@@ -2,7 +2,7 @@ import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, useViewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import * as d3 from 'd3'
-import { Sparkles } from 'lucide-react'
+import { Sparkles } from '../components/ui/icons'
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3'
 import type { NoteListItem } from '../../../shared/types'
 import { WorkspaceEmptyState } from '../components/workspace'
@@ -130,7 +130,7 @@ function KnowledgeCanvas({
 
     const linkSelection = root
       .append('g')
-      .attr('stroke', 'var(--line-strong)')
+      .attr('stroke', 'var(--border)')
       .attr('stroke-opacity', 0.5)
       .selectAll('line')
       .data(simulationLinks)
@@ -139,13 +139,13 @@ function KnowledgeCanvas({
 
     const nodeSelection = root
       .append('g')
-      .attr('stroke', 'var(--panel)')
+      .attr('stroke', 'var(--card)')
       .attr('stroke-width', 1.5)
       .selectAll('circle')
       .data(simulationNodes)
       .join('circle')
       .attr('r', (node) => 5 + Math.min(node.degree, 6))
-      .attr('fill', (node) => (node.isOrphan ? 'var(--muted)' : 'var(--accent)'))
+      .attr('fill', (node) => (node.isOrphan ? 'var(--muted-foreground)' : 'var(--primary)'))
       .attr('fill-opacity', (node) => (node.isOrphan ? 0.72 : 0.92))
       .style('cursor', 'pointer')
       .style('pointer-events', 'all')
@@ -160,12 +160,12 @@ function KnowledgeCanvas({
       .selectAll('text')
       .data(simulationNodes)
       .join('text')
-      .attr('fill', 'var(--text)')
+      .attr('fill', 'var(--foreground)')
       .attr('font-size', 12)
       .attr('font-weight', 500)
       .attr('text-anchor', 'middle')
       .attr('paint-order', 'stroke')
-      .attr('stroke', 'var(--panel)')
+      .attr('stroke', 'var(--card)')
       .attr('stroke-width', 4)
       .attr('stroke-linejoin', 'round')
       .style('pointer-events', 'none')
@@ -257,7 +257,7 @@ function KnowledgeCanvas({
     <div
       ref={containerRef}
       data-testid="knowledge-page"
-      className="workspace-clear-surface relative h-full min-w-0 flex-1 overflow-hidden"
+      className="bg-transparent relative h-full min-w-0 flex-1 overflow-hidden"
     >
       <ReactFlow
         data-testid="knowledge-canvas"
@@ -286,9 +286,9 @@ function KnowledgeCanvas({
           className="absolute inset-0 flex items-center justify-center p-10"
         >
           <WorkspaceEmptyState
-            className="max-w-xl px-8 py-10 text-center shadow-[0_24px_64px_rgba(15,23,42,0.08)]"
+            className="max-w-xl px-8 py-10 text-center shadow-sm"
             icon={
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-ring bg-accent text-primary">
                 <Sparkles size={20} />
               </div>
             }

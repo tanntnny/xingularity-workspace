@@ -1,11 +1,10 @@
 import { ReactElement, ReactNode, useMemo } from 'react'
-import { Copy, FolderInput, Link, Pencil, Trash2 } from 'lucide-react'
+import { Copy, FolderInput, Link, Pencil, Trash2 } from './ui/icons'
 import { isNotePath, stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
@@ -15,7 +14,10 @@ import {
   ContextMenuTrigger
 } from './ui/context-menu'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
+import { Shortcut } from './ui/kbd'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 
 interface FileTreeProps {
   notes: NoteListItem[]
@@ -79,54 +81,64 @@ export function FileTree({
   }, [notes])
 
   return (
-    <div className="file-tree">
+    <nav aria-label="Notes" className="flex flex-col gap-4">
       <Section title="Quick Links">
-        <button className="tree-pill active" type="button">
+        <Button variant="secondary" className="h-8 w-full justify-between px-2" type="button">
           <span>All Notes</span>
-          <span className="count-pill">{notes.length}</span>
-        </button>
-        <button className="tree-pill" type="button">
+          <Badge variant="outline">{notes.length}</Badge>
+        </Button>
+        <Button variant="ghost" className="h-8 w-full justify-between px-2" type="button">
           <span>Favorites</span>
-          <span className="count-pill">0</span>
-        </button>
-        <button className="tree-pill" type="button">
+          <Badge variant="outline">0</Badge>
+        </Button>
+        <Button variant="ghost" className="h-8 w-full justify-between px-2" type="button">
           <span>Archived</span>
-          <span className="count-pill">0</span>
-        </button>
-        <button className="tree-pill" type="button">
+          <Badge variant="outline">0</Badge>
+        </Button>
+        <Button variant="ghost" className="h-8 w-full justify-between px-2" type="button">
           <span>Recently Deleted</span>
-          <span className="count-pill">0</span>
-        </button>
+          <Badge variant="outline">0</Badge>
+        </Button>
       </Section>
 
       <Section title="Tags">
         {tags.length > 0 ? (
           tags.map((tag) => (
-            <button className="tree-pill" key={tag} type="button">
+            <Button
+              variant="ghost"
+              className="h-8 w-full justify-start px-2"
+              key={tag}
+              type="button"
+            >
               <span>#{tag}</span>
-            </button>
+            </Button>
           ))
         ) : (
-          <div className="empty">No tags yet</div>
+          <p className="px-2 text-sm text-muted-foreground">No tags yet</p>
         )}
       </Section>
 
       <Section title="Folders">
         {folders.length > 0 ? (
           folders.map((folder) => (
-            <button className="tree-pill" key={folder.name} type="button">
+            <Button
+              variant="ghost"
+              className="h-8 w-full justify-between px-2"
+              key={folder.name}
+              type="button"
+            >
               <span>{folder.name}</span>
-              <span className="count-pill">{folder.count}</span>
-            </button>
+              <Badge variant="outline">{folder.count}</Badge>
+            </Button>
           ))
         ) : (
-          <div className="empty">No folders yet</div>
+          <p className="px-2 text-sm text-muted-foreground">No folders yet</p>
         )}
       </Section>
 
       <Section title="Notes">
         {sorted.length === 0 ? (
-          <div className="empty">No notes yet</div>
+          <p className="px-2 text-sm text-muted-foreground">No notes yet</p>
         ) : (
           sorted.map((note) => {
             const menuItems = buildNoteMenuItems({
@@ -166,9 +178,10 @@ export function FileTree({
             }
 
             const noteRow = (
-              <div className={`note-row ${selectedPath === note.relPath ? 'selected' : ''}`}>
-                <button
-                  className="note-button"
+              <div>
+                <Button
+                  variant={selectedPath === note.relPath ? 'secondary' : 'ghost'}
+                  className="h-auto w-full justify-start truncate px-2 py-1.5 text-left"
                   onClick={() => onSelect(note.relPath)}
                   onContextMenu={
                     useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
@@ -183,7 +196,7 @@ export function FileTree({
                   title={note.relPath}
                 >
                   {note.relPath}
-                </button>
+                </Button>
               </div>
             )
 
@@ -228,26 +241,31 @@ export function FileTree({
                     </ContextMenuItem>
                   )}
                   <ContextMenuSeparator />
-                  <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
+                  <ContextMenuItem
+                    className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                    onClick={() => onDelete(note.relPath)}
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
-                    <ContextMenuShortcut keys={['cmd', 'backspace']} />
-                  </ContextMenuDestructiveItem>
+                    <ContextMenuShortcut>
+                      <Shortcut keys={['cmd', 'backspace']} />
+                    </ContextMenuShortcut>
+                  </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             )
           })
         )}
       </Section>
-    </div>
+    </nav>
   )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
   return (
-    <section className="tree-section">
-      <h4>{title}</h4>
-      <div className="tree-section-body">{children}</div>
+    <section className="flex flex-col gap-1">
+      <h2 className="px-2 text-xs font-medium text-muted-foreground">{title}</h2>
+      <div className="flex flex-col gap-1">{children}</div>
     </section>
   )
 }

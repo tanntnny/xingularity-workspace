@@ -1,4 +1,4 @@
-import { FileDown, FileText } from 'lucide-react'
+import { FileDown, FileText } from './ui/icons'
 import { ReactElement } from 'react'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle
 } from './ui/dialog'
+import { Button } from './ui/button'
 
 export type NoteExportFormat = 'markdown' | 'pdf'
 
@@ -63,23 +64,20 @@ export function NoteExportDialog({
             const isSelected = format === optionFormat
 
             return (
-              <button
+              <Button
                 key={optionFormat}
                 type="button"
+                variant={isSelected ? 'secondary' : 'outline'}
                 role="radio"
                 aria-checked={isSelected}
                 data-testid={`note-export-format:${optionFormat}`}
                 onClick={() => onFormatChange(optionFormat)}
-                className={`rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
-                  isSelected
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                    : 'dialog-input-surface hover:border-[var(--accent-line)] hover:bg-[var(--panel-2)]'
-                }`}
+                className="h-auto flex-col items-start p-4 text-left whitespace-normal"
               >
-                <Icon className="mb-3 h-6 w-6 text-[var(--accent)]" aria-hidden="true" />
-                <div className="font-semibold text-[var(--text)]">{title}</div>
-                <div className="mt-1 text-sm text-[var(--muted)]">{description}</div>
-              </button>
+                <Icon className="mb-3 h-6 w-6 text-primary" aria-hidden="true" />
+                <div className="font-semibold text-foreground">{title}</div>
+                <div className="mt-1 text-sm text-muted-foreground">{description}</div>
+              </Button>
             )
           })}
         </div>

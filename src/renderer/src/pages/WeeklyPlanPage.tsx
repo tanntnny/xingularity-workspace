@@ -13,7 +13,7 @@ import {
   Target,
   Trophy,
   Trash2
-} from 'lucide-react'
+} from '../components/ui/icons'
 import type {
   CreateWeeklyPlanPriorityInput,
   CreateWeeklyPlanWeekInput,
@@ -25,10 +25,12 @@ import type {
   WeeklyPlanState
 } from '../../../shared/types'
 import { InlineEditableText } from '../components/InlineEditableText'
+import { Button } from '../components/ui/button'
+import { Checkbox } from '../components/ui/checkbox'
 import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -83,9 +85,9 @@ interface WeeklyPlanSidebarProps {
 }
 
 const metaPillClass =
-  'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-[var(--muted)]'
+  'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground'
 const neutralChipClass =
-  'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
+  'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground'
 const defaultWeeklyPrioritySort: WeeklyPrioritySortState = {
   key: 'status',
   direction: 'asc'
@@ -175,7 +177,7 @@ export function WeeklyPlanWorkspace({
 
   if (!isReady) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-[var(--muted)]">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
         <CalendarDays size={24} />
         <p className="max-w-sm text-sm">
           Weekly Plan isn&apos;t available in this build yet. Restart Beacon after updating or make
@@ -187,7 +189,7 @@ export function WeeklyPlanWorkspace({
 
   if (!selectedWeek && !loading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-[var(--muted)]">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
         <CalendarDays size={24} />
         <p className="max-w-sm text-sm">Create a week from the right panel to start planning.</p>
       </div>
@@ -197,7 +199,7 @@ export function WeeklyPlanWorkspace({
   return (
     <div className="relative flex h-full flex-col">
       {loading ? (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[var(--panel)]/60">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-card/60">
           <Loader2 className="animate-spin" />
         </div>
       ) : null}
@@ -208,10 +210,10 @@ export function WeeklyPlanWorkspace({
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-start gap-4">
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[var(--text)]">
+                    <h1 className="text-4xl font-semibold tracking-tight text-foreground">
                       {formatWeekRange(selectedWeek.startDate, selectedWeek.endDate)}
                     </h1>
-                    <p className="mt-2 max-w-2xl text-sm workspace-meta">
+                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                       {progress.total
                         ? `${progress.done} of ${progress.total} priorities complete this week.`
                         : 'Add priorities to define what success looks like this week.'}
@@ -224,19 +226,19 @@ export function WeeklyPlanWorkspace({
             <div className="px-4">
               <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
                 <div className="space-y-2">
-                  <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-[var(--text)]">
-                    <Target size={20} className="text-[var(--accent)]" />
+                  <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-foreground">
+                    <Target size={20} className="text-primary" />
                     <span>Week Focus</span>
                   </h2>
-                  <p className="mt-1 text-sm workspace-meta">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     One line that keeps the week pointed in the right direction.
                   </p>
                   <InlineEditableText
                     value={selectedWeek.focus ?? ''}
                     onCommit={(nextValue) => handleFocusCommit(nextValue)}
                     displayAs="p"
-                    displayClassName="cursor-text text-lg font-medium text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                    inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-lg font-medium text-[var(--text)] outline-none"
+                    displayClassName="cursor-text text-lg font-medium text-foreground transition-colors hover:text-primary"
+                    inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-lg font-medium text-foreground outline-none"
                     placeholder="Name the main theme for this week."
                     title="Click to edit weekly focus"
                     allowEmpty={true}
@@ -245,7 +247,7 @@ export function WeeklyPlanWorkspace({
                       value?.trim() ? (
                         value
                       ) : (
-                        <span className="text-[var(--muted)]">
+                        <span className="text-muted-foreground">
                           Name the main theme for this week.
                         </span>
                       )
@@ -254,18 +256,18 @@ export function WeeklyPlanWorkspace({
                 </div>
               </div>
 
-              <section className="workspace-section">
+              <section className="border-t pt-5 mt-6">
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="min-w-0 flex-1">
-                    <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-[var(--text)]">
-                      <ListTodo size={20} className="text-[var(--accent)]" />
+                    <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-foreground">
+                      <ListTodo size={20} className="text-primary" />
                       <span>Priority</span>
                     </h2>
-                    <p className="mt-1 text-sm workspace-meta">Aim for 3 to 7 priorities.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Aim for 3 to 7 priorities.</p>
                   </div>
                 </div>
 
-                <Table className="mt-4 rounded-xl">
+                <Table className="mt-4 rounded-lg">
                   <TableHeader>
                     <TableRow>
                       <SortableTableHead
@@ -289,7 +291,7 @@ export function WeeklyPlanWorkspace({
                         </span>
                       </SortableTableHead>
                       <TableHead className="w-[120px] text-center">
-                        <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
+                        <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-muted-foreground">
                           ACTIONS
                         </span>
                       </TableHead>
@@ -299,7 +301,7 @@ export function WeeklyPlanWorkspace({
                     {priorities.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={3}>
-                          <div className="py-2 text-sm text-[var(--muted)]">
+                          <div className="py-2 text-sm text-muted-foreground">
                             Capture the top commitments that make this week successful.
                           </div>
                         </TableCell>
@@ -308,16 +310,11 @@ export function WeeklyPlanWorkspace({
                     {sortedPriorities.map((priority) => (
                       <TableRow key={priority.id}>
                         <TableCell className="px-3 py-2 text-center align-middle">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={priority.status === 'done'}
-                            onChange={(event) => {
-                              void handlePriorityCheckedChange(
-                                priority,
-                                event.currentTarget.checked
-                              )
+                            onCheckedChange={(checked) => {
+                              void handlePriorityCheckedChange(priority, checked === true)
                             }}
-                            className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
                             aria-label={`Mark ${priority.title} as done`}
                           />
                         </TableCell>
@@ -333,12 +330,16 @@ export function WeeklyPlanWorkspace({
                               }}
                               displayAs="span"
                               displayClassName={cn(
-                                'block h-full min-w-[140px] w-full cursor-text px-3 py-2 font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]',
-                                priority.status === 'done' ? 'text-[var(--muted)] line-through' : ''
+                                'block h-full min-w-[140px] w-full cursor-text px-3 py-2 font-semibold text-foreground transition-colors hover:text-primary',
+                                priority.status === 'done'
+                                  ? 'text-muted-foreground line-through'
+                                  : ''
                               )}
                               inputClassName={cn(
-                                'h-full min-w-[140px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-[var(--text)] outline-none',
-                                priority.status === 'done' ? 'text-[var(--muted)] line-through' : ''
+                                'h-full min-w-[140px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-foreground outline-none',
+                                priority.status === 'done'
+                                  ? 'text-muted-foreground line-through'
+                                  : ''
                               )}
                               title="Click to rename priority"
                             />
@@ -346,25 +347,29 @@ export function WeeklyPlanWorkspace({
                         </TableCell>
                         <TableCell className="px-2 py-1">
                           <div className="flex items-center justify-start gap-1">
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => {
                                 void onDeletePriority(priority.id)
                               }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--danger)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--danger)]"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
                               title="Remove priority"
+                              aria-label={`Remove ${priority.title}`}
                             >
                               <Trash2 size={14} />
-                            </button>
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
-                    <TableRow className="hover:bg-[var(--accent-soft)]/60">
+                    <TableRow className="hover:bg-accent/60">
                       <TableCell colSpan={3} className="p-0">
-                        <button
+                        <Button
                           type="button"
-                          className="flex h-full w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)] disabled:opacity-50"
+                          variant="ghost"
+                          className="h-auto w-full justify-start gap-2 px-3 py-2 text-left text-muted-foreground"
                           onClick={() => {
                             void handleAddPriority()
                           }}
@@ -376,37 +381,39 @@ export function WeeklyPlanWorkspace({
                               ? 'Priority limit reached'
                               : 'Add a new priority'}
                           </span>
-                        </button>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </section>
 
-              <section className="workspace-section">
+              <section className="border-t pt-5 mt-6">
                 <div className="mb-4">
-                  <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-[var(--text)]">
-                    <NotebookPen size={20} className="text-[var(--accent)]" />
+                  <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-foreground">
+                    <NotebookPen size={20} className="text-primary" />
                     <span>Weekly Review</span>
                   </h2>
-                  <p className="mt-1 text-sm workspace-meta">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     Reflect on wins, misses, blockers, and what should carry forward.
                   </p>
                 </div>
                 <div className="grid gap-6 md:grid-cols-2">
                   {(['wins', 'misses', 'blockers', 'nextWeek'] as const).map((key) => (
                     <div key={key} className="space-y-2">
-                      <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-[var(--text)]">
+                      <h2 className="mt-1 inline-flex items-center gap-2 text-2xl font-semibold text-foreground">
                         {reviewHeadingIcon(key)}
                         <span>{labelForReviewKey(key)}</span>
                       </h2>
-                      <p className="mt-1 text-sm workspace-meta">{placeholderForReviewKey(key)}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {placeholderForReviewKey(key)}
+                      </p>
                       <InlineEditableText
                         value={review?.[key] ?? ''}
                         onCommit={(nextValue) => handleReviewCommit(key, nextValue)}
                         displayAs="p"
-                        displayClassName="cursor-text text-base font-medium text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                        inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-base font-medium text-[var(--text)] outline-none"
+                        displayClassName="cursor-text text-base font-medium text-foreground transition-colors hover:text-primary"
+                        inputClassName="m-0 min-w-0 w-full border-0 bg-transparent p-0 text-base font-medium text-foreground outline-none"
                         placeholder={placeholderForReviewKey(key)}
                         title={`Click to edit ${labelForReviewKey(key).toLowerCase()}`}
                         allowEmpty={true}
@@ -415,7 +422,7 @@ export function WeeklyPlanWorkspace({
                           value?.trim() ? (
                             value
                           ) : (
-                            <span className="text-[var(--muted)]">
+                            <span className="text-muted-foreground">
                               {placeholderForReviewKey(key)}
                             </span>
                           )
@@ -467,7 +474,7 @@ export function WeeklyPlanSidebar({
         actions={
           <WorkspaceHeaderActions>
             <WorkspaceHeaderActionGroup>
-              <WorkspaceActionButton
+              <WorkspaceIconButton
                 onClick={() => {
                   void handleQuickCreateWeek()
                 }}
@@ -479,7 +486,7 @@ export function WeeklyPlanSidebar({
             </WorkspaceHeaderActionGroup>
             <WorkspaceHeaderActionDivider />
             <WorkspaceHeaderActionGroup>
-              <WorkspaceActionButton
+              <WorkspaceIconButton
                 onClick={() => handleJumpToCurrent()}
                 disabled={!currentWeekId || !isReady}
                 aria-label="Current week"
@@ -495,13 +502,13 @@ export function WeeklyPlanSidebar({
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
               icon={<CalendarDays size={16} aria-hidden="true" />}
-              iconContainerClassName="bg-blue-500/12 text-blue-500"
+              iconContainerClassName="bg-accent text-primary"
               heading="All Week"
               description={`${weeks.length} saved weeks${currentWeekId ? ' · current week available' : ''}`}
             />
             <div className="space-y-2">
               {weeks.length === 0 ? (
-                <div className="p-2 text-sm text-[var(--muted)]">
+                <div className="p-3 text-sm text-muted-foreground">
                   Nothing scheduled yet. Create your first week to get rolling.
                 </div>
               ) : (
@@ -514,32 +521,33 @@ export function WeeklyPlanSidebar({
                   const range = formatWeekRange(week.startDate, week.endDate)
                   const isCurrent = !!findWeekForDate([week], todayIso)
                   return (
-                    <button
+                    <Button
                       key={week.id}
                       type="button"
+                      variant={selectedWeekId === week.id ? 'secondary' : 'ghost'}
                       ref={revealProps.ref}
                       onClick={() => onSelectWeek(week.id)}
                       style={revealProps.style}
                       data-active={selectedWeekId === week.id}
                       className={cn(
                         revealProps.className,
-                        'sidebar-menu-card right-panel-menu-card flex-col gap-1.5 px-3 py-2.5 text-left'
+                        'rounded-lg border bg-card text-card-foreground h-auto flex-col items-stretch gap-1.5 px-3 py-2.5 text-left'
                       )}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="truncate text-lg font-bold text-[var(--text)]">{range}</div>
+                        <div className="truncate text-lg font-bold text-foreground">{range}</div>
                         <span className={metaPillClass}>
                           {doneCount}/{weekPriorities.length}
                         </span>
                       </div>
-                      <div className="line-clamp-2 text-sm text-[var(--muted)]">
+                      <div className="line-clamp-2 text-sm text-muted-foreground">
                         {week.focus?.trim()
                           ? week.focus
                           : 'No weekly focus yet. Open this week to set one.'}
                       </div>
-                      <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                      <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                         {isCurrent ? (
-                          <span className={cn(neutralChipClass, 'text-[var(--accent)]')}>
+                          <span className={cn(neutralChipClass, 'text-primary')}>
                             <Circle size={10} /> Current
                           </span>
                         ) : null}
@@ -548,7 +556,7 @@ export function WeeklyPlanSidebar({
                           {new Date(week.updatedAt).toLocaleDateString()}
                         </span>
                       </div>
-                    </button>
+                    </Button>
                   )
                 })
               )}
@@ -557,7 +565,7 @@ export function WeeklyPlanSidebar({
         </div>
       </DocumentWorkspacePanelContent>
       {loading ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--panel)]/60">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-card/60">
           <Loader2 className="animate-spin" />
         </div>
       ) : null}
@@ -643,12 +651,12 @@ function placeholderForReviewKey(key: 'wins' | 'misses' | 'blockers' | 'nextWeek
 function reviewHeadingIcon(key: 'wins' | 'misses' | 'blockers' | 'nextWeek'): ReactElement {
   switch (key) {
     case 'wins':
-      return <Trophy size={20} className="text-[var(--accent)]" />
+      return <Trophy size={20} className="text-primary" />
     case 'misses':
-      return <Pencil size={20} className="text-[var(--accent)]" />
+      return <Pencil size={20} className="text-primary" />
     case 'blockers':
-      return <CircleAlert size={20} className="text-[var(--accent)]" />
+      return <CircleAlert size={20} className="text-primary" />
     case 'nextWeek':
-      return <ArrowRight size={20} className="text-[var(--accent)]" />
+      return <ArrowRight size={20} className="text-primary" />
   }
 }

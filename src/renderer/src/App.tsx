@@ -1,13 +1,4 @@
-import {
-  CSSProperties,
-  Fragment,
-  ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react'
+import { Fragment, ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
   Bot,
@@ -33,7 +24,7 @@ import {
   ChevronUp,
   Star,
   SlidersHorizontal
-} from 'lucide-react'
+} from './components/ui/icons'
 import {
   CalendarTask,
   CreateWeeklyPlanWeekInput,
@@ -55,14 +46,12 @@ import {
   HistoryAffectedAreas,
   VaultOpenResult
 } from '../../shared/types'
-import type { ProfileColor } from '../../shared/profileColors'
 import {
   isExcalidrawPath,
   stripNotebookFileExtension,
   withExcalidrawExtension
 } from '../../shared/excalidrawFile'
 import { createRandomProjectIcon } from '../../shared/projectIcons'
-import { resolveProfileAccent } from './lib/profileColors'
 import {
   appendTextToNoteMarkdown,
   getNoteDisplayName,
@@ -93,6 +82,9 @@ import {
   normalizePageForPlatform
 } from './platform/pageAvailability'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
+import { Button } from './components/ui/button'
+import { Badge } from './components/ui/badge'
+import { Input } from './components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,7 +101,7 @@ import {
   DocumentWorkspacePanelHeader,
   WorkspaceTabManager,
   WorkspaceContextEmptyState,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
@@ -118,13 +110,12 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
-import { type SelectionMenuOption } from './components/ui/selection-menu'
-import { TabMenu, TabMenuCountBadge, TabMenuItem } from './components/ui/tab-menu'
+import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { ActionButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
-import { FontOption, SettingsPage } from './pages/SettingsPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { AgentHistoryPage } from './pages/AgentHistoryPage'
 import { SchedulesPage } from './pages/SchedulesPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
@@ -269,22 +260,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const FONT_OPTIONS: FontOption[] = [
-  {
-    label: 'Iowan Serif',
-    value: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif"
-  },
-  { label: 'Inter', value: "Inter, 'Segoe UI', sans-serif" },
-  { label: 'Atkinson Hyperlegible', value: "'Atkinson Hyperlegible', 'Segoe UI', sans-serif" },
-  { label: 'Source Sans', value: "'Source Sans 3', 'Gill Sans', 'Trebuchet MS', sans-serif" },
-  {
-    label: 'JetBrains Mono',
-    value: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace"
-  },
-  { label: 'Charter', value: "'Charter', 'Georgia', 'Times New Roman', serif" }
-]
-
-const CALENDAR_VIEW_MODE_OPTIONS: SelectionMenuOption[] = [
+const CALENDAR_VIEW_MODE_OPTIONS = [
   { value: 'month', label: 'Monthly' },
   { value: 'week', label: 'Weekly' }
 ]
@@ -307,14 +283,14 @@ function SettingsRightPanelSections(): ReactElement {
     {
       id: 'settings-editor-defaults',
       icon: <Type size={16} aria-hidden="true" />,
-      iconContainerClassName: 'bg-cyan-500/12 text-cyan-500',
+      iconContainerClassName: 'bg-accent text-primary',
       heading: 'Editor Defaults',
       description: 'Type, writing, and editing preferences'
     },
     {
       id: 'settings-shortcuts',
       icon: <Keyboard size={16} aria-hidden="true" />,
-      iconContainerClassName: 'bg-violet-500/12 text-violet-500',
+      iconContainerClassName: 'bg-accent text-primary',
       heading: 'Shortcuts',
       description: 'Keyboard actions available across the app'
     }
@@ -329,7 +305,7 @@ function SettingsRightPanelSections(): ReactElement {
             key={section.id}
             ref={revealProps.ref}
             style={revealProps.style}
-            className={`${revealProps.className} rounded-xl`}
+            className={`${revealProps.className} rounded-lg`}
           >
             <WorkspacePanelSectionHeader
               icon={section.icon}
@@ -361,11 +337,9 @@ function App(): ReactElement {
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
-  const performanceModeEnabled = useVaultStore((state) => state.settings.performanceModeEnabled)
   const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
   const editorVimKeyMappings = useVaultStore((state) => state.settings.editorVimKeyMappings)
   const profileName = useVaultStore((state) => state.settings.profile.name)
-  const profileColor = useVaultStore((state) => state.settings.profile.color)
   const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
   const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
   const projectIcons = useVaultStore((state) => state.settings.projectIcons)
@@ -390,23 +364,6 @@ function App(): ReactElement {
   const [isDarkMode, setIsDarkMode] = useState(
     () => window.matchMedia('(prefers-color-scheme: dark)').matches
   )
-  const profileAccent = resolveProfileAccent(profileColor, isDarkMode)
-  const accentCssVars = useMemo(
-    () =>
-      ({
-        ['--accent' as string]: profileAccent.accent,
-        ['--accent-soft' as string]: profileAccent.soft,
-        ['--accent-line' as string]: profileAccent.line,
-        ['--accent-color' as string]: profileAccent.soft,
-        ['--accent-foreground' as string]: profileAccent.accent,
-        ['--ring' as string]: profileAccent.line,
-        ['--sidebar-primary' as string]: profileAccent.accent,
-        ['--sidebar-accent' as string]: profileAccent.soft,
-        ['--sidebar-accent-foreground' as string]: profileAccent.accent
-      }) as CSSProperties,
-    [profileAccent]
-  )
-  const shellAccentStyle = accentCssVars
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
@@ -439,18 +396,6 @@ function App(): ReactElement {
   const [isNoteExporting, setIsNoteExporting] = useState(false)
   const [isFolderPdfExporting, setIsFolderPdfExporting] = useState(false)
 
-  useEffect(() => {
-    const rootStyle = document.documentElement.style
-    for (const [name, value] of Object.entries(accentCssVars)) {
-      rootStyle.setProperty(name, String(value))
-    }
-
-    return () => {
-      for (const name of Object.keys(accentCssVars)) {
-        rootStyle.removeProperty(name)
-      }
-    }
-  }, [accentCssVars])
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [areAllNoteFoldersCollapsed, setAreAllNoteFoldersCollapsed] = useState(false)
   const knowledgeOrphanRingRadiusPx = useMemo(() => {
@@ -567,12 +512,6 @@ function App(): ReactElement {
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
   const hasAttemptedVaultRestoreRef = useRef(false)
-  const shouldAnimateWorkspacePane =
-    hasVault &&
-    (activePage === 'knowledge' ||
-      activePage === 'notes' ||
-      activePage === 'projects' ||
-      activePage === 'calendar')
   const hasRightPanel = activePage !== 'designAudit' && activePage !== 'projects'
   const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
 
@@ -1155,10 +1094,6 @@ function App(): ReactElement {
       mediaQuery.removeEventListener('change', syncColorScheme)
     }
   }, [])
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--app-font-family', fontFamily)
-  }, [fontFamily])
 
   useEffect(() => {
     calendarTasksRef.current = calendarTasks
@@ -1844,53 +1779,6 @@ function App(): ReactElement {
     }
   }, [flushCurrentNote])
 
-  useEffect(() => {
-    if (!vaultApi) {
-      return
-    }
-
-    void vaultApi.ui.applyPerformanceMode(performanceModeEnabled).catch(() => undefined)
-  }, [performanceModeEnabled, vaultApi])
-
-  useEffect(() => {
-    const nextValue = performanceModeEnabled ? 'on' : 'off'
-    document.documentElement.dataset.performanceMode = nextValue
-    document.body.dataset.performanceMode = nextValue
-
-    return () => {
-      delete document.documentElement.dataset.performanceMode
-      delete document.body.dataset.performanceMode
-    }
-  }, [performanceModeEnabled])
-
-  const updateFontFamily = async (fontFamily: string): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    try {
-      const nextSettings = await vaultApi.settings.update({ fontFamily })
-      setSettings(nextSettings)
-      pushToast('success', 'Font updated')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
-  const updatePerformanceMode = async (enabled: boolean): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    try {
-      const nextSettings = await vaultApi.settings.update({ performanceModeEnabled: enabled })
-      setSettings(nextSettings)
-      pushToast('success', enabled ? 'Performance mode enabled' : 'Performance mode disabled')
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
   const updateEditorVimMode = async (enabled: boolean): Promise<void> => {
     if (!vaultApi) {
       return
@@ -1933,24 +1821,6 @@ function App(): ReactElement {
         }
       })
       setSettings(nextSettings)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
-  const updateProfileColor = async (color: ProfileColor): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    try {
-      const nextSettings = await vaultApi.settings.update({
-        profile: {
-          color
-        }
-      })
-      setSettings(nextSettings)
-      pushToast('success', 'Color style updated')
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -3347,7 +3217,10 @@ function App(): ReactElement {
       const result = await vaultApi.files.exportFolderPdf({ folderPath })
 
       if (result.noteCount === 0) {
-        pushToast('info', 'No Markdown notes found in the selected folder')
+        pushToast('info', 'No readable Markdown notes found in the selected folder')
+        if (result.warnings.length > 0) {
+          pushToast('info', `PDF export encountered ${result.warnings.length} warning(s)`)
+        }
         return
       }
 
@@ -3358,7 +3231,7 @@ function App(): ReactElement {
       const noteLabel = result.noteCount === 1 ? 'note' : 'notes'
       pushToast('success', `Exported ${result.noteCount} nested ${noteLabel} to ${result.path}`)
       if (result.warnings.length > 0) {
-        pushToast('info', `PDF exported with ${result.warnings.length} image warning(s)`)
+        pushToast('info', `PDF exported with ${result.warnings.length} warning(s)`)
       }
     } catch (error) {
       pushToast('error', String(error))
@@ -5092,9 +4965,7 @@ function App(): ReactElement {
 
   const isStandalonePage =
     activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
-  const paletteSurfaceClass = 'transition-[filter,opacity] duration-200 ease-out'
-  const paletteBlurClass =
-    commandPaletteOpen && !performanceModeEnabled ? ' search-palette-surface-blur' : ''
+  const paletteSurfaceClass = ''
   const headerPageLabel =
     hasVault && activePage === 'subscriptions'
       ? 'Finance'
@@ -5157,13 +5028,13 @@ function App(): ReactElement {
   }
 
   return (
-    <div className="flex h-screen" data-performance-mode={performanceModeEnabled ? 'on' : 'off'}>
+    <div className="flex h-screen">
       <SidebarProvider
         className="h-full"
-        style={shellAccentStyle}
         data-focus-mode={isFocusMode ? 'true' : 'false'}
         open={isFocusMode ? false : isSidebarOpen}
         onOpenChange={setIsSidebarOpen}
+        macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
       >
         <AppSidebar
           activePage={activePage}
@@ -5177,16 +5048,12 @@ function App(): ReactElement {
           activeVaultPath={vault?.rootPath ?? null}
           isLocked={!hasVault}
           availablePages={availablePages}
-          className={`${paletteSurfaceClass}${paletteBlurClass}`}
+          className={paletteSurfaceClass}
           collapsible={isFocusMode ? 'offcanvas' : 'icon'}
         />
 
-        <SidebarInset
-          data-workspace-vibrancy={performanceModeEnabled ? 'off' : 'on'}
-          data-performance-mode={performanceModeEnabled ? 'on' : 'off'}
-          className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]"
-        >
-          <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
+        <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased">
+          <div className="flex h-full min-w-0 flex-col">
             <WorkspaceTabManager
               tabs={workspaceTabs.map((tab, index) => ({
                 id: tab.id,
@@ -5239,16 +5106,14 @@ function App(): ReactElement {
               onTogglePanel={() => setIsRightPanelCollapsed((current) => !current)}
               className={isStandalonePage ? 'hidden' : undefined}
             >
-              <DocumentWorkspaceMain
-                className={`${currentExcalidrawPath ? 'excalidraw-workspace-main ' : ''}${paletteSurfaceClass}${paletteBlurClass}`.trim()}
-              >
+              <DocumentWorkspaceMain className={paletteSurfaceClass}>
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
                     activePage === 'projects' || activePage === 'calendar' ? null : (
                       <Breadcrumb>
-                        <BreadcrumbList className="text-[var(--muted)]">
+                        <BreadcrumbList className="text-muted-foreground">
                           <BreadcrumbItem>
-                            <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                            <BreadcrumbPage className="text-sm text-muted-foreground">
                               {headerPageLabel}
                             </BreadcrumbPage>
                           </BreadcrumbItem>
@@ -5258,13 +5123,13 @@ function App(): ReactElement {
 
                               return (
                                 <Fragment key={`${segment}:${index}`}>
-                                  <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                                  <BreadcrumbSeparator className="text-muted-foreground" />
                                   <BreadcrumbItem>
                                     <BreadcrumbPage
                                       className={
                                         isLast
-                                          ? 'max-w-[220px] truncate text-sm font-semibold text-[var(--text)]'
-                                          : 'max-w-[140px] truncate text-sm text-[var(--muted)]'
+                                          ? 'max-w-[220px] truncate text-sm font-semibold text-foreground'
+                                          : 'max-w-[140px] truncate text-sm text-muted-foreground'
                                       }
                                     >
                                       {segment}
@@ -5275,9 +5140,9 @@ function App(): ReactElement {
                             })
                           ) : middleHeaderBreadcrumbItem ? (
                             <>
-                              <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                              <BreadcrumbSeparator className="text-muted-foreground" />
                               <BreadcrumbItem>
-                                <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                                <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
                                   {middleHeaderBreadcrumbItem}
                                 </BreadcrumbPage>
                               </BreadcrumbItem>
@@ -5293,46 +5158,52 @@ function App(): ReactElement {
                         data-testid="calendar-workspace-toolbar"
                         className="flex min-w-max items-center gap-3"
                       >
-                        <div className="overflow-hidden rounded-md border border-[#d32f2f] shadow-[0_4px_12px_rgba(15,23,42,0.08)]">
-                          <div className="flex h-3.5 items-center justify-center bg-[#d32f2f] px-2 text-center text-[9px] font-extrabold leading-none text-white">
+                        <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
+                          <div className="flex h-3.5 items-center justify-center bg-primary px-2 text-center text-xs font-extrabold leading-none text-primary-foreground">
                             {calendarTodayHeader.monthShort}
                           </div>
-                          <div className="flex h-4.5 items-center justify-center border-t border-[color:rgba(217,90,78,0.28)] px-2 text-center">
-                            <span className="block text-sm font-medium leading-none text-[var(--text)]">
+                          <div className="flex h-4 items-center justify-center border-t border-border px-2 text-center">
+                            <span className="block text-sm font-medium leading-none text-foreground">
                               {calendarTodayHeader.dayNumber}
                             </span>
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold leading-4 text-[var(--text)]">
+                          <p className="truncate text-sm font-semibold leading-4 text-foreground">
                             {calendarCurrentPeriodTitle}
                           </p>
                         </div>
-                        <TabMenu
-                          variant="toolbar"
+                        <ToggleGroup
+                          type="single"
                           value={calendarContentFilter}
                           onValueChange={(value) =>
-                            setCalendarContentFilter(value as CalendarContentFilter)
+                            value && setCalendarContentFilter(value as CalendarContentFilter)
                           }
-                          fullWidth={false}
-                          withSpacer={false}
+                          variant="outline"
+                          size="sm"
+                          aria-label="Calendar content filter"
                         >
                           {calendarContentFilterOptions.map((option) => (
-                            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+                            <ToggleGroupItem key={option.value} value={option.value}>
                               <span className="inline-flex items-center gap-2">
                                 <span>{option.label}</span>
-                                <TabMenuCountBadge count={option.count} />
+                                <Badge
+                                  variant="secondary"
+                                  className="h-5 min-w-5 justify-center px-1 text-xs"
+                                >
+                                  {option.count}
+                                </Badge>
                               </span>
-                            </TabMenuItem>
+                            </ToggleGroupItem>
                           ))}
-                        </TabMenu>
+                        </ToggleGroup>
                         <ActionButtonGroup size="sm" aria-label="Calendar period navigation">
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={goToPrevCalendarPeriod}
                             title={calendarViewMode === 'week' ? 'Previous week' : 'Previous month'}
                             icon={<ChevronLeft size={18} />}
                           />
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={goToToday}
                             title={
                               calendarViewMode === 'week'
@@ -5347,7 +5218,7 @@ function App(): ReactElement {
                             icon={<CalendarDays size={18} />}
                             label={calendarViewMode === 'week' ? 'Current week' : 'Current month'}
                           />
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={goToNextCalendarPeriod}
                             title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
                             icon={<ChevronRight size={18} />}
@@ -5361,7 +5232,7 @@ function App(): ReactElement {
                       <WorkspaceHeaderActions>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <WorkspaceActionButton
+                            <WorkspaceIconButton
                               title="Show backlinks"
                               aria-label="Show backlinks"
                               icon={<Link2 size={18} />}
@@ -5380,7 +5251,7 @@ function App(): ReactElement {
                                   <span className="max-w-full truncate font-medium">
                                     {getNoteDisplayName(note.relPath)}
                                   </span>
-                                  <span className="max-w-full truncate text-xs text-[var(--muted)]">
+                                  <span className="max-w-full truncate text-xs text-muted-foreground">
                                     {stripNoteExtension(note.relPath)}
                                   </span>
                                 </DropdownMenuItem>
@@ -5390,7 +5261,7 @@ function App(): ReactElement {
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        <WorkspaceActionButton
+                        <WorkspaceIconButton
                           onClick={() => {
                             void copyCurrentNoteMarkdown()
                           }}
@@ -5398,7 +5269,7 @@ function App(): ReactElement {
                           aria-label="Copy Raw Markdown"
                           icon={<Copy size={18} />}
                         />
-                        <WorkspaceActionButton
+                        <WorkspaceIconButton
                           onClick={() => {
                             setIsNoteExportDialogOpen(true)
                           }}
@@ -5408,15 +5279,15 @@ function App(): ReactElement {
                         />
                         <WorkspaceHeaderActionDivider />
                         <WorkspaceHeaderActionGroup>
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={toggleCurrentNoteFavorite}
                             title={
                               currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
                             }
                             className={
                               currentNoteIsFavorite
-                                ? 'border-amber-400/40 bg-amber-500/12 text-amber-500 hover:text-amber-400'
-                                : 'hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-500'
+                                ? 'border-border bg-accent text-muted-foreground hover:text-muted-foreground'
+                                : 'hover:border-border hover:bg-accent hover:text-muted-foreground'
                             }
                             icon={
                               <Star
@@ -5428,7 +5299,7 @@ function App(): ReactElement {
                         </WorkspaceHeaderActionGroup>
                         <WorkspaceHeaderActionDivider />
                         <WorkspaceHeaderActionGroup>
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={() => {
                               void deleteCurrentNote()
                             }}
@@ -5441,7 +5312,7 @@ function App(): ReactElement {
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
                           {projectsWorkspaceTab === 'taskList' ? (
-                            <WorkspaceActionButton
+                            <WorkspaceIconButton
                               onClick={() => {
                                 setProjectTaskListCollapseAllRequest({
                                   token: Date.now(),
@@ -5467,7 +5338,7 @@ function App(): ReactElement {
                               }
                             />
                           ) : null}
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={() => {
                               setNewProjectRequest({ token: Date.now() })
                             }}
@@ -5479,64 +5350,51 @@ function App(): ReactElement {
                         </WorkspaceHeaderActionGroup>
                         <WorkspaceHeaderActionDivider />
                         <WorkspaceHeaderActionGroup>
-                          <TabMenu
-                            variant="toolbar"
+                          <ToggleGroup
+                            type="single"
                             value={projectsWorkspaceTab}
                             onValueChange={(value) =>
-                              setProjectsWorkspaceTab(value as ProjectsWorkspaceTab)
+                              value && setProjectsWorkspaceTab(value as ProjectsWorkspaceTab)
                             }
-                            fullWidth={false}
-                            withSpacer={false}
-                            className="toolbar-shortcut-tab-menu"
-                            trailingAccessory={
-                              <Shortcut
-                                keys={['option', 'tab']}
-                                data-testid="workspace-shortcut:projects-view-toggle"
-                                className="shrink-0"
-                              />
-                            }
+                            variant="outline"
+                            size="sm"
+                            aria-label="Projects view"
                           >
-                            <TabMenuItem variant="toolbar" value="board">
+                            <ToggleGroupItem value="board">
                               <span className="inline-flex items-center gap-2">
                                 <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
                                 Project Board
                               </span>
-                            </TabMenuItem>
-                            <TabMenuItem variant="toolbar" value="taskList">
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="taskList">
                               <span className="inline-flex items-center gap-2">
                                 <ListTodo size={15} className="shrink-0" aria-hidden="true" />
                                 Task List
                               </span>
-                            </TabMenuItem>
-                          </TabMenu>
+                            </ToggleGroupItem>
+                            <Shortcut
+                              keys={['option', 'tab']}
+                              data-testid="workspace-shortcut:projects-view-toggle"
+                              className="shrink-0"
+                            />
+                          </ToggleGroup>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'calendar' ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
-                          <TabMenu
-                            variant="toolbar"
+                          <ToggleGroup
+                            type="single"
                             value={calendarViewMode}
                             onValueChange={(value) =>
-                              setCalendarViewMode(value as CalendarViewMode)
+                              value && setCalendarViewMode(value as CalendarViewMode)
                             }
-                            fullWidth={false}
-                            withSpacer={false}
-                            className="toolbar-shortcut-tab-menu"
-                            trailingAccessory={
-                              <Shortcut
-                                keys={['option', 'tab']}
-                                data-testid="workspace-shortcut:calendar-view-toggle"
-                                className="shrink-0"
-                              />
-                            }
+                            variant="outline"
+                            size="sm"
+                            aria-label="Calendar view"
                           >
                             {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
-                              <TabMenuItem
-                                key={option.value}
-                                variant="toolbar"
-                                value={option.value}
-                              >
+                              <ToggleGroupItem key={option.value} value={option.value}>
                                 <span className="inline-flex items-center gap-2">
                                   {option.value === 'month' ? (
                                     <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
@@ -5549,15 +5407,20 @@ function App(): ReactElement {
                                   )}
                                   {option.label}
                                 </span>
-                              </TabMenuItem>
+                              </ToggleGroupItem>
                             ))}
-                          </TabMenu>
+                            <Shortcut
+                              keys={['option', 'tab']}
+                              data-testid="workspace-shortcut:calendar-view-toggle"
+                              className="shrink-0"
+                            />
+                          </ToggleGroup>
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
                       <WorkspaceHeaderActions>
                         <WorkspaceHeaderActionGroup>
-                          <WorkspaceActionButton
+                          <WorkspaceIconButton
                             onClick={() => {
                               void handleDeleteSelectedWeeklyPlanWeek()
                             }}
@@ -5577,9 +5440,7 @@ function App(): ReactElement {
                 >
                   <div
                     key={activePage}
-                    className={`${
-                      activePage === 'notes' ? '' : 'page-transition '
-                    }w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                    className={`w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
                   >
                     {!hasVault ? (
                       <VaultSelectionPage
@@ -5631,7 +5492,7 @@ function App(): ReactElement {
                           vimKeyMappings={editorVimKeyMappings}
                         />
                       ) : (
-                        <div className="p-5 text-sm text-[var(--muted)]">
+                        <div className="p-5 text-sm text-muted-foreground">
                           Pick a note or drawing from the right panel to open it
                         </div>
                       )
@@ -5706,14 +5567,14 @@ function App(): ReactElement {
                         onUpsertReview={(input) => upsertReview(input)}
                       />
                     ) : activePage === 'calendar' ? (
-                      <div className="calendar-full min-h-full">
+                      <div className="min-h-full">
                         <section
                           data-testid={
                             calendarViewMode === 'week'
                               ? 'calendar-week-shell'
                               : 'calendar-month-shell'
                           }
-                          className="min-h-full rounded-lg border border-[var(--line)]"
+                          className="min-h-full rounded-lg border border-border"
                         >
                           <div>
                             {calendarViewMode === 'week' ? (
@@ -5794,17 +5655,11 @@ function App(): ReactElement {
                         </section>
                       </div>
                     ) : activePage === 'designAudit' ? (
-                      <DesignAuditPage
-                        themeVersion={`${profileColor}:${isDarkMode}:${fontFamily}`}
-                      />
+                      <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
                     ) : activePage === 'settings' ? (
                       <SettingsPage
                         profileName={profileName}
                         mistralApiKey={mistralApiKey}
-                        fontOptions={FONT_OPTIONS}
-                        selectedFontFamily={fontFamily}
-                        profileColor={profileColor}
-                        performanceModeEnabled={performanceModeEnabled}
                         editorVimModeEnabled={editorVimModeEnabled}
                         editorVimKeyMappings={editorVimKeyMappings}
                         vaultLocation={vault?.rootPath ?? lastVaultPath}
@@ -5814,15 +5669,6 @@ function App(): ReactElement {
                         }}
                         onSaveMistralApiKey={(apiKey) => {
                           void updateMistralApiKey(apiKey)
-                        }}
-                        onSelectFont={(fontFamily) => {
-                          void updateFontFamily(fontFamily)
-                        }}
-                        onSelectProfileColor={(color) => {
-                          void updateProfileColor(color)
-                        }}
-                        onTogglePerformanceMode={(enabled) => {
-                          void updatePerformanceMode(enabled)
                         }}
                         onToggleEditorVimMode={(enabled) => {
                           void updateEditorVimMode(enabled)
@@ -5845,7 +5691,7 @@ function App(): ReactElement {
                         }}
                       />
                     ) : (
-                      <div className="p-5 text-sm text-[var(--muted)]">
+                      <div className="p-5 text-sm text-muted-foreground">
                         {activePage} workspace ready. Notes remain fully functional.
                       </div>
                     )}
@@ -5859,7 +5705,7 @@ function App(): ReactElement {
                   shouldSlideWorkspacePanelOut
                     ? 'pointer-events-none translate-x-full opacity-0'
                     : 'translate-x-0 opacity-100'
-                } ${paletteSurfaceClass}${paletteBlurClass}`}
+                } ${paletteSurfaceClass}`}
                 style={
                   shouldSlideWorkspacePanelOut
                     ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
@@ -5879,15 +5725,12 @@ function App(): ReactElement {
                     onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
                   />
                 ) : (
-                  <div
-                    key={shouldAnimateWorkspacePane ? `workspace-pane-${activePage}` : undefined}
-                    className={`flex h-full flex-col${shouldAnimateWorkspacePane ? ' animate-workspace-pane' : ''}`}
-                  >
+                  <div key={activePage} className="flex h-full flex-col">
                     <DocumentWorkspacePanelHeader
                       actions={
                         hasVault && activePage === 'notes' ? (
                           <WorkspaceHeaderActions>
-                            <WorkspaceActionButton
+                            <WorkspaceIconButton
                               aria-label={
                                 areAllNoteFoldersCollapsed
                                   ? 'Expand all folders'
@@ -5911,7 +5754,7 @@ function App(): ReactElement {
                               }}
                             />
                             {useNativeMenus ? (
-                              <WorkspaceActionButton
+                              <WorkspaceIconButton
                                 ref={noteActionsButtonRef}
                                 onClick={() => {
                                   void openNativeNoteActionsMenu()
@@ -5923,7 +5766,7 @@ function App(): ReactElement {
                             ) : (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <WorkspaceActionButton
+                                  <WorkspaceIconButton
                                     aria-label="Notebook actions"
                                     title="Notebook actions"
                                     icon={<Plus size={18} aria-hidden="true" />}
@@ -5962,14 +5805,6 @@ function App(): ReactElement {
                               </DropdownMenu>
                             )}
                           </WorkspaceHeaderActions>
-                        ) : hasVault && activePage === 'settings' ? (
-                          <WorkspaceActionButton
-                            onClick={() => {
-                              void updateFontFamily(FONT_OPTIONS[0].value)
-                            }}
-                            icon={<Type size={14} />}
-                            label="Reset Font"
-                          />
                         ) : null
                       }
                     />
@@ -6028,19 +5863,19 @@ function App(): ReactElement {
                         <WorkspacePanelSection data-testid="knowledge-graph-editor">
                           <WorkspacePanelSectionHeader
                             icon={<SlidersHorizontal size={16} aria-hidden="true" />}
-                            iconContainerClassName="bg-[var(--accent-soft)] text-[var(--accent)]"
+                            iconContainerClassName="bg-accent text-primary"
                             heading="Graph view"
                             description="Configure how disconnected notes are arranged."
                           />
                           <div className="space-y-2">
                             <label
                               htmlFor="knowledge-orphan-radius-input"
-                              className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
+                              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
                             >
                               Orphan ring radius
                             </label>
                             <div className="flex items-center gap-2">
-                              <input
+                              <Input
                                 id="knowledge-orphan-radius-input"
                                 data-testid="knowledge-orphan-radius-input"
                                 type="number"
@@ -6051,28 +5886,29 @@ function App(): ReactElement {
                                   setKnowledgeOrphanRingRadiusInput(event.target.value)
                                 }}
                                 placeholder="Auto"
-                                className="workspace-subtle-control h-9 min-w-0 flex-1 rounded-md border border-[var(--line)] px-3 text-sm text-[var(--text)] outline-none transition hover:border-[var(--accent)] focus:border-[var(--accent)]"
+                                className="min-w-0 flex-1"
                                 aria-label="Orphan ring radius in pixels"
                               />
-                              <span className="text-xs text-[var(--muted)]">px</span>
+                              <span className="text-xs text-muted-foreground">px</span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3">
-                            <p className="text-xs text-[var(--muted)]">
+                          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                            <p className="text-xs text-muted-foreground">
                               Applied radius:{' '}
                               {knowledgeOrphanRingRadiusPx == null
                                 ? 'Auto'
                                 : `${knowledgeOrphanRingRadiusPx}px`}
                             </p>
-                            <button
+                            <Button
                               type="button"
-                              className="workspace-subtle-control rounded-md border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              variant="outline"
+                              size="sm"
                               onClick={() => {
                                 setKnowledgeOrphanRingRadiusInput('')
                               }}
                             >
                               Reset
-                            </button>
+                            </Button>
                           </div>
                         </WorkspacePanelSection>
                       ) : activePage === 'calendar' ? (
@@ -6209,41 +6045,41 @@ function VaultSelectionPage({
 
   return (
     <div data-testid="vault-required-page" className="flex h-full items-center justify-center p-8">
-      <div className="max-w-2xl rounded-[28px] border border-[var(--line)] bg-[var(--panel)] px-8 py-9 text-center shadow-[0_24px_80px_rgba(7,5,18,0.12)]">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]">
+      <div className="max-w-2xl rounded-lg border border-border bg-card px-8 py-9 text-center shadow-sm">
+        <div className="mx-auto flex size-16 items-center justify-center rounded-lg border border-ring bg-accent text-primary">
           <FolderOpen size={26} />
         </div>
-        <h2 className="mt-5 text-3xl font-semibold text-[var(--text)]">
+        <h2 className="mt-5 text-3xl font-semibold text-foreground">
           {supportsVaultPicker ? 'Select a vault first' : 'Workspace connection required'}
         </h2>
-        <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {supportsVaultPicker
             ? 'Open an existing vault or create a new one before accessing notes, projects, calendar, and automation pages.'
             : 'This shell now runs outside Electron, but on-device workspace storage still needs a mobile implementation before notes and projects can open here.'}
         </p>
         {supportsVaultPicker ? (
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <button
+            <Button
               type="button"
+              variant="outline"
               data-testid="vault-required-open"
               onClick={onManageVaults}
-              className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--accent)] hover:border-[var(--accent)]"
             >
               Manage Vaults
-            </button>
+            </Button>
           </div>
         ) : (
-          <div className="mt-6 rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] px-4 py-3 text-left text-sm text-[var(--accent)]">
+          <div className="mt-6 rounded-lg border border-ring bg-accent px-4 py-3 text-left text-sm text-primary">
             {isMobileShell
               ? 'Mobile/web mode now shares the app shell and page system, but still needs a managed local workspace adapter.'
               : 'A platform workspace adapter must be connected before this build can open local data.'}
           </div>
         )}
-        <div className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] px-4 py-3 text-left text-sm text-[var(--muted)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">
+        <div className="mt-6 rounded-lg border border-border bg-muted px-4 py-3 text-left text-sm text-muted-foreground">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {supportsVaultPicker ? 'Last Known Vault' : 'Desktop Vault State'}
           </div>
-          <div className="mt-2 break-words text-[var(--text)]">
+          <div className="mt-2 break-words text-foreground">
             {lastVaultPath ??
               (supportsVaultPicker
                 ? 'No previous vault remembered on this device.'

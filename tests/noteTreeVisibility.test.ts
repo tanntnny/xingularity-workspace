@@ -10,6 +10,7 @@ describe('hideManagedProjectTree', () => {
         kind: 'folder',
         relPath: 'Projects',
         name: 'Projects',
+        isLinked: false,
         protectionKind: null,
         children: [
           {
@@ -17,6 +18,7 @@ describe('hideManagedProjectTree', () => {
             kind: 'folder',
             relPath: 'Projects/Alpha',
             name: 'Alpha',
+            isLinked: false,
             isProtected: true,
             protectionKind: 'project-folder',
             children: []
@@ -28,6 +30,7 @@ describe('hideManagedProjectTree', () => {
         kind: 'folder',
         relPath: 'Archive',
         name: 'Archive',
+        isLinked: false,
         children: []
       }
     ]
@@ -42,6 +45,7 @@ describe('hideManagedProjectTree', () => {
         kind: 'folder',
         relPath: 'Projects',
         name: 'Projects',
+        isLinked: false,
         children: []
       }
     ]

@@ -1,6 +1,6 @@
 import { ReactElement, useEffect, useMemo, useState } from 'react'
 import * as d3 from 'd3'
-import { Archive, CalendarClock, Landmark, Pencil, Plus, Trash2, WalletCards } from 'lucide-react'
+import { Archive, CalendarClock, Landmark, Pencil, Plus, Trash2, WalletCards } from '../components/ui/icons'
 import {
   deriveSubscriptionAnalytics,
   getBillingIntervalMonths,
@@ -29,7 +29,13 @@ import {
 } from '../components/ui/drawer'
 import { Input } from '../components/ui/input'
 import { FloatingHoverCard } from '../components/ui/floating-hover-card'
-import { Select } from '../components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '../components/ui/select'
 import {
   SortableTableHead,
   Table,
@@ -429,46 +435,52 @@ function TreemapCard({
 
   if (!records.length) {
     return (
-      <div className="workspace-subtle-surface rounded-lg">
-        <div className="border-b border-[var(--line)] px-5 py-4">
-          <div className="mb-4 border-t border-[var(--line)]" />
-          <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
+      <div className="border bg-card text-card-foreground rounded-lg">
+        <div className="border-b border-border px-5 py-4">
+          <div className="mb-4 border-t border-border" />
+          <h2 className="text-base font-semibold text-foreground">Recurring spend map</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Category to service hierarchy sized by normalized monthly spend
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row">
               <Select
-                aria-label="Status filter"
                 value={statusFilter}
-                onChange={(event) =>
-                  onChangeStatusFilter(event.currentTarget.value as 'all' | SubscriptionStatus)
-                }
-                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
+                onValueChange={(value) => onChangeStatusFilter(value as 'all' | SubscriptionStatus)}
               >
-                <option value="all">All statuses</option>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
+                <SelectTrigger
+                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
+                  aria-label="Status filter"
+                >
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
               <Select
-                aria-label="Category filter"
                 value={activeCategory ?? 'all'}
-                onChange={(event) =>
-                  onSelectCategory(
-                    event.currentTarget.value === 'all' ? null : event.currentTarget.value
-                  )
-                }
-                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
+                onValueChange={(value) => onSelectCategory(value === 'all' ? null : value)}
               >
-                <option value="all">All categories</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
+                <SelectTrigger
+                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
+                  aria-label="Category filter"
+                >
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <Button onClick={onOpenCreate} className="gap-2 self-start">
@@ -478,7 +490,7 @@ function TreemapCard({
           </div>
         </div>
         <div className="p-8">
-          <p className="text-sm text-[var(--muted)]">
+          <p className="text-sm text-muted-foreground">
             The treemap will appear once you add active subscriptions.
           </p>
         </div>
@@ -490,46 +502,52 @@ function TreemapCard({
 
   return (
     <>
-      <div className="workspace-subtle-surface overflow-hidden rounded-lg px-5 shadow-[0_18px_60px_rgba(5,10,18,0.12)]">
-        <div className="border-b border-[var(--line)] py-4">
-          <div className="mb-4 border-t border-[var(--line)]" />
-          <h2 className="text-base font-semibold text-[var(--text)]">Recurring spend map</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
+      <div className="overflow-hidden rounded-lg border bg-card px-5 text-card-foreground shadow-sm">
+        <div className="border-b border-border py-4">
+          <div className="mb-4 border-t border-border" />
+          <h2 className="text-base font-semibold text-foreground">Recurring spend map</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Category to service hierarchy sized by normalized monthly spend
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Select
-                aria-label="Status filter"
                 value={statusFilter}
-                onChange={(event) =>
-                  onChangeStatusFilter(event.currentTarget.value as 'all' | SubscriptionStatus)
-                }
-                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
+                onValueChange={(value) => onChangeStatusFilter(value as 'all' | SubscriptionStatus)}
               >
-                <option value="all">All statuses</option>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
+                <SelectTrigger
+                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
+                  aria-label="Status filter"
+                >
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
               <Select
-                aria-label="Category filter"
                 value={activeCategory ?? 'all'}
-                onChange={(event) =>
-                  onSelectCategory(
-                    event.currentTarget.value === 'all' ? null : event.currentTarget.value
-                  )
-                }
-                className="workspace-subtle-control h-9 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)]"
+                onValueChange={(value) => onSelectCategory(value === 'all' ? null : value)}
               >
-                <option value="all">All categories</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
+                <SelectTrigger
+                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
+                  aria-label="Category filter"
+                >
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
               {statusFilter !== 'all' || activeCategory ? (
                 <Button
@@ -573,9 +591,7 @@ function TreemapCard({
                   width={width}
                   height={height}
                   fill="transparent"
-                  stroke={
-                    activeCategory === node.category ? 'var(--accent)' : 'rgba(255,255,255,0.08)'
-                  }
+                  stroke={activeCategory === node.category ? 'var(--primary)' : 'var(--border)'}
                   strokeWidth={activeCategory === node.category ? 2 : 1}
                   rx={8}
                   className="cursor-pointer"
@@ -711,40 +727,38 @@ function TreemapCard({
         <FloatingHoverCard x={hoverCard.x} y={hoverCard.y} className="w-72">
           {hoverCard.kind === 'record' ? (
             <>
-              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
-                {hoverCard.name}
-              </div>
-              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+              <div className="mb-1.5 text-sm font-semibold text-foreground">{hoverCard.name}</div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{hoverCard.category}</span>
                 <span>{hoverCard.status}</span>
               </div>
-              <div className="mt-2 text-xs text-[var(--muted)]">
+              <div className="mt-2 text-xs text-muted-foreground">
                 Monthly: {formatCurrency(hoverCard.value)}
               </div>
-              <div className="mt-1 text-xs text-[var(--muted)]">
+              <div className="mt-1 text-xs text-muted-foreground">
                 Billing: {formatCurrency(hoverCard.amount)} / {hoverCard.billingCycle}
               </div>
-              <div className="mt-1 text-xs text-[var(--muted)]">
+              <div className="mt-1 text-xs text-muted-foreground">
                 Renewal: {formatRenewalLabel(hoverCard.nextRenewalAt)}
               </div>
               {hoverCard.provider ? (
-                <div className="mt-1 text-xs text-[var(--muted)]">
+                <div className="mt-1 text-xs text-muted-foreground">
                   Provider: {hoverCard.provider}
                 </div>
               ) : null}
             </>
           ) : (
             <>
-              <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">
+              <div className="mb-1.5 text-sm font-semibold text-foreground">
                 {hoverCard.category}
               </div>
-              <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
                   {hoverCard.count} subscription{hoverCard.count === 1 ? '' : 's'}
                 </span>
                 <span>Category</span>
               </div>
-              <div className="mt-2 text-xs text-[var(--muted)]">
+              <div className="mt-2 text-xs text-muted-foreground">
                 Total monthly: {formatCurrency(hoverCard.value)}
               </div>
             </>
@@ -981,13 +995,13 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
             {kpiCards.map((card) => (
               <div
                 key={card.label}
-                className="workspace-subtle-surface rounded-lg border border-[var(--line)] px-4 py-4"
+                className="border bg-card text-card-foreground rounded-lg border border-border px-4 py-4"
               >
-                <div className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <card.icon size={16} />
                   <span>{card.label}</span>
                 </div>
-                <p className="mt-3 text-3xl font-semibold leading-none text-[var(--text)]">
+                <p className="mt-3 text-3xl font-semibold leading-none text-foreground">
                   {card.value}
                 </p>
               </div>
@@ -996,7 +1010,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         </section>
 
         {isLoading ? (
-          <div className="workspace-subtle-surface rounded-lg px-6 py-8 text-sm text-[var(--muted)]">
+          <div className="border bg-card text-card-foreground rounded-lg px-6 py-8 text-sm text-muted-foreground">
             Loading subscriptions…
           </div>
         ) : (
@@ -1020,17 +1034,15 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
             </section>
 
             <section>
-              <div className="workspace-subtle-surface rounded-lg p-5">
+              <div className="border bg-card text-card-foreground rounded-lg p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-[var(--text)]">
-                      Subscriptions list
-                    </h2>
-                    <p className="text-sm text-[var(--muted)]">
+                    <h2 className="text-base font-semibold text-foreground">Subscriptions list</h2>
+                    <p className="text-sm text-muted-foreground">
                       Sort, filter, and manage individual subscriptions.
                     </p>
                   </div>
-                  <div className="text-sm text-[var(--muted)]">
+                  <div className="text-sm text-muted-foreground">
                     {filteredRecords.length} result{filteredRecords.length === 1 ? '' : 's'}
                   </div>
                 </div>
@@ -1086,8 +1098,8 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                           onClick={() => setSelectedId(record.id)}
                         >
                           <TableCell>
-                            <div className="font-medium text-[var(--text)]">{record.name}</div>
-                            <div className="text-xs text-[var(--muted)]">
+                            <div className="font-medium text-foreground">{record.name}</div>
+                            <div className="text-xs text-muted-foreground">
                               {record.provider ?? 'No provider'}
                             </div>
                           </TableCell>
@@ -1106,18 +1118,18 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="font-medium text-[var(--text)]">
+                            <div className="font-medium text-foreground">
                               {formatCurrency(record.normalizedMonthlyAmount)}
                             </div>
-                            <div className="text-xs capitalize text-[var(--muted)]">
+                            <div className="text-xs capitalize text-muted-foreground">
                               {formatCurrency(record.amount)} / {record.billingCycle}
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="font-medium text-[var(--text)]">
+                            <div className="font-medium text-foreground">
                               {formatRenewalLabel(record.nextRenewalAt)}
                             </div>
-                            <div className="text-xs text-[var(--muted)]">
+                            <div className="text-xs text-muted-foreground">
                               {formatRelativeRenewal(record.nextRenewalAt)}
                             </div>
                           </TableCell>
@@ -1183,7 +1195,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <DrawerContent side="right">
-          <DrawerHeader className="border-b border-[var(--line)] pb-4">
+          <DrawerHeader className="border-b border-border pb-4">
             <DrawerTitle>{draft.id ? 'Edit subscription' : 'Add subscription'}</DrawerTitle>
             <DrawerDescription>
               Update recurring spend, renewal timing, and review signals.
@@ -1211,18 +1223,25 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
               </Field>
               <Field label="Category" className="text-sm">
                 <Select
-                  value={draft.category}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, category: value }))
+                  value={draft.category || '__none__'}
+                  onValueChange={(value) => {
+                    setDraft((current) => ({
+                      ...current,
+                      category: value === '__none__' ? '' : value
+                    }))
                   }}
                 >
-                  <option value="">Select category</option>
-                  {categoryOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select category</SelectItem>
+                    {categoryOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </Field>
               <Field label="Amount" className="text-sm">
@@ -1240,17 +1259,21 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
               <Field label="Billing cycle" className="text-sm">
                 <Select
                   value={draft.billingCycle}
-                  onChange={(event) => {
-                    const value = event.currentTarget
-                      .value as CreateSubscriptionInput['billingCycle']
-                    setDraft((current) => ({ ...current, billingCycle: value }))
+                  onValueChange={(value) => {
+                    const billingCycle = value as CreateSubscriptionInput['billingCycle']
+                    setDraft((current) => ({ ...current, billingCycle }))
                   }}
                 >
-                  {BILLING_CYCLE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Billing cycle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BILLING_CYCLE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </Field>
               {draft.billingCycle === 'custom' ? (
@@ -1280,31 +1303,42 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
               <Field label="Status" className="text-sm">
                 <Select
                   value={draft.status}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value as SubscriptionStatus
-                    setDraft((current) => ({ ...current, status: value }))
+                  onValueChange={(value) => {
+                    setDraft((current) => ({ ...current, status: value as SubscriptionStatus }))
                   }}
                 >
-                  {STATUS_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </Field>
               <Field label="Review flag" className="text-sm">
                 <Select
                   value={draft.reviewFlag}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value as SubscriptionReviewFlag
-                    setDraft((current) => ({ ...current, reviewFlag: value }))
+                  onValueChange={(value) => {
+                    setDraft((current) => ({
+                      ...current,
+                      reviewFlag: value as SubscriptionReviewFlag
+                    }))
                   }}
                 >
-                  {REVIEW_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Review flag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REVIEW_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </Field>
               <Field label="Last used" className="text-sm">
@@ -1339,7 +1373,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
               </Field>
             </div>
           </div>
-          <DrawerFooter className="justify-between border-t border-[var(--line)] pt-4">
+          <DrawerFooter className="justify-between border-t border-border pt-4">
             <DrawerClose asChild>
               <Button variant="outline">Cancel</Button>
             </DrawerClose>

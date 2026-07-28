@@ -1,14 +1,11 @@
 import * as React from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from './icons'
 
 import { cn } from '../lib/utils'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div
-      className="table-no-ripple-scope performance-surface-panel relative w-full overflow-auto rounded-b-2xl border"
-      data-no-ripple-scope
-    >
+    <div className="relative w-full overflow-auto">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )
@@ -19,14 +16,7 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead
-    ref={ref}
-    className={cn(
-      'bg-[color:color-mix(in_srgb,var(--panel-2)_24%,transparent)] [&_tr]:border-b [&_tr]:border-[var(--line)]',
-      className
-    )}
-    {...props}
-  />
+  <thead ref={ref} className={cn('[&_tr]:border-b', className)} {...props} />
 ))
 TableHeader.displayName = 'TableHeader'
 
@@ -44,10 +34,7 @@ const TableFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tfoot
     ref={ref}
-    className={cn(
-      'border-t border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel-2)_18%,transparent)] font-medium [&>tr]:last:border-b-0',
-      className
-    )}
+    className={cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', className)}
     {...props}
   />
 ))
@@ -58,7 +45,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
     <tr
       ref={ref}
       className={cn(
-        'border-b border-[var(--line)] bg-transparent transition-colors hover:bg-[color:color-mix(in_srgb,var(--panel-2)_16%,transparent)] data-[state=selected]:bg-[var(--accent-soft)]',
+        'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
         className
       )}
       {...props}
@@ -74,7 +61,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-10 border-r border-[var(--line)] px-3 text-left align-middle text-xs font-semibold uppercase tracking-wide text-[var(--muted)] last:border-r-0 [&:has([role=checkbox])]:pr-0',
+      'h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0',
       className
     )}
     {...props}
@@ -102,7 +89,7 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
       <TableHead ref={ref} className={className} aria-sort={ariaSort} {...props}>
         <button
           type="button"
-          className="flex w-full items-center gap-1.5 text-left transition-colors hover:text-[var(--text)]"
+          className="flex w-full items-center gap-1.5 text-left transition-colors hover:text-foreground"
           onClick={onToggleSort}
         >
           <span className="min-w-0 flex-1">{children}</span>
@@ -120,10 +107,7 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn(
-      'border-r border-[var(--line)] px-3 py-2 align-middle text-[var(--text)] last:border-r-0 [&:has([role=checkbox])]:pr-0',
-      className
-    )}
+    className={cn('p-4 align-middle [&:has([role=checkbox])]:pr-0', className)}
     {...props}
   />
 ))
@@ -133,7 +117,7 @@ const TableCaption = React.forwardRef<
   HTMLTableCaptionElement,
   React.HTMLAttributes<HTMLTableCaptionElement>
 >(({ className, ...props }, ref) => (
-  <caption ref={ref} className={cn('mt-4 text-sm text-[var(--muted)]', className)} {...props} />
+  <caption ref={ref} className={cn('mt-4 text-sm text-muted-foreground', className)} {...props} />
 ))
 TableCaption.displayName = 'TableCaption'
 

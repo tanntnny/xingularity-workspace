@@ -64,14 +64,12 @@ function createFixtureSettings(vaultRoot: string): AppSettings {
     favoriteNotePaths: [],
     favoriteProjectIds: [],
     profile: {
-      name: '',
-      color: 'atmosphere'
+      name: ''
     },
     ai: {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
-    workspaceVibrancyEnabled: true,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

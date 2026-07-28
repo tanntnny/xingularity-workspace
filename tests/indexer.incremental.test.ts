@@ -32,6 +32,16 @@ describe('sqlite index incremental updates', () => {
       ),
       'utf-8'
     )
+    const linkedDirectoryTarget = path.join(root, 'linked-directory-target')
+    await fs.mkdir(linkedDirectoryTarget)
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'linked.md'),
+      serializeStoredNoteDocument(
+        createStoredNoteDocumentFromText('# Linked\nLinked body', ['linked'])
+      ),
+      'utf-8'
+    )
+    await fs.symlink(linkedDirectoryTarget, path.join(notesRoot, 'Docs'), 'dir')
 
     let indexer: InstanceType<typeof SqliteIndexer>
     try {
@@ -49,6 +59,9 @@ describe('sqlite index incremental updates', () => {
 
     const initialResults = indexer.query('alpha')
     expect(initialResults.some((r) => r.relPath === 'first.md')).toBe(true)
+
+    const linkedResults = indexer.query('linked')
+    expect(linkedResults.some((r) => r.relPath === 'Docs/linked.md')).toBe(true)
 
     const bodyResults = indexer.query('@Body')
     expect(bodyResults.some((r) => r.relPath === 'first.md')).toBe(true)

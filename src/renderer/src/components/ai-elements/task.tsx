@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { CheckCircle2, ChevronDown, Circle, LoaderCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Circle, LoaderCircle } from '../ui/icons'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/button'
 
 interface TaskContextValue {
   open: boolean
@@ -17,10 +18,7 @@ export function Task({
   const [open, setOpen] = React.useState(defaultOpen)
   return (
     <TaskContext.Provider value={{ open, setOpen }}>
-      <div
-        className={cn('rounded-lg border border-[var(--line)] bg-[var(--panel)]', className)}
-        {...props}
-      />
+      <div className={cn('rounded-lg border border-border bg-card', className)} {...props} />
     </TaskContext.Provider>
   )
 }
@@ -40,25 +38,26 @@ export function TaskTrigger({
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
       className={cn('flex w-full items-center gap-3 px-4 py-3 text-left', className)}
       onClick={() => context.setOpen((value) => !value)}
       {...props}
     >
       {status === 'completed' ? (
-        <CheckCircle2 size={16} className="text-emerald-500" />
+        <CheckCircle2 size={16} className="text-primary" />
       ) : status === 'in_progress' ? (
-        <LoaderCircle size={16} className="animate-spin text-[var(--accent)]" />
+        <LoaderCircle size={16} className="animate-spin text-primary" />
       ) : (
-        <Circle size={16} className="text-[var(--muted)]" />
+        <Circle size={16} className="text-muted-foreground" />
       )}
-      <span className="flex-1 text-sm font-semibold text-[var(--text)]">{title}</span>
+      <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
       <ChevronDown
         size={15}
-        className={cn('text-[var(--muted)] transition', context.open ? 'rotate-180' : '')}
+        className={cn('text-muted-foreground transition', context.open ? 'rotate-180' : '')}
       />
-    </button>
+    </Button>
   )
 }
 
@@ -73,7 +72,7 @@ export function TaskContent({
   if (!context.open) {
     return null
   }
-  return <div className={cn('border-t border-[var(--line)] px-4 py-3', className)} {...props} />
+  return <div className={cn('border-t border-border px-4 py-3', className)} {...props} />
 }
 
 export function TaskItem({
@@ -82,7 +81,7 @@ export function TaskItem({
 }: React.HTMLAttributes<HTMLDivElement>): React.ReactElement {
   return (
     <div
-      className={cn('flex items-start gap-2 py-1 text-sm text-[var(--muted)]', className)}
+      className={cn('flex items-start gap-2 py-1 text-sm text-muted-foreground', className)}
       {...props}
     />
   )

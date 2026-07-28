@@ -16,7 +16,6 @@ export function setCalendarTaskDragPreview(event: DragPreviewEvent): void {
   dragPreview.style.pointerEvents = 'none'
   dragPreview.style.transform = 'none'
   dragPreview.style.opacity = '1'
-  dragPreview.classList.add('calendar-task-drag-preview')
   document.body.appendChild(dragPreview)
 
   event.dataTransfer.setDragImage(dragPreview, event.clientX - rect.left, event.clientY - rect.top)

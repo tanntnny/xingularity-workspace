@@ -1,5 +1,5 @@
 import { ReactElement } from 'react'
-import { ArrowLeft, Download } from 'lucide-react'
+import { ArrowLeft, Download } from '../components/ui/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,7 +16,7 @@ import {
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
   WorkspaceContextEmptyState,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider
@@ -153,18 +153,18 @@ interface ScheduleDocumentationPageProps {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): ReactElement {
   return (
-    <section className="workspace-subtle-surface space-y-3 rounded-[24px] p-6 shadow-sm">
+    <section className="space-y-3 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       </div>
-      <div className="space-y-3 text-sm leading-7 text-[var(--muted)]">{children}</div>
+      <div className="space-y-3 text-sm leading-7 text-muted-foreground">{children}</div>
     </section>
   )
 }
 
 function CodeBlock({ code, language }: { code: string; language: string }): ReactElement {
   return (
-    <pre className="workspace-subtle-surface overflow-x-auto rounded-2xl p-4 text-xs leading-6 text-[var(--text)]">
+    <pre className="border bg-card text-card-foreground overflow-x-auto rounded-lg p-4 text-xs leading-6 text-foreground">
       <code data-language={language}>{code}</code>
     </pre>
   )
@@ -182,13 +182,15 @@ export function ScheduleDocumentationPage({
         <DocumentWorkspaceMainHeader
           breadcrumb={
             <Breadcrumb>
-              <BreadcrumbList className="text-[var(--muted)]">
+              <BreadcrumbList className="text-muted-foreground">
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="text-sm text-[var(--muted)]">Schedules</BreadcrumbPage>
+                  <BreadcrumbPage className="text-sm text-muted-foreground">
+                    Schedules
+                  </BreadcrumbPage>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                <BreadcrumbSeparator className="text-muted-foreground" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="text-sm font-semibold text-[var(--text)]">
+                  <BreadcrumbPage className="text-sm font-semibold text-foreground">
                     Schedule API Guide
                   </BreadcrumbPage>
                 </BreadcrumbItem>
@@ -198,7 +200,7 @@ export function ScheduleDocumentationPage({
           actions={
             <WorkspaceHeaderActions>
               <WorkspaceHeaderActionGroup>
-                <WorkspaceActionButton
+                <WorkspaceIconButton
                   onClick={onBack}
                   icon={<ArrowLeft size={14} />}
                   label="Back to schedules"
@@ -206,7 +208,7 @@ export function ScheduleDocumentationPage({
               </WorkspaceHeaderActionGroup>
               <WorkspaceHeaderActionDivider />
               <WorkspaceHeaderActionGroup>
-                <WorkspaceActionButton
+                <WorkspaceIconButton
                   onClick={onDownload}
                   icon={<Download size={14} />}
                   label="Download .md"
@@ -217,14 +219,14 @@ export function ScheduleDocumentationPage({
         />
         <DocumentWorkspaceMainContent className="overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-6 py-6">
-            <section className="workspace-subtle-surface rounded-[28px] px-6 py-7 shadow-sm">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
+            <section className="rounded-lg border bg-card px-6 py-7 text-card-foreground shadow-sm">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 Standalone Documentation
               </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--text)]">
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
                 Schedule API Guide
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--muted)]">
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
                 This page documents the schedule feature as an app-level API surface: job shape,
                 trigger config, available renderer methods, emitted action contracts, and the
                 review/apply lifecycle.
@@ -260,28 +262,26 @@ dismissRun(runId: string): Promise<void>`}
             <Section title="Job definition">
               <ul className="space-y-2">
                 <li>
-                  <span className="font-medium text-[var(--text)]">name</span>: user-facing job
-                  label.
+                  <span className="font-medium text-foreground">name</span>: user-facing job label.
                 </li>
                 <li>
-                  <span className="font-medium text-[var(--text)]">enabled</span>: whether
-                  non-manual triggers are active.
+                  <span className="font-medium text-foreground">enabled</span>: whether non-manual
+                  triggers are active.
                 </li>
                 <li>
-                  <span className="font-medium text-[var(--text)]">trigger</span>: scheduling
-                  strategy.
+                  <span className="font-medium text-foreground">trigger</span>: scheduling strategy.
                 </li>
                 <li>
-                  <span className="font-medium text-[var(--text)]">runtime</span>: script runtime,
+                  <span className="font-medium text-foreground">runtime</span>: script runtime,
                   either JavaScript or Python.
                 </li>
                 <li>
-                  <span className="font-medium text-[var(--text)]">permissions</span>: explicit
+                  <span className="font-medium text-foreground">permissions</span>: explicit
                   capabilities granted to the script.
                 </li>
                 <li>
-                  <span className="font-medium text-[var(--text)]">outputMode</span>: review-first
-                  or auto-apply execution.
+                  <span className="font-medium text-foreground">outputMode</span>: review-first or
+                  auto-apply execution.
                 </li>
               </ul>
               <CodeBlock

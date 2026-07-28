@@ -89,7 +89,7 @@ export function useWeeklyPlan(
     [ensureApi, pushToast]
   )
 
-  const createMutation = <T,>(
+  const createMutation = <T>(
     fn: (api: RendererVaultApi['weeklyPlan'], input: T) => Promise<WeeklyPlanState>
   ): Mutation<T> => {
     return async (input: T) => {

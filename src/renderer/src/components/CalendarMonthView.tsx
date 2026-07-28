@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Trash2 } from 'lucide-react'
+import { Check, Trash2 } from './ui/icons'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -28,7 +28,7 @@ import {
 import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { Input } from './ui/input'
-import { Select } from './ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import {
   buildCalendarEvents,
   type CalendarEventInput,
@@ -551,7 +551,7 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="calendar-full min-h-full rounded-b-2xl" data-testid="calendar-month-view">
+    <section className="min-h-full rounded-lg" data-testid="calendar-month-view">
       <div className="relative">
         <FullCalendar
           ref={calendarRef}
@@ -581,14 +581,12 @@ export function CalendarMonthView({
             return (
               <div
                 className={`flex w-full flex-col items-center px-3 py-3 text-center transition-colors ${
-                  isHighlighted
-                    ? 'bg-[var(--accent-soft)]'
-                    : 'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)]'
+                  isHighlighted ? 'bg-accent' : 'hover:bg-accent'
                 }`}
               >
                 <span
                   className={`text-sm font-semibold ${
-                    isToday ? 'text-[var(--accent)]' : 'text-[var(--text)]'
+                    isToday ? 'text-primary' : 'text-foreground'
                   }`}
                 >
                   {formatWeekdayHeaderLabel(arg.date)}
@@ -636,43 +634,34 @@ export function CalendarMonthView({
           eventClassNames={(arg) => {
             const source = String(arg.event.extendedProps.source ?? 'task')
             if (source === 'milestone') {
-              return [
-                'beacon-task-event',
-                'beacon-calendar-milestone',
-                arg.event.extendedProps.completed ? 'beacon-task-completed' : ''
-              ]
+              return ['rounded-md', 'border', 'bg-card']
             }
             const task = tasksById[arg.event.id]
             if (!task) {
-              return ['calendar-task-card-shell', 'beacon-task-event', 'beacon-task-assignment']
+              return ['rounded-md', 'border', 'bg-card']
             }
-            return [
-              'calendar-task-card-shell',
-              'beacon-task-event',
-              `beacon-task-${task.taskType || 'assignment'}`,
-              task.completed ? 'beacon-task-completed' : ''
-            ]
+            return ['rounded-md', 'border', 'bg-card', task.completed ? 'opacity-60' : '']
           }}
           dayCellClassNames={(arg) => {
             const iso = toIsoDate(arg.date)
-            return iso === selectedDate ? ['beacon-day-selected'] : []
+            return iso === selectedDate ? ['bg-accent'] : []
           }}
           eventContent={(arg) => {
             const source = String(arg.event.extendedProps.source ?? 'task')
             if (source === 'milestone') {
               const milestone = getMilestoneDetailsFromEvent(arg.event)
               if (!milestone) {
-                return <span className="truncate text-[var(--text)]">{arg.event.title}</span>
+                return <span className="truncate text-foreground">{arg.event.title}</span>
               }
               return (
-                <div className="beacon-task-inner w-full rounded px-1.5 py-1">
+                <div className="w-full rounded-md px-1.5 py-1">
                   <CalendarMilestoneCard milestone={milestone} />
                 </div>
               )
             }
             const task = tasksById[arg.event.id]
             if (!task) {
-              return <span className="truncate text-[var(--text)]">{arg.event.title}</span>
+              return <span className="truncate text-foreground">{arg.event.title}</span>
             }
 
             return <CalendarTaskCard task={task} onToggle={safeToggleTask} />
@@ -843,93 +832,96 @@ export function TaskEditDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Title
             </label>
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="dialog-input-surface mt-1"
+              className=" mt-1"
               placeholder="Task title"
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Priority
             </label>
-            <Select
-              value={priority}
-              onChange={(event) => setPriority(event.target.value as TaskPriority)}
-              className="calendar-dialog-field mt-1 w-full"
-              contentClassName="calendar-dialog-selection-menu"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+            <Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}>
+              <SelectTrigger className=" mt-1 w-full">
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Type
             </label>
             <Select
               value={taskType}
-              onChange={(event) => setTaskType(event.target.value as CalendarTaskType)}
-              className="calendar-dialog-field mt-1 w-full"
-              contentClassName="calendar-dialog-selection-menu"
+              onValueChange={(value) => setTaskType(value as CalendarTaskType)}
             >
-              {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              <SelectTrigger className=" mt-1 w-full">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Start date
               </label>
               <Input
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
-                className="calendar-dialog-field mt-1"
+                className=" mt-1"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Start time
               </label>
               <Input
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
-                className="calendar-dialog-field mt-1"
+                className=" mt-1"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 End date
               </label>
               <Input
                 type="date"
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
-                className="calendar-dialog-field mt-1"
+                className=" mt-1"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 End time
               </label>
               <Input
                 type="time"
                 value={endTime}
                 onChange={(event) => setEndTime(event.target.value)}
-                className="calendar-dialog-field mt-1"
+                className=" mt-1"
               />
             </div>
           </div>

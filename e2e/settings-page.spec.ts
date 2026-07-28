@@ -104,28 +104,12 @@ test.describe('settings page', () => {
       await page.getByRole('radio', { name: 'Appearance' }).click()
       await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
       await expect(page.getByText('App Font', { exact: true })).toBeVisible()
-      await expect(page.getByText('The quick brown fox jumps over the lazy dog.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Atmosphere' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Monotone' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Indigo' })).toHaveCount(0)
-      await page.getByRole('button', { name: 'Monotone' }).click()
-      await expect
-        .poll(async () => {
-          const profile = (await readVaultSettings(vaultRoot)).profile as
-            | { color?: string }
-            | undefined
-          return profile?.color
-        })
-        .toBe('monotone')
-      await page.getByRole('button', { name: 'Atmosphere' }).click()
-      await expect
-        .poll(async () => {
-          const profile = (await readVaultSettings(vaultRoot)).profile as
-            | { color?: string }
-            | undefined
-          return profile?.color
-        })
-        .toBe('atmosphere')
+      await expect(page.getByText('Color Theme', { exact: true })).toBeVisible()
+      await expect(page.getByText('Monotone', { exact: true })).toBeVisible()
+      await expect(page.getByText('Performance Mode', { exact: true })).toHaveCount(0)
+      await expect(page.getByRole('switch', { name: 'Enable performance mode' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Atmosphere' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Monotone' })).toHaveCount(0)
       await expect(page.getByText('Active Vault')).toHaveCount(0)
 
       await page.getByRole('radio', { name: 'Editor' }).click()

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Xingularity Electron Feature'
+  short_description: 'Build safe vault-backed Electron features.'
+  default_prompt: 'Use $xingularity-electron-feature to implement a Xingularity feature across shared contracts, preload, main IPC, and the renderer with focused tests.'

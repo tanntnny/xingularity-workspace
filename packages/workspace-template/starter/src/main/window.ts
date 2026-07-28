@@ -14,14 +14,7 @@ export function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     ...(isMac ? { trafficLightPosition: { x: 16, y: 14 } } : {}),
-    backgroundColor: isMac ? '#00000000' : '#f6f7f9',
-    ...(isMac
-      ? {
-          transparent: true,
-          vibrancy: 'sidebar',
-          visualEffectState: 'active'
-        }
-      : {}),
+    backgroundColor: '#f6f7f9',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

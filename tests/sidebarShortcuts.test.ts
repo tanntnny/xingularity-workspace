@@ -1,14 +1,31 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { NotebookPen } from 'lucide-react'
+import { NotebookPen } from '../src/renderer/src/components/ui/icons'
 import { describe, expect, it } from 'vitest'
 import { AppSidebar } from '../src/renderer/src/components/AppSidebar'
-import { SidebarProvider } from '../src/renderer/src/components/ui/sidebar'
+import { SidebarHeader, SidebarProvider } from '../src/renderer/src/components/ui/sidebar'
 import { Shortcut } from '../src/renderer/src/components/ui/kbd'
-import { TabMenu, TabMenuItem } from '../src/renderer/src/components/ui/tab-menu'
+import { ToggleGroup, ToggleGroupItem } from '../src/renderer/src/components/ui/toggle-group'
 import { WorkspaceTabManager } from '../src/renderer/src/components/ui/document-workspace'
 
 describe('sidebar shortcuts', () => {
+  it('adds macOS traffic-light clearance to the shared sidebar header', () => {
+    const macMarkup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        { macosTrafficLightInset: true },
+        createElement(SidebarHeader, null, 'Header')
+      )
+    )
+    const defaultMarkup = renderToStaticMarkup(
+      createElement(SidebarProvider, null, createElement(SidebarHeader, null, 'Header'))
+    )
+
+    expect(macMarkup).toContain('--sidebar-macos-traffic-light-inset:32px')
+    expect(macMarkup).toContain('pt-[calc(0.75rem+var(--sidebar-macos-traffic-light-inset))]')
+    expect(defaultMarkup).toContain('--sidebar-macos-traffic-light-inset:0px')
+  })
+
   it('renders icon-based Option+Tab shortcut keys', () => {
     const markup = renderToStaticMarkup(createElement(Shortcut, { keys: ['option', 'tab'] }))
 
@@ -50,28 +67,30 @@ describe('sidebar shortcuts', () => {
     )
   })
 
-  it('renders a trailing shortcut inside the tab menu group', () => {
+  it('renders shortcut content inside a toggle group', () => {
     const markup = renderToStaticMarkup(
       createElement(
-        TabMenu,
+        ToggleGroup,
         {
-          variant: 'toolbar',
-          value: 'board',
-          fullWidth: false,
-          withSpacer: false,
-          trailingAccessory: createElement(Shortcut, {
-            keys: ['option', 'tab'],
-            'data-testid': 'tab-menu-shortcut'
-          })
+          type: 'single',
+          value: 'board'
         },
-        createElement(TabMenuItem, { variant: 'toolbar', value: 'board' }, 'Board'),
-        createElement(TabMenuItem, { variant: 'toolbar', value: 'taskList' }, 'Task List')
+        createElement(
+          ToggleGroupItem,
+          { value: 'board' },
+          'Board',
+          createElement(Shortcut, {
+            keys: ['option', 'tab'],
+            'data-testid': 'toggle-group-shortcut'
+          })
+        ),
+        createElement(ToggleGroupItem, { value: 'taskList' }, 'Task List')
       )
     )
 
-    expect(markup).toContain('tab-menu-group')
-    expect(markup).toContain('tab-menu-accessory')
-    expect(markup).toContain('data-testid="tab-menu-shortcut"')
+    expect(markup).toContain('role="group"')
+    expect(markup).toContain('data-state="on"')
+    expect(markup).toContain('data-testid="toggle-group-shortcut"')
   })
 
   it('renders interactive workspace tabs with a create control', () => {

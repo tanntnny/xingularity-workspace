@@ -1,19 +1,15 @@
 workspace_shell:
-  workspace_vibrancy_enabled:
-    default: true
+  appearance_defaults:
+    color_theme: monotone
+    performance_mode: always_on
     scope:
       - main workspace area
       - right sidebar
     behavior:
-      - When enabled, only the root workspace shell and root right sidebar keep the strong translucent glass surface.
-      - Nested page cards, lists, and controls should use explicit subtle/clear workspace surface classes instead of full panel fills.
-      - The toggle lives in Appearance settings and persists in vault settings.
-      - Appearance settings own the persisted global accent color; the `Monotone` option resolves to dark accent in light mode and white accent in dark mode.
-      - The Appearance settings monotone swatch follows `var(--text)`, so its preview dot flips black in light mode and white in dark mode.
-      - Active profile accent tokens are mirrored onto `document.documentElement` so overlays and any portal-rendered UI inherit the current accent even outside the workspace shell wrapper.
-      - Shared dialogs and alert dialogs use dedicated glass overlay/content surfaces and inherit the current global accent variables.
-      - Shared drawers use glass overlay/content surfaces too, with backdrop blur and side-aware open/close motion instead of opaque panels.
-      - The command palette applies current accent tokens to input chrome, result icon chips, selection states, preview tags, and the panel border; in both themes its overlay uses the shared dark dialog scrim, and in light mode the panel uses a translucent gradient glass fill with stronger backdrop blur instead of an opaque white sheet.
+      - The workspace always uses opaque neutral surfaces with no native vibrancy, backdrop blur, or filter blur.
+      - Performance mode and color-theme controls are not user-selectable or persisted.
+      - Monotone accents resolve to dark neutrals in light mode and white neutrals in dark mode.
+      - Shared dialogs, alert dialogs, drawers, command palette, popovers, and Excalidraw chrome use opaque surfaces.
       - On the Schedules page, clicking a schedule card in the right panel selects it only; the edit drawer opens from the icon-only workspace header action.
       - The FullCalendar month grid keeps header and day cell backgrounds transparent so the workspace glass shell remains visible behind the calendar lattice.
       - Calendar task completion indicators use `var(--primary-foreground)` for the check glyph so the icon stays light in light mode and dark in dark mode.
@@ -21,10 +17,10 @@ workspace_shell:
       - The subscriptions page caps page-local surface and treemap tile corner radius at `rounded-lg` / 8px; avoid oversized 2xl/3xl/24px rounding there.
       - Table sort/filter UI state persists per renderer in localStorage for project details tables, subscriptions tables/filters, and weekly plan priority sorting; keep the storage keys under the `beacon:` namespace and validate stored payloads before using them.
       - The settings page also caps page-local card, preview, toggle, and accent chip corner radius at `rounded-lg`; avoid xl/2xl/full rounding there.
-      - Shared `TabMenu` supports an `inline-accent` variant for section tabs that should read as text with an accent underline instead of boxed pills; use it for settings and project detail milestone/note switching.
-      - Excalidraw UI chrome should inherit app accent tokens too: map its toolbar/button/popup/input/theme CSS variables to `--accent`, `--accent-soft`, `--accent-line`, `--text`, `--line`, and `--app-font-family` so board controls match the active profile color.
+      - Section switching uses the shared Radix-backed `ToggleGroup` primitive with stock shadcn variants; use `ToggleGroup` and `ToggleGroupItem` for settings, project detail, and workspace view switching.
+      - Excalidraw UI chrome should inherit the fixed Monotone accent tokens: map its toolbar/button/popup/input/theme CSS variables to `--accent`, `--accent-soft`, `--accent-line`, `--text`, `--line`, and `--app-font-family`.
       - Excalidraw also needs explicit overrides for remaining control clusters that bypass its base theme vars, especially `zoom-actions`, `undo-redo-buttons`, `sidebar-trigger` / library controls, `buttonList` option groups, dropdown selected rows, and right sidebar chrome.
-      - When workspace vibrancy is on, the Excalidraw main surface must opt out of the parent `document-workspace-main-surface` backdrop blur and inset highlight; otherwise Excalidraw cursor/tool overlays can drift from pointer position.
+      - Excalidraw main surfaces remain opaque and must not introduce a parent backdrop blur or vibrancy layer.
       - Excalidraw must also opt out of the shared `page-transition` route animation wrapper and extra padded/rounded inner page shell. Excalidraw caches pointer offset from its mount layout, and route transforms or shell padding can leave eraser/pointer overlays persistently shifted down-right.
       - On this Electron shell, Excalidraw's generated eraser cursor hotspot can render slightly down-right of the true pointer; when the active tool is `eraser`, add a page-shell class and force the board canvases to use a native `crosshair` cursor instead of Excalidraw's generated cursor.
       - The agent chat page and its `ai-elements` surfaces also cap message bubbles, composer, empty states, pills, task cards, and chat-side controls at `rounded-lg`; avoid 2xl/3xl/full rounding there.

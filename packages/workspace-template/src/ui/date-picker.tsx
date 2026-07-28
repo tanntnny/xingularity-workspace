@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { format, parseISO } from 'date-fns'
-import { CalendarIcon } from 'lucide-react'
+import { CalendarIcon } from './icons'
 
 import { cn } from '../lib/utils'
 import { Button } from './button'
@@ -27,7 +27,7 @@ export function DatePicker({
           variant="outline"
           className={cn(
             'w-full justify-start text-left font-normal',
-            !date && 'text-[var(--muted-foreground)]',
+            !date && 'text-muted-foreground',
             className
           )}
         >
@@ -83,7 +83,7 @@ export function DatePickerISO({
           size="sm"
           className={cn(
             'justify-start text-left font-normal',
-            !date && 'text-[var(--muted-foreground)]',
+            !date && 'text-muted-foreground',
             className
           )}
           aria-label={ariaLabel}

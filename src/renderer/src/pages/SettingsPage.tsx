@@ -1,18 +1,24 @@
 import { ReactElement, KeyboardEvent, useEffect, useState } from 'react'
-import { Field, Input, Select, Switch, TabMenu, TabMenuItem } from '../components/ui'
-import type { ProfileColor } from '../../../shared/profileColors'
+import {
+  Button,
+  Field,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  ToggleGroup,
+  ToggleGroupItem
+} from '../components/ui'
+import { WorkspacePageLayout } from '../components/workspace'
 import type {
   NoteVimKeyMapping,
   NoteVimMappingAction,
   NoteVimMappingMode
 } from '../../../shared/types'
 import vimLogo from '../assets/vim-logo.svg'
-import { PROFILE_COLOR_OPTIONS } from '../lib/profileColors'
-
-export interface FontOption {
-  label: string
-  value: string
-}
 
 const EDITOR_VIM_MAPPING_MODES: Array<{ value: NoteVimMappingMode; label: string }> = [
   { value: 'insert', label: 'Insert' },
@@ -98,19 +104,12 @@ function getEditorVimMappingErrors(mappings: NoteVimKeyMapping[]): Record<string
 interface SettingsPageProps {
   profileName: string
   mistralApiKey: string
-  fontOptions: FontOption[]
-  selectedFontFamily: string
-  profileColor: ProfileColor
-  performanceModeEnabled: boolean
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   vaultLocation: string | null
   savedVaultCount: number
   onSaveProfile: (name: string) => void
   onSaveMistralApiKey: (apiKey: string) => void
-  onSelectFont: (fontFamily: string) => void
-  onSelectProfileColor: (color: ProfileColor) => void
-  onTogglePerformanceMode: (enabled: boolean) => void
   onToggleEditorVimMode: (enabled: boolean) => void
   onUpdateEditorVimKeyMappings: (mappings: NoteVimKeyMapping[]) => void
   onManageVaults: () => void
@@ -123,19 +122,12 @@ interface SettingsPageProps {
 export function SettingsPage({
   profileName,
   mistralApiKey,
-  fontOptions,
-  selectedFontFamily,
-  profileColor,
-  performanceModeEnabled,
   editorVimModeEnabled,
   editorVimKeyMappings,
   vaultLocation,
   savedVaultCount,
   onSaveProfile,
   onSaveMistralApiKey,
-  onSelectFont,
-  onSelectProfileColor,
-  onTogglePerformanceMode,
   onToggleEditorVimMode,
   onUpdateEditorVimKeyMappings,
   onManageVaults,
@@ -244,44 +236,45 @@ export function SettingsPage({
   }
 
   return (
-    <section className="grid gap-3.5 p-5" aria-label="App settings">
-      <h2 className="text-2xl font-bold">Settings</h2>
-      <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-        Manage your identity, workspace storage, editor behavior, appearance, and AI connection
-        settings.
-      </p>
-
-      <TabMenu
-        variant="inline-accent"
-        className="settings-tab-menu"
+    <WorkspacePageLayout
+      heading="Settings"
+      description="Manage your identity, workspace storage, editor behavior, appearance, and AI connection settings."
+      width="wide"
+      aria-label="App settings"
+    >
+      <ToggleGroup
+        type="single"
+        className="w-full"
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as typeof activeTab)}
+        onValueChange={(value) => value && setActiveTab(value as typeof activeTab)}
+        variant="outline"
+        aria-label="Settings sections"
       >
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="profile">
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="profile">
           Profile
-        </TabMenuItem>
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="workspace">
+        </ToggleGroupItem>
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="workspace">
           Workspace
-        </TabMenuItem>
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="appearance">
+        </ToggleGroupItem>
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="appearance">
           Appearance
-        </TabMenuItem>
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="editor">
+        </ToggleGroupItem>
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="editor">
           Editor
-        </TabMenuItem>
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="agent">
+        </ToggleGroupItem>
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="agent">
           Agent
-        </TabMenuItem>
-        <TabMenuItem variant="inline-accent" className="settings-tab-menu-item" value="developer">
+        </ToggleGroupItem>
+        <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="developer">
           Developer
-        </TabMenuItem>
-      </TabMenu>
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       {activeTab === 'profile' ? (
-        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Profile</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+            <h3 className="text-lg font-semibold text-foreground">Profile</h3>
+            <p className="max-w-[56ch] text-sm text-muted-foreground">
               Choose how your workspace introduces you across the app.
             </p>
           </div>
@@ -299,171 +292,95 @@ export function SettingsPage({
               onChange={(event) => setProfileDraft(event.target.value)}
               onBlur={commitProfileName}
               onKeyDown={onProfileInputKeyDown}
-              className="workspace-subtle-control h-auto w-full rounded-lg border border-[var(--line)] p-2.5"
+              className="border border-input bg-card text-foreground h-auto w-full rounded-lg border border-border p-2.5"
             />
           </Field>
         </div>
       ) : null}
 
       {activeTab === 'workspace' ? (
-        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Workspace</h3>
-            <p className="w-full text-sm text-[var(--muted)]">
+            <h3 className="text-lg font-semibold text-foreground">Workspace</h3>
+            <p className="w-full text-sm text-muted-foreground">
               Manage the local workspace vaults saved on this device and switch between them when
               you want to work from a different folder.
             </p>
           </div>
 
           <div className="grid w-full gap-1.5" aria-label="Vault storage">
-            <span className="text-sm text-[var(--muted)]">Active Vault</span>
-            <div className="workspace-subtle-control w-full break-words rounded-lg border border-[var(--line)] p-2.5 text-sm text-[var(--text)]">
+            <span className="text-sm text-muted-foreground">Active Vault</span>
+            <div className="border border-input bg-card text-foreground w-full break-words rounded-lg border border-border p-2.5 text-sm text-foreground">
               {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
             </div>
-            <span className="text-xs text-[var(--muted)]">
+            <span className="text-xs text-muted-foreground">
               Saved locally on this device: {savedVaultCount} vault
               {savedVaultCount === 1 ? '' : 's'}
             </span>
-            <button
-              type="button"
-              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
-              onClick={onManageVaults}
-            >
+            <Button type="button" variant="outline" onClick={onManageVaults}>
               Manage Vaults
-            </button>
+            </Button>
           </div>
 
           <div className="grid w-full gap-1.5" aria-label="Note migration">
-            <span className="text-sm text-[var(--muted)]">Old Note Conversion</span>
-            <p className="text-sm leading-6 text-[var(--muted)]">
+            <span className="text-sm text-muted-foreground">Old Note Conversion</span>
+            <p className="text-sm leading-6 text-muted-foreground">
               Convert old BlockNote JSON note files into normal markdown in your vault.
             </p>
-            <button
-              type="button"
-              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
-              onClick={onMigrateBlockNoteNotes}
-            >
+            <Button type="button" variant="outline" onClick={onMigrateBlockNoteNotes}>
               Convert old BlockNote notes
-            </button>
-            <button
-              type="button"
-              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
-              onClick={onMigrateTaggedNoteBodyFrontmatter}
-            >
+            </Button>
+            <Button type="button" variant="outline" onClick={onMigrateTaggedNoteBodyFrontmatter}>
               Normalize tagged note bodies
-            </button>
-            <button
-              type="button"
-              className="workspace-subtle-control w-fit rounded-lg border border-[var(--line)] px-3 py-2"
-              onClick={onImportLegacyExcalidrawSessions}
-            >
+            </Button>
+            <Button type="button" variant="outline" onClick={onImportLegacyExcalidrawSessions}>
               Import legacy Excalidraw drawings
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
 
       {activeTab === 'appearance' ? (
-        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Appearance</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+            <h3 className="text-lg font-semibold text-foreground">Appearance</h3>
+            <p className="max-w-[56ch] text-sm text-muted-foreground">
               Tune how the app reads with font and surface controls for the main workspace.
             </p>
           </div>
 
-          <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--text)]">Performance Mode</p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  Reduce GPU-heavy blur, transparency, and ambient animation across the workspace.
-                </p>
-              </div>
-              <Switch
-                className="self-center"
-                checked={performanceModeEnabled}
-                onChange={(_event, checked) => onTogglePerformanceMode(checked)}
-                inputProps={{ 'aria-label': 'Toggle performance mode' }}
-              />
-            </div>
-            <p className="text-xs text-[var(--muted)]">
-              Uses more opaque surfaces and simpler overlays to reduce compositor and GPU load.
+          <div className="border bg-card text-card-foreground grid gap-1.5 rounded-lg p-4">
+            <span className="text-sm font-semibold text-foreground">Color Theme</span>
+            <span className="text-sm text-muted-foreground">Monotone</span>
+            <p className="text-xs text-muted-foreground">
+              The interface uses a fixed neutral palette that adapts to the system light or dark
+              appearance.
             </p>
           </div>
 
-          <div className="grid gap-2">
-            <span className="text-sm text-[var(--muted)]">Color Style</span>
-            <div className="flex flex-wrap gap-2">
-              {PROFILE_COLOR_OPTIONS.map((option) => {
-                const isActive = option.value === profileColor
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => onSelectProfileColor(option.value)}
-                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
-                      isActive
-                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--text)]'
-                        : 'workspace-subtle-control border-[var(--line)] text-[var(--text)]'
-                    }`}
-                  >
-                    <span
-                      className="h-4 w-4 rounded-lg border"
-                      style={{
-                        background: option.swatch,
-                        borderColor: option.swatchBorder
-                      }}
-                    />
-                    <span>{option.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-xs text-[var(--muted)]">
-              `Atmosphere` uses a curated palette chosen to feel adaptive without changing at
-              runtime. `Monotone` becomes dark in light mode and white in dark mode.
-            </p>
-          </div>
-
-          <Field label="App Font" htmlFor="font-family-select">
-            <Select
-              id="font-family-select"
-              className="w-full"
-              value={selectedFontFamily}
-              onChange={(event) => onSelectFont(event.target.value)}
-            >
-              {fontOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <p
-            className="workspace-subtle-surface w-full rounded-lg p-3.5"
-            style={{ fontFamily: selectedFontFamily }}
+          <Field
+            label="App Font"
+            description="The interface uses Inter for consistent readability."
           >
-            The quick brown fox jumps over the lazy dog.
-          </p>
+            <Input value="Inter" readOnly aria-label="App font" />
+          </Field>
         </div>
       ) : null}
 
       {activeTab === 'editor' ? (
-        <div className="workspace-subtle-surface grid gap-5 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Editor</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+            <h3 className="text-lg font-semibold text-foreground">Editor</h3>
+            <p className="max-w-[56ch] text-sm text-muted-foreground">
               Tune note editing behavior for the main workspace editor.
             </p>
           </div>
 
-          <div className="workspace-subtle-surface grid gap-2 rounded-lg p-4">
+          <div className="border bg-card text-card-foreground grid gap-2 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-2" data-testid="vim-mode-setting">
-                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
                     <img
                       src={vimLogo}
                       alt=""
@@ -472,9 +389,9 @@ export function SettingsPage({
                       className="h-4 w-4 shrink-0"
                     />
                   </span>
-                  <p className="text-sm font-semibold text-[var(--text)]">Vim Mode</p>
+                  <p className="text-sm font-semibold text-foreground">Vim Mode</p>
                 </div>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Use modal keyboard controls in notes, including insert, normal, and visual modes
                   with common Vim motions.
                 </p>
@@ -482,35 +399,31 @@ export function SettingsPage({
               <Switch
                 className="self-center"
                 checked={editorVimModeEnabled}
-                onChange={(_event, checked) => onToggleEditorVimMode(checked)}
-                inputProps={{ 'aria-label': 'Toggle Vim mode' }}
+                onCheckedChange={onToggleEditorVimMode}
+                aria-label="Enable Vim mode"
               />
             </div>
-            <p className="text-xs text-[var(--muted)]">
+            <p className="text-xs text-muted-foreground">
               Disabled by default. Press Escape in the note editor to enter normal mode.
             </p>
           </div>
 
-          <div className="workspace-subtle-surface grid gap-3 rounded-lg p-4">
+          <div className="border bg-card text-card-foreground grid gap-3 rounded-lg p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--text)]">Vim Key Mappings</p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
+                <p className="text-sm font-semibold text-foreground">Vim Key Mappings</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Add short key sequences such as <span className="font-mono">ij</span> to run core
                   Vim mode actions.
                 </p>
               </div>
-              <button
-                type="button"
-                className="workspace-subtle-control rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
-                onClick={addVimMapping}
-              >
+              <Button type="button" variant="outline" onClick={addVimMapping}>
                 Add Mapping
-              </button>
+              </Button>
             </div>
 
             {vimMappingDrafts.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-[var(--line)] p-3 text-sm text-[var(--muted)]">
+              <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
                 No custom mappings yet. Add one like insert / ij / Enter normal mode.
               </p>
             ) : (
@@ -521,29 +434,31 @@ export function SettingsPage({
                   return (
                     <div
                       key={mapping.id}
-                      className="grid gap-2 rounded-lg border border-[var(--line)] p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(11rem,1.4fr)_auto]"
+                      className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(11rem,1.4fr)_auto]"
                     >
-                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Mode">
+                      <Field className="gap-1 text-xs text-muted-foreground" label="Mode">
                         <Select
-                          className="w-full"
                           value={mapping.mode}
-                          onChange={(event) =>
-                            updateVimMapping(mapping.id, {
-                              mode: event.target.value as NoteVimMappingMode
-                            })
+                          onValueChange={(value) =>
+                            updateVimMapping(mapping.id, { mode: value as NoteVimMappingMode })
                           }
                         >
-                          {EDITOR_VIM_MAPPING_MODES.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EDITOR_VIM_MAPPING_MODES.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
                       </Field>
 
-                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Sequence">
+                      <Field className="gap-1 text-xs text-muted-foreground" label="Sequence">
                         <Input
-                          className="workspace-subtle-control rounded-lg border border-[var(--line)] p-2 font-mono text-sm text-[var(--text)]"
+                          className="rounded-lg border border-border bg-card p-3 font-mono text-sm text-foreground"
                           value={mapping.sequence}
                           maxLength={8}
                           placeholder="ij"
@@ -554,34 +469,37 @@ export function SettingsPage({
                         />
                       </Field>
 
-                      <Field className="gap-1 text-xs text-[var(--muted)]" label="Action">
+                      <Field className="gap-1 text-xs text-muted-foreground" label="Action">
                         <Select
-                          className="w-full"
                           value={mapping.action}
-                          onChange={(event) =>
-                            updateVimMapping(mapping.id, {
-                              action: event.target.value as NoteVimMappingAction
-                            })
+                          onValueChange={(value) =>
+                            updateVimMapping(mapping.id, { action: value as NoteVimMappingAction })
                           }
                         >
-                          {getEditorVimActionOptions(mapping.mode).map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select action" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getEditorVimActionOptions(mapping.mode).map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
                       </Field>
 
-                      <button
+                      <Button
                         type="button"
-                        className="workspace-subtle-control self-end rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+                        variant="outline"
+                        className="self-end"
                         onClick={() => removeVimMapping(mapping.id)}
                       >
                         Remove
-                      </button>
+                      </Button>
 
                       {rowErrors.length > 0 ? (
-                        <p className="text-xs text-[var(--danger)] md:col-span-4">
+                        <p className="text-xs text-destructive md:col-span-4">
                           {rowErrors.join(' ')}
                         </p>
                       ) : null}
@@ -592,11 +510,11 @@ export function SettingsPage({
             )}
 
             {hasMappingErrors ? (
-              <p className="text-xs text-[var(--muted)]">
+              <p className="text-xs text-muted-foreground">
                 Fix mapping errors to save changes. Valid sequences use 1-8 printable characters.
               </p>
             ) : (
-              <p className="text-xs text-[var(--muted)]">
+              <p className="text-xs text-muted-foreground">
                 Custom mappings override built-in Vim keys when the same sequence is used.
               </p>
             )}
@@ -605,10 +523,10 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'agent' ? (
-        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Agent</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
+            <h3 className="text-lg font-semibold text-foreground">Agent</h3>
+            <p className="max-w-[56ch] text-sm text-muted-foreground">
               Connect your AI provider for command palette completion and agent workflows.
             </p>
           </div>
@@ -625,7 +543,7 @@ export function SettingsPage({
               onChange={(event) => setMistralApiKeyDraft(event.target.value)}
               onBlur={commitMistralApiKey}
               onKeyDown={onProfileInputKeyDown}
-              className="workspace-subtle-control h-auto w-full rounded-lg border border-[var(--line)] p-2.5"
+              className="border border-input bg-card text-foreground h-auto w-full rounded-lg border border-border p-2.5"
               autoComplete="off"
               spellCheck={false}
             />
@@ -634,32 +552,33 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'developer' ? (
-        <div className="workspace-subtle-surface grid gap-4 rounded-lg p-5">
+        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
           <div className="grid gap-1">
-            <h3 className="text-lg font-semibold text-[var(--text)]">Developer</h3>
-            <p className="max-w-[56ch] text-sm text-[var(--muted)]">
-              Inspect the app's design-system primitives, tokens, and component states.
+            <h3 className="text-lg font-semibold text-foreground">Developer</h3>
+            <p className="max-w-[56ch] text-sm text-muted-foreground">
+              Inspect the app&apos;s design-system primitives, tokens, and component states.
             </p>
           </div>
 
-          <div className="workspace-subtle-surface flex flex-wrap items-center justify-between gap-4 rounded-lg p-4">
+          <div className="border bg-card text-card-foreground flex flex-wrap items-center justify-between gap-4 rounded-lg p-4">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--text)]">Design Audit</p>
-              <p className="mt-1 text-sm text-[var(--muted)]">
+              <p className="text-sm font-semibold text-foreground">Design Audit</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Review the live visual language and interactive component specimens.
               </p>
             </div>
-            <button
+            <Button
               type="button"
               data-testid="settings-open-design-audit"
-              className="workspace-subtle-control shrink-0 rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+              variant="outline"
+              size="sm"
               onClick={onOpenDesignAudit}
             >
               Open Design Audit
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
-    </section>
+    </WorkspacePageLayout>
   )
 }

@@ -1,5 +1,5 @@
 import { forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
-import { Check } from 'lucide-react'
+import { Check } from './ui/icons'
 import { CalendarTask } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 
@@ -24,11 +24,11 @@ export const CalendarTaskCard = forwardRef<
   return (
     <div
       ref={ref}
-      className={`beacon-task-inner group flex h-full w-full flex-col justify-start rounded px-1.5 py-1 ${className ?? ''}`}
+      className={`group flex h-full w-full flex-col justify-start rounded-md px-1.5 py-1 ${className ?? ''}`}
       onMouseMove={onMouseMove}
       {...rest}
     >
-      <div className="beacon-task-row flex items-center justify-between gap-1.5">
+      <div className="flex items-center justify-between gap-1.5">
         <button
           type="button"
           onClick={(event) => {
@@ -42,37 +42,35 @@ export const CalendarTaskCard = forwardRef<
           <span
             className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 ${
               task.completed
-                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
-                : 'border-[color:var(--calendar-task-text)] bg-[color:color-mix(in_srgb,var(--calendar-task-card-bg)_72%,white)]'
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card'
             }`}
           >
             {task.completed ? <Check size={8} strokeWidth={3} /> : null}
           </span>
-          <span className="text-[10px] font-medium text-[color:var(--calendar-task-meta)]">
+          <span className="text-xs font-medium text-muted-foreground">
             {task.completed ? 'Completed' : 'Pending'}
           </span>
         </button>
-        <span className="pointer-events-none shrink-0 text-[10px] text-[color:var(--calendar-task-meta)]">
+        <span className="pointer-events-none shrink-0 text-xs text-muted-foreground">
           {formatCalendarTaskTimeLabel(task)}
         </span>
       </div>
       <div className="mt-0.5 flex items-start gap-1">
         {priorityMarker && priorityMarkerColor ? (
           <span
-            className="pointer-events-none shrink-0 text-[11px] font-semibold leading-none"
+            className="pointer-events-none shrink-0 text-xs font-semibold leading-none"
             style={{ color: priorityMarkerColor }}
             aria-hidden="true"
           >
             {priorityMarker}
           </span>
         ) : null}
-        <span className="pointer-events-none truncate text-[11px] font-semibold leading-tight text-[color:var(--calendar-task-text)]">
+        <span className="pointer-events-none truncate text-xs font-semibold leading-tight text-foreground">
           {task.title}
         </span>
         {(task.reminders || []).some((reminder) => reminder.enabled) ? (
-          <span className="pointer-events-none shrink-0 text-[10px] text-[color:var(--calendar-task-meta)]">
-            *
-          </span>
+          <span className="pointer-events-none shrink-0 text-xs text-muted-foreground">*</span>
         ) : null}
       </div>
     </div>

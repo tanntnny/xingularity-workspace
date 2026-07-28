@@ -495,10 +495,11 @@ export class VaultRuntime {
   async exportFolderPdf(input: FolderPdfExportInput): Promise<FolderPdfExportResult> {
     this.assertReady()
     const safeFolderPath = sanitizeEntryPath(input.folderPath)
-    const notes = await this.fileService!.listNoteDocumentsInFolder(safeFolderPath)
+    const folderDocuments = await this.fileService!.listNoteDocumentsInFolder(safeFolderPath)
+    const { notes, warnings: documentWarnings } = folderDocuments
 
     if (notes.length === 0) {
-      return { path: null, noteCount: 0, warnings: [] }
+      return { path: null, noteCount: 0, warnings: documentWarnings }
     }
 
     const folderName = path.basename(safeFolderPath)
@@ -523,7 +524,7 @@ export class VaultRuntime {
     return {
       path: result.filePath,
       noteCount: notes.length,
-      warnings: [...printable.warnings, ...imageWarnings]
+      warnings: [...documentWarnings, ...printable.warnings, ...imageWarnings]
     }
   }
 
@@ -2164,7 +2165,6 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     profile: settings.profile,
     ai: settings.ai,
     fontFamily: settings.fontFamily,
-    performanceModeEnabled: settings.performanceModeEnabled,
     calendarTasks: settings.calendarTasks,
     projectIcons: settings.projectIcons,
     projects: settings.projects,

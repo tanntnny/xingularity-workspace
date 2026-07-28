@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown } from '../ui/icons'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/button'
 
 const ConversationScrollContext = React.createContext<{ scrollToBottom: () => void } | null>(null)
 
@@ -89,15 +90,15 @@ export function ConversationEmptyState({
   return (
     <div
       className={cn(
-        'workspace-subtle-surface flex h-full flex-col items-center justify-center gap-3 rounded-lg border-dashed px-6 py-10 text-center',
+        'border bg-card text-card-foreground flex h-full flex-col items-center justify-center gap-3 rounded-lg border-dashed px-6 py-10 text-center',
         className
       )}
       {...props}
     >
-      {icon ? <div className="text-[var(--muted)]">{icon}</div> : null}
+      {icon ? <div className="text-muted-foreground">{icon}</div> : null}
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-[var(--text)]">{title}</p>
-        <p className="max-w-md text-sm text-[var(--muted)]">{description}</p>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
       </div>
       {children}
     </div>
@@ -111,16 +112,18 @@ export function ConversationScrollButton({
   const context = React.useContext(ConversationScrollContext)
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="icon"
       className={cn(
-        'workspace-subtle-control absolute bottom-4 right-4 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--text)] transition hover:text-[var(--accent)]',
+        'border border-input bg-card text-foreground absolute bottom-4 right-4 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-foreground transition hover:text-primary',
         className
       )}
       onClick={() => context?.scrollToBottom()}
       {...props}
     >
       <ArrowDown size={15} />
-    </button>
+    </Button>
   )
 }

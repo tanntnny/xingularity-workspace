@@ -8,8 +8,7 @@ export {
   DocumentWorkspacePanelContent as WorkspaceSidePanelContent,
   WorkspaceHeaderActions as WorkspaceToolbar,
   WorkspaceHeaderActionGroup as WorkspaceToolbarGroup,
-  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider,
-  WorkspaceActionButton as WorkspaceIconButton
+  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider
 } from '../ui/document-workspace'
 
 export {
@@ -23,7 +22,7 @@ export {
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
-  WorkspaceActionButton
+  WorkspaceIconButton
 } from '../ui/document-workspace'
 
 export { WorkspaceTabManager } from '../ui/document-workspace'
@@ -50,9 +49,9 @@ export function WorkspaceAppShell({
       {sidebar}
       <SidebarInset
         {...props}
-        className={cn('min-h-0 overflow-hidden text-[var(--text)]', className)}
+        className={cn('min-h-0 overflow-hidden bg-background text-foreground', className)}
       >
-        <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
+        <div className="flex h-full min-w-0 flex-col">
           {tabs}
           {children}
         </div>

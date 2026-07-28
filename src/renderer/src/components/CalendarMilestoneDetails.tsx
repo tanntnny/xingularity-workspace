@@ -1,5 +1,5 @@
 import { ReactElement } from 'react'
-import { ArrowUpRight, Check, Milestone } from 'lucide-react'
+import { ArrowUpRight, Check, Milestone } from './ui/icons'
 import { ProjectIconStyle, ProjectMilestone } from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { FloatingHoverCard } from './ui/floating-hover-card'
@@ -51,19 +51,19 @@ export function CalendarMilestoneCard({ milestone }: CalendarMilestoneCardProps)
   return (
     <div className="flex min-w-0 flex-col gap-1" data-testid="calendar-milestone-card">
       <div className="flex items-center gap-2" data-testid="calendar-milestone-progress">
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--panel)_78%,transparent)]">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-[var(--accent)]"
+            className="h-full rounded-full bg-primary"
             style={{ width: `${clampProgress(milestone.milestoneProgressPercent)}%` }}
           />
         </div>
-        <span className="shrink-0 text-[10px] font-medium text-[var(--muted)]">{progress}</span>
+        <span className="shrink-0 text-xs font-medium text-muted-foreground">{progress}</span>
       </div>
-      <div className="truncate text-[11px] font-semibold leading-tight text-[var(--text)]">
+      <div className="truncate text-xs font-semibold leading-tight text-foreground">
         {milestone.title}
       </div>
       <div
-        className="flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--muted)]"
+        className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
         data-testid="calendar-milestone-project"
       >
         {milestone.projectIcon ? (
@@ -88,32 +88,32 @@ export function CalendarMilestoneHoverCard({
     <FloatingHoverCard x={x} y={y} className="w-80">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="mb-1.5 text-sm font-semibold text-[var(--text)]">{milestone.title}</div>
-          <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--muted)]">
+          <div className="mb-1.5 text-sm font-semibold text-foreground">{milestone.title}</div>
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             {milestone.projectIcon ? (
               <NoteShapeIcon icon={milestone.projectIcon} size={16} className="shrink-0" />
             ) : null}
             <span className="truncate">{milestone.projectName}</span>
           </div>
         </div>
-        <span className="shrink-0 text-xs text-[var(--muted)]">{statusLabel}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{statusLabel}</span>
       </div>
       <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-xs text-[var(--muted)]">
+        <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
           <span>{progressSummary}</span>
           <span>{progressDetail}</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--panel)_78%,transparent)]">
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-[var(--accent)]"
+            className="h-full rounded-full bg-primary"
             style={{ width: `${clampProgress(milestone.milestoneProgressPercent)}%` }}
           />
         </div>
       </div>
-      <div className="mt-3 text-xs text-[var(--muted)]">
+      <div className="mt-3 text-xs text-muted-foreground">
         Due: {milestone.milestoneDueDate?.trim() || 'No due date'}
       </div>
-      <div className="mt-1 text-xs text-[var(--muted)]">
+      <div className="mt-1 text-xs text-muted-foreground">
         {milestone.milestoneDescription?.trim() || 'No milestone description.'}
       </div>
     </FloatingHoverCard>
@@ -149,12 +149,12 @@ export function CalendarMilestoneDialog({
       >
         <DialogHeader>
           <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent-soft)_76%,var(--panel))] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+            <span className="inline-flex items-center gap-1 rounded-md border border-ring bg-accent px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
               <Milestone size={12} />
               Milestone
             </span>
             <span
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${statusClassName}`}
+              className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ${statusClassName}`}
             >
               {statusLabel}
             </span>
@@ -166,44 +166,44 @@ export function CalendarMilestoneDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="calendar-dialog-field-surface rounded-xl border p-4">
+          <div className="bg-muted rounded-lg border p-4">
             <div className="flex items-center gap-3">
               {milestone.projectIcon ? (
                 <NoteShapeIcon icon={milestone.projectIcon} size={24} className="shrink-0" />
               ) : null}
               <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Project
                 </div>
-                <div className="truncate text-sm font-medium text-[var(--text)]">
+                <div className="truncate text-sm font-medium text-foreground">
                   {milestone.projectName}
                 </div>
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Due date
                 </div>
-                <div className="mt-1 text-sm text-[var(--text)]">
+                <div className="mt-1 text-sm text-foreground">
                   {milestone.milestoneDueDate?.trim() || 'No due date'}
                 </div>
               </div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Status
                 </div>
-                <div className="mt-1 text-sm text-[var(--text)]">{statusLabel}</div>
+                <div className="mt-1 text-sm text-foreground">{statusLabel}</div>
               </div>
             </div>
             <div className="mt-4">
-              <div className="mb-1 flex items-center justify-between text-xs text-[var(--muted)]">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                 <span>{progressSummary}</span>
                 <span>{progressDetail}</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--panel)_78%,transparent)]">
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-[var(--accent)]"
+                  className="h-full rounded-full bg-primary"
                   style={{ width: `${clampProgress(milestone.milestoneProgressPercent)}%` }}
                 />
               </div>
@@ -211,10 +211,10 @@ export function CalendarMilestoneDialog({
           </div>
 
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Description
             </div>
-            <div className="calendar-dialog-field-surface mt-1 rounded-xl border p-4 text-sm leading-6 text-[var(--text)]">
+            <div className="bg-muted mt-1 rounded-lg border p-4 text-sm leading-6 text-foreground">
               {milestone.milestoneDescription?.trim() || 'No milestone description.'}
             </div>
           </div>
@@ -286,13 +286,13 @@ function getMilestoneStatusClassName(
   completed?: boolean
 ): string {
   if (completed || status === 'completed') {
-    return 'border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)]'
+    return 'border border-ring bg-accent text-primary'
   }
   if (status === 'blocked') {
-    return 'border border-red-200 bg-red-50 text-red-700'
+    return 'border border-destructive/40 bg-destructive/10 text-destructive'
   }
   if (status === 'in-progress') {
-    return 'border border-amber-200 bg-amber-50 text-amber-700'
+    return 'border border-border bg-accent text-muted-foreground'
   }
-  return 'border border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_82%,transparent)] text-[var(--text)]'
+  return 'border border-border bg-card text-foreground'
 }

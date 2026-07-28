@@ -17,7 +17,7 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn('drawer-glass-overlay fixed inset-0 z-50', className)}
+    className={cn('fixed inset-0 z-50 bg-black/80', className)}
     {...props}
   />
 ))
@@ -32,10 +32,10 @@ const DrawerContent = React.forwardRef<
   DrawerContentProps
 >(({ className, children, side = 'right', style, ...props }, ref) => {
   const sideClasses: Record<NonNullable<DrawerContentProps['side']>, string> = {
-    right: 'drawer-glass-content-right inset-y-0 right-0 h-full w-full border-l',
-    left: 'drawer-glass-content-left inset-y-0 left-0 h-full w-full border-r',
-    top: 'drawer-glass-content-top inset-x-0 top-0 w-full max-h-[90vh] border-b',
-    bottom: 'drawer-glass-content-bottom inset-x-0 bottom-0 w-full max-h-[90vh] border-t'
+    right: 'inset-y-0 right-0 h-full w-full border-l',
+    left: 'inset-y-0 left-0 h-full w-full border-r',
+    top: 'inset-x-0 top-0 max-h-[90vh] w-full border-b',
+    bottom: 'inset-x-0 bottom-0 max-h-[90vh] w-full border-t'
   }
 
   const dimensionStyle: React.CSSProperties =
@@ -47,7 +47,7 @@ const DrawerContent = React.forwardRef<
       <DrawerPrimitive.Content
         ref={ref}
         className={cn(
-          'drawer-glass-content fixed z-50 flex flex-col overflow-hidden border-[var(--line-strong)] transform-gpu',
+          'fixed z-50 flex flex-col overflow-hidden border bg-background text-foreground shadow-lg',
           sideClasses[side],
           className
         )}
@@ -86,7 +86,7 @@ const DrawerTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Title
     ref={ref}
-    className={cn('text-base font-semibold text-[var(--text)]', className)}
+    className={cn('text-base font-semibold text-foreground', className)}
     {...props}
   />
 ))
@@ -98,7 +98,7 @@ const DrawerDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-[var(--muted)]', className)}
+    className={cn('text-sm text-muted-foreground', className)}
     {...props}
   />
 ))

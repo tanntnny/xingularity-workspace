@@ -1,30 +1,27 @@
 import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 
-import { type UiTone, mergeUiToneStyle } from '../../lib/uiTone'
+import type { UiTone } from '../../lib/uiTone'
 import { cn } from '../../lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2',
+  'inline-flex items-center whitespace-nowrap rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
   {
     variants: {
       variant: {
-        default:
-          'border-transparent bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/80',
+        default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
         secondary:
-          'border-transparent bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--secondary)]/80',
+          'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
         destructive:
-          'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:bg-[var(--destructive)]/80',
-        outline: 'text-[var(--foreground)]',
-        // Custom variants for Xingularity's tag colors
-        tag0: 'border-[var(--tag-0-line)] bg-[var(--tag-0-bg)] text-[var(--tag-0-text)]',
-        tag1: 'border-[var(--tag-1-line)] bg-[var(--tag-1-bg)] text-[var(--tag-1-text)]',
-        tag2: 'border-[var(--tag-2-line)] bg-[var(--tag-2-bg)] text-[var(--tag-2-text)]',
-        tag3: 'border-[var(--tag-3-line)] bg-[var(--tag-3-bg)] text-[var(--tag-3-text)]',
-        tag4: 'border-[var(--tag-4-line)] bg-[var(--tag-4-bg)] text-[var(--tag-4-text)]',
-        tag5: 'border-[var(--tag-5-line)] bg-[var(--tag-5-bg)] text-[var(--tag-5-text)]',
-        neutral:
-          'border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] text-[var(--tag-neutral-text)]'
+          'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
+        outline: 'border-border text-foreground',
+        tag0: 'border-border bg-secondary text-secondary-foreground',
+        tag1: 'border-border bg-secondary text-secondary-foreground',
+        tag2: 'border-border bg-secondary text-secondary-foreground',
+        tag3: 'border-border bg-secondary text-secondary-foreground',
+        tag4: 'border-border bg-secondary text-secondary-foreground',
+        tag5: 'border-border bg-secondary text-secondary-foreground',
+        neutral: 'border-border bg-muted text-muted-foreground'
       }
     },
     defaultVariants: {
@@ -43,14 +40,21 @@ function Badge({
   tone,
   ...props
 }: BadgeProps & { tone?: UiTone }): React.ReactElement {
+  const toneClassName = {
+    subtle: 'border-border bg-secondary text-secondary-foreground',
+    neutral: 'border-border bg-muted text-muted-foreground',
+    info: 'border-border bg-secondary text-secondary-foreground',
+    accent: 'border-border bg-secondary text-secondary-foreground',
+    attention: 'border-border bg-secondary text-secondary-foreground',
+    success: 'border-border bg-secondary text-secondary-foreground',
+    warning: 'border-border bg-secondary text-secondary-foreground',
+    danger: 'border-transparent bg-destructive text-destructive-foreground'
+  } satisfies Record<UiTone, string>
+
   return (
     <div
-      className={cn(
-        badgeVariants({ variant }),
-        tone && 'border-[var(--ui-tone-border)] bg-[var(--ui-tone-bg)] text-[var(--ui-tone-text)]',
-        className
-      )}
-      style={mergeUiToneStyle(tone, style)}
+      className={cn(badgeVariants({ variant }), tone && toneClassName[tone], className)}
+      style={style}
       {...props}
     />
   )

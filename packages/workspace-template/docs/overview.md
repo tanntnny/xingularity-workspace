@@ -16,7 +16,7 @@ The reusable package is split into two UI layers:
 
 ## Import Rules
 
-- Use `src/ui` for controls such as `Button`, `Input`, `Select`, `Switch`, `Textarea`, `Field`, `TabMenu`, and sidebar primitives.
+- Use `src/ui` for controls such as `Button`, `Input`, `Select`, `ToggleGroup`, `Switch`, `Textarea`, `Field`, and sidebar primitives.
 - Use `src/workspace` for workspace shell, page sections, empty states, and shared shell composition.
 - Do not import `@mui/*` or `@radix-ui/*` directly from feature pages/components.
 

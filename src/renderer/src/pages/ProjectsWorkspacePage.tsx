@@ -27,7 +27,7 @@ import {
   SlidersHorizontal,
   Star,
   Trash2
-} from 'lucide-react'
+} from '../components/ui/icons'
 import type {
   Project,
   ProjectIconStyle,
@@ -60,15 +60,20 @@ import {
   DropdownMenuTrigger
 } from '../components/ui/dropdown-menu'
 import {
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderSecondaryActions
 } from '../components/ui/document-workspace'
 import { Field } from '../components/ui/field'
 import { Input } from '../components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
-import { SelectionMenu, type SelectionMenuOption } from '../components/ui/selection-menu'
-import { Select } from '../components/ui/select'
-import { TabMenu, TabMenuCountBadge, TabMenuItem } from '../components/ui/tab-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '../components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
 import { Textarea } from '../components/ui/textarea'
 import { usePersistentState } from '../hooks/usePersistentState'
 import {
@@ -281,7 +286,9 @@ const MILESTONE_STATUS_OPTIONS: Array<{
   { value: 'completed', label: 'Completed' }
 ]
 
-const TASK_LIST_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
+type SelectOption = { value: string; label: string; icon?: ReactElement }
+
+const TASK_LIST_GROUP_BY_OPTIONS: SelectOption[] = [
   {
     value: 'project',
     label: 'Group by Project',
@@ -294,7 +301,7 @@ const TASK_LIST_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
   }
 ]
 
-const BOARD_GROUP_BY_OPTIONS: SelectionMenuOption[] = [
+const BOARD_GROUP_BY_OPTIONS: SelectOption[] = [
   {
     value: 'status',
     label: 'Group by Status',
@@ -355,10 +362,7 @@ const TASK_LIST_GROUP_ICON_SIZE: Record<TaskListRowHeight, number> = {
   comfortable: 24
 }
 
-const TASK_LIST_GROUP_ROW_BACKGROUND_COLOR =
-  'color-mix(in srgb, var(--accent-soft) 34%, color-mix(in srgb, var(--panel-3) 82%, var(--panel) 18%))'
-const TASK_LIST_ROW_HOVER_CLASS =
-  'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_46%,var(--panel-2))]'
+const TASK_LIST_ROW_HOVER_CLASS = 'hover:bg-accent'
 const TASK_LIST_GRID_STYLE: CSSProperties = {
   gridTemplateColumns: '56px minmax(0, 4fr) minmax(0, 2fr) minmax(0, 2fr) 112px 124px 72px'
 }
@@ -597,67 +601,93 @@ export function ProjectsWorkspacePage({
   const projectToolbar =
     activeTab === 'board' ? (
       <div data-testid="projects-board-toolbar" className="flex min-w-max items-center gap-3">
-        <SelectionMenu
+        <Select
           value={boardGroupBy}
           onValueChange={(value) => setBoardGroupBy(value as ProjectBoardGroupBy)}
-          options={BOARD_GROUP_BY_OPTIONS}
-          selectedLabel={renderBoardGroupBySelectionLabel(boardGroupBy)}
-          variant="toolbar"
-          aria-label={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
-          title={`Board grouping: ${formatBoardGroupByLabel(boardGroupBy)}`}
-          className="min-w-[15rem]"
-          fullWidth={false}
-        />
-        <TabMenu
-          variant="toolbar"
+        >
+          <SelectTrigger className="min-w-[15rem]" aria-label="Board grouping">
+            <SelectValue placeholder={formatBoardGroupByLabel(boardGroupBy)} />
+          </SelectTrigger>
+          <SelectContent>
+            {BOARD_GROUP_BY_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                <span className="inline-flex items-center gap-2">
+                  {option.icon}
+                  {option.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <ToggleGroup
+          type="single"
           value={filterMode}
-          onValueChange={(value) => onFilterModeChange(value as ProjectsWorkspaceFilterMode)}
-          fullWidth={false}
-          withSpacer={false}
+          onValueChange={(value) =>
+            value && onFilterModeChange(value as ProjectsWorkspaceFilterMode)
+          }
+          variant="outline"
+          size="sm"
+          aria-label="Project filter"
+          className="shrink-0"
         >
           {projectFilterOptions.map((option) => (
-            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+            <ToggleGroupItem key={option.value} value={option.value}>
               <span className="inline-flex items-center gap-2">
                 <span>{option.label}</span>
-                <TabMenuCountBadge count={option.count} />
+                <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1 text-xs">
+                  {option.count}
+                </Badge>
               </span>
-            </TabMenuItem>
+            </ToggleGroupItem>
           ))}
-        </TabMenu>
-        <span className="shrink-0 text-sm text-[var(--muted)]">
+        </ToggleGroup>
+        <span className="shrink-0 text-sm text-muted-foreground">
           {filteredProjects.length} {filteredProjects.length === 1 ? 'project' : 'projects'}
         </span>
       </div>
     ) : (
       <div data-testid="projects-task-list-toolbar" className="flex min-w-max items-center gap-3">
-        <SelectionMenu
+        <Select
           value={taskListGroupBy}
           onValueChange={(value) => setTaskListGroupBy(value as TaskListGroupBy)}
-          options={TASK_LIST_GROUP_BY_OPTIONS}
-          selectedLabel={renderTaskListGroupBySelectionLabel(taskListGroupBy)}
-          variant="toolbar"
-          aria-label={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
-          title={`Task list grouping: ${formatTaskListGroupByLabel(taskListGroupBy)}`}
-          className="min-w-[13rem]"
-          fullWidth={false}
-        />
-        <TabMenu
-          variant="toolbar"
+        >
+          <SelectTrigger className="min-w-[13rem]" aria-label="Task list grouping">
+            <SelectValue placeholder={formatTaskListGroupByLabel(taskListGroupBy)} />
+          </SelectTrigger>
+          <SelectContent>
+            {TASK_LIST_GROUP_BY_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                <span className="inline-flex items-center gap-2">
+                  {option.icon}
+                  {option.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <ToggleGroup
+          type="single"
           value={filterMode}
-          onValueChange={(value) => onFilterModeChange(value as ProjectsWorkspaceFilterMode)}
-          fullWidth={false}
-          withSpacer={false}
+          onValueChange={(value) =>
+            value && onFilterModeChange(value as ProjectsWorkspaceFilterMode)
+          }
+          variant="outline"
+          size="sm"
+          aria-label="Task list filter"
+          className="shrink-0"
         >
           {projectFilterOptions.map((option) => (
-            <TabMenuItem key={option.value} variant="toolbar" value={option.value}>
+            <ToggleGroupItem key={option.value} value={option.value}>
               <span className="inline-flex items-center gap-2">
                 <span>{option.label}</span>
-                <TabMenuCountBadge count={option.count} />
+                <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1 text-xs">
+                  {option.count}
+                </Badge>
               </span>
-            </TabMenuItem>
+            </ToggleGroupItem>
           ))}
-        </TabMenu>
-        <WorkspaceActionButton
+        </ToggleGroup>
+        <WorkspaceIconButton
           active={hideCompletedItems}
           icon={<Rows3 size={16} />}
           label={hideCompletedItems ? 'Show Completed' : 'Hide Completed'}
@@ -667,7 +697,7 @@ export function ProjectsWorkspacePage({
         />
         <Popover open={isTaskListViewMenuOpen} onOpenChange={setIsTaskListViewMenuOpen}>
           <PopoverTrigger asChild>
-            <WorkspaceActionButton
+            <WorkspaceIconButton
               active={isTaskListViewMenuOpen}
               label="View Settings"
               icon={<SlidersHorizontal size={16} />}
@@ -676,36 +706,37 @@ export function ProjectsWorkspacePage({
           </PopoverTrigger>
           <PopoverContent
             align="end"
-            className="w-96 border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_86%,transparent)] p-3 text-[var(--text)] shadow-xl backdrop-blur-xl"
+            className="w-96 border-border bg-card p-3 text-foreground shadow-xl"
           >
             <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-[var(--text)]">View Settings</h2>
-              <p className="text-xs text-[var(--muted)]">Adjust how the task list is displayed.</p>
+              <h2 className="text-sm font-semibold text-foreground">View Settings</h2>
+              <p className="text-xs text-muted-foreground">
+                Adjust how the task list is displayed.
+              </p>
             </div>
-            <div className="mt-3 rounded-lg border border-[var(--line)]/80 bg-[color:color-mix(in_srgb,var(--panel)_72%,transparent)] p-3">
+            <div className="mt-3 rounded-lg border bg-muted p-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[var(--text)]">Row height</div>
-                <p className="mt-1 text-xs text-[var(--muted)]">
+                <div className="text-sm font-medium text-foreground">Row height</div>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Control the spacing for task rows in this list.
                 </p>
               </div>
               <div className="mt-3">
-                <SelectionMenu
+                <Select
                   value={taskListRowHeight}
                   onValueChange={(value) => setTaskListRowHeight(value as TaskListRowHeight)}
-                  options={TASK_LIST_ROW_HEIGHT_OPTIONS}
-                  variant="toolbar"
-                  align="end"
-                  className="min-w-[10.5rem]"
-                  selectedLabel={
-                    TASK_LIST_ROW_HEIGHT_OPTIONS.find(
-                      (option) => option.value === taskListRowHeight
-                    )?.label ?? 'Default'
-                  }
-                  aria-label="Task list row height"
-                  title="Task list row height"
-                  fullWidth={false}
-                />
+                >
+                  <SelectTrigger className="min-w-[10.5rem]" aria-label="Task list row height">
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TASK_LIST_ROW_HEIGHT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </PopoverContent>
@@ -714,7 +745,7 @@ export function ProjectsWorkspacePage({
     )
 
   return (
-    <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
+    <div className="bg-transparent flex h-full min-h-0 flex-col">
       <WorkspaceHeaderSecondaryActions>{projectToolbar}</WorkspaceHeaderSecondaryActions>
       <div
         data-testid="projects-workspace-content"
@@ -726,7 +757,7 @@ export function ProjectsWorkspacePage({
         {activeTab === 'board' ? (
           <section
             data-testid="projects-board-shell"
-            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--line)]"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border"
           >
             <div className="min-h-0 flex-1 overflow-x-auto">
               <div className="grid h-full min-w-[960px] grid-cols-4">
@@ -734,14 +765,14 @@ export function ProjectsWorkspacePage({
                   <section
                     key={group.key}
                     data-testid={`project-board-group:${boardGroupBy}:${group.key}`}
-                    className="flex min-h-0 min-w-0 flex-col rounded-none border-r border-[var(--line)] last:border-r-0"
+                    className="flex min-h-0 min-w-0 flex-col rounded-none border-r border-border last:border-r-0"
                   >
-                    <div className="flex items-center justify-between border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-4 py-3">
+                    <div className="flex items-center justify-between border-b border-border bg-muted px-4 py-3">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--text)]">
+                        <div className="truncate text-sm font-semibold text-foreground">
                           {group.label}
                         </div>
-                        <div className="text-xs text-[var(--muted)]">
+                        <div className="text-xs text-muted-foreground">
                           {group.projects.length}{' '}
                           {group.projects.length === 1 ? 'project' : 'projects'}
                         </div>
@@ -756,7 +787,7 @@ export function ProjectsWorkspacePage({
                     >
                       <div className="flex flex-col gap-3">
                         {group.projects.length === 0 ? (
-                          <div className="rounded-none border border-dashed border-[var(--line)] px-4 py-6 text-sm text-[var(--muted)]">
+                          <div className="rounded-none border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                             No projects in this group.
                           </div>
                         ) : (
@@ -773,16 +804,17 @@ export function ProjectsWorkspacePage({
                               <article
                                 key={project.id}
                                 className={cn(
-                                  'rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-4 shadow-sm transition-colors hover:border-[var(--accent)]',
+                                  'rounded-lg border border-border bg-muted p-4 shadow-sm transition-colors hover:border-primary',
                                   (isActive || selectedProjectId === project.id) &&
-                                    'border-[var(--accent)] bg-[var(--accent-soft)]/30'
+                                    'border-primary bg-accent/30'
                                 )}
                               >
                                 <div className="flex flex-col gap-4">
                                   <div className="flex items-start gap-3">
-                                    <button
+                                    <Button
                                       type="button"
-                                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                                      variant="ghost"
+                                      className="h-auto min-w-0 flex-1 items-start justify-start gap-3 p-0 text-left"
                                       onClick={() => {
                                         onSelectProject(project.id)
                                         onActiveTabChange('board')
@@ -794,19 +826,21 @@ export function ProjectsWorkspacePage({
                                         size={24}
                                         className="mt-0.5 shrink-0"
                                       />
-                                      <div className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--text)]">
+                                      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
                                         {project.name}
                                       </div>
-                                    </button>
+                                    </Button>
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
-                                        <button
+                                        <Button
                                           type="button"
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-muted-foreground"
                                           aria-label={`Open actions for ${project.name}`}
                                         >
                                           <MoreHorizontal size={16} />
-                                        </button>
+                                        </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="w-48">
                                         <DropdownMenuItem
@@ -855,16 +889,17 @@ export function ProjectsWorkspacePage({
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
-                                  <button
+                                  <Button
                                     type="button"
-                                    className="flex w-full flex-col gap-4 text-left"
+                                    variant="ghost"
+                                    className="h-auto w-full flex-col items-stretch gap-4 p-0 text-left whitespace-normal"
                                     onClick={() => {
                                       onSelectProject(project.id)
                                       onActiveTabChange('board')
                                       setDrawerState({ kind: 'project', projectId: project.id })
                                     }}
                                   >
-                                    <div className="w-full text-sm text-[var(--muted)]">
+                                    <div className="w-full text-sm text-muted-foreground">
                                       {project.summary || 'No summary yet.'}
                                     </div>
                                     <div
@@ -873,17 +908,17 @@ export function ProjectsWorkspacePage({
                                       aria-label={`Project progress: ${projectProgress}% complete`}
                                       title={`${projectProgress}% complete`}
                                     >
-                                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:color-mix(in_srgb,var(--panel)_78%,transparent)]">
+                                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                                         <div
-                                          className="h-full rounded-full bg-[var(--accent)]"
+                                          className="h-full rounded-full bg-primary"
                                           style={{ width: `${projectProgress}%` }}
                                         />
                                       </div>
-                                      <span className="shrink-0 text-[10px] font-medium text-[var(--muted)]">
+                                      <span className="shrink-0 text-xs font-medium text-muted-foreground">
                                         {projectProgress}% complete
                                       </span>
                                     </div>
-                                    <div className="flex w-full flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                                    <div className="flex w-full flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                       <span>
                                         Updated {new Date(project.updatedAt).toLocaleDateString()}
                                       </span>
@@ -904,7 +939,7 @@ export function ProjectsWorkspacePage({
                                       />
                                       <span>{milestoneLabel}</span>
                                     </div>
-                                  </button>
+                                  </Button>
                                 </div>
                               </article>
                             )
@@ -918,42 +953,40 @@ export function ProjectsWorkspacePage({
             </div>
           </section>
         ) : (
-          <section className="overflow-hidden rounded-2xl border border-[var(--line)]">
-            <div
-              className="table-no-ripple-scope relative w-full overflow-auto rounded-b-2xl border"
-              data-no-ripple-scope
-            >
+          <section className="overflow-hidden rounded-lg border border-border">
+            <div className=" relative w-full overflow-auto rounded-b-2xl border">
               <div className="min-w-full">
-                <div
-                  className="grid border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]"
-                  style={TASK_LIST_GRID_STYLE}
-                >
-                  <div className="flex h-10 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                <div className="grid border-b border-border bg-muted" style={TASK_LIST_GRID_STYLE}>
+                  <div className="flex h-10 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="inline-flex items-center justify-center text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 p-0"
                       onClick={() => toggleTaskListSort('status')}
                       aria-label="Sort by status"
                     >
                       <Circle size={12} aria-hidden="true" />
                       <span className="sr-only">Status</span>
-                    </button>
+                    </Button>
                   </div>
-                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="flex h-10 w-full items-center gap-1.5 text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      className="h-10 w-full justify-start gap-1.5 p-0 text-left"
                       onClick={() => toggleTaskListSort('title')}
                       aria-label="Sort by item"
                     >
                       <span className="min-w-0 flex-1">Item</span>
                       {renderTaskListSortIcon(taskListSort.key === 'title', taskListSort.direction)}
-                    </button>
+                    </Button>
                   </div>
-                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="flex h-10 w-full items-center gap-1.5 text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      className="h-10 w-full justify-start gap-1.5 p-0 text-left"
                       onClick={() => toggleTaskListSort('project')}
                       aria-label="Sort by project"
                     >
@@ -962,12 +995,13 @@ export function ProjectsWorkspacePage({
                         taskListSort.key === 'project',
                         taskListSort.direction
                       )}
-                    </button>
+                    </Button>
                   </div>
-                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="flex h-10 w-full items-center gap-1.5 text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      className="h-10 w-full justify-start gap-1.5 p-0 text-left"
                       onClick={() => toggleTaskListSort('milestone')}
                       aria-label="Sort by milestone"
                     >
@@ -976,12 +1010,13 @@ export function ProjectsWorkspacePage({
                         taskListSort.key === 'milestone',
                         taskListSort.direction
                       )}
-                    </button>
+                    </Button>
                   </div>
-                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="flex h-10 w-full items-center gap-1.5 whitespace-nowrap text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      className="h-10 w-full justify-start gap-1.5 p-0 text-left"
                       onClick={() => toggleTaskListSort('priority')}
                       aria-label="Sort by priority"
                     >
@@ -990,12 +1025,13 @@ export function ProjectsWorkspacePage({
                         taskListSort.key === 'priority',
                         taskListSort.direction
                       )}
-                    </button>
+                    </Button>
                   </div>
-                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    <button
+                  <div className="min-w-0 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Button
                       type="button"
-                      className="flex h-10 w-full items-center gap-1.5 whitespace-nowrap text-left transition-colors hover:text-[var(--text)]"
+                      variant="ghost"
+                      className="h-10 w-full justify-start gap-1.5 p-0 text-left"
                       onClick={() => toggleTaskListSort('dueDate')}
                       aria-label="Sort by due date"
                     >
@@ -1004,15 +1040,15 @@ export function ProjectsWorkspacePage({
                         taskListSort.key === 'dueDate',
                         taskListSort.direction
                       )}
-                    </button>
+                    </Button>
                   </div>
-                  <div className="flex h-10 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  <div className="flex h-10 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     <MoreHorizontal size={12} aria-hidden="true" />
                     <span className="sr-only">Actions</span>
                   </div>
                 </div>
                 {taskListGroups.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-[var(--muted)]">
+                  <div className="py-8 text-center text-sm text-muted-foreground">
                     No project work matches the current filter.
                   </div>
                 ) : (
@@ -1024,15 +1060,15 @@ export function ProjectsWorkspacePage({
                       <Fragment key={group.key}>
                         <div
                           className={cn(
-                            'border-b border-[var(--line)] transition-colors',
+                            'border-b border-border transition-colors',
                             TASK_LIST_ROW_HOVER_CLASS
                           )}
-                          style={{ backgroundColor: TASK_LIST_GROUP_ROW_BACKGROUND_COLOR }}
                         >
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
                             className={cn(
-                              'flex w-full items-center gap-3 px-4 text-left text-[var(--text)] transition-colors',
+                              'h-auto w-full justify-start gap-3 px-4 text-left',
                               taskListGroupButtonPaddingClass
                             )}
                             onClick={() => toggleTaskGroup(group.key)}
@@ -1052,10 +1088,10 @@ export function ProjectsWorkspacePage({
                             <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                               {group.label}
                             </span>
-                            <span className="shrink-0 text-xs text-[var(--text)]">
+                            <span className="shrink-0 text-xs text-foreground">
                               {group.itemCount} {group.itemCount === 1 ? 'item' : 'items'}
                             </span>
-                          </button>
+                          </Button>
                         </div>
                         {isCollapsed
                           ? null
@@ -1065,14 +1101,15 @@ export function ProjectsWorkspacePage({
                                   <div
                                     key={`create-subtask:${displayRow.projectId}:${displayRow.milestoneId}`}
                                     className={cn(
-                                      'border-b border-[var(--line)] transition-colors',
+                                      'border-b border-border transition-colors',
                                       TASK_LIST_ROW_HOVER_CLASS
                                     )}
                                   >
-                                    <button
+                                    <Button
                                       type="button"
+                                      variant="ghost"
                                       className={cn(
-                                        'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[color:color-mix(in_srgb,var(--muted)_62%,var(--panel-2))] transition-colors hover:text-[color:color-mix(in_srgb,var(--muted)_82%,var(--panel-2))]',
+                                        'h-auto w-full justify-start gap-3 rounded-none px-4 text-left text-sm text-muted-foreground',
                                         taskListHelperButtonPaddingClass
                                       )}
                                       onClick={() => {
@@ -1088,7 +1125,7 @@ export function ProjectsWorkspacePage({
                                     >
                                       <Plus size={14} aria-hidden="true" />
                                       <span>Add Subtask</span>
-                                    </button>
+                                    </Button>
                                   </div>
                                 )
                               }
@@ -1098,14 +1135,15 @@ export function ProjectsWorkspacePage({
                                   <div
                                     key={`create-milestone:${displayRow.projectId}`}
                                     className={cn(
-                                      'border-b border-[var(--line)] transition-colors',
+                                      'border-b border-border transition-colors',
                                       TASK_LIST_ROW_HOVER_CLASS
                                     )}
                                   >
-                                    <button
+                                    <Button
                                       type="button"
+                                      variant="ghost"
                                       className={cn(
-                                        'flex w-full items-center gap-3 rounded-none bg-transparent px-4 text-left text-sm text-[color:color-mix(in_srgb,var(--muted)_62%,var(--panel-2))] transition-colors hover:text-[color:color-mix(in_srgb,var(--muted)_82%,var(--panel-2))]',
+                                        'h-auto w-full justify-start gap-3 rounded-none px-4 text-left text-sm text-muted-foreground',
                                         taskListHelperButtonPaddingClass
                                       )}
                                       onClick={() => {
@@ -1120,7 +1158,7 @@ export function ProjectsWorkspacePage({
                                     >
                                       <Plus size={14} aria-hidden="true" />
                                       <span>Add Milestone</span>
-                                    </button>
+                                    </Button>
                                   </div>
                                 )
                               }
@@ -1140,13 +1178,12 @@ export function ProjectsWorkspacePage({
                                 <div
                                   key={row.id}
                                   className={cn(
-                                    'grid items-center cursor-pointer border-b border-[var(--line)] transition-colors',
+                                    'grid items-center cursor-pointer border-b border-border transition-colors',
                                     TASK_LIST_ROW_HOVER_CLASS,
-                                    (isMilestoneActive || isSubtaskActive) &&
-                                      'bg-[var(--accent-soft)]/35',
+                                    (isMilestoneActive || isSubtaskActive) && 'bg-accent/35',
                                     activeMilestoneToken !== null &&
                                       isRowHighlighted(row, focusedMilestoneTarget) &&
-                                      'bg-[var(--accent-soft)]/35'
+                                      'bg-accent/35'
                                   )}
                                   style={TASK_LIST_GRID_STYLE}
                                   onClick={() => {
@@ -1180,8 +1217,10 @@ export function ProjectsWorkspacePage({
                                         taskListStatusControlSizeClass
                                       )
                                     ) : (
-                                      <button
+                                      <Button
                                         type="button"
+                                        variant="ghost"
+                                        size="icon"
                                         onClick={(event) => {
                                           event.stopPropagation()
                                           onToggleSubtask(
@@ -1202,7 +1241,7 @@ export function ProjectsWorkspacePage({
                                         }
                                         data-testid={`project-task-list-subtask-toggle:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
                                         className={cn(
-                                          'group relative flex shrink-0 items-center justify-center',
+                                          'group relative flex shrink-0 items-center justify-center p-0',
                                           taskListStatusControlSizeClass
                                         )}
                                       >
@@ -1211,17 +1250,17 @@ export function ProjectsWorkspacePage({
                                           variant="circle"
                                           ringTestId={`project-task-list-subtask-ring:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
                                           checkTestId={`project-task-list-subtask-check:${row.projectId}:${row.milestoneId}:${row.subtaskId as string}`}
-                                          ringClassName="group-hover:border-[var(--accent)]"
+                                          ringClassName="group-hover:border-primary"
                                           checkClassName="text-white"
                                           checkedCircleStyle={TASK_LIST_SUBTASK_CHECKED_STYLE}
                                           uncheckedCircleStyle={TASK_LIST_SUBTASK_UNCHECKED_STYLE}
                                         />
-                                      </button>
+                                      </Button>
                                     )}
                                   </div>
                                   <div
                                     className={cn(
-                                      'flex min-w-0 items-center px-3 text-sm font-normal text-[var(--text)]',
+                                      'flex min-w-0 items-center px-3 text-sm font-normal text-foreground',
                                       taskListDataCellPaddingClass
                                     )}
                                   >
@@ -1229,7 +1268,7 @@ export function ProjectsWorkspacePage({
                                   </div>
                                   <div
                                     className={cn(
-                                      'flex min-w-0 items-center px-3 text-sm font-normal text-[var(--text)]',
+                                      'flex min-w-0 items-center px-3 text-sm font-normal text-foreground',
                                       taskListDataCellPaddingClass
                                     )}
                                   >
@@ -1238,14 +1277,14 @@ export function ProjectsWorkspacePage({
                                         icon={row.projectIcon}
                                         size={taskListProjectIconSize}
                                       />
-                                      <span className="truncate text-sm text-[var(--text)]">
+                                      <span className="truncate text-sm text-foreground">
                                         {row.projectName}
                                       </span>
                                     </div>
                                   </div>
                                   <div
                                     className={cn(
-                                      'flex min-w-0 items-center px-3 text-sm font-normal text-[var(--text)]',
+                                      'flex min-w-0 items-center px-3 text-sm font-normal text-foreground',
                                       taskListDataCellPaddingClass
                                     )}
                                   >
@@ -1255,7 +1294,7 @@ export function ProjectsWorkspacePage({
                                   </div>
                                   <div
                                     className={cn(
-                                      'flex items-center px-3 whitespace-nowrap text-sm font-normal text-[var(--text)]',
+                                      'flex items-center px-3 whitespace-nowrap text-sm font-normal text-foreground',
                                       taskListDataCellPaddingClass
                                     )}
                                   >
@@ -1263,7 +1302,7 @@ export function ProjectsWorkspacePage({
                                   </div>
                                   <div
                                     className={cn(
-                                      'flex items-center px-3 whitespace-nowrap text-sm font-normal text-[var(--text)]',
+                                      'flex items-center px-3 whitespace-nowrap text-sm font-normal text-foreground',
                                       taskListDataCellPaddingClass
                                     )}
                                   >
@@ -1277,17 +1316,19 @@ export function ProjectsWorkspacePage({
                                   >
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
-                                        <button
+                                        <Button
                                           type="button"
+                                          variant="ghost"
+                                          size="icon"
                                           className={cn(
-                                            'inline-flex items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]',
+                                            'text-muted-foreground',
                                             taskListActionButtonSizeClass
                                           )}
                                           onClick={(event) => event.stopPropagation()}
                                           aria-label={`Open actions for ${row.title}`}
                                         >
                                           <MoreHorizontal size={16} />
-                                        </button>
+                                        </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="w-48">
                                         <DropdownMenuItem
@@ -2047,12 +2088,12 @@ function ProjectForm({
           placeholder="What is this project about?"
         />
       </Field>
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-4">
+      <div className="rounded-lg border border-border bg-muted p-4">
         <div className="mb-3 flex items-center gap-3">
           <NoteShapeIcon icon={icon} size={32} />
           <div>
-            <div className="text-sm text-[var(--muted)]">Project icon</div>
-            <div className="text-xs text-[var(--muted)]/80">Filled Lucide icons</div>
+            <div className="text-sm text-muted-foreground">Project icon</div>
+            <div className="text-xs text-muted-foreground/80">Filled Lucide icons</div>
           </div>
         </div>
         <div className="space-y-4">
@@ -2069,20 +2110,22 @@ function ProjectForm({
                 }
 
                 return (
-                  <button
+                  <Button
                     key={glyph}
                     type="button"
+                    variant={isActive ? 'secondary' : 'outline'}
+                    size="icon"
                     className={cn(
-                      'inline-flex h-12 w-12 items-center justify-center rounded-xl border transition-colors',
+                      'size-12 rounded-lg',
                       isActive
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                        : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
+                        ? 'border-primary bg-accent'
+                        : 'border-border bg-card hover:border-primary'
                     )}
                     onClick={() => onChange({ ...draft, icon: nextIcon })}
                     title={glyph}
                   >
                     <NoteShapeIcon icon={nextIcon} size={28} />
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -2092,12 +2135,14 @@ function ProjectForm({
               {PROJECT_ICON_COLORS.map((color) => {
                 const isActive = icon.color === color
                 return (
-                  <button
+                  <Button
                     key={color}
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     className={cn(
-                      'h-8 w-8 rounded-full border-2 transition-transform',
-                      isActive ? 'scale-105 border-[var(--text)]' : 'border-transparent'
+                      'h-8 w-8 rounded-full border-2 p-0 transition-transform',
+                      isActive ? 'scale-105 border-foreground' : 'border-transparent'
                     )}
                     style={{ backgroundColor: color }}
                     onClick={() =>
@@ -2110,6 +2155,7 @@ function ProjectForm({
                       })
                     }
                     title={color}
+                    aria-label={`Set icon color to ${color}`}
                   />
                 )
               })}
@@ -2166,35 +2212,45 @@ function MilestoneForm({
       <Field label="Status">
         <Select
           value={draft.status}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange({
               ...draft,
-              status: event.target.value as MilestoneDraft['status']
+              status: value as MilestoneDraft['status']
             })
           }
         >
-          {MILESTONE_STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <SelectTrigger>
+            <SelectValue placeholder="Select status" />
+          </SelectTrigger>
+          <SelectContent>
+            {MILESTONE_STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       </Field>
       <Field label="Priority">
         <Select
           value={draft.priority}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange({
               ...draft,
-              priority: event.target.value as MilestoneDraft['priority']
+              priority: value as MilestoneDraft['priority']
             })
           }
         >
-          {PRIORITY_OPTIONS.map((option) => (
-            <option key={option.value || 'none'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <SelectTrigger>
+            <SelectValue placeholder="Select priority" />
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITY_OPTIONS.map((option) => (
+              <SelectItem key={option.value || 'none'} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       </Field>
     </div>
@@ -2235,18 +2291,23 @@ function SubtaskForm({
       <Field label="Priority">
         <Select
           value={draft.priority}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange({
               ...draft,
-              priority: event.target.value as SubtaskDraft['priority']
+              priority: value as SubtaskDraft['priority']
             })
           }
         >
-          {PRIORITY_OPTIONS.map((option) => (
-            <option key={option.value || 'none'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <SelectTrigger>
+            <SelectValue placeholder="Select priority" />
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITY_OPTIONS.map((option) => (
+              <SelectItem key={option.value || 'none'} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       </Field>
       <Field label="Completed">
@@ -2263,7 +2324,7 @@ function SubtaskForm({
 
 function renderPriorityBadge(priority: TaskPriority | undefined): ReactElement {
   if (!priority) {
-    return <span className="text-sm text-[var(--muted)]">No priority</span>
+    return <span className="text-sm text-muted-foreground">No priority</span>
   }
 
   const tone = priority === 'high' ? 'danger' : priority === 'medium' ? 'warning' : 'success'
@@ -2358,11 +2419,11 @@ function TaskListStatusGlyph({
     >
       {variant === 'diamond' ? (
         <>
-          <span className="absolute inset-0 rotate-45 overflow-hidden shadow-[0_8px_20px_color-mix(in_srgb,#0f172a_14%,transparent)]">
+          <span className="absolute inset-0 rotate-45 overflow-hidden border-2 border-border">
             <span className="absolute inset-[-21%] -rotate-45">
-              <span className="absolute inset-0 bg-[linear-gradient(180deg,#7dd3fc_0%,#2563eb_55%,#d946ef_100%)]" />
+              <span className="absolute inset-0 bg-primary" />
               <span
-                className="absolute inset-0 bg-[color:color-mix(in_srgb,var(--panel-2)_78%,#0f172a_22%)]"
+                className="absolute inset-0 bg-muted"
                 style={{ clipPath: `inset(0 0 ${clampedProgress}% 0)` }}
               />
             </span>
@@ -2370,7 +2431,7 @@ function TaskListStatusGlyph({
           <span
             data-testid={ringTestId}
             className={cn(
-              'absolute inset-0 rotate-45 border-2 border-[color:color-mix(in_srgb,#67e8f9_46%,#1e293b_22%)] bg-transparent',
+              'absolute inset-0 rotate-45 border-2 border-border bg-transparent',
               ringClassName
             )}
           />
@@ -2380,8 +2441,8 @@ function TaskListStatusGlyph({
           data-testid={ringTestId}
           className={cn(
             checked
-              ? 'absolute inset-0 rounded-full border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)] shadow-[0_8px_18px_color-mix(in_srgb,var(--accent)_24%,transparent)]'
-              : 'absolute inset-0 rounded-full border-2 border-[color:var(--calendar-task-text)] bg-[var(--panel)] shadow-[0_8px_18px_color-mix(in_srgb,#0f172a_14%,transparent)]',
+              ? 'absolute inset-0 rounded-full border-2 border-primary bg-primary text-primary-foreground'
+              : 'absolute inset-0 rounded-full border-2 border-border bg-card',
             ringClassName
           )}
           style={checked ? checkedCircleStyle : uncheckedCircleStyle}
@@ -2390,8 +2451,8 @@ function TaskListStatusGlyph({
       <span
         data-testid={checkTestId}
         className={cn(
-          'pointer-events-none absolute inset-0 flex items-center justify-center drop-shadow-[0_1px_3px_rgba(8,15,30,0.45)]',
-          variant === 'diamond' ? 'text-white' : 'text-[var(--primary-foreground)]',
+          'pointer-events-none absolute inset-0 flex items-center justify-center',
+          variant === 'diamond' ? 'text-white' : 'text-primary-foreground',
           checkClassName
         )}
         style={{
@@ -2404,19 +2465,16 @@ function TaskListStatusGlyph({
   )
 }
 
-const TASK_LIST_SUBTASK_BORDER_COLOR = 'color-mix(in srgb, #67e8f9 46%, #1e293b 22%)'
-const TASK_LIST_SUBTASK_FILL_COLOR = 'color-mix(in srgb, #67e8f9 22%, var(--panel-2) 78%)'
-
 const TASK_LIST_SUBTASK_CHECKED_STYLE: CSSProperties = {
-  borderColor: TASK_LIST_SUBTASK_BORDER_COLOR,
-  backgroundColor: TASK_LIST_SUBTASK_FILL_COLOR,
-  boxShadow: '0 8px 18px color-mix(in srgb, #0f172a 14%, transparent)'
+  borderColor: 'var(--border)',
+  backgroundColor: 'var(--primary)',
+  boxShadow: 'none'
 }
 
 const TASK_LIST_SUBTASK_UNCHECKED_STYLE: CSSProperties = {
-  borderColor: TASK_LIST_SUBTASK_BORDER_COLOR,
+  borderColor: 'var(--border)',
   backgroundColor: 'transparent',
-  boxShadow: '0 8px 18px color-mix(in srgb, #0f172a 14%, transparent)'
+  boxShadow: 'none'
 }
 
 function formatTaskListDueDate(value: string | undefined): string {
@@ -2455,37 +2513,9 @@ function formatBoardGroupByLabel(value: ProjectBoardGroupBy): string {
   return typeof option?.label === 'string' ? option.label : value
 }
 
-function renderBoardGroupBySelectionLabel(value: ProjectBoardGroupBy): ReactElement | string {
-  const option = BOARD_GROUP_BY_OPTIONS.find((item) => item.value === value)
-  if (!option) {
-    return value
-  }
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      {option.icon ? <span className="shrink-0 text-[var(--muted)]">{option.icon}</span> : null}
-      <span>{option.label}</span>
-    </span>
-  )
-}
-
 function formatTaskListGroupByLabel(value: TaskListGroupBy): string {
   const option = TASK_LIST_GROUP_BY_OPTIONS.find((item) => item.value === value)
   return typeof option?.label === 'string' ? option.label : value
-}
-
-function renderTaskListGroupBySelectionLabel(value: TaskListGroupBy): ReactElement | string {
-  const option = TASK_LIST_GROUP_BY_OPTIONS.find((item) => item.value === value)
-  if (!option) {
-    return value
-  }
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      {option.icon ? <span className="shrink-0 text-[var(--muted)]">{option.icon}</span> : null}
-      <span>{option.label}</span>
-    </span>
-  )
 }
 
 function groupTaskRows(

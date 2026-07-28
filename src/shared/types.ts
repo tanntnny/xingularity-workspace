@@ -1,5 +1,3 @@
-import type { ProfileColor } from './profileColors'
-
 export type Maybe<T> = T | null
 
 export interface VaultInfo {
@@ -117,6 +115,7 @@ interface NoteTreeEntryBase {
 
 export interface NoteTreeFolder extends NoteTreeEntryBase {
   kind: 'folder'
+  isLinked: boolean
   children: NoteTreeNode[]
 }
 
@@ -362,13 +361,11 @@ export interface AppSettings {
   favoriteProjectIds: string[]
   profile: {
     name: string
-    color: ProfileColor
   }
   ai: {
     mistralApiKey: string
   }
   fontFamily: string
-  performanceModeEnabled: boolean
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   calendarTasks: CalendarTask[]
@@ -381,13 +378,11 @@ export interface AppSettingsUpdate {
   isSidebarCollapsed?: boolean // Optional
   profile?: {
     name?: string
-    color?: ProfileColor
   }
   ai?: {
     mistralApiKey: string
   }
   fontFamily?: string
-  performanceModeEnabled?: boolean
   editorVimModeEnabled?: boolean
   editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
@@ -965,7 +960,6 @@ export interface RendererVaultApi {
       items: NativeMenuItemDescriptor[],
       position: NativeMenuPosition
     ) => Promise<string | null>
-    applyPerformanceMode: (enabled: boolean) => Promise<void>
     reloadApp: () => Promise<void>
   }
   app: {

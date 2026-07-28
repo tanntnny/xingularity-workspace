@@ -1,13 +1,13 @@
 import { ReactElement, useMemo } from 'react'
-import { Copy, FileText, FolderInput, Heart, Link, Pencil, Trash2 } from 'lucide-react'
+import { Copy, FileText, FolderInput, Heart, Link, Pencil, Trash2 } from './ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
 import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuSub,
@@ -18,6 +18,7 @@ import {
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
+import { Shortcut } from './ui/kbd'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
@@ -120,7 +121,7 @@ export function NotePreviewList({
   return (
     <div ref={containerRef} className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       {filtered.length === 0 ? (
-        <div className="p-2 text-sm text-[var(--muted)]">No notes found</div>
+        <div className="p-3 text-sm text-muted-foreground">No notes found</div>
       ) : (
         <>
           <NoteSection
@@ -208,7 +209,7 @@ function NoteSection({
     <WorkspacePanelSection>
       <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {notes.length === 0 ? (
-        <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
+        <div className="p-3 text-sm text-muted-foreground">{emptyLabel}</div>
       ) : (
         notes.map((note) => {
           const revealProps = getRevealItemProps(`${revealKeyPrefix}:${note.relPath}`)
@@ -255,12 +256,13 @@ function NoteSection({
           }
 
           const noteButton = (
-            <button
+            <Button
               type="button"
+              variant={isSelected ? 'secondary' : 'ghost'}
               ref={revealProps.ref}
               data-testid={`note-preview:${note.relPath}`}
               data-active={isSelected}
-              className={`${revealProps.className} sidebar-menu-card right-panel-menu-card items-start gap-2 px-3 py-2 text-left`}
+              className={`${revealProps.className} rounded-lg border bg-card text-card-foreground h-auto items-start justify-start gap-2 px-3 py-2 text-left`}
               style={revealProps.style}
               onClick={() => onOpen(note.relPath)}
               onContextMenu={
@@ -274,13 +276,13 @@ function NoteSection({
                 onDelete(note.relPath)
               }}
             >
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" />
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold">
                   {stripNoteExtension(note.name)}
                 </div>
-                <div className="truncate text-xs text-[var(--muted)]">{note.relPath}</div>
-                <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+                <div className="truncate text-xs text-muted-foreground">{note.relPath}</div>
+                <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                   <Badge variant="neutral" tone="subtle">
                     <Pencil size={12} aria-hidden="true" />
                     {updatedLabel}
@@ -297,7 +299,7 @@ function NoteSection({
                   </span>
                 </div>
               </div>
-            </button>
+            </Button>
           )
 
           return useNativeMenus ? (
@@ -343,11 +345,16 @@ function NoteSection({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuDestructiveItem onClick={() => onDelete(note.relPath)}>
+                <ContextMenuItem
+                  className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                  onClick={() => onDelete(note.relPath)}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
-                  <ContextMenuShortcut keys={['cmd', 'backspace']} />
-                </ContextMenuDestructiveItem>
+                  <ContextMenuShortcut>
+                    <Shortcut keys={['cmd', 'backspace']} />
+                  </ContextMenuShortcut>
+                </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
           )

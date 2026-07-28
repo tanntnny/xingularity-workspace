@@ -16,7 +16,7 @@ import {
   Star,
   SlidersHorizontal,
   Trash2
-} from 'lucide-react'
+} from '../../src/ui/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -24,7 +24,7 @@ import {
   BreadcrumbPage,
   SidebarInset,
   SidebarProvider,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceContextEmptyState,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup,
@@ -185,7 +185,7 @@ export default function App(): React.JSX.Element {
               <img
                 src={appLogo}
                 alt="Xingularity logo"
-                className="h-11 w-11 shrink-0 rounded-lg border border-white/10 shadow-[0_12px_30px_rgba(7,5,18,0.35)]"
+                className="size-11 shrink-0 rounded-md border border-border shadow-sm"
               />
             ),
             name: 'XINGULARITY',
@@ -194,7 +194,7 @@ export default function App(): React.JSX.Element {
           context={{
             heading: (
               <>
-                Welcome back, <span className="text-[var(--accent)]">there</span>
+                Welcome back, <span className="text-primary">there</span>
               </>
             ),
             detail: 'No vault selected'
@@ -204,11 +204,8 @@ export default function App(): React.JSX.Element {
           collapsible={isFocusMode ? 'offcanvas' : 'icon'}
         />
 
-        <SidebarInset
-          data-workspace-vibrancy="on"
-          className="!min-h-0 overflow-hidden text-[var(--text)] antialiased [font-family:var(--app-font-family)]"
-        >
-          <div className="workspace-vibrancy-scope flex h-full min-w-0 flex-col">
+        <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased">
+          <div className="flex h-full min-w-0 flex-col">
             <WorkspaceTabManager
               tabs={[
                 {
@@ -234,9 +231,9 @@ export default function App(): React.JSX.Element {
                 <WorkspaceMainHeader
                   breadcrumb={
                     <Breadcrumb>
-                      <BreadcrumbList className="text-[var(--muted)]">
+                      <BreadcrumbList className="text-muted-foreground">
                         <BreadcrumbItem>
-                          <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                          <BreadcrumbPage className="text-sm text-muted-foreground">
                             {PAGE_LABELS[activeNavigationId]}
                           </BreadcrumbPage>
                         </BreadcrumbItem>
@@ -245,16 +242,16 @@ export default function App(): React.JSX.Element {
                   }
                   actions={
                     <WorkspaceHeaderActions>
-                      <WorkspaceActionButton title="Show backlinks" icon={<Link2 size={18} />} />
-                      <WorkspaceActionButton title="Copy Raw Markdown" icon={<Copy size={18} />} />
-                      <WorkspaceActionButton title="Export Note" icon={<Download size={18} />} />
+                      <WorkspaceIconButton title="Show backlinks" icon={<Link2 size={18} />} />
+                      <WorkspaceIconButton title="Copy Raw Markdown" icon={<Copy size={18} />} />
+                      <WorkspaceIconButton title="Export Note" icon={<Download size={18} />} />
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton title="Add to Favorites" icon={<Star size={18} />} />
+                        <WorkspaceIconButton title="Add to Favorites" icon={<Star size={18} />} />
                       </WorkspaceHeaderActionGroup>
                       <WorkspaceHeaderActionDivider />
                       <WorkspaceHeaderActionGroup>
-                        <WorkspaceActionButton title="Delete Note" icon={<Trash2 size={18} />} />
+                        <WorkspaceIconButton title="Delete Note" icon={<Trash2 size={18} />} />
                       </WorkspaceHeaderActionGroup>
                     </WorkspaceHeaderActions>
                   }
@@ -283,11 +280,11 @@ export default function App(): React.JSX.Element {
                   <WorkspaceSidePanelHeader
                     actions={
                       <WorkspaceHeaderActions>
-                        <WorkspaceActionButton
+                        <WorkspaceIconButton
                           title="Collapse all folders"
                           icon={<ChevronDown size={18} />}
                         />
-                        <WorkspaceActionButton title="Notebook actions" icon={<Plus size={18} />} />
+                        <WorkspaceIconButton title="Notebook actions" icon={<Plus size={18} />} />
                       </WorkspaceHeaderActions>
                     }
                   />
@@ -295,7 +292,7 @@ export default function App(): React.JSX.Element {
                     <WorkspacePanelSection>
                       <WorkspacePanelSectionHeader
                         icon={<FolderOpen size={16} />}
-                        iconContainerClassName="bg-[var(--accent-soft)] text-[var(--accent)]"
+                        iconContainerClassName="bg-accent text-accent-foreground"
                         heading="Workspace context"
                         description="The starter deliberately contains one placeholder page."
                       />

@@ -1,5 +1,5 @@
 import { ReactElement, RefObject, useCallback, useEffect, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus } from '../components/ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
@@ -105,7 +105,7 @@ export function EditorPage({
   }
 
   return (
-    <div className="workspace-clear-surface flex h-full min-h-0 flex-col">
+    <div className="bg-transparent flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-8 py-5">
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 items-center">
@@ -114,12 +114,12 @@ export function EditorPage({
               onCommit={onRename}
               editToken={titleEditToken}
               displayAs="h1"
-              displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-4xl font-bold text-[var(--text)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-[var(--accent)]"
-              inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-[var(--text)] caret-[var(--accent)] transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
+              displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-4xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
+              inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
               title="Click to rename"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
             {tags.map((tag) => (
               <TagChip
                 key={tag}
@@ -160,7 +160,7 @@ export function EditorPage({
                   }}
                   placeholder="tag name"
                   autoFocus
-                  className="workspace-subtle-control w-32 rounded-md border border-[var(--accent)] px-2.5 py-1 text-sm caret-[var(--accent)]"
+                  className="w-32 rounded-md border border-primary bg-card px-2.5 py-1 text-sm text-foreground caret-primary"
                 />
               </div>
             ) : (
@@ -170,7 +170,7 @@ export function EditorPage({
                   editorRef?.current?.blur()
                   setIsAddingTag(true)
                 }}
-                className="workspace-subtle-control inline-flex items-center justify-center rounded-md border border-dashed border-[var(--line)] p-1"
+                  className="border border-input bg-card text-foreground inline-flex items-center justify-center rounded-md border border-dashed border-border p-1"
                 title="Add tag"
               >
                 <Plus size={16} />

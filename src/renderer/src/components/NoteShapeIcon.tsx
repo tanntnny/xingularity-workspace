@@ -16,7 +16,7 @@ import {
   Shield,
   Sparkles,
   Target
-} from 'lucide-react'
+} from './ui/icons'
 import { ProjectIconStyle } from '../../../shared/types'
 import { resolveProjectIconGlyph, resolveProjectIconSet } from '../../../shared/projectIcons'
 import { cn } from '../lib/utils'
@@ -40,7 +40,7 @@ export function NoteShapeIcon({ icon, size = 16, className }: NoteShapeIconProps
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-[35%] border',
+        'inline-flex shrink-0 items-center justify-center rounded-md border',
         className
       )}
       style={{

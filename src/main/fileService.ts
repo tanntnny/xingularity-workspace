@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { createDirectoryAncestors, getDirectoryTraversal } from './directoryTraversal'
 import {
   createEmptyExcalidrawFileDocument,
   EXCALIDRAW_FILE_EXTENSION,
@@ -50,6 +51,11 @@ const noteNameSchema = z.string().min(1).max(120)
 
 type InternalWriteCallback = (relPath: string) => void
 
+export interface FolderNoteDocumentsResult {
+  notes: Array<{ relPath: string; document: StoredNoteDocument }>
+  warnings: string[]
+}
+
 export class FileService {
   constructor(
     private readonly notesRoot: string,
@@ -63,7 +69,11 @@ export class FileService {
   }
 
   async listTree(): Promise<NoteTreeNode[]> {
-    return listTreeNodes(this.notesRoot, this.notesRoot)
+    return listTreeNodes(
+      this.notesRoot,
+      this.notesRoot,
+      await createDirectoryAncestors(this.notesRoot)
+    )
   }
 
   async readNote(relPathInput: string): Promise<string> {
@@ -78,9 +88,7 @@ export class FileService {
     return parseStoredNoteDocument(raw)
   }
 
-  async listNoteDocumentsInFolder(
-    folderRelPathInput: string
-  ): Promise<Array<{ relPath: string; document: StoredNoteDocument }>> {
+  async listNoteDocumentsInFolder(folderRelPathInput: string): Promise<FolderNoteDocumentsResult> {
     const folderRelPath = sanitizeEntryPath(folderRelPathInput)
     const folderPath = joinSafe(this.notesRoot, folderRelPath)
     const stats = await fs.stat(folderPath)
@@ -90,15 +98,31 @@ export class FileService {
     }
 
     const notePaths = await listNotePaths(folderPath)
-    return Promise.all(
+    const results = await Promise.all(
       notePaths.map(async (absolutePath) => {
-        const raw = await fs.readFile(absolutePath, 'utf-8')
-        return {
-          relPath: normalizeRelativePath(path.relative(this.notesRoot, absolutePath)),
-          document: parseStoredNoteDocument(raw)
+        const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+        try {
+          const raw = await fs.readFile(absolutePath, 'utf-8')
+          return {
+            note: {
+              relPath,
+              document: parseStoredNoteDocument(raw)
+            },
+            warning: null
+          }
+        } catch (error) {
+          return {
+            note: null,
+            warning: `Skipped unreadable Markdown note ${relPath}: ${describeError(error)}`
+          }
         }
       })
     )
+
+    return {
+      notes: results.flatMap((result) => (result.note ? [result.note] : [])),
+      warnings: results.flatMap((result) => (result.warning ? [result.warning] : []))
+    }
   }
 
   async readExcalidrawFileDocument(relPathInput: string): Promise<StoredExcalidrawFileDocument> {
@@ -519,13 +543,19 @@ async function rewriteNoteMentionTargetsForRename(
   )
 }
 
-async function listNotePaths(root: string): Promise<string[]> {
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function listNotePaths(root: string, ancestors?: ReadonlySet<string>): Promise<string[]> {
+  const currentAncestors = ancestors ?? (await createDirectoryAncestors(root))
   const entries = await fs.readdir(root, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
-    if (entry.isDirectory()) {
-      results.push(...(await listNotePaths(absolutePath)))
+    const directory = await getDirectoryTraversal(entry, absolutePath, currentAncestors)
+    if (directory.nextAncestors) {
+      results.push(...(await listNotePaths(absolutePath, directory.nextAncestors)))
       continue
     }
     if (entry.isFile() && isNotePath(entry.name)) {
@@ -535,13 +565,18 @@ async function listNotePaths(root: string): Promise<string[]> {
   return results.sort((left, right) => left.localeCompare(right))
 }
 
-async function listLegacyNoteDocumentPaths(root: string): Promise<string[]> {
+async function listLegacyNoteDocumentPaths(
+  root: string,
+  ancestors?: ReadonlySet<string>
+): Promise<string[]> {
+  const currentAncestors = ancestors ?? (await createDirectoryAncestors(root))
   const entries = await fs.readdir(root, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
     const absolutePath = path.join(root, entry.name)
-    if (entry.isDirectory()) {
-      results.push(...(await listLegacyNoteDocumentPaths(absolutePath)))
+    const directory = await getDirectoryTraversal(entry, absolutePath, currentAncestors)
+    if (directory.nextAncestors) {
+      results.push(...(await listLegacyNoteDocumentPaths(absolutePath, directory.nextAncestors)))
       continue
     }
     if (entry.isFile() && isLegacyNotePath(entry.name)) {
@@ -551,7 +586,11 @@ async function listLegacyNoteDocumentPaths(root: string): Promise<string[]> {
   return results.sort((left, right) => left.localeCompare(right))
 }
 
-async function listTreeNodes(root: string, currentDir: string): Promise<NoteTreeNode[]> {
+async function listTreeNodes(
+  root: string,
+  currentDir: string,
+  ancestors: ReadonlySet<string>
+): Promise<NoteTreeNode[]> {
   const entries = await fs.readdir(currentDir, { withFileTypes: true })
   const folders: NoteTreeFolder[] = []
   const notes: NoteTreeFile[] = []
@@ -561,13 +600,17 @@ async function listTreeNodes(root: string, currentDir: string): Promise<NoteTree
     const absolutePath = path.join(currentDir, entry.name)
     const relPath = normalizeRelativePath(path.relative(root, absolutePath))
 
-    if (entry.isDirectory()) {
+    const directory = await getDirectoryTraversal(entry, absolutePath, ancestors)
+    if (directory.isDirectory) {
       folders.push({
         id: `folder:${relPath}`,
         kind: 'folder',
         relPath,
         name: entry.name,
-        children: await listTreeNodes(root, absolutePath)
+        isLinked: entry.isSymbolicLink(),
+        children: directory.nextAncestors
+          ? await listTreeNodes(root, absolutePath, directory.nextAncestors)
+          : []
       })
       continue
     }

@@ -2,6 +2,7 @@ import * as React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/button'
 
 export const Message = React.forwardRef<
   HTMLDivElement,
@@ -22,7 +23,7 @@ export const MessageContent = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'workspace-subtle-surface max-w-[min(860px,100%)] rounded-lg px-4 py-3 text-sm text-[var(--text)]',
+      'border bg-card text-card-foreground max-w-[min(860px,100%)] rounded-lg px-4 py-3 text-sm text-foreground',
       className
     )}
     {...props}
@@ -38,7 +39,7 @@ export function MessageResponse({
   return (
     <div
       className={cn(
-        'prose prose-sm max-w-none break-words text-[var(--text)] prose-p:my-2 prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--line)] prose-pre:bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]',
+        'prose prose-sm max-w-none break-words text-foreground prose-p:my-2 prose-pre:rounded-lg prose-pre:border prose-pre:border-border prose-pre:bg-muted',
         className
       )}
       {...props}
@@ -61,12 +62,14 @@ export function MessageAction({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }): React.ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       aria-label={label}
       title={label}
       className={cn(
-        'workspace-subtle-control inline-flex h-8 items-center justify-center rounded-lg border border-[var(--line)] px-2.5 text-[var(--muted)] transition hover:text-[var(--accent)]',
+        'border border-input bg-card text-foreground inline-flex h-8 items-center justify-center rounded-lg border border-border px-2.5 text-muted-foreground transition hover:text-primary',
         className
       )}
       {...props}

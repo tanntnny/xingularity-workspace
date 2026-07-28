@@ -1,5 +1,5 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
-import { CalendarPlus, Plus } from 'lucide-react'
+import { CalendarPlus, Plus } from './ui/icons'
 import { CalendarTask, CalendarTaskType, TaskPriority, TaskReminder } from '../../../shared/types'
 import { TaskEditDialog } from './CalendarMonthView'
 import { CalendarTaskCard } from './CalendarTaskCard'
@@ -89,18 +89,16 @@ export function UnscheduledTaskList({
       data-unscheduled-task-list="true"
       data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
       className={`flex h-full flex-col overflow-hidden transition-colors ${
-        isDragOver
-          ? 'bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]'
-          : 'workspace-clear-surface'
+        isDragOver ? 'bg-accent' : 'bg-transparent'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="shrink-0 p-2 pb-4">
+      <div className="shrink-0 p-3 pb-4">
         <WorkspacePanelSectionHeader
           icon={<CalendarPlus size={16} aria-hidden="true" />}
-          iconContainerClassName="bg-amber-500/12 text-amber-500"
+          iconContainerClassName="bg-accent text-muted-foreground"
           heading="Unscheduled"
           description={`${pendingCount} pending${completedCount > 0 ? ` · ${completedCount} done` : ''}`}
         />
@@ -119,34 +117,32 @@ export function UnscheduledTaskList({
                 onInsertTask()
               }
             }}
-            className="workspace-subtle-control h-8 min-w-0 flex-1 rounded-md border border-[var(--line)] px-2.5 text-sm text-[var(--text)] outline-none hover:border-[var(--accent)] focus:border-[var(--accent)] transition"
+            className="border border-input bg-background text-foreground h-8 min-w-0 flex-1 rounded-md border border-border px-2.5 text-sm text-foreground outline-none hover:border-primary focus:border-primary transition"
           />
           <button
             type="button"
             onClick={onInsertTask}
             aria-label="Insert task"
             title="Insert task"
-            className="workspace-subtle-control inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--line)] text-[var(--text)] transition-colors"
+            className="border border-input bg-background text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors"
           >
             <Plus size={13} aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="mx-4 border-t border-[var(--line)]" />
+      <div className="mx-4 border-t border-border" />
 
       <div ref={containerRef} className="flex-1 overflow-auto px-2 pt-4">
         <div
           data-unscheduled-drop-zone="true"
           data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
-          className={`flex min-h-full flex-col border p-2 transition-all ${
-            isDragOver
-              ? 'border-dashed border-[color:color-mix(in_srgb,var(--accent)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)]'
-              : 'border-transparent'
+          className={`flex min-h-full flex-col border p-3 transition-all ${
+            isDragOver ? 'border-dashed border-ring bg-accent' : 'border-transparent'
           }`}
         >
           {isDragOver ? (
-            <div className="workspace-subtle-surface mb-2 rounded-none px-2 py-1 text-center text-[11px] text-[var(--accent)]">
+            <div className="border bg-card text-card-foreground mb-2 rounded-none px-2 py-1 text-center text-xs text-primary">
               Drop here to unschedule
             </div>
           ) : null}
@@ -210,9 +206,7 @@ export function UnscheduledTaskList({
                       event.preventDefault()
                       onDelete(task.id)
                     }}
-                    className={`${revealProps.className} calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${task.taskType || 'assignment'} ${
-                      task.completed ? 'beacon-task-completed' : ''
-                    } cursor-grab rounded-md border transition-shadow active:cursor-grabbing`}
+                    className={`${revealProps.className} cursor-grab rounded-md border bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
                   >
                     <CalendarTaskCard task={task} onToggle={onToggle} />
                   </article>
@@ -222,11 +216,11 @@ export function UnscheduledTaskList({
 
             {tasks.length === 0 && (
               <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-                <div className="workspace-subtle-surface mb-3 flex h-12 w-12 items-center justify-center rounded-2xl">
-                  <CalendarPlus size={24} className="text-[var(--muted)]" />
+                <div className="border bg-card text-card-foreground mb-3 flex h-12 w-12 items-center justify-center rounded-lg">
+                  <CalendarPlus size={24} className="text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium text-[var(--text)]">No unscheduled tasks</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
+                <p className="text-sm font-medium text-foreground">No unscheduled tasks</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Add a task above or drag from calendar
                 </p>
               </div>

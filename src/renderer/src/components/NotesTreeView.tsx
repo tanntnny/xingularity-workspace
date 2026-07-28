@@ -10,7 +10,6 @@ import {
   useRef,
   useState
 } from 'react'
-import { useElementSize } from '@mantine/hooks'
 import {
   ChevronRight,
   FileDown,
@@ -18,11 +17,12 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  Link,
   MoreHorizontal,
   PenTool,
   Pencil,
   Trash2
-} from 'lucide-react'
+} from './ui/icons'
 import {
   Tree,
   TreeApi,
@@ -36,7 +36,6 @@ import type { NativeMenuItemDescriptor, NoteTreeNode } from '../../../shared/typ
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger
@@ -59,14 +58,13 @@ import { cn } from '../lib/utils'
 const TREE_ICON_CLASS = 'h-4 w-4 shrink-0'
 const TREE_CHEVRON_CLASS = 'h-3.5 w-3.5 shrink-0'
 const TREE_DROPDOWN_ITEM_CLASS =
-  'relative flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors focus:bg-[var(--accent-color)] focus:text-[var(--accent-foreground)] hover:bg-[var(--accent-color)] hover:text-[var(--accent-foreground)]'
+  'relative flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground'
 const TREE_INDENT = 18
 const TREE_ROW_HEIGHT = 28
 const AUTO_EXPAND_DELAY_MS = 400
 const TREE_AUTO_SCROLL_EDGE_PX = 48
 const TREE_AUTO_SCROLL_MAX_STEP = 18
-const TREE_DROP_TARGET_ROW_CLASS =
-  'bg-[color-mix(in_srgb,var(--accent-soft)_94%,var(--panel))] text-[var(--text)] shadow-[inset_3px_0_0_var(--accent),inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_18%,transparent),0_0_18px_rgba(99,102,241,0.14)]'
+const TREE_DROP_TARGET_ROW_CLASS = 'bg-accent text-accent-foreground shadow-sm'
 
 function renderTreeNodeLabel(label: string): ReactElement | string {
   const match = label.match(/^(\d+\+?)(\s+.*)$/)
@@ -79,7 +77,7 @@ function renderTreeNodeLabel(label: string): ReactElement | string {
 
   return (
     <>
-      <span className="text-[var(--muted)]">{prefix}</span>
+      <span className="text-muted-foreground">{prefix}</span>
       {remainder}
     </>
   )
@@ -126,14 +124,30 @@ export function NotesTreeView({
 }: NotesTreeViewProps): ReactElement {
   const treeRef = useRef<TreeApi<NoteTreeNode> | null>(null)
   const lastSyncedSelectionKeyRef = useRef<string>('')
-  const { ref: sizeContainerRef, height } = useElementSize()
+  const [treeContainer, setTreeContainer] = useState<HTMLDivElement | null>(null)
+  const [treeContainerHeight, setTreeContainerHeight] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
   const autoScrollFrameRef = useRef<number | null>(null)
   const dragClientYRef = useRef<number | null>(null)
   const stepAutoScrollRef = useRef<() => void>(() => {})
   const useNativeMenus = canUseNativeMenus()
-  const treeHeight = height > 8 ? height - 8 : 320
+  const treeHeight = treeContainerHeight > 8 ? treeContainerHeight - 8 : 320
   const deferredSearchTerm = useDeferredValue(searchTerm.trim().toLowerCase())
+
+  useEffect(() => {
+    if (!treeContainer) {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      setTreeContainerHeight(entry.contentRect.height)
+    })
+
+    resizeObserver.observe(treeContainer)
+    setTreeContainerHeight(treeContainer.getBoundingClientRect().height)
+
+    return () => resizeObserver.disconnect()
+  }, [treeContainer])
   const matchSearchTerm = useCallback(
     (node: NodeApi<NoteTreeNode>, term: string): boolean =>
       node.data.name.toLowerCase().includes(term) || node.data.relPath.toLowerCase().includes(term),
@@ -332,24 +346,24 @@ export function NotesTreeView({
     return createPortal(
       <div className="pointer-events-none fixed inset-0 z-[200]">
         <div
-          className="absolute min-w-[180px] max-w-[280px] border border-[var(--accent-line)] bg-[var(--panel)] px-3 py-2 opacity-80 shadow-[0_14px_38px_rgba(15,23,42,0.22)]"
+          className="absolute min-w-[180px] max-w-[280px] rounded-md border border-ring bg-card px-3 py-2 opacity-80 shadow-sm"
           style={{
             left: position.x + 14,
             top: position.y + 10
           }}
         >
-          <div className="flex items-center gap-2 text-sm text-[var(--text)]">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             {previewEntry.kind === 'folder' ? (
-              <Folder className="h-4 w-4 shrink-0 text-[var(--accent)]" strokeWidth={1.9} />
+              <Folder className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} />
             ) : previewEntry.kind === 'excalidraw' ? (
-              <PenTool className="h-4 w-4 shrink-0 text-[var(--text)]" strokeWidth={1.9} />
+              <PenTool className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
             ) : (
-              <FileText className="h-4 w-4 shrink-0 text-[var(--text)]" strokeWidth={1.9} />
+              <FileText className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
             )}
             <span className="truncate font-medium">{label}</span>
           </div>
           {props.dragIds.length > 1 ? (
-            <div className="mt-1 text-xs text-[var(--muted)]">{props.dragIds.length} items</div>
+            <div className="mt-1 text-xs text-muted-foreground">{props.dragIds.length} items</div>
           ) : null}
         </div>
       </div>,
@@ -359,7 +373,7 @@ export function NotesTreeView({
 
   if (tree.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-4 text-sm text-[var(--muted)]">
+      <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
         No notebooks or folders yet
       </div>
     )
@@ -391,7 +405,7 @@ export function NotesTreeView({
 
   return (
     <div
-      ref={sizeContainerRef}
+      ref={setTreeContainer}
       className="h-full min-h-0"
       data-testid="notes-tree-view"
       onKeyDownCapture={(event) => {
@@ -747,8 +761,8 @@ function TreeNode({
           isDropTarget
             ? TREE_DROP_TARGET_ROW_CLASS
             : node.isSelected
-              ? 'bg-[var(--accent-soft)] text-[var(--text)]'
-              : 'text-[var(--text)] hover:bg-[var(--panel-2)]'
+              ? 'bg-accent text-foreground'
+              : 'text-foreground hover:bg-muted'
         )}
         onContextMenu={
           useNativeMenus && !isEditing ? (event) => void handleNativeContextMenu(event) : undefined
@@ -761,7 +775,7 @@ function TreeNode({
         >
           <button
             type="button"
-            className={`flex h-4 w-4 shrink-0 items-center justify-center text-[var(--muted)] ${
+            className={`flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground ${
               isFolder ? 'opacity-100' : 'opacity-0'
             }`}
             onClick={(event) => {
@@ -778,19 +792,16 @@ function TreeNode({
                   TREE_CHEVRON_CLASS,
                   'transition-transform',
                   node.isOpen && 'rotate-90',
-                  isDropTarget && 'text-[var(--accent)]'
+                  isDropTarget && 'text-primary'
                 )}
               />
             ) : null}
           </button>
           {isFolder ? (
             node.isOpen ? (
-              <FolderOpen
-                className={cn(TREE_ICON_CLASS, 'text-[var(--accent)]')}
-                strokeWidth={1.9}
-              />
+              <FolderOpen className={cn(TREE_ICON_CLASS, 'text-primary')} strokeWidth={1.9} />
             ) : (
-              <Folder className={cn(TREE_ICON_CLASS, 'text-[var(--accent)]')} strokeWidth={1.9} />
+              <Folder className={cn(TREE_ICON_CLASS, 'text-primary')} strokeWidth={1.9} />
             )
           ) : (
             renderTreeFileIcon(node.data.kind)
@@ -804,12 +815,22 @@ function TreeNode({
               )}
             </span>
           )}
+          {node.data.kind === 'folder' && node.data.isLinked ? (
+            <span
+              className="inline-flex shrink-0 text-muted-foreground"
+              data-testid={`note-tree-linked-folder:${node.data.relPath}`}
+              title="Linked folder"
+            >
+              <Link className="h-3.5 w-3.5" aria-hidden="true" strokeWidth={1.9} />
+              <span className="sr-only">Linked folder</span>
+            </span>
+          ) : null}
           {!isEditing && !isProtected ? (
             useNativeMenus ? (
               <button
                 type="button"
                 data-testid={`note-tree-menu:${node.data.relPath}`}
-                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
+                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-card hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                 onPointerDown={(event) => {
                   event.stopPropagation()
                 }}
@@ -825,7 +846,7 @@ function TreeNode({
                   <button
                     type="button"
                     data-testid={`note-tree-menu:${node.data.relPath}`}
-                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] opacity-0 transition hover:bg-[var(--panel)] hover:text-[var(--text)] focus-visible:opacity-100 group-hover:opacity-100"
+                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-card hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     onPointerDown={(event) => {
                       event.stopPropagation()
                     }}
@@ -923,7 +944,7 @@ function TreeNode({
                   <button
                     type="button"
                     role="menuitem"
-                    className={`${TREE_DROPDOWN_ITEM_CLASS} text-[var(--danger)] focus:bg-[rgba(220,38,38,0.14)] focus:text-[var(--danger)]`}
+                    className={`${TREE_DROPDOWN_ITEM_CLASS} text-destructive focus:bg-destructive/10 focus:text-destructive`}
                     onPointerDownCapture={(event) => handleDropdownMenuAction(event, 'delete')}
                     onClick={(event) => handleDropdownMenuAction(event, 'delete')}
                     onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'delete')}
@@ -983,10 +1004,13 @@ function TreeNode({
               <Pencil className="mr-2 h-4 w-4" />
               Rename
             </ContextMenuItem>
-            <ContextMenuDestructiveItem onSelect={() => handleMenuAction('delete')}>
+            <ContextMenuItem
+              className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+              onSelect={() => handleMenuAction('delete')}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
-            </ContextMenuDestructiveItem>
+            </ContextMenuItem>
           </>
         ) : null}
       </ContextMenuContent>
@@ -1040,7 +1064,7 @@ function TreeNodeInput({
       defaultValue={
         node.data.kind === 'folder' ? node.data.name : stripNotebookFileExtension(node.data.name)
       }
-      className="h-7 flex-1 border border-[var(--accent-line)] bg-[var(--panel)] px-2 text-sm outline-none"
+      className="h-7 flex-1 border border-ring bg-card px-2 text-sm outline-none"
       onFocus={(event) => event.currentTarget.select()}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
@@ -1142,10 +1166,10 @@ function buildNotesTreeMenuItems(
 
 function renderTreeFileIcon(kind: NoteTreeNode['kind']): ReactElement {
   if (kind === 'excalidraw') {
-    return <PenTool className={cn(TREE_ICON_CLASS, 'text-[var(--text)]')} strokeWidth={1.9} />
+    return <PenTool className={cn(TREE_ICON_CLASS, 'text-foreground')} strokeWidth={1.9} />
   }
 
-  return <FileText className={cn(TREE_ICON_CLASS, 'text-[var(--text)]')} strokeWidth={1.9} />
+  return <FileText className={cn(TREE_ICON_CLASS, 'text-foreground')} strokeWidth={1.9} />
 }
 
 function getTreeNodeKindLabel(kind: NoteTreeNode['kind']): string {

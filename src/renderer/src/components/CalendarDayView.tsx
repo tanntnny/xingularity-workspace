@@ -79,14 +79,14 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToPrevDay}
-            className="workspace-subtle-control flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
+            className="border border-input bg-background text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
           >
             &lt;
           </button>
-          <h2 className="text-lg font-semibold text-[var(--text)]">
+          <h2 className="text-lg font-semibold text-foreground">
             {dateLabel}
             {isToday && (
-              <span className="ml-2 rounded-full bg-[var(--accent)] px-2 py-0.5 text-xs font-medium text-white">
+              <span className="ml-2 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
                 Today
               </span>
             )}
@@ -94,33 +94,29 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToNextDay}
-            className="workspace-subtle-control flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
+            className="border border-input bg-background text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
           >
             &gt;
           </button>
         </div>
-        <span className="inline-flex items-center rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]">
+        <span className="inline-flex items-center rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground">
           {tasks.length} task{tasks.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* All Day section */}
       {allDayTasks.length > 0 && (
-        <div className="workspace-subtle-surface shrink-0 rounded-xl p-3">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <div className="border bg-card text-card-foreground shrink-0 rounded-lg p-3">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             All Day / No Time Set
           </h3>
           <div className="flex flex-wrap gap-2">
             {allDayTasks.map((task) => (
               <div
                 key={task.id}
-                className={`calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
-                  task.taskType || 'assignment'
-                } ${task.completed ? 'beacon-task-completed line-through' : ''} inline-flex items-center rounded-lg px-2.5 py-1.5 text-sm`}
+                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${task.completed ? 'line-through opacity-60' : ''}`}
               >
-                <span className="truncate font-medium text-[color:var(--calendar-task-text)]">
-                  {task.title}
-                </span>
+                <span className="truncate font-medium text-foreground">{task.title}</span>
               </div>
             ))}
           </div>
@@ -156,30 +152,26 @@ export function CalendarDayView({
             return (
               <div
                 key={slot.hour}
-                className="flex border-b border-[var(--line)]"
+                className="flex border-b border-border"
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <div className="w-16 shrink-0 py-2 pr-2 text-right text-xs text-[var(--muted)]">
+                <div className="w-16 shrink-0 py-2 pr-2 text-right text-xs text-muted-foreground">
                   {slot.label}
                 </div>
                 <div
                   className={`min-h-[50px] flex-1 py-1 pl-2 transition-colors ${
-                    isDragOver ? 'bg-[var(--accent-soft)]' : ''
+                    isDragOver ? 'bg-accent' : ''
                   }`}
                 >
                   {slotTasks.map((task) => (
                     <div
                       key={task.id}
-                      className={`calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
-                        task.taskType || 'assignment'
-                      } ${task.completed ? 'beacon-task-completed line-through' : ''} mb-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm`}
+                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${task.completed ? 'line-through opacity-60' : ''}`}
                     >
-                      <span className="truncate font-medium text-[color:var(--calendar-task-text)]">
-                        {task.title}
-                      </span>
-                      <span className="text-xs text-[color:var(--calendar-task-meta)]">
+                      <span className="truncate font-medium text-foreground">{task.title}</span>
+                      <span className="text-xs text-muted-foreground">
                         {formatCalendarTaskTimeLabel(task)}
                       </span>
                     </div>

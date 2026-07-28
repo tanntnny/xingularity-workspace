@@ -1,6 +1,8 @@
 import * as React from 'react'
-import { ArrowUp, LoaderCircle } from 'lucide-react'
+import { ArrowUp, LoaderCircle } from '../ui/icons'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/button'
+import { Textarea } from '../ui/textarea'
 
 export interface PromptInputMessage {
   text: string
@@ -29,10 +31,7 @@ export const PromptInput = React.forwardRef<
     <PromptInputContext.Provider value={{ onSubmit }}>
       <form
         ref={ref}
-        className={cn(
-          'workspace-subtle-surface rounded-lg p-2',
-          className
-        )}
+        className={cn('rounded-lg border bg-card p-3 text-card-foreground', className)}
         onSubmit={handleSubmit}
         {...props}
       >
@@ -67,11 +66,11 @@ export const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(({ className, ...props }, ref) => (
-  <textarea
+  <Textarea
     ref={ref}
     name="prompt-input-message"
     className={cn(
-      'min-h-[96px] w-full resize-none bg-transparent px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]',
+      'min-h-[96px] w-full resize-none bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground',
       className
     )}
     {...props}
@@ -104,10 +103,12 @@ export function PromptInputButton({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>): React.ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       className={cn(
-        'workspace-subtle-control inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line)] px-3 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--accent)]',
+        'border border-input bg-card text-foreground inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition hover:text-primary',
         className
       )}
       {...props}
@@ -125,17 +126,18 @@ export function PromptInputSubmit({
 }): React.ReactElement {
   const busy = status === 'submitted' || status === 'streaming'
   return (
-    <button
+    <Button
       type="submit"
+      size="icon"
       disabled={disabled || busy}
       className={cn(
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent)] text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50',
         className
       )}
       {...props}
     >
       {busy ? <LoaderCircle size={16} className="animate-spin" /> : <ArrowUp size={16} />}
-    </button>
+    </Button>
   )
 }
 

@@ -1,4 +1,4 @@
-import { ArrowRightToLine, Command, Option } from 'lucide-react'
+import { ArrowRightToLine, Command, Option } from './icons'
 import { HTMLAttributes, ReactElement, ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 
@@ -61,7 +61,7 @@ export function Kbd({ className, ...props }: HTMLAttributes<HTMLElement>): React
   return (
     <kbd
       className={cn(
-        'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] px-1.5 text-[10px] font-medium leading-none text-[var(--muted)] whitespace-nowrap',
+        'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-md border border-border bg-muted px-1.5 text-xs font-medium leading-none text-muted-foreground whitespace-nowrap',
         className
       )}
       {...props}
@@ -84,7 +84,7 @@ function ShortcutSymbol({
       <span
         aria-label={shortcut.ariaLabel}
         className={cn(
-          'inline-flex min-w-[0.5rem] items-center justify-center text-[0.9em] leading-none [&_svg]:shrink-0',
+          'inline-flex min-w-[0.5rem] items-center justify-center text-xs leading-none [&_svg]:shrink-0',
           className
         )}
       >
@@ -97,7 +97,7 @@ function ShortcutSymbol({
     <span
       aria-label={keyName}
       className={cn(
-        'inline-flex min-w-[0.5rem] items-center justify-center text-[0.9em] leading-none',
+        'inline-flex min-w-[0.5rem] items-center justify-center text-xs leading-none',
         className
       )}
     >
@@ -106,15 +106,18 @@ function ShortcutSymbol({
   )
 }
 
+type ShortcutProps = HTMLAttributes<HTMLElement> & {
+  [key: `data-${string}`]: string | number | undefined
+  keyClassName?: string
+  keys?: readonly ShortcutKey[]
+}
+
 export function Shortcut({
   className,
   keyClassName,
   keys,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & {
-  keyClassName?: string
-  keys?: readonly ShortcutKey[]
-}): ReactElement | null {
+}: ShortcutProps): ReactElement | null {
   if (!keys?.length) {
     return null
   }

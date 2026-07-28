@@ -10,7 +10,7 @@ import {
   Target,
   Trash2,
   X
-} from 'lucide-react'
+} from './ui/icons'
 import {
   CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
@@ -22,7 +22,6 @@ import {
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
@@ -31,6 +30,8 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger
 } from './ui/context-menu'
+import { Shortcut } from './ui/kbd'
+import { Button } from './ui/button'
 import {
   Dialog,
   DialogActionButton,
@@ -41,7 +42,7 @@ import {
   DialogHeader,
   DialogTitle
 } from './ui/dialog'
-import { Select } from './ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 
 interface TaskContextMenuProps {
@@ -348,11 +349,16 @@ export function TaskContextMenu({
                 Schedule to {selectedDate}
               </ContextMenuItem>
             )}
-            <ContextMenuDestructiveItem onClick={() => onDelete(task.id)}>
+            <ContextMenuItem
+              className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+              onClick={() => onDelete(task.id)}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
-              <ContextMenuShortcut keys={['cmd', 'backspace']} />
-            </ContextMenuDestructiveItem>
+              <ContextMenuShortcut>
+                <Shortcut keys={['cmd', 'backspace']} />
+              </ContextMenuShortcut>
+            </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       )}
@@ -367,7 +373,7 @@ export function TaskContextMenu({
             type="time"
             value={timeInputValue}
             onChange={(event) => setTimeInputValue(event.target.value)}
-            className="calendar-dialog-field w-full rounded-lg border px-3 py-2 text-sm text-[var(--text)] outline-none"
+            className=" w-full rounded-lg border px-3 py-2 text-sm text-foreground outline-none"
           />
           <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
             <DialogCloseAction label="Close time dialog" />
@@ -400,26 +406,26 @@ export function TaskContextMenu({
                     key={reminder.id}
                     className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
                       reminder.enabled
-                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                        : 'border-[var(--line)] bg-[var(--panel-2)] opacity-70'
+                        ? 'border-ring bg-accent'
+                        : 'border-border bg-muted opacity-70'
                     }`}
                   >
                     <button
                       type="button"
                       onClick={() => handleToggleReminder(reminder.id)}
-                      className="flex items-center gap-1.5 text-[var(--text)]"
+                      className="flex items-center gap-1.5 text-foreground"
                     >
                       {reminder.enabled ? (
-                        <BellRing size={12} className="text-amber-500" />
+                        <BellRing size={12} className="text-muted-foreground" />
                       ) : (
-                        <Bell size={12} className="text-[var(--muted)]" />
+                        <Bell size={12} className="text-muted-foreground" />
                       )}
                       {formatReminderLabel(reminder)}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleRemoveReminder(reminder.id)}
-                      className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--panel)] hover:text-red-500"
+                      className="rounded p-0.5 text-muted-foreground hover:bg-card hover:text-destructive"
                       title="Remove reminder"
                     >
                       <X size={12} />
@@ -428,11 +434,11 @@ export function TaskContextMenu({
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-[var(--muted)]">No reminders yet.</p>
+              <p className="text-xs text-muted-foreground">No reminders yet.</p>
             )}
 
-            <div className="border-t border-[var(--line)] pt-2">
-              <div className="mb-2 text-xs text-[var(--muted)]">Add reminder</div>
+            <div className="border-t border-border pt-2">
+              <div className="mb-2 text-xs text-muted-foreground">Add reminder</div>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -442,27 +448,26 @@ export function TaskContextMenu({
                   onChange={(event) =>
                     setNewReminderValue(Math.max(1, Number(event.target.value) || 1))
                   }
-                  className="calendar-dialog-field w-16 rounded-lg border px-2 py-1 text-xs text-[var(--text)] outline-none"
+                  className=" w-16 rounded-lg border px-2 py-1 text-xs text-foreground outline-none"
                 />
                 <Select
                   value={newReminderType}
-                  onChange={(event) =>
-                    setNewReminderType(event.target.value as 'minutes' | 'hours' | 'days')
+                  onValueChange={(value) =>
+                    setNewReminderType(value as 'minutes' | 'hours' | 'days')
                   }
-                  className="calendar-dialog-field flex-1 text-xs"
-                  contentClassName="calendar-dialog-selection-menu"
                 >
-                  <option value="minutes">minutes</option>
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
+                  <SelectTrigger className=" flex-1 text-xs">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">minutes</SelectItem>
+                    <SelectItem value="hours">hours</SelectItem>
+                    <SelectItem value="days">days</SelectItem>
+                  </SelectContent>
                 </Select>
-                <button
-                  type="button"
-                  onClick={handleAddReminder}
-                  className="workspace-action-button calendar-dialog-action inline-flex h-7 rounded-full px-2.5 text-xs font-medium"
-                >
+                <Button type="button" onClick={handleAddReminder} variant="outline" size="sm">
                   Add
-                </button>
+                </Button>
               </div>
             </div>
           </div>

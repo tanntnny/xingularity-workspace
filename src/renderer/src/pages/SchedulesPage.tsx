@@ -1,4 +1,4 @@
-import { ReactElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BookOpen,
   CalendarClock,
@@ -13,7 +13,7 @@ import {
   AlertCircle,
   Eye,
   SlidersHorizontal
-} from 'lucide-react'
+} from '../components/ui/icons'
 import type { RendererVaultApi } from '../../../shared/types'
 import type {
   ScheduleJob,
@@ -42,7 +42,7 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
-  WorkspaceActionButton,
+  WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup
 } from '../components/ui/document-workspace'
@@ -57,7 +57,18 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
-import { Select } from '../components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '../components/ui/select'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Switch } from '../components/ui/switch'
+import { Textarea } from '../components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 interface SchedulesPageProps {
@@ -146,17 +157,17 @@ function emptyJob(): Omit<ScheduleJob, 'id' | 'createdAt' | 'updatedAt'> {
 function statusIcon(status: RunStatus | undefined): ReactElement {
   switch (status) {
     case 'running':
-      return <Loader2 size={13} className="animate-spin text-blue-500" />
+      return <Loader2 size={13} className="animate-spin text-primary" />
     case 'success':
-      return <CheckCircle2 size={13} className="text-green-500" />
+      return <CheckCircle2 size={13} className="text-primary" />
     case 'error':
-      return <XCircle size={13} className="text-red-500" />
+      return <XCircle size={13} className="text-destructive" />
     case 'review':
-      return <Eye size={13} className="text-amber-500" />
+      return <Eye size={13} className="text-muted-foreground" />
     case 'cancelled':
-      return <AlertCircle size={13} className="text-[var(--muted)]" />
+      return <AlertCircle size={13} className="text-muted-foreground" />
     default:
-      return <Circle size={13} className="text-[var(--muted)]" />
+      return <Circle size={13} className="text-muted-foreground" />
   }
 }
 
@@ -534,15 +545,15 @@ export function SchedulesPage({
           <DocumentWorkspaceMainHeader
             breadcrumb={
               <Breadcrumb>
-                <BreadcrumbList className="text-[var(--muted)]">
+                <BreadcrumbList className="text-muted-foreground">
                   <BreadcrumbItem>
-                    <BreadcrumbPage className="text-sm text-[var(--muted)]">
+                    <BreadcrumbPage className="text-sm text-muted-foreground">
                       Schedules
                     </BreadcrumbPage>
                   </BreadcrumbItem>
-                  <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                  <BreadcrumbSeparator className="text-muted-foreground" />
                   <BreadcrumbItem>
-                    <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-[var(--text)]">
+                    <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
                       {selectedJob?.name ?? 'Run History'}
                     </BreadcrumbPage>
                   </BreadcrumbItem>
@@ -552,13 +563,13 @@ export function SchedulesPage({
             actions={
               <WorkspaceHeaderActions>
                 <WorkspaceHeaderActionGroup>
-                  <WorkspaceActionButton
+                  <WorkspaceIconButton
                     onClick={onOpenDocumentation}
                     title="Schedule guide"
                     aria-label="Schedule guide"
                     icon={<BookOpen size={18} />}
                   />
-                  <WorkspaceActionButton
+                  <WorkspaceIconButton
                     onClick={() => {
                       if (selectedJobId) {
                         handleOpenEditDrawer(selectedJobId)
@@ -570,7 +581,7 @@ export function SchedulesPage({
                     aria-label="Open schedule drawer"
                     icon={<SlidersHorizontal size={18} />}
                   />
-                  <WorkspaceActionButton
+                  <WorkspaceIconButton
                     onClick={() => void handleRunNow()}
                     disabled={!canRunNow}
                     title="Run now"
@@ -587,115 +598,67 @@ export function SchedulesPage({
               </WorkspaceHeaderActions>
             }
           />
-          {/* <div className="border-b border-[var(--line)] px-3 py-3">
-            {jobs.length === 0 ? (
-              <div className="flex flex-col gap-3 text-sm text-[var(--muted)]">
-                <p>No schedules yet. Create one to get started.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  <span>Schedule</span>
-                  <button
-                    type="button"
-                    onClick={handleNewJob}
-                    className="inline-flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-[10px] font-medium hover:border-[var(--accent)]"
-                  >
-                    <Plus size={12} />
-                    New
-                  </button>
-                </div>
-                <select
-                  className="rounded border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                  value={selectedJobId ?? jobs[0]?.id ?? ''}
-                  onChange={(e) => setSelectedJobId(e.target.value)}
-                >
-                  {jobs.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedJob && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                    <div className="flex items-center gap-1">
-                      {statusIcon(selectedJob.lastStatus)}
-                      <span>{statusLabel(selectedJob.lastStatus)}</span>
-                    </div>
-                    {selectedJob.lastRunAt && (
-                      <span className="text-[var(--muted)]">
-                        • Last run {formatRelativeTime(selectedJob.lastRunAt)}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditDrawer(selectedJob.id)}
-                      className="ml-auto inline-flex items-center rounded border border-[var(--line)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div> */}
           <DocumentWorkspaceMainContent className="overflow-y-auto">
             {!selectedJobId ? (
-              <div className="p-4 text-sm text-[var(--muted)]">
+              <div className="p-4 text-sm text-muted-foreground">
                 Select or create a schedule to view run history.
               </div>
             ) : runs.length === 0 ? (
-              <div className="p-4 text-sm text-[var(--muted)]">
+              <div className="p-4 text-sm text-muted-foreground">
                 No runs yet. Click &ldquo;Run Now&rdquo; to test this schedule.
               </div>
             ) : (
               <div className="flex flex-col">
-                <div className="border-b border-[var(--line)] px-3 py-2">
-                  <select
-                    className="w-full rounded border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--text)] outline-none"
+                <div className="border-b border-border px-3 py-2">
+                  <Select
                     value={selectedRunId ?? runs[0]?.id ?? ''}
-                    onChange={(e) => setSelectedRunId(e.target.value)}
+                    onValueChange={setSelectedRunId}
                   >
-                    {runs.map((run) => (
-                      <option key={run.id} value={run.id}>
-                        {new Date(run.startedAt).toLocaleString()} — {statusLabel(run.status)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select run" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {runs.map((run) => (
+                        <SelectItem key={run.id} value={run.id}>
+                          {new Date(run.startedAt).toLocaleString()} — {statusLabel(run.status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {selectedRun && (
                   <div className="flex flex-col gap-0">
-                    <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
                       {statusIcon(selectedRun.status)}
-                      <span className="text-xs font-medium text-[var(--text)]">
+                      <span className="text-xs font-medium text-foreground">
                         {statusLabel(selectedRun.status)}
                       </span>
-                      <span className="ml-auto text-xs text-[var(--muted)]">
+                      <span className="ml-auto text-xs text-muted-foreground">
                         {formatRelativeTime(selectedRun.startedAt)}
                       </span>
                     </div>
 
                     {selectedRun.errorMessage && (
-                      <div className="border-b border-[var(--line)] bg-red-50 px-3 py-2.5 dark:bg-red-950/30">
-                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                      <div className="border-b border-border bg-destructive/10 px-3 py-2.5">
+                        <p className="text-xs font-semibold text-destructive dark:text-destructive">
                           Error
                         </p>
-                        <p className="mt-0.5 break-words text-xs text-red-600 dark:text-red-400">
+                        <p className="mt-0.5 break-words text-xs text-destructive dark:text-destructive">
                           {selectedRun.errorMessage}
                         </p>
                       </div>
                     )}
 
                     {selectedRun.status === 'review' && selectedRun.proposedActions.length > 0 && (
-                      <div className="border-b border-[var(--line)] px-3 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                      <div className="border-b border-border px-3 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                           Pending Review
                         </p>
                         <ul className="mt-1.5 space-y-1">
                           {selectedRun.proposedActions.map((action, i) => (
-                            <li key={i} className="text-xs text-[var(--text)]">
-                              <span className="mr-1 rounded bg-[var(--panel-3)] px-1 py-0.5 font-mono text-[10px] text-[var(--muted)]">
+                            <li key={i} className="text-xs text-foreground">
+                              <span className="mr-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-muted-foreground">
                                 {action.type}
                               </span>
                               {describeAction(action)}
@@ -703,38 +666,38 @@ export function SchedulesPage({
                           ))}
                         </ul>
                         <div className="mt-2.5 flex gap-2">
-                          <button
+                          <Button
                             type="button"
+                            size="sm"
                             onClick={() => void handleApplyActions(selectedRun.id)}
-                            className="flex items-center gap-1 rounded border border-green-500 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-400"
+                            className="gap-1"
                           >
                             <CheckCircle2 size={11} />
                             Apply all
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => void handleDismissRun(selectedRun.id)}
-                            className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--muted)] hover:border-[var(--accent)]"
+                            className="gap-1"
                           >
                             <XCircle size={11} />
                             Dismiss
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )}
 
                     {selectedRun.appliedActions.length > 0 && (
-                      <div className="border-b border-[var(--line)] px-3 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      <div className="border-b border-border px-3 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Actions Applied
                         </p>
                         <ul className="mt-1.5 space-y-1">
                           {selectedRun.appliedActions.map((action, i) => (
-                            <li
-                              key={i}
-                              className="flex items-start gap-1 text-xs text-[var(--text)]"
-                            >
-                              <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-green-500" />
+                            <li key={i} className="flex items-start gap-1 text-xs text-foreground">
+                              <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-primary" />
                               {describeAction(action)}
                             </li>
                           ))}
@@ -743,11 +706,11 @@ export function SchedulesPage({
                     )}
 
                     {selectedRun.stdout && (
-                      <div className="border-b border-[var(--line)] px-3 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      <div className="border-b border-border px-3 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Output
                         </p>
-                        <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--panel-2)] p-2 font-mono text-[10px] leading-relaxed text-[var(--text)]">
+                        <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 font-mono text-xs leading-relaxed text-foreground">
                           {selectedRun.stdout}
                         </pre>
                       </div>
@@ -755,10 +718,10 @@ export function SchedulesPage({
 
                     {selectedRun.stderr && (
                       <div className="px-3 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Stderr
                         </p>
-                        <pre className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--panel-2)] p-2 font-mono text-[10px] leading-relaxed text-red-500">
+                        <pre className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 font-mono text-xs leading-relaxed text-destructive">
                           {selectedRun.stderr}
                         </pre>
                       </div>
@@ -776,7 +739,7 @@ export function SchedulesPage({
             actions={
               <WorkspaceHeaderActions>
                 <WorkspaceHeaderActionGroup>
-                  <WorkspaceActionButton
+                  <WorkspaceIconButton
                     onClick={handleNewJob}
                     title="New schedule"
                     aria-label="New schedule"
@@ -797,12 +760,12 @@ export function SchedulesPage({
                 >
                   <WorkspacePanelSectionHeader
                     icon={<CalendarClock size={16} aria-hidden="true" />}
-                    iconContainerClassName="bg-cyan-500/12 text-cyan-500"
+                    iconContainerClassName="bg-accent text-primary"
                     heading="Schedules"
                     description={`${jobs.length} jobs configured${selectedJobId ? ' · select one to edit' : ''}`}
                   />
                   {jobs.length === 0 ? (
-                    <div className="p-1 text-sm text-[var(--muted)]">
+                    <div className="p-1 text-sm text-muted-foreground">
                       No schedules yet. Click + to create one.
                     </div>
                   ) : (
@@ -811,41 +774,42 @@ export function SchedulesPage({
                         const isActive = selectedJobId === job.id
                         const itemRevealProps = getRevealItemProps(`schedule:${job.id}`)
                         return (
-                          <button
+                          <Button
                             key={job.id}
                             ref={itemRevealProps.ref}
                             style={itemRevealProps.style}
                             type="button"
+                            variant={isActive ? 'secondary' : 'ghost'}
                             onClick={() => setSelectedJobId(job.id)}
                             data-active={isActive}
-                            className={`${itemRevealProps.className} sidebar-menu-card right-panel-menu-card flex-col gap-2 px-3 py-3 text-left`}
+                            className={`${itemRevealProps.className} rounded-lg border bg-card text-card-foreground h-auto flex-col items-stretch gap-2 px-3 py-3 text-left`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-[var(--text)]">
+                                <p className="truncate text-sm font-semibold text-foreground">
                                   {job.name}
                                 </p>
-                                <p className="text-xs text-[var(--muted)]">
+                                <p className="text-xs text-muted-foreground">
                                   {TRIGGER_LABELS[job.trigger?.type ?? 'manual'] ?? 'Manual only'}
                                 </p>
                               </div>
                               <span
                                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                                  job.enabled ? 'bg-green-500' : 'bg-[var(--muted)]'
+                                  job.enabled ? 'bg-primary' : 'bg-muted-foreground'
                                 }`}
                                 title={job.enabled ? 'Enabled' : 'Disabled'}
                               />
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               {statusIcon(job.lastStatus)}
                               <span>{statusLabel(job.lastStatus)}</span>
                             </div>
                             {job.nextRunAt && (
-                              <div className="text-xs text-[var(--muted)]">
+                              <div className="text-xs text-muted-foreground">
                                 Next run {formatNextRun(job.nextRunAt)}
                               </div>
                             )}
-                          </button>
+                          </Button>
                         )
                       })}
                     </div>
@@ -859,7 +823,7 @@ export function SchedulesPage({
 
       <Drawer open={isNewDrawerOpen} onOpenChange={handleNewDrawerOpenChange}>
         <DrawerContent>
-          <DrawerHeader className="border-b border-[var(--line)] pb-4">
+          <DrawerHeader className="border-b border-border pb-4">
             <DrawerTitle>New Schedule</DrawerTitle>
             <DrawerDescription>Configure the job before saving.</DrawerDescription>
           </DrawerHeader>
@@ -871,24 +835,21 @@ export function SchedulesPage({
               handleRuntimeChange={handleNewRuntimeChange}
             />
           </div>
-          <DrawerFooter className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-4">
+          <DrawerFooter className="flex items-center justify-between gap-2 border-t border-border pt-4">
             <DrawerClose asChild>
-              <button
-                type="button"
-                className="rounded border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
-              >
+              <Button type="button" variant="outline">
                 Cancel
-              </button>
+              </Button>
             </DrawerClose>
-            <button
+            <Button
               type="button"
               onClick={() => void handleCreateNewSchedule()}
               disabled={isCreatingNew}
-              className="flex items-center gap-1.5 rounded border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-sm text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:opacity-40"
+              className="gap-1.5"
             >
               {isCreatingNew ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               Create schedule
-            </button>
+            </Button>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -898,13 +859,11 @@ export function SchedulesPage({
         onOpenChange={handleEditDrawerOpenChange}
       >
         <DrawerContent>
-          <DrawerHeader className="border-b border-[var(--line)] pb-4">
+          <DrawerHeader className="border-b border-border pb-4">
             <DrawerTitle>{draft.name ?? 'Schedule details'}</DrawerTitle>
             <DrawerDescription>Review and update this schedule.</DrawerDescription>
             {isDraftDirty && selectedJobId && (
-              <span className="text-[11px] uppercase tracking-wide text-[var(--accent)]">
-                Unsaved changes
-              </span>
+              <span className="text-xs uppercase tracking-wide text-primary">Unsaved changes</span>
             )}
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -916,49 +875,49 @@ export function SchedulesPage({
                 handleRuntimeChange={handleCurrentRuntimeChange}
               />
             ) : (
-              <div className="p-6 text-sm text-[var(--muted)]">Select a schedule to edit.</div>
+              <div className="p-6 text-sm text-muted-foreground">Select a schedule to edit.</div>
             )}
           </div>
-          <DrawerFooter className="flex items-center justify-between gap-2 border-t border-[var(--line)] pt-4">
+          <DrawerFooter className="flex items-center justify-between gap-2 border-t border-border pt-4">
             <DrawerClose asChild>
-              <button
-                type="button"
-                className="rounded border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:border-[var(--accent)]"
-              >
+              <Button type="button" variant="outline">
                 Close
-              </button>
+              </Button>
             </DrawerClose>
             <div className="flex items-center gap-2">
               {canDelete && (
-                <button
+                <Button
                   type="button"
+                  variant="destructive"
+                  size="icon"
                   onClick={() => void handleDelete()}
-                  className="flex items-center justify-center rounded border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm hover:border-[var(--danger)] hover:text-[var(--danger)]"
                   title="Delete schedule"
+                  aria-label="Delete schedule"
                 >
                   <Trash2 size={16} />
-                </button>
+                </Button>
               )}
               {canRunNow && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => void handleRunNow()}
                   disabled={isRunning}
-                  className="flex items-center gap-1.5 rounded border border-[var(--line)] bg-[var(--panel-2)] px-3 py-1.5 text-sm hover:border-[var(--accent)] disabled:opacity-50"
+                  className="gap-1.5"
                 >
                   {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                   Run
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 type="button"
                 onClick={() => void handleSave()}
                 disabled={isSaving || !isDraftDirty || !selectedJobId}
-                className="flex items-center gap-1.5 rounded border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-sm text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:opacity-40"
+                className="gap-1.5"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 Save changes
-              </button>
+              </Button>
             </div>
           </DrawerFooter>
         </DrawerContent>
@@ -980,79 +939,82 @@ function ScheduleForm({
   togglePermission,
   handleRuntimeChange
 }: ScheduleFormProps): ReactElement {
-  const outputModeName = useId()
   const permissions = draft.permissions ?? []
   const triggerType = draft.trigger?.type ?? 'manual'
   const outputMode = draft.outputMode ?? 'review_before_apply'
 
   return (
     <div className="flex flex-col gap-0">
-      <section className="border-b border-[var(--line)] px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <section className="border-b border-border px-5 py-4">
+        <label
+          htmlFor="schedule-name"
+          className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        >
           Name
         </label>
-        <input
+        <Input
+          id="schedule-name"
           type="text"
           maxLength={200}
           value={draft.name ?? ''}
           onChange={(e) => updateDraft('name', e.target.value)}
           placeholder="My Schedule"
-          className="mt-1.5 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          className="mt-1.5"
         />
         <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={draft.enabled}
-            onClick={() => updateDraft('enabled', !draft.enabled)}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
-              draft.enabled ? 'bg-green-500' : 'bg-[var(--line-strong)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-                draft.enabled ? 'translate-x-4' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
-          <span className="text-xs text-[var(--muted)]">
+          <Switch
+            checked={draft.enabled}
+            onCheckedChange={(checked) => updateDraft('enabled', checked)}
+            aria-label="Enable schedule"
+          />
+          <span className="text-xs text-muted-foreground">
             {draft.enabled ? 'Enabled' : 'Disabled'}
           </span>
         </div>
       </section>
 
-      <section className="border-b border-[var(--line)] px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <section className="border-b border-border px-5 py-4">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Trigger
         </label>
         <Select
-          className="mt-1.5"
           value={triggerType}
-          onChange={(e) =>
+          onValueChange={(value) =>
             updateDraft('trigger', {
               ...draft.trigger,
-              type: e.target.value as TriggerType
+              type: value as TriggerType
             })
           }
         >
-          {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((type) => (
-            <option key={type} value={type}>
-              {TRIGGER_LABELS[type]}
-            </option>
-          ))}
+          <SelectTrigger className="mt-1.5 w-full">
+            <SelectValue placeholder="Select trigger" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((type) => (
+              <SelectItem key={type} value={type}>
+                {TRIGGER_LABELS[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
 
         {triggerType === 'daily' && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="text-xs text-[var(--muted)]">Time</label>
-            <input
+            <label htmlFor="schedule-trigger-time" className="text-xs text-muted-foreground">
+              Time
+            </label>
+            <Input
+              id="schedule-trigger-time"
               type="time"
               value={draft.trigger?.time ?? '09:00'}
               onChange={(e) => updateDraft('trigger', { ...draft.trigger!, time: e.target.value })}
-              className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
+              className="w-auto"
             />
-            <label className="text-xs text-[var(--muted)]">Timezone</label>
-            <input
+            <label htmlFor="schedule-trigger-timezone" className="text-xs text-muted-foreground">
+              Timezone
+            </label>
+            <Input
+              id="schedule-trigger-timezone"
               type="text"
               placeholder="e.g. America/New_York"
               maxLength={60}
@@ -1063,15 +1025,18 @@ function ScheduleForm({
                   timezone: e.target.value || undefined
                 })
               }
-              className="w-48 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
+              className="w-48"
             />
           </div>
         )}
 
         {triggerType === 'every' && (
           <div className="mt-3 flex items-center gap-3">
-            <label className="text-xs text-[var(--muted)]">Every</label>
-            <input
+            <label htmlFor="schedule-trigger-interval" className="text-xs text-muted-foreground">
+              Every
+            </label>
+            <Input
+              id="schedule-trigger-interval"
               type="number"
               min={1}
               max={10080}
@@ -1082,16 +1047,19 @@ function ScheduleForm({
                   intervalMinutes: parseInt(e.target.value, 10)
                 })
               }
-              className="w-24 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
+              className="w-24"
             />
-            <span className="text-xs text-[var(--muted)]">minutes</span>
+            <span className="text-xs text-muted-foreground">minutes</span>
           </div>
         )}
 
         {triggerType === 'cron' && (
           <div className="mt-3 flex items-center gap-3">
-            <label className="text-xs text-[var(--muted)]">Expression</label>
-            <input
+            <label htmlFor="schedule-trigger-expression" className="text-xs text-muted-foreground">
+              Expression
+            </label>
+            <Input
+              id="schedule-trigger-expression"
               type="text"
               placeholder="0 9 * * 1-5"
               maxLength={100}
@@ -1102,115 +1070,111 @@ function ScheduleForm({
                   expression: e.target.value || undefined
                 })
               }
-              className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
+              className="flex-1"
             />
           </div>
         )}
       </section>
 
-      <section className="border-b border-[var(--line)] px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <section className="border-b border-border px-5 py-4">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Permissions
         </label>
-        <p className="mt-1 text-xs text-[var(--muted)]">Grant the schedule access it needs.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Grant the schedule access it needs.</p>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {ALL_PERMISSIONS.map((perm) => {
             const active = permissions.includes(perm)
             return (
-              <button
+              <Button
                 type="button"
                 key={perm}
+                variant={active ? 'secondary' : 'outline'}
                 onClick={() => togglePermission(perm)}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                  active
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                    : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-                }`}
+                aria-pressed={active}
+                className="h-auto justify-start gap-2 px-3 py-2 text-left whitespace-normal"
               >
                 {active ? (
                   <CheckCircle2 size={14} />
                 ) : (
-                  <Circle size={14} className="text-[var(--muted)]" />
+                  <Circle size={14} className="text-muted-foreground" />
                 )}
                 <span className="truncate">{PERMISSION_LABELS[perm]}</span>
-              </button>
+              </Button>
             )
           })}
         </div>
       </section>
 
-      <section className="border-b border-[var(--line)] px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <section className="border-b border-border px-5 py-4">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Output handling
         </label>
-        <div className="mt-3 flex flex-col gap-2">
+        <ToggleGroup
+          type="single"
+          value={outputMode}
+          onValueChange={(value) => {
+            if (value) {
+              updateDraft('outputMode', value as ScheduleJob['outputMode'])
+            }
+          }}
+          className="mt-3 flex flex-col items-stretch gap-2"
+          aria-label="Output handling"
+        >
           {(['review_before_apply', 'auto_apply'] as const).map((mode) => (
-            <label
+            <ToggleGroupItem
               key={mode}
-              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                outputMode === mode
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                  : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-              }`}
+              value={mode}
+              variant="outline"
+              className="h-auto justify-start gap-2 rounded-lg px-3 py-2 text-left whitespace-normal"
             >
-              <input
-                type="radio"
-                className="hidden"
-                name={outputModeName}
-                value={mode}
-                checked={outputMode === mode}
-                onChange={() => updateDraft('outputMode', mode)}
-              />
               <span className="font-medium">
                 {mode === 'auto_apply' ? 'Apply actions automatically' : 'Review before applying'}
               </span>
-              <span className="ml-1 text-xs text-[var(--muted)]">
+              <span className="ml-1 text-xs text-muted-foreground">
                 {mode === 'auto_apply'
                   ? '— actions are applied immediately'
                   : '— actions wait for your approval'}
               </span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </section>
 
-      <section className="border-b border-[var(--line)] px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <section className="border-b border-border px-5 py-4">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Runtime
         </label>
         <div className="mt-2 flex flex-wrap gap-2">
           {(['javascript', 'python'] as const).map((rt) => (
-            <button
+            <Button
               key={rt}
               type="button"
+              variant={(draft.runtime ?? 'javascript') === rt ? 'secondary' : 'outline'}
               onClick={() => handleRuntimeChange(rt)}
-              className={`flex flex-1 min-w-[120px] flex-col rounded-lg border px-3 py-2 text-left transition-colors ${
-                (draft.runtime ?? 'javascript') === rt
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                  : 'border-[var(--line)] bg-[var(--panel-2)] text-[var(--text)] hover:border-[var(--accent)]'
-              }`}
+              aria-pressed={(draft.runtime ?? 'javascript') === rt}
+              className="h-auto min-w-[120px] flex-1 flex-col items-start px-3 py-2 text-left whitespace-normal"
             >
               <span className="text-sm font-semibold capitalize">{rt}</span>
-              <span className="text-xs text-[var(--muted)]">
+              <span className="text-xs text-muted-foreground">
                 {rt === 'javascript'
                   ? '— run JavaScript inside Xingularity'
                   : '— run Python via runtime'}
               </span>
-            </button>
+            </Button>
           ))}
         </div>
       </section>
 
       <section className="px-5 py-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Code
         </label>
-        <textarea
+        <Textarea
           value={draft.code ?? ''}
           onChange={(e) => updateDraft('code', e.target.value)}
           spellCheck={false}
           rows={18}
-          className="mt-2 w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-3 font-mono text-xs leading-relaxed text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          className="mt-2 min-h-80 resize-y font-mono text-xs leading-relaxed"
           placeholder="Write your script here…"
         />
       </section>

@@ -29,7 +29,8 @@ describe('ActionButtonGroup', () => {
     )
 
     expect(markup).toContain('aria-label="Calendar period navigation"')
-    expect(markup).toContain('workspace-action-button-group')
+    expect(markup).toContain('role="group"')
+    expect(markup).toContain('rounded-md')
     expect(markup).toContain('h-7')
     expect(markup).toContain('Current month')
   })
@@ -50,7 +51,7 @@ describe('ActionButtonGroup', () => {
       )
     )
 
-    expect(markup).toContain('workspace-action-button-group')
+    expect(markup).toContain('role="group"')
     expect(markup).toContain('h-8')
   })
 })

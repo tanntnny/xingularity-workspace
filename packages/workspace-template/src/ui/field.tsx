@@ -13,13 +13,13 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
   ({ className, label, description, htmlFor, error, children, ...props }, ref) => (
     <div ref={ref} className={cn('grid w-full gap-1.5', className)} {...props}>
       {label ? (
-        <label htmlFor={htmlFor} className="text-sm text-[var(--muted)]">
+        <label htmlFor={htmlFor} className="text-sm font-medium leading-none">
           {label}
         </label>
       ) : null}
       {children}
-      {description ? <p className="text-xs text-[var(--muted)]">{description}</p> : null}
-      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
     </div>
   )
 )

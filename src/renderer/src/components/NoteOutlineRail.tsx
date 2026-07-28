@@ -9,7 +9,6 @@ interface NoteOutlineRailProps {
 
 const OUTLINE_PROXIMITY_RADIUS_PX = 36
 const OUTLINE_MAX_OPACITY_BOOST = 0.28
-const OUTLINE_MAX_ACCENT_MIX = 100
 const OUTLINE_ROD_TRANSITION = 'background-color 140ms ease-out, opacity 140ms ease-out'
 
 function getOutlineIndent(level: number): number {
@@ -72,13 +71,11 @@ function getOutlineRodStyle(input: {
     1,
     getOutlineOpacity(level) + proximityStrength * OUTLINE_MAX_OPACITY_BOOST
   )
-  const accentMix = Math.round(proximityStrength * OUTLINE_MAX_ACCENT_MIX)
-
   return {
     marginLeft: `${indent}px`,
     height: '1px',
     opacity,
-    backgroundColor: `color-mix(in srgb, var(--accent) ${accentMix}%, var(--line-strong))`,
+    backgroundColor: 'var(--primary)',
     transition: OUTLINE_ROD_TRANSITION
   }
 }
@@ -145,7 +142,7 @@ export function NoteOutlineRail({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-64 text-left">
-                  <span className="font-semibold text-[var(--accent)]">H{item.level}</span>
+                  <span className="font-semibold text-primary">H{item.level}</span>
                   <span className="ml-2">{item.label}</span>
                 </TooltipContent>
               </Tooltip>

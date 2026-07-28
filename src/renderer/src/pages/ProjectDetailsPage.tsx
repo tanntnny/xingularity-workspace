@@ -20,7 +20,7 @@ import {
   Plus,
   Tag,
   Trash2
-} from 'lucide-react'
+} from '../components/ui/icons'
 import { type NativeMenuItemDescriptor, type NoteListItem } from '../../../shared/types'
 import { generateProjectTag, isProjectTag } from '../../../shared/noteTags'
 import { InlineEditableText } from '../components/InlineEditableText'
@@ -30,13 +30,14 @@ import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Calendar } from '../components/ui/calendar'
+import { Checkbox } from '../components/ui/checkbox'
+import { Input } from '../components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
-import { TabMenu, TabMenuItem } from '../components/ui/tab-menu'
+import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger
@@ -406,7 +407,7 @@ export function ProjectDetailsPage({
   }
 
   return (
-    <div className="workspace-clear-surface h-full overflow-auto">
+    <div className="bg-transparent h-full overflow-auto">
       <div className="flex flex-col gap-3 px-8 py-5">
         <div className="flex min-w-0 items-center gap-1">
           <NoteShapeIcon icon={project.icon} size={20} className="shrink-0" />
@@ -415,8 +416,8 @@ export function ProjectDetailsPage({
             onCommit={onRename}
             editToken={nameEditToken}
             displayAs="h2"
-            displayClassName="m-0 min-w-0 cursor-text truncate text-4xl font-bold text-[var(--text)] hover:text-[var(--accent)]"
-            inputClassName="m-0 min-w-0 flex-1 border-0 bg-transparent text-4xl font-bold text-[var(--text)] outline-none"
+            displayClassName="m-0 min-w-0 cursor-text truncate text-4xl font-bold text-foreground hover:text-primary"
+            inputClassName="m-0 min-w-0 flex-1 border-0 bg-transparent text-4xl font-bold text-foreground outline-none"
             title="Click to rename"
           />
         </div>
@@ -425,15 +426,15 @@ export function ProjectDetailsPage({
           value={project.summary}
           onCommit={onUpdateSummary}
           displayAs="p"
-          displayClassName="cursor-text text-sm text-[var(--muted)] hover:text-[var(--accent)]"
-          inputClassName="border-0 bg-transparent text-sm text-[var(--muted)] outline-none"
+          displayClassName="cursor-text text-sm text-muted-foreground hover:text-primary"
+          inputClassName="border-0 bg-transparent text-sm text-muted-foreground outline-none"
           title="Click to edit details"
           placeholder="Add project details here."
           allowEmpty={true}
           normalize={(next) => next.trim()}
         />
 
-        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -449,7 +450,7 @@ export function ProjectDetailsPage({
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs space-y-1.5 text-left">
-                <div className="font-semibold text-[var(--text)]">
+                <div className="font-semibold text-foreground">
                   Status: {PROJECT_STATUS_META[healthSummary.status].label}
                 </div>
                 <div>{healthSummary.reason}</div>
@@ -479,32 +480,34 @@ export function ProjectDetailsPage({
         </div>
       </div>
 
-      <div className="workspace-clear-surface flex shrink-0 flex-col gap-2 px-8 py-2">
-        <TabMenu
-          variant="inline-accent"
-          className="project-tab-menu"
+      <div className="bg-transparent flex shrink-0 flex-col gap-2 px-8 py-2">
+        <ToggleGroup
+          type="single"
+          className="w-full"
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as 'milestones' | 'notes')}
+          onValueChange={(value) => value && setActiveTab(value as 'milestones' | 'notes')}
+          variant="outline"
+          aria-label="Project sections"
         >
-          <TabMenuItem variant="inline-accent" className="project-tab-menu-item" value="milestones">
+          <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="milestones">
             <span className="inline-flex items-center gap-1.5">
               <Flag size={14} aria-hidden="true" />
               Milestones
             </span>
-          </TabMenuItem>
-          <TabMenuItem variant="inline-accent" className="project-tab-menu-item" value="notes">
+          </ToggleGroupItem>
+          <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="notes">
             <span className="inline-flex items-center gap-1.5">
               <FileText size={14} aria-hidden="true" />
               Project Notes
             </span>
-          </TabMenuItem>
-        </TabMenu>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {activeTab === 'notes' && (
         <section className="px-8 pb-6">
           <div className="p-4">
-            <Table className="rounded-xl">
+            <Table className="rounded-lg">
               <TableHeader>
                 <TableRow>
                   <SortableTableHead
@@ -530,7 +533,7 @@ export function ProjectDetailsPage({
                     </span>
                   </SortableTableHead>
                   <TableHead className="w-[120px] text-center">
-                    <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
+                    <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-muted-foreground">
                       ACTIONS
                     </span>
                   </TableHead>
@@ -540,7 +543,7 @@ export function ProjectDetailsPage({
                 {projectNoteRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3}>
-                      <div className="py-2 text-sm text-[var(--muted)]">
+                      <div className="py-2 text-sm text-muted-foreground">
                         No notes tagged for this project yet.
                       </div>
                     </TableCell>
@@ -557,13 +560,14 @@ export function ProjectDetailsPage({
                         }
                       >
                         <TableCell className="p-0">
-                          <button
+                          <Button
                             type="button"
-                            className="flex h-full w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:text-[var(--accent)]"
+                            variant="ghost"
+                            className="h-auto w-full justify-start gap-2 px-3 py-2 text-left"
                             onClick={() => onOpenNote(row.relPath)}
                           >
                             <span>{row.name}</span>
-                          </button>
+                          </Button>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -577,9 +581,11 @@ export function ProjectDetailsPage({
                         </TableCell>
                         <TableCell className="px-2 py-1 text-left">
                           {useNativeMenus ? (
-                            <button
+                            <Button
                               type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground"
                               aria-label="Open note actions"
                               onClick={(event) => {
                                 void openProjectNoteMenu(
@@ -590,17 +596,19 @@ export function ProjectDetailsPage({
                               }}
                             >
                               <MoreHorizontal size={14} />
-                            </button>
+                            </Button>
                           ) : (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button
+                                <Button
                                   type="button"
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground"
                                   aria-label="Open note actions"
                                 >
                                   <MoreHorizontal size={14} />
-                                </button>
+                                </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-44">
                                 <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
@@ -620,16 +628,17 @@ export function ProjectDetailsPage({
                     </ContextMenuContent>
                   </ContextMenu>
                 ))}
-                <TableRow className="hover:bg-[var(--accent-soft)]/60">
+                <TableRow className="hover:bg-accent/60">
                   <TableCell colSpan={3} className="p-0">
-                    <button
+                    <Button
                       type="button"
-                      className="flex h-full w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                      variant="ghost"
+                      className="h-auto w-full justify-start gap-2 px-3 py-2 text-left text-sm text-muted-foreground"
                       onClick={onCreateProjectNote}
                     >
                       <Plus size={14} className="shrink-0" />
                       <span>New note</span>
-                    </button>
+                    </Button>
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -641,15 +650,17 @@ export function ProjectDetailsPage({
       {activeTab === 'milestones' && (
         <section className="px-8 pb-8">
           <div className="p-4">
-            <Table className="rounded-xl">
+            <Table className="rounded-lg">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[48px] px-2 text-center">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
                       className={cn(
-                        'inline-flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-[var(--panel)] hover:text-[var(--text)]',
-                        hideCompletedItems ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+                        'h-7 w-7',
+                        hideCompletedItems ? 'text-primary' : 'text-muted-foreground'
                       )}
                       onClick={() => setHideCompletedItems((current) => !current)}
                       aria-label={
@@ -658,7 +669,7 @@ export function ProjectDetailsPage({
                       title={hideCompletedItems ? 'Show completed items' : 'Hide completed items'}
                     >
                       <Funnel size={12} aria-hidden="true" />
-                    </button>
+                    </Button>
                   </TableHead>
                   <SortableTableHead
                     className="w-[68%]"
@@ -683,7 +694,7 @@ export function ProjectDetailsPage({
                     </span>
                   </SortableTableHead>
                   <TableHead className="w-[120px] text-center">
-                    <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-[var(--muted)]">
+                    <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-muted-foreground">
                       ACTIONS
                     </span>
                   </TableHead>
@@ -703,9 +714,9 @@ export function ProjectDetailsPage({
                             milestoneRowRefs.current[milestone.id] = node
                           }}
                           className={cn(
-                            'bg-[var(--accent-soft)] transition-colors',
+                            'bg-accent transition-colors',
                             highlightedMilestoneId === milestone.id
-                              ? 'ring-1 ring-inset ring-[var(--accent)] bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--panel))]'
+                              ? 'ring-1 ring-inset ring-primary bg-accent'
                               : undefined
                           )}
                           onContextMenu={
@@ -715,9 +726,11 @@ export function ProjectDetailsPage({
                           }
                         >
                           <TableCell className="px-3 py-2 text-center">
-                            <button
+                            <Button
                               type="button"
-                              className="inline-flex h-6 w-6 items-center justify-center rounded text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 onToggleMilestoneCollapsed(milestone.id)
@@ -733,7 +746,7 @@ export function ProjectDetailsPage({
                               ) : (
                                 <ChevronDown size={14} />
                               )}
-                            </button>
+                            </Button>
                           </TableCell>
                           <TableCell className="p-0">
                             <div className="flex min-w-0">
@@ -741,13 +754,13 @@ export function ProjectDetailsPage({
                                 value={milestone.title}
                                 onCommit={(nextTitle) => onRenameMilestone(milestone.id, nextTitle)}
                                 displayAs="span"
-                                displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-left font-semibold text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                                inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-[var(--text)] outline-none"
+                                displayClassName="block h-full min-w-[120px] w-full cursor-text px-3 py-2 text-left font-semibold text-foreground transition-colors hover:text-primary"
+                                inputClassName="h-full min-w-[120px] w-full border-0 bg-transparent px-3 py-2 font-semibold text-foreground outline-none"
                                 title="Click to rename milestone"
                                 renderDisplay={(value) => (
                                   <>
                                     {value}
-                                    <span className="ml-2 text-[0.82em] font-medium text-[var(--muted)]">
+                                    <span className="ml-2 text-xs font-medium text-muted-foreground">
                                       {milestoneProgressPercent}% complete
                                     </span>
                                   </>
@@ -767,19 +780,23 @@ export function ProjectDetailsPage({
                           </TableCell>
                           <TableCell className="px-2 py-1">
                             <div className="flex items-center justify-start gap-1">
-                              <button
+                              <Button
                                 type="button"
-                                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(milestone.priority)}`}
+                                variant="ghost"
+                                size="icon"
+                                className={`h-5 w-5 shrink-0 ${subtaskPriorityButtonClass(milestone.priority)}`}
                                 onClick={() => onCycleMilestonePriority(milestone.id)}
                                 title={`Priority: ${formatSubtaskPriority(milestone.priority)}. Click to change priority.`}
                                 aria-label={`Change priority for ${milestone.title}`}
                               >
                                 <Flag size={13} />
-                              </button>
+                              </Button>
                               {useNativeMenus ? (
-                                <button
+                                <Button
                                   type="button"
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground"
                                   aria-label="Open milestone actions"
                                   onClick={async (event) => {
                                     await openMilestoneMenu(
@@ -793,17 +810,19 @@ export function ProjectDetailsPage({
                                   }}
                                 >
                                   <MoreHorizontal size={14} />
-                                </button>
+                                </Button>
                               ) : (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <button
+                                    <Button
                                       type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground"
                                       aria-label="Open milestone actions"
                                     >
                                       <MoreHorizontal size={14} />
-                                    </button>
+                                    </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-44">
                                     {onDuplicateMilestone ? (
@@ -836,14 +855,16 @@ export function ProjectDetailsPage({
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               )}
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground"
                                 onClick={() => startCreatingSubtask(milestone.id)}
                                 aria-label="Add subtask"
                               >
                                 <Plus size={14} />
-                              </button>
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -868,12 +889,13 @@ export function ProjectDetailsPage({
                           Make unscheduled
                         </ContextMenuItem>
                         <ContextMenuSeparator />
-                        <ContextMenuDestructiveItem
+                        <ContextMenuItem
+                          className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
                           onClick={() => _onRemoveMilestone(milestone.id)}
                         >
                           <Trash2 />
                           Delete
-                        </ContextMenuDestructiveItem>
+                        </ContextMenuItem>
                       </ContextMenuContent>
                       {milestone.collapsed
                         ? null
@@ -894,13 +916,12 @@ export function ProjectDetailsPage({
                                 >
                                   <TableCell className="px-3 py-2 text-center">
                                     <div className="flex items-center justify-center">
-                                      <input
-                                        type="checkbox"
+                                      <Checkbox
                                         checked={subtask.completed}
-                                        onChange={() => {
+                                        onCheckedChange={() => {
                                           onToggleSubtask(milestone.id, subtask.id)
                                         }}
-                                        className="h-4 w-4 rounded border-[var(--line-strong)]"
+                                        aria-label={`Mark ${subtask.title} as complete`}
                                       />
                                     </div>
                                   </TableCell>
@@ -912,34 +933,38 @@ export function ProjectDetailsPage({
                                           onRenameSubtask(milestone.id, subtask.id, nextTitle)
                                         }}
                                         displayAs="span"
-                                        displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-[var(--text)] transition-colors hover:text-[var(--accent)]"
-                                        inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-[var(--text)] outline-none"
+                                        displayClassName="block h-full min-w-[140px] w-full cursor-text px-1 py-0 text-sm text-foreground transition-colors hover:text-primary"
+                                        inputClassName="h-full min-w-[140px] w-full border-0 bg-transparent px-1 py-0 text-sm text-foreground outline-none"
                                         title="Click to rename subtask"
                                       />
                                     </div>
                                   </TableCell>
                                   <TableCell className="w-[1%] whitespace-nowrap px-1 py-0">
-                                    <span className="block h-full w-full px-1.5 py-2 text-sm text-[var(--muted)]">
+                                    <span className="block h-full w-full px-1.5 py-2 text-sm text-muted-foreground">
                                       -
                                     </span>
                                   </TableCell>
                                   <TableCell className="px-2 py-1 text-left">
                                     <div className="flex items-center justify-start gap-1">
-                                      <button
+                                      <Button
                                         type="button"
+                                        variant="ghost"
+                                        size="icon"
                                         onClick={() =>
                                           onCycleSubtaskPriority(milestone.id, subtask.id)
                                         }
-                                        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${subtaskPriorityButtonClass(subtask.priority)}`}
+                                        className={`h-5 w-5 shrink-0 ${subtaskPriorityButtonClass(subtask.priority)}`}
                                         title={`Priority: ${formatSubtaskPriority(subtask.priority)}. Click to change priority.`}
                                         aria-label={`Change priority for ${subtask.title}`}
                                       >
                                         <Flag size={13} />
-                                      </button>
+                                      </Button>
                                       {useNativeMenus ? (
-                                        <button
+                                        <Button
                                           type="button"
-                                          className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-muted-foreground"
                                           aria-label="Open subtask actions"
                                           onClick={async (event) => {
                                             await openSubtaskMenu(
@@ -954,17 +979,19 @@ export function ProjectDetailsPage({
                                           }}
                                         >
                                           <MoreHorizontal size={14} />
-                                        </button>
+                                        </Button>
                                       ) : (
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                            <button
+                                            <Button
                                               type="button"
-                                              className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--accent)]"
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 text-muted-foreground"
                                               aria-label="Open subtask actions"
                                             >
                                               <MoreHorizontal size={14} />
-                                            </button>
+                                            </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent align="end" className="w-44">
                                             {onDuplicateSubtask ? (
@@ -1020,20 +1047,21 @@ export function ProjectDetailsPage({
                                 {onDuplicateSubtask || onCopySubtaskLink ? (
                                   <ContextMenuSeparator />
                                 ) : null}
-                                <ContextMenuDestructiveItem
+                                <ContextMenuItem
+                                  className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
                                   onClick={() => onRemoveSubtask(milestone.id, subtask.id)}
                                 >
                                   <Trash2 />
                                   Delete
-                                </ContextMenuDestructiveItem>
+                                </ContextMenuItem>
                               </ContextMenuContent>
                             </ContextMenu>
                           ))}
                       {milestone.collapsed || !isCreatingSubtask ? null : (
-                        <TableRow className="hover:bg-[var(--accent-soft)]/60">
+                        <TableRow className="hover:bg-accent/60">
                           <TableCell colSpan={4} className="p-0">
-                            <div className="flex items-center gap-2 rounded-md border border-dashed border-[var(--accent)] px-3 py-2">
-                              <input
+                            <div className="flex items-center gap-2 rounded-md border border-dashed border-primary px-3 py-2">
+                              <Input
                                 type="text"
                                 value={draftTitle}
                                 onChange={(event) =>
@@ -1054,22 +1082,24 @@ export function ProjectDetailsPage({
                                 }}
                                 placeholder="Subtask title"
                                 autoFocus
-                                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--text)] outline-none"
+                                className="min-w-0 flex-1 border-0 bg-transparent shadow-none"
                               />
-                              <button
+                              <Button
                                 type="button"
-                                className="rounded-md border border-[var(--line)] px-2 py-1 text-xs"
+                                variant="outline"
+                                size="sm"
                                 onClick={() => submitSubtask(milestone.id)}
                               >
                                 Add
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                className="rounded-md border border-[var(--line)] px-2 py-1 text-xs"
+                                variant="outline"
+                                size="sm"
                                 onClick={() => cancelCreatingSubtask(milestone.id)}
                               >
                                 Cancel
-                              </button>
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1077,11 +1107,11 @@ export function ProjectDetailsPage({
                     </ContextMenu>
                   )
                 })}
-                <TableRow className="hover:bg-[var(--accent-soft)]/60">
+                <TableRow className="hover:bg-accent/60">
                   <TableCell colSpan={4} className="p-0">
                     {isCreatingMilestone ? (
-                      <div className="grid gap-2 rounded-md border border-dashed border-[var(--accent)] px-3 py-2 md:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
-                        <input
+                      <div className="grid gap-2 rounded-md border border-dashed border-primary px-3 py-2 md:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
+                        <Input
                           type="text"
                           value={newMilestoneTitle}
                           onChange={(event) => setNewMilestoneTitle(event.target.value)}
@@ -1099,7 +1129,7 @@ export function ProjectDetailsPage({
                           }}
                           placeholder="Milestone title"
                           autoFocus
-                          className="min-w-0 border-0 bg-transparent text-sm text-[var(--text)] outline-none"
+                          className="min-w-0 border-0 bg-transparent shadow-none"
                         />
                         <MilestoneCalendarPicker
                           value={newMilestoneDueDate}
@@ -1107,16 +1137,13 @@ export function ProjectDetailsPage({
                           aria-label="New milestone due date"
                           className="h-8 justify-start text-xs"
                         />
-                        <button
-                          type="button"
-                          className="rounded-md border border-[var(--line)] px-2 py-1 text-xs"
-                          onClick={submitMilestone}
-                        >
+                        <Button type="button" variant="outline" size="sm" onClick={submitMilestone}>
                           Add
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
-                          className="rounded-md border border-[var(--line)] px-2 py-1 text-xs"
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setNewMilestoneTitle('')
                             setNewMilestoneDueDate(toIsoDate(new Date()))
@@ -1124,16 +1151,17 @@ export function ProjectDetailsPage({
                           }}
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     ) : (
-                      <button
+                      <Button
                         type="button"
-                        className="flex h-full w-full items-center px-3 py-2 text-left text-sm text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+                        variant="ghost"
+                        className="h-auto w-full justify-start px-3 py-2 text-left text-sm text-muted-foreground"
                         onClick={() => setIsCreatingMilestone(true)}
                       >
                         + New milestone
-                      </button>
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -1167,7 +1195,7 @@ function MilestoneCalendarPicker({
           size="sm"
           className={cn(
             'w-full min-w-[130px] justify-start text-left font-normal',
-            !date && 'text-[var(--muted-foreground)]',
+            !date && 'text-muted-foreground',
             className
           )}
           aria-label={ariaLabel}
@@ -1176,14 +1204,15 @@ function MilestoneCalendarPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <div className="border-b border-[var(--line)] p-1">
-          <button
+        <div className="border-b border-border p-1">
+          <Button
             type="button"
-            className="flex w-full items-center justify-start rounded-sm px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+            variant="ghost"
+            className="h-auto w-full justify-start rounded-sm px-3 py-2 text-sm text-muted-foreground"
             onClick={() => onChange(undefined)}
           >
             Unscheduled milestone
-          </button>
+          </Button>
         </div>
         <Calendar
           mode="single"
@@ -1269,12 +1298,12 @@ function buildSubtaskMenuItems(options: {
 
 function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): string {
   if (priority === 'high') {
-    return 'border-[color:rgba(239,68,68,0.35)] bg-[color:rgba(239,68,68,0.12)] text-[color:#b91c1c] hover:border-[color:rgba(239,68,68,0.55)]'
+    return 'border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive'
   }
   if (priority === 'medium') {
-    return 'border-[color:rgba(245,158,11,0.35)] bg-[color:rgba(245,158,11,0.12)] text-[color:#b45309] hover:border-[color:rgba(245,158,11,0.55)]'
+    return 'border-border bg-secondary text-secondary-foreground hover:border-primary'
   }
-  return 'border-[color:rgba(34,197,94,0.35)] bg-[color:rgba(34,197,94,0.12)] text-[color:#15803d] hover:border-[color:rgba(34,197,94,0.55)]'
+  return 'border-border bg-muted text-muted-foreground hover:border-primary'
 }
 
 type ProjectNoteSortKey = 'name' | 'tags'

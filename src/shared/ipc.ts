@@ -11,7 +11,6 @@ export const IPC_CHANNELS = {
   desktopOpenPath: 'desktop:open-path',
   desktopOpenWarpAtNotePath: 'desktop:open-warp-at-note-path',
   uiShowNativeMenu: 'ui:show-native-menu',
-  uiApplyPerformanceMode: 'ui:apply-performance-mode',
   uiReloadApp: 'ui:reload-app',
   listNotes: 'files:list-notes',
   listNoteTree: 'files:list-note-tree',

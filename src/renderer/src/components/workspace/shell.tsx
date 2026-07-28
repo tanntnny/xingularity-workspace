@@ -8,8 +8,7 @@ export {
   DocumentWorkspacePanelContent as WorkspaceSidePanelContent,
   WorkspaceHeaderActions as WorkspaceToolbar,
   WorkspaceHeaderActionGroup as WorkspaceToolbarGroup,
-  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider,
-  WorkspaceActionButton as WorkspaceIconButton
+  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider
 } from '../ui/document-workspace'
 
 export {
@@ -23,5 +22,5 @@ export {
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
-  WorkspaceActionButton
+  WorkspaceIconButton
 } from '../ui/document-workspace'

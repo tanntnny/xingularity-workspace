@@ -138,13 +138,13 @@ describe('dispatchWorkspaceShellShortcut', () => {
   it('selects tabs while typing in an editable target', () => {
     const typingTarget = { kind: 'input' }
     const bindings = createBindings({
-      isTypingTarget: (target) => target === typingTarget
+      isTypingTarget: (target) => target === (typingTarget as unknown as EventTarget)
     })
     const event = createEvent({
       key: '2',
       code: 'Digit2',
       metaKey: true,
-      target: typingTarget as EventTarget
+      target: typingTarget as unknown as EventTarget
     })
 
     const handled = dispatchWorkspaceShellShortcut(event, bindings)

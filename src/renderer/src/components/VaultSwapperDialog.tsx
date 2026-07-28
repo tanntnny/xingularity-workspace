@@ -1,11 +1,12 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FolderOpen, HardDrive, Plus, Star, X } from 'lucide-react'
+import { FolderOpen, HardDrive, Plus, Star, X } from './ui/icons'
 import {
   type RendererVaultApi,
   type SavedVaultState,
   type VaultOpenResult
 } from '../../../shared/types'
 import { Pallete, PalleteInput, PalleteSearchBar } from './ui/pallete'
+import { Button } from './ui/button'
 import { cn } from '../lib/utils'
 
 interface VaultSwapperDialogProps {
@@ -21,9 +22,9 @@ interface VaultSwapperDialogProps {
 const paletteRowClassName =
   'relative flex min-w-0 items-center gap-2 select-none rounded-lg px-2 py-1.5 text-sm outline-none transition-[background-color,color,box-shadow] disabled:pointer-events-none disabled:opacity-50'
 
-const paletteRowHoverClassName = 'hover:bg-[var(--accent-color)]'
+const paletteRowHoverClassName = 'hover:bg-accent'
 
-const paletteRowSelectedClassName = 'bg-[var(--accent-color)]'
+const paletteRowSelectedClassName = 'bg-accent'
 
 type VaultPaletteSelectionItem =
   | {
@@ -343,7 +344,7 @@ export function VaultSwapperDialog({
     <Pallete
       open={open}
       aria-label="Manage vaults"
-      className="command-palette-top-aligned !top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
+      className="!top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={(nextOpen) => {
         onOpenChange(nextOpen)
       }}
@@ -361,13 +362,13 @@ export function VaultSwapperDialog({
 
         <div className="max-h-[360px] overflow-y-auto p-1">
           {loading && !savedVaultState ? (
-            <div className="rounded-lg px-3 py-3 text-sm text-[var(--muted)]">
+            <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
               Loading saved vaults...
             </div>
           ) : null}
 
           {showNoSavedVaultsHint ? (
-            <div className="rounded-lg px-3 py-3 text-sm text-[var(--muted)]">
+            <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
               No saved vaults yet. Add an existing vault or create a new one to start switching.
             </div>
           ) : null}
@@ -392,18 +393,20 @@ export function VaultSwapperDialog({
                 className={cn(
                   'group flex items-center gap-1 rounded-lg',
                   isCurrent
-                    ? 'bg-[var(--panel-2)]'
+                    ? 'bg-muted'
                     : isSelected
                       ? paletteRowSelectedClassName
                       : paletteRowHoverClassName
                 )}
               >
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   ref={(node) => {
                     rowRefs.current.set(selectionKey, node)
                   }}
-                  className={cn(paletteRowClassName, 'flex-1 text-left')}
+                  className={cn(paletteRowClassName, 'h-auto flex-1 justify-start text-left')}
                   onClick={() => {
                     setSelectedItemKey(selectionKey)
                     void handleSwitch(vault.rootPath)
@@ -413,25 +416,27 @@ export function VaultSwapperDialog({
                     isCurrent ? `${vault.name} is the current vault` : `Switch to ${vault.name}`
                   }
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)]">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center text-primary">
                     <HardDrive size={16} />
                   </div>
                   <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-                    <span className="shrink-0 font-medium text-[var(--text)]">{vault.name}</span>
-                    <span className="truncate text-[var(--muted)]">
+                    <span className="shrink-0 font-medium text-foreground">{vault.name}</span>
+                    <span className="truncate text-muted-foreground">
                       {detailParts.length > 0 ? `${detailParts.join(' · ')} · ` : ''}
                       {vault.rootPath}
                     </span>
                   </div>
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   className={cn(
                     paletteRowClassName,
                     vault.isFavorite
-                      ? 'h-9 w-9 shrink-0 justify-center px-0 text-amber-500 hover:text-amber-400 group-hover:text-amber-400'
-                      : 'h-9 w-9 shrink-0 justify-center px-0 text-[var(--muted)] hover:text-amber-500 group-hover:text-amber-500'
+                      ? 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
+                      : 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
                   )}
                   onClick={() => {
                     setSelectedItemKey(selectionKey)
@@ -448,15 +453,17 @@ export function VaultSwapperDialog({
                 >
                   <Star
                     size={16}
-                    className={vault.isFavorite ? 'fill-current text-amber-500' : ''}
+                    className={vault.isFavorite ? 'fill-current text-muted-foreground' : ''}
                   />
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   className={cn(
                     paletteRowClassName,
-                    'h-9 w-9 shrink-0 justify-center px-0 text-[var(--muted)] hover:text-[var(--text)] group-hover:text-[var(--text)]'
+                    'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-foreground group-hover:text-foreground'
                   )}
                   onClick={() => {
                     setSelectedItemKey(selectionKey)
@@ -466,13 +473,13 @@ export function VaultSwapperDialog({
                   aria-label={isRemoving ? `Removing ${vault.name}` : `Remove ${vault.name}`}
                 >
                   <X size={16} />
-                </button>
+                </Button>
               </div>
             )
           })}
 
           {filteredVaults.length > 0 && filteredActions.length > 0 ? (
-            <div className="mx-1 my-1 h-px bg-[color:color-mix(in_srgb,var(--accent-line)_18%,var(--line))]" />
+            <div className="mx-1 my-1 h-px bg-border" />
           ) : null}
 
           {filteredActions.map((action) => {
@@ -480,16 +487,18 @@ export function VaultSwapperDialog({
             const selectionKey = `action:${action.key}`
             const isSelected = selectionKey === selectedItemKey
             return (
-              <button
+              <Button
                 key={action.key}
                 type="button"
+                variant="ghost"
+                size="sm"
                 ref={(node) => {
                   rowRefs.current.set(selectionKey, node)
                 }}
                 className={cn(
                   paletteRowClassName,
                   isSelected ? paletteRowSelectedClassName : paletteRowHoverClassName,
-                  'w-full text-left'
+                  'h-auto w-full justify-start text-left'
                 )}
                 onClick={() => {
                   setSelectedItemKey(selectionKey)
@@ -497,16 +506,16 @@ export function VaultSwapperDialog({
                 }}
                 disabled={busyKey !== null}
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center text-[var(--accent)]">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center text-primary">
                   <Icon size={16} />
                 </div>
-                <span className="truncate font-medium text-[var(--text)]">{action.label}</span>
-              </button>
+                <span className="truncate font-medium text-foreground">{action.label}</span>
+              </Button>
             )
           })}
 
           {showEmptyState ? (
-            <div className="rounded-lg px-3 py-3 text-sm text-[var(--muted)]">
+            <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
               No vaults or actions match your search.
             </div>
           ) : null}

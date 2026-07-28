@@ -47,14 +47,12 @@ export const useVaultStore = create<VaultState>((set) => ({
     favoriteNotePaths: [],
     favoriteProjectIds: [],
     profile: {
-      name: '',
-      color: 'atmosphere'
+      name: ''
     },
     ai: {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
-    performanceModeEnabled: false,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

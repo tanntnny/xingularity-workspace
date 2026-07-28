@@ -17,12 +17,11 @@ import {
   Plus,
   X,
   Clock
-} from 'lucide-react'
+} from './ui/icons'
 import { CalendarTask, CalendarItem, TaskPriority, TaskReminder } from '../../../shared/types'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
@@ -32,9 +31,9 @@ import {
   ContextMenuTrigger
 } from './ui/context-menu'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import { SelectionMenu, type SelectionMenuOption } from './ui/selection-menu'
-import { Select } from './ui/select'
-import { TabMenuCountBadge } from './ui/tab-menu'
+import { Shortcut } from './ui/kbd'
+import { Badge } from './ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 
 type TaskFilterMode = 'all' | 'pending' | 'completed'
 type ItemTypeFilter = 'all' | 'tasks' | 'milestones' | 'subtasks'
@@ -78,7 +77,7 @@ export function CalendarTaskList({
   onToggleSubtask
 }: CalendarTaskListProps): ReactElement {
   const neutralChipClass =
-    'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)]'
+    'inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground'
 
   const [filterMode, setFilterMode] = useState<TaskFilterMode>('all')
   const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('all')
@@ -331,39 +330,35 @@ export function CalendarTaskList({
   const renderCountLabel = (label: string, count: number): ReactElement => (
     <span className="inline-flex items-center gap-2">
       <span>{label}</span>
-      <TabMenuCountBadge count={count} />
+      <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1 text-xs">
+        {count}
+      </Badge>
     </span>
   )
-  const itemTypeOptions: SelectionMenuOption[] = [
-    { value: 'all', label: renderCountLabel('All', totalItems) },
-    { value: 'tasks', label: renderCountLabel('Tasks', tasks.length) },
-    { value: 'milestones', label: renderCountLabel('Milestones', milestonesCount) },
-    { value: 'subtasks', label: renderCountLabel('Subtasks', subtasksCount) }
+  const itemTypeOptions = [
+    { value: 'all', label: 'All', count: totalItems },
+    { value: 'tasks', label: 'Tasks', count: tasks.length },
+    { value: 'milestones', label: 'Milestones', count: milestonesCount },
+    { value: 'subtasks', label: 'Subtasks', count: subtasksCount }
   ]
-  const taskFilterOptions: SelectionMenuOption[] = [
+  const taskFilterOptions = [
     {
       value: 'all',
-      label: renderCountLabel(
-        'All',
-        tasks.length + calendarItems.filter((i) => i.type !== 'task').length
-      )
+      label: 'All',
+      count: tasks.length + calendarItems.filter((i) => i.type !== 'task').length
     },
     {
       value: 'pending',
-      label: renderCountLabel(
-        'Pending',
-        pendingCount + calendarItems.filter((i) => !i.completed).length
-      )
+      label: 'Pending',
+      count: pendingCount + calendarItems.filter((i) => !i.completed).length
     },
     {
       value: 'completed',
-      label: renderCountLabel(
-        'Completed',
-        completedCount + calendarItems.filter((i) => i.completed).length
-      )
+      label: 'Completed',
+      count: completedCount + calendarItems.filter((i) => i.completed).length
     }
   ]
-  const sortOptions: SelectionMenuOption[] = [
+  const sortOptions = [
     { value: 'name', label: 'Name' },
     { value: 'created', label: 'Created' },
     { value: 'status', label: 'Status' },
@@ -374,43 +369,57 @@ export function CalendarTaskList({
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-auto">
       <div className="flex flex-wrap items-center gap-2">
-        <SelectionMenu
+        <Select
           value={itemTypeFilter}
           onValueChange={(value) => setItemTypeFilter(value as ItemTypeFilter)}
-          options={itemTypeOptions}
-          selectedLabel={formatItemTypeFilter(itemTypeFilter)}
-          variant="toolbar"
-          icon={<Eye size={14} aria-hidden="true" />}
-          aria-label={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
-          title={`Show calendar items: ${formatItemTypeFilter(itemTypeFilter)}`}
-          className="min-w-[8.5rem]"
-        />
-        <SelectionMenu
+        >
+          <SelectTrigger className="min-w-[8.5rem]" aria-label="Show calendar items">
+            <Eye size={14} aria-hidden="true" />
+            <SelectValue placeholder={formatItemTypeFilter(itemTypeFilter)} />
+          </SelectTrigger>
+          <SelectContent>
+            {itemTypeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {renderCountLabel(option.label, option.count)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={filterMode}
           onValueChange={(value) => setFilterMode(value as TaskFilterMode)}
-          options={taskFilterOptions}
-          selectedLabel={formatTaskFilterMode(filterMode)}
-          variant="toolbar"
-          icon={<Funnel size={14} aria-hidden="true" />}
-          aria-label={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
-          title={`Filter calendar items: ${formatTaskFilterMode(filterMode)}`}
-          className="min-w-[8.5rem]"
-        />
-        <SelectionMenu
+        >
+          <SelectTrigger className="min-w-[8.5rem]" aria-label="Filter calendar items">
+            <Funnel size={14} aria-hidden="true" />
+            <SelectValue placeholder={formatTaskFilterMode(filterMode)} />
+          </SelectTrigger>
+          <SelectContent>
+            {taskFilterOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {renderCountLabel(option.label, option.count)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={sortField}
           onValueChange={(value) => selectSortField(value as TaskSortField)}
-          options={sortOptions}
-          selectedLabel={formatTaskSortField(sortField)}
-          variant="toolbar"
-          icon={<ArrowUpDown size={14} aria-hidden="true" />}
-          aria-label={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
-          title={`Sort calendar items: ${formatTaskSortLabel(sortField, sortDirection)}`}
-          className="min-w-[8rem]"
-        />
+        >
+          <SelectTrigger className="min-w-[8rem]" aria-label="Sort calendar items">
+            <ArrowUpDown size={14} aria-hidden="true" />
+            <SelectValue placeholder={formatTaskSortField(sortField)} />
+          </SelectTrigger>
+          <SelectContent>
+            {sortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <button
           type="button"
-          data-no-ripple
-          className="workspace-subtle-control inline-flex h-8 items-center gap-2 rounded-lg border border-[var(--line)] px-3 text-sm text-[var(--text)] transition-colors hover:text-[var(--text)]"
+          className="border border-input bg-background text-foreground inline-flex h-8 items-center gap-2 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:text-foreground"
           aria-label={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
           title={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
           onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
@@ -425,7 +434,7 @@ export function CalendarTaskList({
           </span>
         </button>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text)]">
+      <h2 className="text-lg font-semibold text-foreground">
         Items for {formatCalendarDateHeading(selectedDate)}
       </h2>
 
@@ -433,7 +442,7 @@ export function CalendarTaskList({
       {(itemTypeFilter === 'all' || itemTypeFilter === 'tasks') && filteredTasks.length > 0 && (
         <>
           {itemTypeFilter === 'all' && (
-            <h3 className="text-sm font-medium text-[var(--muted)]">Tasks</h3>
+            <h3 className="text-sm font-medium text-muted-foreground">Tasks</h3>
           )}
           {filteredTasks.map((task) => {
             const isEditing = editingTaskId === task.id
@@ -462,10 +471,10 @@ export function CalendarTaskList({
                       event.preventDefault()
                       onDelete(task.id)
                     }}
-                    className={`flex w-full cursor-grab items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors active:cursor-grabbing ${
+                    className={`flex w-full cursor-grab items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors active:cursor-grabbing ${
                       task.completed
-                        ? 'border-[var(--line)] bg-[var(--panel-2)] opacity-70'
-                        : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                        ? 'border-border bg-muted opacity-70'
+                        : 'border-border bg-muted hover:border-primary'
                     }`}
                   >
                     <button
@@ -473,8 +482,8 @@ export function CalendarTaskList({
                       onClick={() => onToggle(task.id)}
                       className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                         task.completed
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
-                          : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card hover:border-primary'
                       }`}
                       title={task.completed ? 'Mark as pending' : 'Mark as complete'}
                     >
@@ -496,13 +505,13 @@ export function CalendarTaskList({
                               cancelEdit()
                             }
                           }}
-                          className="w-full rounded-md border border-[var(--accent-line)] bg-[var(--panel)] px-2 py-1 text-base font-medium text-[var(--text)] outline-none"
+                          className="w-full rounded-md border border-ring bg-card px-2 py-1 text-base font-medium text-foreground outline-none"
                         />
                       ) : (
                         <button
                           type="button"
                           onClick={() => startEditing(task)}
-                          className={`w-full text-left text-base font-medium text-[var(--text)] hover:text-[var(--accent)] whitespace-normal break-words ${
+                          className={`w-full text-left text-base font-medium text-foreground hover:text-primary whitespace-normal break-words ${
                             task.completed ? 'line-through' : ''
                           }`}
                           title="Click to edit"
@@ -511,7 +520,7 @@ export function CalendarTaskList({
                         </button>
                       )}
 
-                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-[var(--muted)]">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                         <span className={neutralChipClass}>
                           {task.completed ? (
                             <Check size={12} aria-hidden="true" />
@@ -538,13 +547,13 @@ export function CalendarTaskList({
                                 }
                               }}
                               autoFocus
-                              className="rounded-md border border-[var(--accent-line)] bg-[var(--panel)] px-2 py-0.5 text-xs text-[var(--text)] outline-none"
+                              className="rounded-md border border-ring bg-card px-2 py-0.5 text-xs text-foreground outline-none"
                             />
                           ) : (
                             <button
                               type="button"
                               onClick={() => setTimeEditingTaskId(task.id)}
-                              className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)] hover:border-[var(--accent)]"
+                              className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground hover:border-primary"
                               title={task.time ? 'Change time' : 'Set time'}
                             >
                               <Clock size={12} aria-hidden="true" />
@@ -558,7 +567,7 @@ export function CalendarTaskList({
                           <button
                             type="button"
                             onClick={() => setPriorityMenuTaskId(showPriorityMenu ? null : task.id)}
-                            className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] px-2 py-0.5 text-xs leading-[1.2] text-[var(--tag-neutral-text)] hover:border-[var(--accent)]"
+                            className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground hover:border-primary"
                             title="Change priority"
                           >
                             <Flag
@@ -571,7 +580,7 @@ export function CalendarTaskList({
                           {showPriorityMenu && (
                             <div
                               ref={priorityMenuRef}
-                              className="absolute left-0 top-full z-10 mt-1 w-28 rounded-lg border border-[var(--line)] bg-[var(--panel)] py-1 shadow-lg"
+                              className="absolute left-0 top-full z-10 mt-1 w-28 rounded-lg border border-border bg-card py-1 shadow-lg"
                             >
                               {(['high', 'medium', 'low'] as TaskPriority[]).map((priority) => {
                                 const config = PRIORITY_CONFIG[priority]
@@ -583,8 +592,8 @@ export function CalendarTaskList({
                                       onUpdatePriority(task.id, priority)
                                       setPriorityMenuTaskId(null)
                                     }}
-                                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--panel-2)] ${
-                                      task.priority === priority ? 'bg-[var(--accent-soft)]' : ''
+                                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted ${
+                                      task.priority === priority ? 'bg-accent' : ''
                                     }`}
                                   >
                                     <Flag size={12} style={{ color: config.color }} />
@@ -601,10 +610,10 @@ export function CalendarTaskList({
                           <button
                             type="button"
                             onClick={() => setReminderMenuTaskId(showReminderMenu ? null : task.id)}
-                            className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs leading-[1.2] hover:border-[var(--accent)] ${
+                            className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs leading-[1.2] hover:border-primary ${
                               hasReminders && enabledReminders.length > 0
-                                ? 'border-amber-500/40 bg-amber-500/10 text-amber-600'
-                                : 'border-[var(--tag-neutral-line)] bg-[var(--tag-neutral-bg)] text-[var(--tag-neutral-text)]'
+                                ? 'border-border bg-accent text-muted-foreground'
+                                : 'border-border bg-muted text-muted-foreground'
                             }`}
                             title={
                               hasReminders
@@ -622,16 +631,16 @@ export function CalendarTaskList({
                           {showReminderMenu && (
                             <div
                               ref={reminderMenuRef}
-                              className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3 shadow-lg"
+                              className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-lg"
                             >
                               <div className="mb-2 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-[var(--text)]">
+                                <span className="text-xs font-semibold text-foreground">
                                   Reminders
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => setReminderMenuTaskId(null)}
-                                  className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]"
+                                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                                 >
                                   <X size={14} />
                                 </button>
@@ -645,8 +654,8 @@ export function CalendarTaskList({
                                       key={reminder.id}
                                       className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
                                         reminder.enabled
-                                          ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
-                                          : 'border-[var(--line)] bg-[var(--panel-2)] opacity-60'
+                                          ? 'border-ring bg-accent'
+                                          : 'border-border bg-muted opacity-60'
                                       }`}
                                     >
                                       <button
@@ -654,15 +663,15 @@ export function CalendarTaskList({
                                         onClick={() =>
                                           handleToggleReminder(task.id, reminder.id, task)
                                         }
-                                        className="flex items-center gap-1.5 text-[var(--text)]"
+                                        className="flex items-center gap-1.5 text-foreground"
                                         title={
                                           reminder.enabled ? 'Disable reminder' : 'Enable reminder'
                                         }
                                       >
                                         {reminder.enabled ? (
-                                          <BellRing size={12} className="text-amber-500" />
+                                          <BellRing size={12} className="text-muted-foreground" />
                                         ) : (
-                                          <Bell size={12} className="text-[var(--muted)]" />
+                                          <Bell size={12} className="text-muted-foreground" />
                                         )}
                                         {formatReminder(reminder)}
                                       </button>
@@ -671,7 +680,7 @@ export function CalendarTaskList({
                                         onClick={() =>
                                           handleRemoveReminder(task.id, reminder.id, task)
                                         }
-                                        className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--panel)] hover:text-red-500"
+                                        className="rounded p-0.5 text-muted-foreground hover:bg-card hover:text-destructive"
                                         title="Remove reminder"
                                       >
                                         <X size={12} />
@@ -680,14 +689,16 @@ export function CalendarTaskList({
                                   ))}
                                 </div>
                               ) : (
-                                <p className="mb-3 text-xs text-[var(--muted)]">
+                                <p className="mb-3 text-xs text-muted-foreground">
                                   No reminders set. Add one below.
                                 </p>
                               )}
 
                               {/* Add new reminder form */}
-                              <div className="border-t border-[var(--line)] pt-2">
-                                <div className="mb-2 text-xs text-[var(--muted)]">Add reminder</div>
+                              <div className="border-t border-border pt-2">
+                                <div className="mb-2 text-xs text-muted-foreground">
+                                  Add reminder
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <input
                                     type="number"
@@ -699,32 +710,34 @@ export function CalendarTaskList({
                                         Math.max(1, parseInt(e.target.value) || 1)
                                       )
                                     }
-                                    className="w-16 rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                                    className="w-16 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
                                   />
                                   <Select
                                     value={newReminderType}
-                                    onChange={(e) =>
-                                      setNewReminderType(
-                                        e.target.value as 'minutes' | 'hours' | 'days'
-                                      )
+                                    onValueChange={(value) =>
+                                      setNewReminderType(value as 'minutes' | 'hours' | 'days')
                                     }
-                                    className="min-w-[7.5rem] flex-1 text-xs"
                                   >
-                                    <option value="minutes">minutes</option>
-                                    <option value="hours">hours</option>
-                                    <option value="days">days</option>
+                                    <SelectTrigger className="min-w-[7.5rem] flex-1 text-xs">
+                                      <SelectValue placeholder="Unit" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="minutes">minutes</SelectItem>
+                                      <SelectItem value="hours">hours</SelectItem>
+                                      <SelectItem value="days">days</SelectItem>
+                                    </SelectContent>
                                   </Select>
                                   <button
                                     type="button"
                                     onClick={() => handleAddReminder(task.id, task)}
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white"
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-ring bg-accent text-primary hover:bg-primary hover:text-white"
                                     title="Add reminder"
                                   >
                                     <Plus size={14} />
                                   </button>
                                 </div>
                                 {!task.time && (
-                                  <p className="mt-2 text-[10px] text-amber-600">
+                                  <p className="mt-2 text-xs text-muted-foreground">
                                     Set a time for this task to enable time-based reminders
                                   </p>
                                 )}
@@ -738,7 +751,7 @@ export function CalendarTaskList({
                     <button
                       type="button"
                       onClick={() => onDelete(task.id)}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground"
                       title="Delete task"
                     >
                       <Trash2 size={14} />
@@ -772,11 +785,16 @@ export function CalendarTaskList({
                     </ContextMenuSubContent>
                   </ContextMenuSub>
                   <ContextMenuSeparator />
-                  <ContextMenuDestructiveItem onClick={() => onDelete(task.id)}>
+                  <ContextMenuItem
+                    className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                    onClick={() => onDelete(task.id)}
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
-                    <ContextMenuShortcut keys={['cmd', 'backspace']} />
-                  </ContextMenuDestructiveItem>
+                    <ContextMenuShortcut>
+                      <Shortcut keys={['cmd', 'backspace']} />
+                    </ContextMenuShortcut>
+                  </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             )
@@ -791,15 +809,15 @@ export function CalendarTaskList({
         filteredProjectItems.length > 0 && (
           <>
             {itemTypeFilter === 'all' && (
-              <h3 className="mt-2 text-sm font-medium text-[var(--muted)]">Project Items</h3>
+              <h3 className="mt-2 text-sm font-medium text-muted-foreground">Project Items</h3>
             )}
             {filteredProjectItems.map((item) => (
               <article
                 key={`${item.type}-${item.id}`}
-                className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
+                className={`flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
                   item.completed
-                    ? 'border-[var(--line)] bg-[var(--panel-2)] opacity-70'
-                    : 'border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)]'
+                    ? 'border-border bg-muted opacity-70'
+                    : 'border-border bg-muted hover:border-primary'
                 }`}
               >
                 <button
@@ -816,10 +834,10 @@ export function CalendarTaskList({
                       onToggleSubtask(item.projectId, item.milestoneId, item.id)
                     }
                   }}
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                     item.completed
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--primary-foreground)]'
-                      : 'border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)]'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card hover:border-primary'
                   }`}
                   title={item.completed ? 'Mark as pending' : 'Mark as complete'}
                 >
@@ -828,17 +846,17 @@ export function CalendarTaskList({
 
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <span
-                    className={`text-base font-medium text-[var(--text)] whitespace-normal break-words ${
+                    className={`text-base font-medium text-foreground whitespace-normal break-words ${
                       item.completed ? 'line-through' : ''
                     }`}
                   >
                     {item.title}
                   </span>
-                  <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-[var(--muted)]">
+                  <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
                     <span
-                      className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs leading-[1.2] ${
+                      className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs leading-[1.2] ${
                         item.type === 'milestone'
-                          ? 'border-blue-500/30 bg-blue-500/10 text-blue-600'
+                          ? 'border-border bg-accent text-primary'
                           : 'border-purple-500/30 bg-purple-500/10 text-purple-600'
                       }`}
                     >
@@ -864,7 +882,7 @@ export function CalendarTaskList({
 
       {/* Empty state */}
       {filteredTasks.length === 0 && filteredProjectItems.length === 0 && (
-        <div className="p-2 text-sm text-[var(--muted)]">
+        <div className="p-3 text-sm text-muted-foreground">
           {totalItems === 0 ? 'No items for this date' : 'No items match the current filter'}
         </div>
       )}
@@ -883,12 +901,6 @@ function formatTaskFilterMode(value: TaskFilterMode): string {
   if (value === 'pending') return 'Pending'
   if (value === 'completed') return 'Completed'
   return 'All'
-}
-
-function formatTaskSortLabel(field: TaskSortField, direction: TaskSortDirection): string {
-  const label = formatTaskSortField(field)
-
-  return `${label} ${direction === 'asc' ? '↑' : '↓'}`
 }
 
 function formatTaskSortField(field: TaskSortField): string {

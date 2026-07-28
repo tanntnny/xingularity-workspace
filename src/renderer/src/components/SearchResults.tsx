@@ -1,5 +1,6 @@
 import { ReactElement } from 'react'
 import { SearchResult } from '../../../shared/types'
+import { Button } from './ui/button'
 
 interface SearchResultsProps {
   results: SearchResult[]
@@ -8,24 +9,25 @@ interface SearchResultsProps {
 
 export function SearchResults({ results, onOpen }: SearchResultsProps): ReactElement {
   if (results.length === 0) {
-    return <div className="p-5 text-sm text-[var(--muted)]">No search results</div>
+    return <div className="p-5 text-sm text-muted-foreground">No search results</div>
   }
 
   return (
     <div className="flex h-full flex-col gap-2 overflow-auto p-3.5">
       {results.map((result) => (
-        <button
+        <Button
           key={`${result.id}-${result.relPath}`}
-          className="workspace-subtle-control w-full rounded-lg border border-[var(--line)] p-2.5 text-left"
+          variant="outline"
+          className="h-auto w-full justify-start p-2.5 text-left whitespace-normal"
           onClick={() => onOpen(result.relPath)}
         >
           <div className="mb-0.5 text-base font-semibold">{result.title}</div>
-          <div className="text-xs text-[var(--muted)]">{result.relPath}</div>
-          <div className="text-xs text-[var(--muted)]">{result.snippet}</div>
-          <div className="text-xs text-[var(--muted)]">
+          <div className="text-xs text-muted-foreground">{result.relPath}</div>
+          <div className="text-xs text-muted-foreground">{result.snippet}</div>
+          <div className="text-xs text-muted-foreground">
             {result.tags.map((tag) => `#${tag}`).join(' ')}
           </div>
-        </button>
+        </Button>
       ))}
     </div>
   )

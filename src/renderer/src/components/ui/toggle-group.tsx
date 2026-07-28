@@ -7,9 +7,8 @@ import { cn } from '../../lib/utils'
 const toggleGroupVariants = cva('flex items-center justify-center gap-1', {
   variants: {
     variant: {
-      default: 'rounded-lg bg-[var(--muted-color)] p-1',
-      outline: 'border border-[var(--border)] rounded-lg',
-      pill: 'flex-wrap gap-1.5'
+      default: 'rounded-lg bg-muted p-1',
+      outline: 'rounded-lg border border-input'
     }
   },
   defaultVariants: {
@@ -18,21 +17,19 @@ const toggleGroupVariants = cva('flex items-center justify-center gap-1', {
 })
 
 const toggleGroupItemVariants = cva(
-  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         default:
-          'text-[var(--muted-foreground)] data-[state=on]:bg-[var(--background)] data-[state=on]:text-[var(--foreground)] data-[state=on]:shadow-sm hover:text-[var(--foreground)]',
+          'text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm hover:text-foreground',
         outline:
-          'border border-transparent text-[var(--muted-foreground)] data-[state=on]:border-[var(--accent-line)] data-[state=on]:bg-[var(--accent-soft)] data-[state=on]:text-[var(--foreground)] hover:bg-[var(--accent-soft)] hover:text-[var(--foreground)]',
-        pill: 'rounded-full border border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--accent)] data-[state=on]:border-[var(--accent-line)] data-[state=on]:bg-[var(--accent-soft)] data-[state=on]:text-[var(--text)]'
+          'border border-transparent text-muted-foreground data-[state=on]:border-input data-[state=on]:bg-accent data-[state=on]:text-accent-foreground hover:bg-accent hover:text-accent-foreground'
       },
       size: {
         default: 'h-9 px-3',
         sm: 'h-8 px-2 text-xs',
-        lg: 'h-10 px-4',
-        xs: 'px-2.5 py-1 text-xs'
+        lg: 'h-10 px-4'
       }
     },
     defaultVariants: {

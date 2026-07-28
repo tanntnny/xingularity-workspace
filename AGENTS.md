@@ -44,3 +44,12 @@
 ## Security & Runtime Boundaries
 - Keep filesystem, shell, and OS access in `src/main/` or `src/preload/`; do not call Node APIs directly from renderer components.
 - Respect Electron’s isolation model (`contextIsolation: true`, `nodeIntegration: false`) when adding new capabilities.
+
+# Implementation Rules
+## 1. Fixing and Editing UI
+- DO NOT fix the UI adhoc, fix at the primitive components
+- Keep the design consistent
+- Use design system principles like always use component-based UI, semantic HTML
+
+## 2. Application UI Styles
+- The fronter components always have ligher bg color

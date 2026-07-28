@@ -8,7 +8,10 @@ const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectio
   ({ className, ...props }, ref) => (
     <section
       ref={ref}
-      className={cn('sidebar-menu-card right-panel-menu-card flex-col gap-3 p-3.5', className)}
+      className={cn(
+        'flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground',
+        className
+      )}
       {...props}
     />
   )
@@ -26,29 +29,27 @@ interface WorkspacePanelSectionHeaderProps extends React.HTMLAttributes<HTMLDivE
 const WorkspacePanelSectionHeader = React.forwardRef<
   HTMLDivElement,
   WorkspacePanelSectionHeaderProps
->(
-  ({ className, icon, heading, description, actions, iconContainerClassName, ...props }, ref) => {
-    return (
-      <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={cn(
-              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[color:color-mix(in_srgb,var(--text)_10%,transparent)] text-[var(--text)]',
-              iconContainerClassName
-            )}
-          >
-            {icon}
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-[var(--text)]">{heading}</h2>
-            <p className="text-xs text-[var(--muted)]">{description}</p>
-          </div>
+>(({ className, icon, heading, description, actions, iconContainerClassName, ...props }, ref) => {
+  return (
+    <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
+      <div className="flex min-w-0 items-center gap-2">
+        <div
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground',
+            iconContainerClassName
+          )}
+        >
+          {icon}
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">{heading}</h2>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
       </div>
-    )
-  }
-)
+      {actions ? <div className="shrink-0">{actions}</div> : null}
+    </div>
+  )
+})
 WorkspacePanelSectionHeader.displayName = 'WorkspacePanelSectionHeader'
 
 export { WorkspacePanelSection, WorkspacePanelSectionHeader }

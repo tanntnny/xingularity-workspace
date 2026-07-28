@@ -1,4 +1,5 @@
 import { KeyboardEvent, ReactElement, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { Input } from './ui/input'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
 
@@ -16,8 +17,7 @@ interface InlineEditableTextProps {
   editToken?: number
 }
 
-const defaultDisplayClassName =
-  'cursor-text text-inherit transition-colors hover:text-[var(--accent)]'
+const defaultDisplayClassName = 'cursor-text text-inherit transition-colors hover:text-primary'
 const defaultInputClassName = 'm-0 min-w-0 flex-1 border-0 bg-transparent text-inherit outline-none'
 
 export function InlineEditableText({
@@ -117,7 +117,7 @@ export function InlineEditableText({
 
   if (isEditing) {
     return (
-      <input
+      <Input
         ref={inputRef}
         type="text"
         value={draftValue}

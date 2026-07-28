@@ -105,8 +105,6 @@ describe('SettingsStore', () => {
     const settings = await store.readVault(root)
 
     expect(settings.profile.name).toBe('Amy')
-    expect(settings.profile.color).toBe('atmosphere')
-    expect(settings.performanceModeEnabled).toBe(true)
     expect(settings.editorVimModeEnabled).toBe(true)
     expect(settings.editorVimKeyMappings).toEqual([
       {
@@ -128,12 +126,12 @@ describe('SettingsStore', () => {
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
     )
-    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
-      '"performanceModeEnabled": true'
-    )
-    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
-      '"color": "atmosphere"'
-    )
+    const canonicalSettings = JSON.parse(
+      await fs.readFile(path.join(root, 'settings.json'), 'utf-8')
+    ) as Record<string, unknown>
+    expect(canonicalSettings).not.toHaveProperty('performanceModeEnabled')
+    expect(canonicalSettings).not.toHaveProperty('workspaceVibrancyEnabled')
+    expect(canonicalSettings.profile).toEqual({ name: 'Amy' })
     await expect(fs.readFile(path.join(root, 'projects.json'), 'utf-8')).resolves.toContain(
       '"name": "Migration"'
     )
@@ -257,7 +255,7 @@ describe('SettingsStore', () => {
     )
   })
 
-  it('normalizes legacy non-monotone profile colors to atmosphere', async () => {
+  it('removes legacy profile colors from canonical settings', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
 
     await fs.writeFile(
@@ -283,9 +281,10 @@ describe('SettingsStore', () => {
     const store = new SettingsStore()
     const settings = await store.readVault(root)
 
-    expect(settings.profile.color).toBe('atmosphere')
-    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
-      '"color": "atmosphere"'
-    )
+    expect(settings.profile.name).toBe('Amy')
+    const canonicalSettings = JSON.parse(
+      await fs.readFile(path.join(root, 'settings.json'), 'utf-8')
+    ) as Record<string, unknown>
+    expect(canonicalSettings.profile).toEqual({ name: 'Amy' })
   })
 })

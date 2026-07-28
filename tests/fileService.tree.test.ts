@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FileService } from '../src/main/fileService'
 import {
   createEmptyExcalidrawFileDocument,
@@ -38,6 +38,7 @@ async function makeService(): Promise<{
 
 describe('FileService tree operations', () => {
   afterEach(async () => {
+    vi.restoreAllMocks()
     await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
   })
 
@@ -91,6 +92,44 @@ describe('FileService tree operations', () => {
     })
   })
 
+  it('includes notes stored in a linked directory', async () => {
+    const { rootDir, notesDir, service } = await makeService()
+    const linkedDirectoryTarget = path.join(rootDir, 'linked-directory-target')
+    await fs.mkdir(linkedDirectoryTarget)
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'shared.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Shared note')),
+      'utf-8'
+    )
+    await fs.symlink(linkedDirectoryTarget, path.join(notesDir, 'Docs'), 'dir')
+
+    const [tree, notes] = await Promise.all([service.listTree(), service.listNotes()])
+
+    expect(tree[0]).toMatchObject({
+      kind: 'folder',
+      relPath: 'Docs',
+      name: 'Docs',
+      isLinked: true,
+      children: [
+        {
+          kind: 'note',
+          relPath: 'Docs/shared.md',
+          name: 'shared.md'
+        }
+      ]
+    })
+    expect(notes.map((note) => note.relPath)).toEqual(['Docs/shared.md'])
+  })
+
+  it('does not recurse through a linked directory that points to an ancestor', async () => {
+    const { notesDir, service } = await makeService()
+    await fs.symlink(notesDir, path.join(notesDir, 'loop'), 'dir')
+
+    await expect(service.listTree()).resolves.toEqual([
+      expect.objectContaining({ kind: 'folder', relPath: 'loop', children: [] })
+    ])
+  })
+
   it('collects only nested Markdown documents in deterministic path order', async () => {
     const { notesDir, service } = await makeService()
     await fs.mkdir(path.join(notesDir, 'archive', 'nested'), { recursive: true })
@@ -107,13 +146,66 @@ describe('FileService tree operations', () => {
     await fs.writeFile(path.join(notesDir, 'archive', 'sketch.excalidraw'), '{}', 'utf-8')
     await fs.writeFile(path.join(notesDir, 'archive', 'ignored.txt'), 'ignore me', 'utf-8')
 
-    const notes = await service.listNoteDocumentsInFolder('archive')
+    const result = await service.listNoteDocumentsInFolder('archive')
 
-    expect(notes.map((note) => note.relPath)).toEqual([
+    expect(result.notes.map((note) => note.relPath)).toEqual([
       'archive/nested/alpha.md',
       'archive/zeta.md'
     ])
-    expect(notes.map((note) => note.document.markdown)).toEqual(['Alpha', 'Zeta'])
+    expect(result.notes.map((note) => note.document.markdown)).toEqual(['Alpha', 'Zeta'])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('collects nested Markdown documents from a linked folder', async () => {
+    const { rootDir, notesDir, service } = await makeService()
+    const linkedDirectoryTarget = path.join(rootDir, 'linked-directory-target')
+    await fs.mkdir(path.join(linkedDirectoryTarget, 'nested'), { recursive: true })
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'zeta.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Zeta')),
+      'utf-8'
+    )
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'nested', 'alpha.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Alpha')),
+      'utf-8'
+    )
+    await fs.symlink(linkedDirectoryTarget, path.join(notesDir, 'Docs'), 'dir')
+
+    const result = await service.listNoteDocumentsInFolder('Docs')
+
+    expect(result.notes.map((note) => note.relPath)).toEqual([
+      'Docs/nested/alpha.md',
+      'Docs/zeta.md'
+    ])
+    expect(result.notes.map((note) => note.document.markdown)).toEqual(['Alpha', 'Zeta'])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('skips unreadable Markdown documents in a linked folder with a warning', async () => {
+    const { rootDir, notesDir, service } = await makeService()
+    const linkedDirectoryTarget = path.join(rootDir, 'linked-directory-target')
+    await fs.mkdir(linkedDirectoryTarget)
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'a-unreadable.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Unreadable')),
+      'utf-8'
+    )
+    await fs.writeFile(
+      path.join(linkedDirectoryTarget, 'z-readable.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Readable')),
+      'utf-8'
+    )
+    await fs.symlink(linkedDirectoryTarget, path.join(notesDir, 'Docs'), 'dir')
+    vi.spyOn(fs, 'readFile').mockRejectedValueOnce(new Error('Permission denied'))
+
+    const result = await service.listNoteDocumentsInFolder('Docs')
+
+    expect(result.notes.map((note) => note.relPath)).toEqual(['Docs/z-readable.md'])
+    expect(result.notes.map((note) => note.document.markdown)).toEqual(['Readable'])
+    expect(result.warnings).toEqual([
+      'Skipped unreadable Markdown note Docs/a-unreadable.md: Permission denied'
+    ])
   })
 
   it('creates, renames, and deletes folders and notes by path', async () => {

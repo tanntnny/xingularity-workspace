@@ -68,7 +68,9 @@ export function ExcalidrawFileEditor({
   const [theme, setTheme] = useState<ExcalidrawTheme>(getSystemExcalidrawTheme)
   const [isLoading, setIsLoading] = useState(true)
   const [activeToolType, setActiveToolType] = useState('selection')
-  const [scene, setScene] = useState<ExcalidrawSessionScene>(createEmptyExcalidrawFileDocument().scene)
+  const [scene, setScene] = useState<ExcalidrawSessionScene>(
+    createEmptyExcalidrawFileDocument().scene
+  )
   const apiRef = useRef<ExcalidrawApi | null>(null)
   const saveTimerRef = useRef<number | null>(null)
   const pendingSceneRef = useRef<ExcalidrawSessionScene | null>(null)
@@ -188,13 +190,13 @@ export function ExcalidrawFileEditor({
 
   return (
     <div
-      className={`excalidraw-app-shell workspace-clear-surface h-full min-w-0 ${
+      className={`bg-transparent h-full min-w-0 ${
         activeToolType === 'eraser' ? 'excalidraw-tool-eraser' : ''
       }`.trim()}
     >
       <div className="h-full min-h-0">
         {isLoading ? (
-          <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading drawing...
           </div>
         ) : (

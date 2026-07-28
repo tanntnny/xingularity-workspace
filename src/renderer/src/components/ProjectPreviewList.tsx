@@ -1,5 +1,5 @@
 import { ReactElement, useMemo } from 'react'
-import { Copy, Flag, Heart, Link, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { Copy, Flag, Heart, Link, Pencil, Sparkles, Trash2 } from './ui/icons'
 import type {
   NativeMenuItemDescriptor,
   Project,
@@ -9,10 +9,10 @@ import type {
 } from '../../../shared/types'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuDestructiveItem,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
@@ -20,6 +20,7 @@ import {
 } from './ui/context-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
+import { Shortcut } from './ui/kbd'
 import { PROJECT_STATUS_META } from '../lib/projectStatus'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
@@ -128,7 +129,7 @@ export function ProjectPreviewList({
   return (
     <div ref={containerRef} className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       {sortedProjects.length === 0 ? (
-        <div className="p-2 text-sm text-[var(--muted)]">No projects found</div>
+        <div className="p-3 text-sm text-muted-foreground">No projects found</div>
       ) : (
         <>
           <ProjectSection
@@ -224,7 +225,7 @@ function ProjectSection({
     <WorkspacePanelSection>
       <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
       {projects.length === 0 ? (
-        <div className="p-2 text-sm text-[var(--muted)]">{emptyLabel}</div>
+        <div className="p-3 text-sm text-muted-foreground">{emptyLabel}</div>
       ) : (
         projects.map((project) => {
           const revealProps = getRevealItemProps(`${revealKeyPrefix}:${project.id}`)
@@ -269,11 +270,12 @@ function ProjectSection({
           }
 
           const projectButton = (
-            <button
+            <Button
               type="button"
+              variant={selectedProjectId === project.id ? 'secondary' : 'ghost'}
               ref={revealProps.ref}
               data-active={selectedProjectId === project.id}
-              className={`${revealProps.className} sidebar-menu-card right-panel-menu-card flex-col gap-1.5 px-3 py-2.5 text-left`}
+              className={`${revealProps.className} rounded-lg border bg-card text-card-foreground h-auto flex-col items-start gap-1.5 px-3 py-2.5 text-left`}
               style={revealProps.style}
               onClick={() => onSelect(project.id)}
               onContextMenu={
@@ -291,7 +293,7 @@ function ProjectSection({
                 <NoteShapeIcon icon={project.icon} size={16} className="shrink-0" />
                 <div className="truncate text-lg font-bold">{project.name}</div>
               </div>
-              <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-[var(--muted)]">
+              <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                 <Badge variant="neutral" tone={PROJECT_STATUS_META[project.status].tone}>
                   <Flag size={12} aria-hidden="true" />
                   {PROJECT_STATUS_META[project.status].label}
@@ -304,7 +306,7 @@ function ProjectSection({
                   {updatedLabel}
                 </Badge>
               </div>
-            </button>
+            </Button>
           )
 
           return useNativeMenus ? (
@@ -334,11 +336,16 @@ function ProjectSection({
                 {onDelete && (
                   <>
                     <ContextMenuSeparator />
-                    <ContextMenuDestructiveItem onClick={() => onDelete(project.id)}>
+                    <ContextMenuItem
+                      className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                      onClick={() => onDelete(project.id)}
+                    >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
-                      <ContextMenuShortcut keys={['cmd', 'backspace']} />
-                    </ContextMenuDestructiveItem>
+                      <ContextMenuShortcut>
+                        <Shortcut keys={['cmd', 'backspace']} />
+                      </ContextMenuShortcut>
+                    </ContextMenuItem>
                   </>
                 )}
               </ContextMenuContent>

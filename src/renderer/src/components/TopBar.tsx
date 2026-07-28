@@ -1,5 +1,5 @@
 import { ReactElement } from 'react'
-import { Home } from 'lucide-react'
+import { Home } from './ui/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -60,14 +60,14 @@ export function TopBar({
   const sectionLabel = PAGE_SECTION_LABELS[activePage]
 
   return (
-    <div className="app-drag-region flex h-[44px] w-full shrink-0 items-center border-b border-[var(--line)] bg-[var(--panel)]">
+    <div className="app-drag-region flex h-[44px] w-full shrink-0 items-center border-b border-border bg-card">
       {/* Left spacer for traffic lights */}
       <div className="w-[80px] shrink-0" />
 
       {/* Center: Breadcrumb */}
       <div className="flex flex-1 items-center justify-center">
         <Breadcrumb>
-          <BreadcrumbList className="app-no-drag text-[var(--muted)]">
+          <BreadcrumbList className="app-no-drag text-muted-foreground">
             <BreadcrumbItem>
               <BreadcrumbLink
                 href="#"
@@ -75,14 +75,14 @@ export function TopBar({
                   e.preventDefault()
                   onNavigateHome()
                 }}
-                className="flex items-center gap-1.5 text-[var(--muted)] hover:text-[var(--text)]"
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <Home size={14} />
                 <span>Home</span>
               </BreadcrumbLink>
             </BreadcrumbItem>
 
-            <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+            <BreadcrumbSeparator className="text-muted-foreground" />
 
             {activePage === 'calendar' ? (
               <>
@@ -90,16 +90,16 @@ export function TopBar({
                   <BreadcrumbLink
                     href="#"
                     onClick={(e) => e.preventDefault()}
-                    className="text-[var(--muted)] hover:text-[var(--text)]"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     {PAGE_LABELS[activePage]}
                   </BreadcrumbLink>
                 </BreadcrumbItem>
 
-                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                <BreadcrumbSeparator className="text-muted-foreground" />
 
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="text-[var(--text)]">
+                  <BreadcrumbPage className="text-foreground">
                     {/** fall back to page label if month not provided */}
                     {currentMonthLabel ?? PAGE_LABELS[activePage]}
                   </BreadcrumbPage>
@@ -111,16 +111,16 @@ export function TopBar({
                   <BreadcrumbLink
                     href="#"
                     onClick={(e) => e.preventDefault()}
-                    className="text-[var(--muted)] hover:text-[var(--text)]"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     {PAGE_LABELS[activePage]}
                   </BreadcrumbLink>
                 </BreadcrumbItem>
 
-                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                <BreadcrumbSeparator className="text-muted-foreground" />
 
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="max-w-[200px] truncate text-[var(--text)]">
+                  <BreadcrumbPage className="max-w-[200px] truncate text-foreground">
                     {itemName}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
@@ -131,23 +131,23 @@ export function TopBar({
                   <BreadcrumbLink
                     href="#"
                     onClick={(e) => e.preventDefault()}
-                    className="text-[var(--muted)] hover:text-[var(--text)]"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     {sectionLabel}
                   </BreadcrumbLink>
                 </BreadcrumbItem>
 
-                <BreadcrumbSeparator className="text-[var(--line-strong)]" />
+                <BreadcrumbSeparator className="text-muted-foreground" />
 
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="text-[var(--text)]">
+                  <BreadcrumbPage className="text-foreground">
                     {PAGE_LABELS[activePage]}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </>
             ) : (
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-[var(--text)]">
+                <BreadcrumbPage className="text-foreground">
                   {PAGE_LABELS[activePage]}
                 </BreadcrumbPage>
               </BreadcrumbItem>

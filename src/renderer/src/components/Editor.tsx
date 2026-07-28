@@ -41,7 +41,7 @@ import { insert, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/nord.css'
 import katex from 'katex'
-import { Check, Link2 } from 'lucide-react'
+import { Check, Link2 } from './ui/icons'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
 import {
   NOTE_PDF_IMAGE_URI_PREFIX,
@@ -1486,7 +1486,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     <div
       data-testid="note-block-editor"
       data-vim-mode={vimModeEnabled ? vimMode : undefined}
-      className="note-milkdown-editor relative h-full min-h-[60vh]"
+      className="relative h-full min-h-[60vh]"
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
       onFocusCapture={() => {
         hasFocusIntentRef.current = true
@@ -1498,14 +1498,14 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
       {slashPicker?.open ? (
         <div
-          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--popover)] shadow-lg"
+          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
           style={{
             top: slashPicker.top,
             left: slashPicker.left
           }}
           data-testid="note-slash-completion"
         >
-          <div className="border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
+          <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
             Insert block
             {slashPicker.query ? (
               <span className="ml-1 truncate">for &quot;{slashPicker.query}&quot;</span>
@@ -1523,8 +1523,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                     className={cn(
                       'flex w-full items-center rounded-md px-2 py-2 text-left text-sm',
                       isActive
-                        ? 'bg-[var(--accent-color)] text-[var(--accent-foreground)]'
-                        : 'text-[var(--text)] hover:bg-[var(--accent-color)] hover:text-[var(--accent-foreground)]'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                     )}
                     onMouseDown={(event) => {
                       event.preventDefault()
@@ -1539,21 +1539,21 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                 )
               })
             ) : (
-              <div className="px-3 py-3 text-sm text-[var(--muted)]">No matching commands</div>
+              <div className="px-3 py-3 text-sm text-muted-foreground">No matching commands</div>
             )}
           </div>
         </div>
       ) : null}
       {mentionPicker?.open ? (
         <div
-          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--popover)] shadow-lg"
+          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
           style={{
             top: mentionPicker.top,
             left: mentionPicker.left
           }}
           data-testid="note-link-completion"
         >
-          <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
             <Link2 size={14} />
             Link note
             {mentionPicker.query ? (
@@ -1575,8 +1575,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm',
                       isActive
-                        ? 'bg-[var(--accent-color)] text-[var(--accent-foreground)]'
-                        : 'text-[var(--text)] hover:bg-[var(--accent-color)] hover:text-[var(--accent-foreground)]'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                     )}
                     onMouseDown={(event) => {
                       event.preventDefault()
@@ -1595,7 +1595,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                 )
               })
             ) : (
-              <div className="px-3 py-3 text-sm text-[var(--muted)]">No matching notes</div>
+              <div className="px-3 py-3 text-sm text-muted-foreground">No matching notes</div>
             )}
           </div>
         </div>

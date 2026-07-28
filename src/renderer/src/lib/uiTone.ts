@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react'
-
 export const UI_TONES = [
   'subtle',
   'neutral',
@@ -18,20 +16,11 @@ export function getUiToneStyle(tone?: UiTone): CSSProperties | undefined {
     return undefined
   }
 
-  const style: Record<string, string> = {
+  return {
     '--ui-tone-bg': `var(--ui-tone-${tone}-bg)`,
     '--ui-tone-border': `var(--ui-tone-${tone}-border)`,
     '--ui-tone-text': `var(--ui-tone-${tone}-text)`,
     '--ui-tone-meta': `var(--ui-tone-${tone}-meta)`
-  }
-
-  return style as CSSProperties
+  } as CSSProperties
 }
-
-export function mergeUiToneStyle(tone?: UiTone, style?: CSSProperties): CSSProperties | undefined {
-  const toneStyle = getUiToneStyle(tone)
-  if (!toneStyle) {
-    return style
-  }
-  return style ? { ...toneStyle, ...style } : toneStyle
-}
+import type { CSSProperties } from 'react'

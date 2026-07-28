@@ -649,9 +649,7 @@ export function CalendarWeekView({
         event.preventDefault()
         safeDeleteTask(task.id)
       }}
-      className={`pointer-events-auto calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
-        task.taskType || 'assignment'
-      } ${task.completed ? 'beacon-task-completed' : ''} h-full cursor-grab self-stretch rounded-md border transition-shadow active:cursor-grabbing`}
+      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md border bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
     >
       <CalendarTaskCard task={task} onToggle={safeToggleTask} />
     </article>
@@ -695,7 +693,7 @@ export function CalendarWeekView({
         })
       }}
       onMouseLeave={() => setHoveredMilestoneCard(null)}
-      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-[var(--accent-line)] bg-[color:color-mix(in_srgb,var(--accent-soft)_72%,var(--panel))] px-2 py-1 text-left text-[11px] text-[var(--text)]"
+      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-ring bg-accent px-2 py-1 text-left text-xs text-foreground"
       title={item.projectName ? `${item.title} · ${item.projectName}` : item.title}
     >
       {item.projectId && item.milestoneId ? (
@@ -775,11 +773,9 @@ export function CalendarWeekView({
           event.preventDefault()
           safeDeleteTask(task.id)
         }}
-        className={`group calendar-task-card-shell beacon-task-surface beacon-task-event beacon-task-${
-          task.taskType || 'assignment'
-        } ${task.completed ? 'beacon-task-completed' : ''} absolute overflow-hidden rounded-md border transition-shadow ${
+        className={`group absolute overflow-hidden rounded-md border bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
-        } cursor-grab active:cursor-grabbing`}
+        } ${task.completed ? 'line-through opacity-60' : ''} cursor-grab active:cursor-grabbing`}
       >
         <button
           type="button"
@@ -787,7 +783,7 @@ export function CalendarWeekView({
           aria-label="Resize task start"
           title="Resize task start"
           onMouseDown={(event) => startResizeInteraction('resize-start', event, task, layout)}
-          className="absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm bg-[color:color-mix(in_srgb,var(--accent)_28%,transparent)] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           style={{ height: `${resizeBandPx}px` }}
         />
         <button
@@ -796,7 +792,7 @@ export function CalendarWeekView({
           aria-label="Resize task end"
           title="Resize task end"
           onMouseDown={(event) => startResizeInteraction('resize-end', event, task, layout)}
-          className="absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm bg-[color:color-mix(in_srgb,var(--accent)_28%,transparent)] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           style={{ height: `${resizeBandPx}px` }}
         />
         <div
@@ -811,11 +807,7 @@ export function CalendarWeekView({
             setEditingTaskId(task.id)
           }}
         >
-          <CalendarTaskCard
-            task={task}
-            onToggle={safeToggleTask}
-            className={`h-full min-h-0 ${layout.heightPx < 42 ? '[&_.beacon-task-row_span:last-child]:hidden [&_.mt-0\\.5]:hidden' : ''}`.trim()}
-          />
+          <CalendarTaskCard task={task} onToggle={safeToggleTask} className="h-full min-h-0" />
         </div>
       </article>
     )
@@ -828,9 +820,9 @@ export function CalendarWeekView({
     >
       <div
         data-testid="calendar-week-weekday-header"
-        className="sticky top-0 z-20 grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)] bg-[var(--panel)]"
+        className="sticky top-0 z-20 grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border bg-card"
       >
-        <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-4" />
+        <div className="border-r border-border bg-muted px-3 py-4" />
         {weekDays.map(({ date, value }) => {
           const isSelected = date === selectedDate
           const isToday = date === todayIso
@@ -841,22 +833,18 @@ export function CalendarWeekView({
               key={date}
               type="button"
               onClick={() => onSelectDate(date)}
-              className={`border-r border-[var(--line)] px-3 py-3 text-center transition-colors last:border-r-0 ${
-                isHighlighted
-                  ? 'bg-[var(--accent-soft)]'
-                  : 'hover:bg-[color:color-mix(in_srgb,var(--accent-soft)_28%,transparent)]'
+              className={`border-r border-border px-3 py-3 text-center transition-colors last:border-r-0 ${
+                isHighlighted ? 'bg-accent' : 'hover:bg-accent'
               }`}
             >
               <div
-                className={`text-sm font-semibold ${
-                  isToday ? 'text-[var(--accent)]' : 'text-[var(--text)]'
-                }`}
+                className={`text-sm font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}
               >
                 {formatWeekdayHeaderLabel(value)}
               </div>
               <div
                 className={`mt-1 text-xs font-normal ${
-                  isToday ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+                  isToday ? 'text-primary' : 'text-muted-foreground'
                 }`}
               >
                 {formatWeekDateHeaderLabel(value)}
@@ -866,8 +854,8 @@ export function CalendarWeekView({
         })}
       </div>
 
-      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--line)]">
-        <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)] px-3 py-3" />
+      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border">
+        <div className="border-r border-border bg-muted px-3 py-3" />
         <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceMinHeightPx}px` }}>
           <div className="absolute inset-0 grid grid-cols-7">
             {weekDays.map(({ date }) => {
@@ -909,11 +897,11 @@ export function CalendarWeekView({
                     setAllDayDropIndicator(null)
                   }}
                   onDrop={(event) => handleAllDayDrop(event, date)}
-                  className={`h-full border-r border-[var(--line)] px-2 py-2 transition-colors last:border-r-0 ${
+                  className={`h-full border-r border-border px-2 py-2 transition-colors last:border-r-0 ${
                     dragOverKey === dragKey && !allDayDropIndicator
-                      ? 'bg-[var(--accent-soft)]'
+                      ? 'bg-accent'
                       : isHighlighted
-                        ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_16%,transparent)]'
+                        ? 'bg-accent'
                         : 'bg-transparent'
                   }`}
                   style={{
@@ -922,7 +910,7 @@ export function CalendarWeekView({
                   }}
                 >
                   {allDayLayouts.length === 0 ? (
-                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-transparent text-[11px] text-[var(--muted)]">
+                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-transparent text-xs text-muted-foreground">
                       No all-day items
                     </div>
                   ) : null}
@@ -935,7 +923,7 @@ export function CalendarWeekView({
             <div className="pointer-events-none absolute inset-0 z-[1] grid grid-cols-7">
               <div
                 data-testid="calendar-week-all-day-drop-indicator"
-                className="bg-[color:color-mix(in_srgb,var(--accent-soft)_88%,transparent)]"
+                className="bg-accent"
                 style={{
                   gridColumn: `${allDayDropIndicator.columnStart + 1} / span ${allDayDropIndicator.columnSpan}`,
                   gridRow: '1 / 2'
@@ -967,7 +955,7 @@ export function CalendarWeekView({
 
       <div data-testid="calendar-week-timed-scroller" className="flex-1 overflow-visible">
         <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-          <div className="border-r border-[var(--line)] bg-[color:color-mix(in_srgb,var(--panel)_20%,transparent)]">
+          <div className="border-r border-border bg-muted">
             <div className="relative" style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}>
               <div
                 ref={timeScaleRef}
@@ -980,8 +968,8 @@ export function CalendarWeekView({
                 {TIME_SLOTS.map((slot, index) => (
                   <div
                     key={slot.hour}
-                    className={`px-3 text-right text-[11px] font-medium text-[var(--muted)] ${
-                      index === 0 ? '' : 'border-t border-[var(--line)]'
+                    className={`px-3 text-right text-xs font-medium text-muted-foreground ${
+                      index === 0 ? '' : 'border-t border-border'
                     }`}
                     style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px`, paddingTop: '8px' }}
                   >
@@ -996,8 +984,8 @@ export function CalendarWeekView({
                   style={{ top: `${currentTimeIndicator.topPx}px` }}
                 >
                   <div className="relative -translate-y-1/2">
-                    <div className="absolute right-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-[var(--accent)]" />
-                    <div className="pr-4 text-right text-[11px] font-semibold leading-none text-[var(--accent)]">
+                    <div className="absolute right-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-primary" />
+                    <div className="pr-4 text-right text-xs font-semibold leading-none text-primary">
                       {currentTimeIndicator.label}
                     </div>
                   </div>
@@ -1059,10 +1047,8 @@ export function CalendarWeekView({
                   setTimedDropIndicator((current) => (current?.date === date ? null : current))
                 }}
                 onDrop={(event) => handleTimedDrop(event, date)}
-                className={`relative border-r border-[var(--line)] last:border-r-0 ${
-                  isHighlighted
-                    ? 'bg-[color:color-mix(in_srgb,var(--accent-soft)_12%,transparent)]'
-                    : 'bg-transparent'
+                className={`relative border-r border-border last:border-r-0 ${
+                  isHighlighted ? 'bg-accent' : 'bg-transparent'
                 }`}
                 style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}
               >
@@ -1082,9 +1068,7 @@ export function CalendarWeekView({
                     {TIME_SLOTS.map((slot, index) => (
                       <div
                         key={slot.hour}
-                        className={`border-t border-[var(--line)] ${
-                          index === 0 ? 'border-t-0' : ''
-                        }`}
+                        className={`border-t border-border ${index === 0 ? 'border-t-0' : ''}`}
                         style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px` }}
                       />
                     ))}
@@ -1093,7 +1077,7 @@ export function CalendarWeekView({
                     <div className="pointer-events-none absolute inset-0 z-[1]">
                       <div
                         data-testid="calendar-week-drop-indicator"
-                        className="calendar-week-drop-indicator absolute inset-x-0"
+                        className="absolute inset-x-0 bg-accent"
                         style={{
                           top: `${timedDropIndicator.topPx}px`,
                           height: `${timedDropIndicator.heightPx}px`
@@ -1117,7 +1101,7 @@ export function CalendarWeekView({
                 left: `${WEEKLY_TIME_GUTTER_WIDTH_PX}px`
               }}
             >
-              <div className="h-0.5 w-full bg-[var(--accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_28%,transparent)]" />
+              <div className="h-0.5 w-full bg-primary" />
             </div>
           ) : null}
         </div>

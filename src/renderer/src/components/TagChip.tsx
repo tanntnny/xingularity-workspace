@@ -1,7 +1,8 @@
 import { ReactElement } from 'react'
-import { Tag } from 'lucide-react'
+import { Tag } from './ui/icons'
 import { getTagColorIndex } from '../utils/tagColor'
 import { Badge, type BadgeProps } from './ui/badge'
+import { Button } from './ui/button'
 import { cn } from '../lib/utils'
 
 interface TagChipProps {
@@ -25,15 +26,17 @@ export function TagChip({ tag, onClick, onRemove }: TagChipProps): ReactElement 
       )}
     >
       {onClick ? (
-        <button
+        <Button
           type="button"
-          className="inline-flex min-w-0 items-center gap-1 border-0 bg-transparent p-0 text-inherit"
+          variant="ghost"
+          size="sm"
+          className="h-auto min-w-0 gap-1 p-0 text-inherit hover:bg-transparent hover:text-inherit"
           onClick={() => onClick(tag)}
           aria-label={`Search tag ${tag}`}
         >
           <Tag size={11} aria-hidden="true" />
           <span className="truncate">{tag}</span>
-        </button>
+        </Button>
       ) : (
         <>
           <Tag size={11} aria-hidden="true" />
@@ -41,14 +44,16 @@ export function TagChip({ tag, onClick, onRemove }: TagChipProps): ReactElement 
         </>
       )}
       {onRemove ? (
-        <button
+        <Button
           type="button"
-          className="border-0 bg-transparent p-0 text-xs leading-none text-inherit opacity-80 hover:opacity-100"
+          variant="ghost"
+          size="sm"
+          className="h-auto w-auto p-0 text-xs leading-none text-inherit opacity-80 hover:bg-transparent hover:text-inherit hover:opacity-100"
           onClick={() => onRemove(tag)}
           aria-label={`Remove tag ${tag}`}
         >
           x
-        </button>
+        </Button>
       ) : null}
     </Badge>
   )
