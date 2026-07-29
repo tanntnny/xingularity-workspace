@@ -1,6 +1,8 @@
 // Shadcn UI Components - Barrel Export
 // Import these components from '@/components/ui' or './components/ui'
 
+export * from './icons'
+
 export { Button, buttonVariants } from './button'
 export type { ButtonProps } from './button'
 

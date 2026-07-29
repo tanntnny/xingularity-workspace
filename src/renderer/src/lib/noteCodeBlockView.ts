@@ -6,10 +6,9 @@ import { codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 
 const COPY_ICON_MARKUP = [
   '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"',
-  ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"',
-  ' stroke-linejoin="round" aria-hidden="true">',
-  '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>',
-  '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
+  ' fill="currentColor" aria-hidden="true">',
+  '<path d="M20.926 7.074a3.67 3.67 0 0 1 1.074 2.593v8.666a3.667 3.667 0 0 1 -3.667 3.667h-8.666a3.667 3.667 0 0 1 -3.667 -3.667v-8.666q 0 -.053 .005 -.102a3.66 3.66 0 0 1 3.662 -3.565h8.666c.973 0 1.905 .386 2.593 1.074"></path>',
+  '<path d="M17.374 3.514a1 1 0 1 1 -1.748 .972c-.221 -.398 -.342 -.486 -.626 -.486h-10c-.548 0 -1 .452 -1 1v9.998c0 .36 .194 .692 .507 .87a1 1 0 1 1 -.99 1.738a3 3 0 0 1 -1.517 -2.606v-10c0 -1.652 1.348 -3 3 -3h10c1.094 0 1.828 .533 2.374 1.514"></path>',
   '</svg>'
 ].join('')
 

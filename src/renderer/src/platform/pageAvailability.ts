@@ -13,10 +13,7 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
       'weeklyPlan',
       'calendar',
       'designAudit',
-      'settings',
-      'schedules',
-      'scheduleDocs',
-      'agentHistory'
+      'settings'
     ]
   }
 

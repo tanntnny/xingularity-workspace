@@ -93,7 +93,11 @@ const DialogActionButton = React.forwardRef<
     type={type}
     variant={tone === 'primary' ? 'default' : 'outline'}
     size={label ? 'sm' : 'icon'}
-    className={cn('shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5', label && 'gap-1.5', className)}
+    className={cn(
+      'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:h-3.5 [&>svg]:w-3.5',
+      label && 'gap-1.5',
+      className
+    )}
     {...props}
   >
     {icon}

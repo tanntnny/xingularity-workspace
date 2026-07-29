@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
+import { normalizeProjectIcon } from '../shared/projectIcons'
 import {
   CALENDAR_TASK_TYPE_VALUES,
   NOTE_VIM_MAPPING_ACTION_VALUES,
@@ -167,7 +168,7 @@ const calendarTaskSchema = z.object({
 })
 
 const projectIconSchema = z.object({
-  set: z.enum(['shape', 'lucide']).optional(),
+  set: z.enum(['tabler', 'shape', 'lucide']).optional(),
   glyph: z
     .enum([
       'circle',
@@ -182,11 +183,19 @@ const projectIconSchema = z.object({
       'target',
       'book-open',
       'package',
-      'flask-conical'
+      'flask-conical',
+      'sparkles',
+      'pen-tool',
+      'monitor',
+      'megaphone',
+      'globe',
+      'shield',
+      'camera',
+      'calendar'
     ])
     .optional(),
   shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']).optional(),
-  variant: z.enum(['filled', 'outlined']),
+  variant: z.enum(['filled', 'outlined']).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
 
@@ -598,8 +607,25 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
   })
 
   handleIpc(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown, options: unknown) => {
+    const parsedNext = settingsUpdateSchema.parse(next)
     return runtime.updateSettings(
-      settingsUpdateSchema.parse(next),
+      {
+        ...parsedNext,
+        projects: parsedNext.projects
+          ? parsedNext.projects.map((project) => ({
+              ...project,
+              icon: normalizeProjectIcon(project.icon, project.id)
+            }))
+          : undefined,
+        projectIcons: parsedNext.projectIcons
+          ? Object.fromEntries(
+              Object.entries(parsedNext.projectIcons).map(([projectId, icon]) => [
+                projectId,
+                normalizeProjectIcon(icon, projectId)
+              ])
+            )
+          : undefined
+      },
       settingsUpdateOptionsSchema.parse(options)
     )
   })

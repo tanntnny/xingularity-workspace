@@ -26,10 +26,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   designAudit: 'Design Audit',
-  settings: 'Settings',
-  schedules: 'Schedules',
-  scheduleDocs: 'Schedule API Guide',
-  agentHistory: 'Agent Chat'
+  settings: 'Settings'
 }
 
 const PAGE_SECTION_LABELS: Partial<Record<AppPage, string>> = {

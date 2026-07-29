@@ -15,6 +15,9 @@ type WorkspaceTab = {
   shortcut?: readonly ShortcutKey[]
 }
 
+const workspaceTopbarControlClass =
+  '[&_[role=group]]:rounded-[var(--radius-button-pill)] [&_button]:rounded-[var(--radius-button-pill)]'
+
 interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
   tabs: readonly WorkspaceTab[]
   activeTabId: string
@@ -43,6 +46,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       aria-label="Workspace tabs"
       className={cn(
         'app-drag-region flex h-10 min-w-0 shrink-0 items-center border-b bg-background px-2',
+        workspaceTopbarControlClass,
         className
       )}
       {...props}
@@ -53,7 +57,10 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
           value={activeTabId}
           onValueChange={(value) => value && onSelectTab(value)}
           variant="outline"
-          className="flex min-w-max items-center gap-1.5 border-0 p-0 pr-1"
+          className={cn(
+            'flex min-w-max items-center gap-1.5 border-0 p-0 pr-1',
+            workspaceTopbarControlClass
+          )}
         >
           {tabs.map((tab) => {
             const TabIcon = tab.icon
@@ -62,7 +69,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               <div
                 key={tab.id}
                 data-active={tab.id === activeTabId ? 'true' : 'false'}
-                className="group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-md border bg-background data-[active=true]:bg-accent"
+                className="group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-background data-[active=true]:bg-accent"
               >
                 <ToggleGroupItem
                   value={tab.id}
@@ -98,6 +105,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   aria-label={`Close ${tab.label} tab`}
                   title={`Close ${tab.label} tab`}
                   data-testid={`workspace-tab-close:${tab.id}`}
+                  className="rounded-[var(--radius-button-pill)]"
                   onClick={() => onCloseTab(tab.id)}
                 >
                   <X size={12} aria-hidden="true" />
@@ -113,6 +121,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
             title="New tab (Cmd+T)"
             data-testid="workspace-tab-add"
             disabled={addDisabled}
+            className="rounded-[var(--radius-button-pill)]"
             onClick={onAddTab}
           >
             <Plus size={14} aria-hidden="true" />
@@ -129,7 +138,10 @@ const workspaceMainHeaderClass = 'grid min-h-16 shrink-0 grid-rows-2 border-b bg
 const workspacePanelHeaderClass =
   'app-drag-region flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3'
 
-const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
+const workspaceHeaderActionRowClass = cn(
+  'app-no-drag ml-auto flex shrink-0 items-center gap-2',
+  workspaceTopbarControlClass
+)
 
 interface WorkspaceHeaderContextValue {
   mainActionSlot: HTMLDivElement | null
@@ -258,12 +270,28 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
         </div>
         <div className="app-drag-region flex min-w-0 items-center justify-between gap-2 px-3">
-          <div className="app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto">
-            <div ref={mainActionSlotRef} className="flex min-w-max items-center gap-1.5" />
+          <div
+            className={cn(
+              'app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto',
+              workspaceTopbarControlClass
+            )}
+          >
+            <div
+              ref={mainActionSlotRef}
+              className={cn('flex min-w-max items-center gap-1.5', workspaceTopbarControlClass)}
+            />
             {secondaryActions}
           </div>
-          <div className="app-no-drag ml-auto flex shrink-0 items-center gap-1.5">
-            <div ref={panelActionSlotRef} className="flex shrink-0 items-center gap-1.5" />
+          <div
+            className={cn(
+              'app-no-drag ml-auto flex shrink-0 items-center gap-1.5',
+              workspaceTopbarControlClass
+            )}
+          >
+            <div
+              ref={panelActionSlotRef}
+              className={cn('flex shrink-0 items-center gap-1.5', workspaceTopbarControlClass)}
+            />
             {hasPanel && onTogglePanel ? (
               <WorkspaceIconButton
                 aria-label={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
@@ -295,6 +323,7 @@ const WorkspaceHeaderSecondaryActions = React.forwardRef<
       ref={ref}
       className={cn(
         'workspace-header-secondary-actions flex min-w-max items-center gap-1.5',
+        workspaceTopbarControlClass,
         className
       )}
       {...props}
@@ -355,7 +384,11 @@ const WorkspaceHeaderActions = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center gap-1.5', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('flex items-center gap-1.5', workspaceTopbarControlClass, className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 
@@ -363,7 +396,11 @@ const WorkspaceHeaderActionGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof ActionButtonGroup>
 >(({ className, ...props }, ref) => (
-  <ActionButtonGroup ref={ref} className={className} {...props} />
+  <ActionButtonGroup
+    ref={ref}
+    className={cn('rounded-[var(--radius-button-pill)]', workspaceTopbarControlClass, className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActionGroup.displayName = 'WorkspaceHeaderActionGroup'
 
@@ -406,7 +443,7 @@ const WorkspaceIconButton = React.forwardRef<
       size={label ? 'sm' : 'icon'}
       data-active={active ? 'true' : 'false'}
       className={cn(
-        'shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5',
+        'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:h-3.5 [&>svg]:w-3.5',
         label ? 'gap-1.5' : undefined,
         className
       )}

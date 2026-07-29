@@ -1,4 +1,5 @@
 export {
+  WorkspaceContextProvider as WorkspaceProvider,
   DocumentWorkspace as WorkspaceShell,
   DocumentWorkspaceMain as WorkspaceMain,
   DocumentWorkspaceMainHeader as WorkspaceMainHeader,
@@ -8,7 +9,8 @@ export {
   DocumentWorkspacePanelContent as WorkspaceSidePanelContent,
   WorkspaceHeaderActions as WorkspaceToolbar,
   WorkspaceHeaderActionGroup as WorkspaceToolbarGroup,
-  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider
+  WorkspaceHeaderActionDivider as WorkspaceToolbarDivider,
+  WorkspaceFooter
 } from '../ui/document-workspace'
 
 export {

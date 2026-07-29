@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  coerceFilledLucideProjectIcon,
+  coerceFilledTablerProjectIcon,
   createRandomProjectIcon,
   normalizeProjectIcon
 } from '../src/shared/projectIcons'
@@ -10,7 +10,7 @@ describe('project icon helpers', () => {
     const first = createRandomProjectIcon('project-seed')
     const second = createRandomProjectIcon('project-seed')
     expect(first).toEqual(second)
-    expect(first.set).toBe('lucide')
+    expect(first.set).toBe('tabler')
     expect(first.variant).toBe('filled')
   })
 
@@ -31,17 +31,17 @@ describe('project icon helpers', () => {
         'alpha'
       )
     ).toEqual({
-      set: 'shape',
-      glyph: 'diamond',
-      shape: 'diamond',
-      variant: 'outlined',
+      set: 'tabler',
+      glyph: 'folder-kanban',
+      shape: undefined,
+      variant: 'filled',
       color: '#be123c'
     })
   })
 
-  it('coerces legacy project icons into filled lucide icons for the picker', () => {
+  it('coerces legacy project icons into filled Tabler icons for the picker', () => {
     expect(
-      coerceFilledLucideProjectIcon(
+      coerceFilledTablerProjectIcon(
         {
           shape: 'diamond',
           variant: 'outlined',
@@ -50,7 +50,7 @@ describe('project icon helpers', () => {
         'alpha'
       )
     ).toEqual({
-      set: 'lucide',
+      set: 'tabler',
       glyph: 'folder-kanban',
       shape: undefined,
       variant: 'filled',
@@ -58,19 +58,19 @@ describe('project icon helpers', () => {
     })
   })
 
-  it('preserves supported extended lucide glyphs during normalization', () => {
+  it('normalizes legacy Lucide glyphs into canonical Tabler records', () => {
     expect(
       normalizeProjectIcon(
         {
           set: 'lucide',
           glyph: 'sparkles',
-          variant: 'filled',
+          variant: 'outlined',
           color: '#0ea5e9'
         },
         'beta'
       )
     ).toEqual({
-      set: 'lucide',
+      set: 'tabler',
       glyph: 'sparkles',
       shape: undefined,
       variant: 'filled',

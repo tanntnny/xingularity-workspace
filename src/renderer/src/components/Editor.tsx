@@ -1521,7 +1521,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                     key={command.id}
                     type="button"
                     className={cn(
-                      'flex w-full items-center rounded-md px-2 py-2 text-left text-sm',
+                      'flex w-full items-center rounded-md px-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       isActive
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground hover:bg-accent hover:text-accent-foreground'
@@ -1573,7 +1573,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
                     key={note.relPath}
                     type="button"
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm',
+                      'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       isActive
                         ? 'bg-accent text-accent-foreground'
                         : 'text-foreground hover:bg-accent hover:text-accent-foreground'

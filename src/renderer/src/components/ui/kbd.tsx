@@ -1,4 +1,3 @@
-import { ArrowRightToLine, Command, Option } from './icons'
 import { HTMLAttributes, ReactElement, ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 
@@ -12,19 +11,19 @@ type ShortcutDefinition = {
 const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
   alt: {
     ariaLabel: 'Option',
-    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌥'
   },
   backspace: { ariaLabel: 'Backspace', label: '⌫' },
   cmd: {
     ariaLabel: 'Command',
-    label: <Command className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌘'
   },
   command: {
     ariaLabel: 'Command',
-    label: <Command className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌘'
   },
-  control: { ariaLabel: 'Control', label: 'Ctrl' },
-  ctrl: { ariaLabel: 'Control', label: 'Ctrl' },
+  control: { ariaLabel: 'Control', label: '⌃' },
+  ctrl: { ariaLabel: 'Control', label: '⌃' },
   delete: { ariaLabel: 'Delete', label: '⌦' },
   down: { ariaLabel: 'Down Arrow', label: '↓' },
   enter: { ariaLabel: 'Enter', label: 'Enter' },
@@ -33,15 +32,15 @@ const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
   left: { ariaLabel: 'Left Arrow', label: '←' },
   meta: {
     ariaLabel: 'Command',
-    label: <Command className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌘'
   },
   opt: {
     ariaLabel: 'Option',
-    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌥'
   },
   option: {
     ariaLabel: 'Option',
-    label: <Option className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⌥'
   },
   return: { ariaLabel: 'Enter', label: 'Enter' },
   right: { ariaLabel: 'Right Arrow', label: '→' },
@@ -49,7 +48,7 @@ const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
   space: { ariaLabel: 'Space', label: 'Space' },
   tab: {
     ariaLabel: 'Tab',
-    label: <ArrowRightToLine className="h-2.5 w-2.5" aria-hidden="true" />
+    label: '⇥'
   },
   up: { ariaLabel: 'Up Arrow', label: '↑' }
 }
@@ -61,7 +60,7 @@ export function Kbd({ className, ...props }: HTMLAttributes<HTMLElement>): React
   return (
     <kbd
       className={cn(
-        'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-md border border-border bg-muted px-1.5 text-xs font-medium leading-none text-muted-foreground whitespace-nowrap',
+        'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-[var(--radius-control)] border border-border bg-muted px-1.5 text-xs font-medium leading-none text-muted-foreground whitespace-nowrap',
         className
       )}
       {...props}

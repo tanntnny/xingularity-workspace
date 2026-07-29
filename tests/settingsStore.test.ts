@@ -132,15 +132,12 @@ describe('SettingsStore', () => {
     expect(canonicalSettings).not.toHaveProperty('performanceModeEnabled')
     expect(canonicalSettings).not.toHaveProperty('workspaceVibrancyEnabled')
     expect(canonicalSettings.profile).toEqual({ name: 'Amy' })
-    await expect(fs.readFile(path.join(root, 'projects.json'), 'utf-8')).resolves.toContain(
-      '"name": "Migration"'
-    )
-    await expect(fs.readFile(path.join(root, 'project-icons.json'), 'utf-8')).resolves.toContain(
-      '{}'
-    )
-    await expect(fs.readFile(path.join(root, 'tasks.json'), 'utf-8')).resolves.toContain(
-      '"title": "Legacy task"'
-    )
+    await expect(
+      fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
+    ).resolves.toContain('"name": "Migration"')
+    await expect(
+      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
+    ).resolves.toContain('"title": "Legacy task"')
     await expect(fs.access(path.join(legacyDir, 'settings.json'))).rejects.toThrow()
     await expect(fs.access(path.join(legacyDir, 'projects.json'))).rejects.toThrow()
     await expect(fs.access(path.join(legacyDir, 'tasks.json'))).rejects.toThrow()
@@ -247,12 +244,12 @@ describe('SettingsStore', () => {
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"lastOpenedNotePath": "alpha.md"'
     )
-    await expect(fs.readFile(path.join(root, 'projects.json'), 'utf-8')).resolves.toContain(
-      '"name": "Migration"'
-    )
-    await expect(fs.readFile(path.join(root, 'tasks.json'), 'utf-8')).resolves.toContain(
-      '"title": "Legacy task"'
-    )
+    await expect(
+      fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
+    ).resolves.toContain('"name": "Migration"')
+    await expect(
+      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
+    ).resolves.toContain('"title": "Legacy task"')
   })
 
   it('removes legacy profile colors from canonical settings', async () => {

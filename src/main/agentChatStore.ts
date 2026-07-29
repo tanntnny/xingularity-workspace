@@ -4,8 +4,8 @@ import path from 'node:path'
 import type { AgentChatSession } from '../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyPageVaultAgentChatsPath,
-  getLegacyVaultAgentChatsPath,
+  getLegacyRootVaultAgentChatsPath,
+  getLegacySystemVaultAgentChatsPath,
   getVaultAgentChatsPath
 } from './vaultData'
 
@@ -14,14 +14,14 @@ const MAX_AGENT_CHAT_SESSIONS = 100
 export class AgentChatStore {
   private readonly vaultRoot: string
   private readonly sessionsPath: string
-  private readonly legacyPageSessionsPath: string
   private readonly legacySessionsPath: string
+  private readonly legacySystemSessionsPath: string
 
   constructor(vaultRoot: string) {
     this.vaultRoot = vaultRoot
     this.sessionsPath = getVaultAgentChatsPath(vaultRoot)
-    this.legacyPageSessionsPath = getLegacyPageVaultAgentChatsPath(vaultRoot)
-    this.legacySessionsPath = getLegacyVaultAgentChatsPath(vaultRoot)
+    this.legacySessionsPath = getLegacyRootVaultAgentChatsPath(vaultRoot)
+    this.legacySystemSessionsPath = getLegacySystemVaultAgentChatsPath(vaultRoot)
   }
 
   async listSessions(): Promise<AgentChatSession[]> {
@@ -61,7 +61,7 @@ export class AgentChatStore {
         console.error('Failed to read agent chat store:', error)
       }
 
-      for (const legacyPath of [this.legacyPageSessionsPath, this.legacySessionsPath]) {
+      for (const legacyPath of [this.legacySessionsPath, this.legacySystemSessionsPath]) {
         try {
           const legacyRaw = await fs.readFile(legacyPath, 'utf-8')
           const parsed = JSON.parse(legacyRaw) as T
@@ -89,8 +89,8 @@ export class AgentChatStore {
 
   private async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(this.legacyPageSessionsPath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacySessionsPath, this.vaultRoot)
+      deleteLegacyVaultPath(this.legacySessionsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemSessionsPath, this.vaultRoot)
     ])
   }
 }

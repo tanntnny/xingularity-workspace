@@ -15,6 +15,9 @@ type WorkspaceTab = {
   shortcut?: readonly ShortcutKey[]
 }
 
+const workspaceTopbarControlClass =
+  '[&_[role=group]]:rounded-[var(--radius-button-pill)] [&_button]:rounded-[var(--radius-button-pill)]'
+
 interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
   tabs: readonly WorkspaceTab[]
   activeTabId: string
@@ -42,7 +45,8 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       ref={ref}
       aria-label="Workspace tabs"
       className={cn(
-        'app-drag-region flex h-10 min-w-0 shrink-0 items-center border-b bg-card px-2',
+        'app-drag-region flex h-[var(--workspace-chrome-height)] min-w-0 shrink-0 items-center px-2',
+        workspaceTopbarControlClass,
         className
       )}
       {...props}
@@ -53,7 +57,10 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
           value={activeTabId}
           onValueChange={(value) => value && onSelectTab(value)}
           variant="outline"
-          className="flex min-w-max items-center gap-1.5 border-0 p-0 pr-1"
+          className={cn(
+            'flex min-w-max items-center gap-1.5 border-0 bg-transparent p-0 pr-1',
+            workspaceTopbarControlClass
+          )}
         >
           {tabs.map((tab) => {
             const TabIcon = tab.icon
@@ -62,7 +69,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               <div
                 key={tab.id}
                 data-active={tab.id === activeTabId ? 'true' : 'false'}
-                className="group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-md border bg-card data-[active=true]:bg-accent"
+                className="group app-no-drag flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-card data-[active=true]:bg-accent"
               >
                 <ToggleGroupItem
                   value={tab.id}
@@ -70,11 +77,11 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   id={`workspace-tab:${tab.id}`}
                   aria-label={tab.label}
                   data-testid={`workspace-tab:${tab.id}`}
-                  className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-medium text-foreground hover:bg-transparent hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                  className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left hover:bg-accent/60 hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                 >
                   {TabIcon ? (
                     <TabIcon
-                      size={14}
+                      size={16}
                       strokeWidth={1.8}
                       aria-hidden="true"
                       data-testid={`workspace-tab-icon:${tab.id}`}
@@ -98,9 +105,10 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   aria-label={`Close ${tab.label} tab`}
                   title={`Close ${tab.label} tab`}
                   data-testid={`workspace-tab-close:${tab.id}`}
+                  className="h-[var(--workspace-tab-control-height)] w-[var(--workspace-tab-control-height)] rounded-[var(--radius-button-pill)]"
                   onClick={() => onCloseTab(tab.id)}
                 >
-                  <X size={12} aria-hidden="true" />
+                  <X size={16} aria-hidden="true" />
                 </Button>
               </div>
             )
@@ -113,9 +121,10 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
             title="New tab (Cmd+T)"
             data-testid="workspace-tab-add"
             disabled={addDisabled}
+            className="h-[var(--workspace-tab-control-height)] w-[var(--workspace-tab-control-height)] rounded-[var(--radius-button-pill)]"
             onClick={onAddTab}
           >
-            <Plus size={14} aria-hidden="true" />
+            <Plus size={16} aria-hidden="true" />
           </Button>
         </ToggleGroup>
       </div>
@@ -124,12 +133,15 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
 )
 WorkspaceTabManager.displayName = 'WorkspaceTabManager'
 
-const workspaceMainHeaderClass = 'grid min-h-16 shrink-0 grid-rows-2 border-b bg-card'
+const workspaceMainHeaderClass = 'grid h-24 min-h-24 shrink-0 grid-rows-[48px_48px]'
 
 const workspacePanelHeaderClass =
   'app-drag-region flex h-10 shrink-0 items-center gap-2 border-b bg-card px-3'
 
-const workspaceHeaderActionRowClass = 'app-no-drag ml-auto flex shrink-0 items-center gap-2'
+const workspaceHeaderActionRowClass = cn(
+  'app-no-drag ml-auto flex shrink-0 items-center gap-2',
+  workspaceTopbarControlClass
+)
 
 interface WorkspaceHeaderContextValue {
   mainActionSlot: HTMLDivElement | null
@@ -154,53 +166,84 @@ const WorkspaceHeaderContext = React.createContext<WorkspaceHeaderContextValue>(
   panelCollapsed: false
 })
 
-interface DocumentWorkspaceProps extends React.HTMLAttributes<HTMLDivElement> {
+interface WorkspaceContextProviderProps {
+  children: React.ReactNode
   hasPanel?: boolean
   panelCollapsed?: boolean
   onTogglePanel?: () => void
 }
 
+const WorkspaceContextProvider = ({
+  children,
+  hasPanel = false,
+  panelCollapsed = false,
+  onTogglePanel
+}: WorkspaceContextProviderProps): React.ReactElement => {
+  const [mainActionSlot, setMainActionSlot] = React.useState<HTMLDivElement | null>(null)
+  const [panelActionSlot, setPanelActionSlot] = React.useState<HTMLDivElement | null>(null)
+  const [footerSlot, setFooterSlot] = React.useState<HTMLDivElement | null>(null)
+  const headerContextValue = React.useMemo(
+    () => ({
+      mainActionSlot,
+      setMainActionSlot,
+      panelActionSlot,
+      setPanelActionSlot,
+      footerSlot,
+      setFooterSlot,
+      hasPanel,
+      panelCollapsed,
+      onTogglePanel
+    }),
+    [footerSlot, hasPanel, mainActionSlot, onTogglePanel, panelActionSlot, panelCollapsed]
+  )
+
+  return (
+    <WorkspaceHeaderContext.Provider value={headerContextValue}>
+      {children}
+    </WorkspaceHeaderContext.Provider>
+  )
+}
+
+interface DocumentWorkspaceProps extends React.HTMLAttributes<HTMLDivElement> {
+  hasPanel?: boolean
+}
+
 const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProps>(
-  (
-    { className, children, hasPanel = true, panelCollapsed = false, onTogglePanel, ...props },
-    ref
-  ) => {
-    const [mainActionSlot, setMainActionSlot] = React.useState<HTMLDivElement | null>(null)
-    const [panelActionSlot, setPanelActionSlot] = React.useState<HTMLDivElement | null>(null)
-    const [footerSlot, setFooterSlot] = React.useState<HTMLDivElement | null>(null)
-    const headerContextValue = React.useMemo(
-      () => ({
-        mainActionSlot,
-        setMainActionSlot,
-        panelActionSlot,
-        setPanelActionSlot,
-        footerSlot,
-        setFooterSlot,
-        hasPanel,
-        panelCollapsed,
-        onTogglePanel
-      }),
-      [footerSlot, hasPanel, mainActionSlot, onTogglePanel, panelActionSlot, panelCollapsed]
-    )
+  ({ className, children, hasPanel = true, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-has-panel={hasPanel ? 'true' : 'false'}
+      className={cn(
+        'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-workspace',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+)
+DocumentWorkspace.displayName = 'DocumentWorkspace'
+
+const WorkspaceFooter = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
+  ({ className, ...props }, ref) => {
+    const { setFooterSlot } = React.useContext(WorkspaceHeaderContext)
 
     return (
-      <WorkspaceHeaderContext.Provider value={headerContextValue}>
-        <div
-          ref={ref}
-          data-has-panel={hasPanel ? 'true' : 'false'}
-          className={cn('flex h-full w-full min-w-0 flex-col', className)}
-          {...props}
-        >
-          <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden p-3">{children}</div>
-          <div className="app-drag-region h-8 shrink-0 border-t">
-            <div ref={setFooterSlot} className="app-no-drag flex h-full items-center px-3" />
-          </div>
-        </div>
-      </WorkspaceHeaderContext.Provider>
+      <footer
+        ref={ref}
+        className={cn(
+          'app-drag-region h-[var(--workspace-chrome-height)] shrink-0 bg-transparent',
+          className
+        )}
+        {...props}
+      >
+        <div ref={setFooterSlot} className="app-no-drag flex h-full items-center px-3" />
+      </footer>
     )
   }
 )
-DocumentWorkspace.displayName = 'DocumentWorkspace'
+WorkspaceFooter.displayName = 'WorkspaceFooter'
 
 const DocumentWorkspaceMain = React.forwardRef<
   HTMLDivElement,
@@ -208,10 +251,7 @@ const DocumentWorkspaceMain = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <section
     ref={ref}
-    className={cn(
-      'flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card',
-      className
-    )}
+    className={cn('flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden rounded-xl p-2', className)}
     {...props}
   />
 ))
@@ -224,7 +264,7 @@ const DocumentWorkspacePanel = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden rounded-lg border bg-card p-3',
+      'flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden rounded-xl border bg-card p-3',
       className
     )}
     {...props}
@@ -258,12 +298,28 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
         </div>
         <div className="app-drag-region flex min-w-0 items-center justify-between gap-2 px-3">
-          <div className="app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto">
-            <div ref={mainActionSlotRef} className="flex min-w-max items-center gap-1.5" />
+          <div
+            className={cn(
+              'app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto',
+              workspaceTopbarControlClass
+            )}
+          >
+            <div
+              ref={mainActionSlotRef}
+              className={cn('flex min-w-max items-center gap-1.5', workspaceTopbarControlClass)}
+            />
             {secondaryActions}
           </div>
-          <div className="app-no-drag ml-auto flex shrink-0 items-center gap-1.5">
-            <div ref={panelActionSlotRef} className="flex shrink-0 items-center gap-1.5" />
+          <div
+            className={cn(
+              'app-no-drag ml-auto flex shrink-0 items-center gap-1.5',
+              workspaceTopbarControlClass
+            )}
+          >
+            <div
+              ref={panelActionSlotRef}
+              className={cn('flex shrink-0 items-center gap-1.5', workspaceTopbarControlClass)}
+            />
             {hasPanel && onTogglePanel ? (
               <WorkspaceIconButton
                 aria-label={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
@@ -295,6 +351,7 @@ const WorkspaceHeaderSecondaryActions = React.forwardRef<
       ref={ref}
       className={cn(
         'workspace-header-secondary-actions flex min-w-max items-center gap-1.5',
+        workspaceTopbarControlClass,
         className
       )}
       {...props}
@@ -355,7 +412,11 @@ const WorkspaceHeaderActions = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center gap-1.5', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('flex items-center gap-1.5', workspaceTopbarControlClass, className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 
@@ -363,7 +424,11 @@ const WorkspaceHeaderActionGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof ActionButtonGroup>
 >(({ className, ...props }, ref) => (
-  <ActionButtonGroup ref={ref} className={className} {...props} />
+  <ActionButtonGroup
+    ref={ref}
+    className={cn('rounded-[var(--radius-button-pill)]', workspaceTopbarControlClass, className)}
+    {...props}
+  />
 ))
 WorkspaceHeaderActionGroup.displayName = 'WorkspaceHeaderActionGroup'
 
@@ -406,7 +471,8 @@ const WorkspaceIconButton = React.forwardRef<
       size={label ? 'sm' : 'icon'}
       data-active={active ? 'true' : 'false'}
       className={cn(
-        'shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5',
+        'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
+        !label ? 'border border-input' : undefined,
         label ? 'gap-1.5' : undefined,
         className
       )}
@@ -450,7 +516,7 @@ const WorkspaceContextEmptyState = React.forwardRef<
   HTMLDivElement,
   WorkspaceContextEmptyStateProps
 >(({ className, title = 'Context', description, ...props }, ref) => (
-  <div ref={ref} className={cn('m-3 rounded-lg border bg-muted p-4', className)} {...props}>
+  <div ref={ref} className={cn('m-3 rounded-xl border bg-muted p-4', className)} {...props}>
     <p className="text-sm font-semibold">{title}</p>
     <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
   </div>
@@ -458,6 +524,7 @@ const WorkspaceContextEmptyState = React.forwardRef<
 WorkspaceContextEmptyState.displayName = 'WorkspaceContextEmptyState'
 
 export {
+  WorkspaceContextProvider,
   DocumentWorkspace,
   WorkspaceTabManager,
   type WorkspaceTab,
@@ -469,6 +536,7 @@ export {
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,
+  WorkspaceFooter,
   WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,

@@ -13,17 +13,22 @@ Your vault stores notebook content, standalone structured data files, and attach
   notebooks/
   attachments/
   settings.json
-  projects.json
-  project-icons.json
-  tasks.json
-  weekly-plan.json
-  subscriptions.json
-  schedule-jobs.json
-  schedule-runs.json
-  agent-chats.json
-  agent-runs.json
-  generative-ui-artifacts.json
-  excalidraw-sessions.json
+  projects/
+    <project-id>.json
+  calendar/
+    tasks.json
+  weekly-plan/
+    state.json
+  subscriptions/
+    data.json
+  schedules/
+    jobs.json
+    runs.json
+  agent/
+    chats.json
+    runs.json
+  excalidraw/
+    sessions.json
   vault.json
   migrations.json
   filemap.json
@@ -42,7 +47,7 @@ If you open an older vault, Xingularity migrates it forward in place:
 
 - `notes/` is copied into `notebooks/`
 - legacy `.appmeta/` and `.xingularity/` metadata files are promoted to root-level canonical files
-- older page-folder JSON stores are rewritten into standalone root-level files
+- older page-folder JSON stores are rewritten into canonical page folders
 
 If both `notes/` and `notebooks/` already exist before migration, the app stops and reports a conflict instead of guessing which copy is canonical.
 
@@ -109,7 +114,7 @@ Project status values are:
 - `blocked`
 - `completed`
 
-Projects can connect back to notes through generated project tags, and their milestones and subtasks also appear in planning surfaces.
+Projects remain independent records; notebook files and tags are created and managed by the user. Milestones and subtasks also appear in planning surfaces.
 
 ## Subscriptions Workflow
 
@@ -258,15 +263,13 @@ Vault-backed files:
 - notebooks: `notebooks/**/*.md`
 - attachments: `attachments/**`
 - vault-scoped settings: `settings.json`
-- projects: `projects.json`
-- project icons: `project-icons.json`
-- calendar tasks: `tasks.json`
-- weekly plans: `weekly-plan.json`
-- subscriptions: `subscriptions.json`
-- schedules: `schedule-jobs.json`, `schedule-runs.json`
-- agent data: `agent-chats.json`, `agent-runs.json`
-- generative UI artifacts: `generative-ui-artifacts.json`
-- Excalidraw sessions: `excalidraw-sessions.json`
+- projects: `projects/<project-id>.json`
+- calendar tasks: `calendar/tasks.json`
+- weekly plans: `weekly-plan/state.json`
+- subscriptions: `subscriptions/data.json`
+- schedules: `schedules/jobs.json`, `schedules/runs.json`
+- agent data: `agent/chats.json`, `agent/runs.json`
+- Excalidraw sessions: `excalidraw/sessions.json`
 - local index and vault metadata: `vault.json`, `migrations.json`, `filemap.json`, `index.sqlite`
 
 ## Current Caveats

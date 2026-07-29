@@ -1,16 +1,11 @@
 import { useMemo, useState, type ReactElement } from 'react'
 import {
-  Bot,
   BookOpen,
-  CalendarClock,
   CalendarDays,
   ChevronDown,
   CreditCard,
   FolderKanban,
-  House,
-  LayoutDashboard,
   ListTodo,
-  MessageSquare,
   NotebookTabs,
   Search,
   Settings2,
@@ -20,7 +15,9 @@ import {
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
 import { cn } from '../lib/utils'
 import {
-  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -32,6 +29,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   SidebarSeparator
 } from './ui'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
@@ -45,12 +43,11 @@ interface AppSidebarProps {
   notesCount: number
   projectsCount: number
   calendarUndoneCount: number
-  profileName: string
-  activeVaultPath?: string | null
   isLocked?: boolean
   availablePages?: readonly AppPage[]
   className?: string
-  collapsible?: 'offcanvas' | 'icon' | 'none'
+  collapsible?: 'offcanvas' | 'icon' | 'min' | 'none'
+  macosTrafficLightInset?: boolean
 }
 
 type SidebarPageItem = {
@@ -61,9 +58,8 @@ type SidebarPageItem = {
 }
 
 type SidebarSection = {
-  id: 'board' | 'home' | 'finance' | 'automations'
+  id: 'board' | 'home' | 'finance'
   label: string
-  icon: FilledIcon
   items: readonly SidebarPageItem[]
 }
 
@@ -71,13 +67,11 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   {
     id: 'board',
     label: 'Board',
-    icon: LayoutDashboard,
     items: [{ id: 'knowledge', label: 'Knowledge', icon: BookOpen }]
   },
   {
     id: 'home',
     label: 'Home',
-    icon: House,
     items: [
       { id: 'notes', label: 'Notebooks', icon: NotebookTabs },
       { id: 'projects', label: 'Projects', icon: FolderKanban },
@@ -88,17 +82,7 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   {
     id: 'finance',
     label: 'Finance',
-    icon: CreditCard,
     items: [{ id: 'subscriptions', label: 'Subscriptions', icon: CreditCard }]
-  },
-  {
-    id: 'automations',
-    label: 'Automations',
-    icon: Bot,
-    items: [
-      { id: 'schedules', label: 'Schedules', icon: CalendarClock },
-      { id: 'agentHistory', label: 'Agent Chat', icon: MessageSquare, shortcut: ['cmd', 'i'] }
-    ]
   }
 ]
 
@@ -109,19 +93,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
   board: true,
   home: true,
-  finance: true,
-  automations: true
-}
-
-function getVaultDisplayName(activeVaultPath: string | null): string {
-  if (!activeVaultPath) {
-    return 'No vault selected'
-  }
-
-  const normalized = activeVaultPath.replace(/[\\/]+$/g, '')
-  const segments = normalized.split(/[\\/]/)
-
-  return segments[segments.length - 1] || activeVaultPath
+  finance: true
 }
 
 export function AppSidebar({
@@ -132,20 +104,15 @@ export function AppSidebar({
   notesCount,
   projectsCount,
   calendarUndoneCount,
-  profileName,
-  activeVaultPath = null,
   isLocked = false,
   availablePages = ALL_APP_PAGES,
   className,
-  collapsible = 'icon'
+  collapsible = 'min',
+  macosTrafficLightInset = false
 }: AppSidebarProps): ReactElement {
   const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
-  const welcomeName = profileName.trim() || 'there'
-  const sidebarVaultTitle = isLocked ? 'Select vault' : (activeVaultPath ?? 'No vault selected')
-  const sidebarVaultLabel = isLocked ? 'Select vault' : getVaultDisplayName(activeVaultPath)
-
   const isPageDisabled = (page: SidebarPageItem): boolean => isLocked || page.id === 'weeklyPlan'
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
 
@@ -194,116 +161,102 @@ export function AppSidebar({
   return (
     <Sidebar
       collapsible={collapsible}
-      className={cn('border-sidebar-border', className)}
+      className={cn('px-2', className)}
       onPointerDownCapture={() => onSidebarInteract?.()}
     >
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
+      <SidebarHeader
+        className={cn('border-b border-sidebar-border py-4', macosTrafficLightInset && '!pt-11')}
+      >
+        <div className="flex w-full min-w-0 items-center justify-center gap-3">
           <img
             src={appLogo}
             alt="Xingularity logo"
-            className="size-8 shrink-0 rounded-md border border-sidebar-border object-cover"
+            className="size-9 shrink-0 rounded-lg border border-sidebar-border object-cover shadow-sm"
           />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-sm font-semibold">Xingularity</p>
-            <p className="truncate text-xs text-muted-foreground">Workspace</p>
+            <h1 className="sidebar-brand-shimmer truncate text-base font-bold leading-none tracking-tight">
+              Xingularity
+            </h1>
+            <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Workspace
+            </p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarGroup className="border-b border-sidebar-border group-data-[collapsible=icon]:hidden">
-        <p className="text-sm font-medium">
-          Welcome back, <span className="text-primary">{welcomeName}</span>
-        </p>
-        <p className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
-          <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-          <span className="truncate" title={sidebarVaultTitle}>
-            {sidebarVaultLabel}
-          </span>
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onOpenSearchPalette}
-          disabled={isLocked}
-          className="mt-2 w-full justify-start"
-          aria-label="Open command palette"
-        >
-          <Search aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-left">Command palette...</span>
-          <Shortcut keys={['cmd', 'p']} className="ml-auto shrink-0" />
-        </Button>
-      </SidebarGroup>
-
-      <SidebarGroup className="hidden p-3 group-data-[collapsible=icon]:block">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={onOpenSearchPalette}
-              disabled={isLocked}
-              tooltip="Command palette"
-              aria-label="Open command palette"
-            >
-              <Search aria-hidden="true" />
-              <span>Command palette</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroup>
-
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={onOpenSearchPalette}
+                  disabled={isLocked}
+                  tooltip="Command palette"
+                  aria-label="Open command palette"
+                  data-testid="sidebar-command-palette"
+                >
+                  <Search aria-hidden="true" />
+                  <span className="min-w-0 truncate">Command palette...</span>
+                  <Shortcut
+                    keys={['cmd', 'p']}
+                    className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
+                  />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {SIDEBAR_SECTIONS.filter((section) =>
           section.items.some((item) => availablePageSet.has(item.id))
         ).map((section) => {
           const isOpen = openSections[section.id]
           const activeInSection = section.items.some((item) => item.id === activePage)
-          const SectionIcon = section.icon
 
           return (
-            <SidebarGroup key={section.id}>
-              <details
-                open={isOpen}
-                onToggle={(event) => {
-                  const nextIsOpen = event.currentTarget.open
-
-                  setOpenSections((current) => ({
-                    ...current,
-                    [section.id]: nextIsOpen
-                  }))
-                }}
-                className="group/section"
-              >
+            <Collapsible
+              key={section.id}
+              asChild
+              open={isOpen}
+              disabled={isLocked}
+              onOpenChange={(nextIsOpen) => {
+                setOpenSections((current) => ({
+                  ...current,
+                  [section.id]: nextIsOpen
+                }))
+              }}
+            >
+              <SidebarGroup className="group/collapsible">
                 <SidebarGroupLabel
                   asChild
-                  className="cursor-pointer list-none [&::-webkit-details-marker]:hidden group-data-[collapsible=icon]:m-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:opacity-100"
+                  className={cn(
+                    'cursor-pointer',
+                    activeInSection && 'text-sidebar-accent-foreground'
+                  )}
+                  title={section.label}
                 >
-                  <summary
-                    className={cn(
-                      'flex items-center gap-2',
-                      activeInSection && 'text-sidebar-accent-foreground'
-                    )}
-                    onClick={(event) => {
-                      if (isLocked) event.preventDefault()
-                    }}
-                    aria-disabled={isLocked}
-                    title={section.label}
-                  >
-                    <SectionIcon aria-hidden="true" />
-                    <span className="group-data-[collapsible=icon]:hidden">{section.label}</span>
+                  <CollapsibleTrigger className="w-full justify-between">
+                    <span>{section.label}</span>
                     <ChevronDown
                       aria-hidden="true"
-                      className="ml-auto transition-transform group-open/section:rotate-180 group-data-[collapsible=icon]:hidden"
+                      className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
                     />
-                  </summary>
+                  </CollapsibleTrigger>
                 </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {section.items.filter((item) => availablePageSet.has(item.id)).map(renderItem)}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </details>
-            </SidebarGroup>
+                <CollapsibleContent asChild>
+                  <SidebarGroupContent className="pl-4 group-data-[collapsible=icon]:pl-0">
+                    <SidebarMenu>
+                      {section.items
+                        .filter((item) => availablePageSet.has(item.id))
+                        .map(renderItem)}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
           )
         })}
       </SidebarContent>
@@ -318,6 +271,7 @@ export function AppSidebar({
           </SidebarFooter>
         </>
       ) : null}
+      <SidebarRail />
     </Sidebar>
   )
 }

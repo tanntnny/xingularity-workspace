@@ -129,7 +129,7 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
 const WEEKLY_TIME_GUTTER_WIDTH_PX = 72
 const WEEKLY_CELL_PADDING_PX = 8
 const WEEKLY_ALL_DAY_ROW_HEIGHT_PX = 44
-const WEEKLY_ALL_DAY_ROW_GAP_PX = 6
+const WEEKLY_ALL_DAY_ROW_GAP_PX = 8
 const WEEKLY_ALL_DAY_CELL_PADDING_X_PX = 10
 const WEEKLY_ALL_DAY_SURFACE_PADDING_PX = 8
 const WEEKLY_ALL_DAY_MIN_HEIGHT_PX = 92
@@ -649,7 +649,7 @@ export function CalendarWeekView({
         event.preventDefault()
         safeDeleteTask(task.id)
       }}
-      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md border bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
+      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
     >
       <CalendarTaskCard task={task} onToggle={safeToggleTask} />
     </article>
@@ -693,7 +693,7 @@ export function CalendarWeekView({
         })
       }}
       onMouseLeave={() => setHoveredMilestoneCard(null)}
-      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-ring bg-accent px-2 py-1 text-left text-xs text-foreground"
+      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-ring bg-accent px-2 py-1 text-left text-xs text-foreground transition-colors hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={item.projectName ? `${item.title} · ${item.projectName}` : item.title}
     >
       {item.projectId && item.milestoneId ? (
@@ -773,7 +773,7 @@ export function CalendarWeekView({
           event.preventDefault()
           safeDeleteTask(task.id)
         }}
-        className={`group absolute overflow-hidden rounded-md border bg-card transition-colors hover:bg-accent ${
+        className={`group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
         } ${task.completed ? 'line-through opacity-60' : ''} cursor-grab active:cursor-grabbing`}
       >
@@ -783,7 +783,7 @@ export function CalendarWeekView({
           aria-label="Resize task start"
           title="Resize task start"
           onMouseDown={(event) => startResizeInteraction('resize-start', event, task, layout)}
-          className="absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ height: `${resizeBandPx}px` }}
         />
         <button
@@ -792,7 +792,7 @@ export function CalendarWeekView({
           aria-label="Resize task end"
           title="Resize task end"
           onMouseDown={(event) => startResizeInteraction('resize-end', event, task, layout)}
-          className="absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ height: `${resizeBandPx}px` }}
         />
         <div
@@ -820,7 +820,7 @@ export function CalendarWeekView({
     >
       <div
         data-testid="calendar-week-weekday-header"
-        className="sticky top-0 z-20 grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border bg-card"
+        className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border bg-card"
       >
         <div className="border-r border-border bg-muted px-3 py-4" />
         {weekDays.map(({ date, value }) => {
@@ -833,7 +833,7 @@ export function CalendarWeekView({
               key={date}
               type="button"
               onClick={() => onSelectDate(date)}
-              className={`border-r border-border px-3 py-3 text-center transition-colors last:border-r-0 ${
+              className={`border-r border-border px-3 py-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring last:border-r-0 ${
                 isHighlighted ? 'bg-accent' : 'hover:bg-accent'
               }`}
             >

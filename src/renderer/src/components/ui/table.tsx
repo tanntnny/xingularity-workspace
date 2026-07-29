@@ -89,7 +89,7 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
       <TableHead ref={ref} className={className} aria-sort={ariaSort} {...props}>
         <button
           type="button"
-          className="flex w-full items-center gap-1.5 text-left transition-colors hover:text-foreground"
+          className="flex w-full items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-left transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={onToggleSort}
         >
           <span className="min-w-0 flex-1">{children}</span>

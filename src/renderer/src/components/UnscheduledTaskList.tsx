@@ -117,14 +117,14 @@ export function UnscheduledTaskList({
                 onInsertTask()
               }
             }}
-            className="border border-input bg-background text-foreground h-8 min-w-0 flex-1 rounded-md border border-border px-2.5 text-sm text-foreground outline-none hover:border-primary focus:border-primary transition"
+            className="border border-input bg-card text-foreground h-8 min-w-0 flex-1 rounded-md border border-border px-2.5 text-sm text-foreground outline-none hover:border-primary focus:border-primary transition"
           />
           <button
             type="button"
             onClick={onInsertTask}
             aria-label="Insert task"
             title="Insert task"
-            className="border border-input bg-background text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors"
+            className="border border-input bg-card text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus size={13} aria-hidden="true" />
           </button>
@@ -147,7 +147,7 @@ export function UnscheduledTaskList({
             </div>
           ) : null}
 
-          <div className="flex flex-1 flex-col gap-2">
+          <div className="flex flex-1 flex-col gap-3">
             {tasks.map((task) => {
               const revealProps = getRevealItemProps(task.id)
               return (
@@ -206,7 +206,7 @@ export function UnscheduledTaskList({
                       event.preventDefault()
                       onDelete(task.id)
                     }}
-                    className={`${revealProps.className} cursor-grab rounded-md border bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
+                    className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
                   >
                     <CalendarTaskCard task={task} onToggle={onToggle} />
                   </article>

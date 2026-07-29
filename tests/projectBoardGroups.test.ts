@@ -11,9 +11,9 @@ const baseProject: Project = {
   updatedAt: '2026-07-10T12:00:00.000Z',
   progress: 0,
   icon: {
-    set: 'shape',
-    glyph: 'circle',
-    shape: 'circle',
+    set: 'tabler',
+    glyph: 'briefcase',
+    shape: undefined,
     variant: 'filled',
     color: '#2563eb'
   },

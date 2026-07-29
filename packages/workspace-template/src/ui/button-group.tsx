@@ -6,9 +6,9 @@ import { cn } from '../lib/utils'
 const buttonGroupVariants = cva('inline-flex items-center', {
   variants: {
     variant: {
-      default: 'gap-0.5 rounded-md bg-muted p-1',
-      outline: 'gap-0.5 rounded-md border bg-background p-1',
-      ghost: 'gap-1'
+      default: 'gap-0.5 rounded-[var(--radius-button)] bg-muted p-1',
+      outline: 'gap-0.5 rounded-[var(--radius-button)] border bg-background p-1',
+      ghost: 'gap-1 rounded-[var(--radius-button)]'
     },
     size: {
       default: '',
@@ -23,7 +23,7 @@ const buttonGroupVariants = cva('inline-flex items-center', {
 })
 
 const actionButtonGroupVariants = cva(
-  'inline-flex items-center gap-0 overflow-hidden rounded-md border bg-background [&>*]:h-full [&>*:not(:first-child)]:border-l',
+  'inline-flex items-center gap-0 overflow-hidden rounded-[var(--radius-button)] border bg-background [&>*]:h-full [&>*:not(:first-child)]:border-l',
   {
     variants: {
       size: {

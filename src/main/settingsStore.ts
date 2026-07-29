@@ -16,16 +16,13 @@ import {
 } from '../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyVaultCalendarTasksPath,
-  getLegacyPageVaultCalendarTasksPath,
-  getLegacyVaultProjectsPath,
-  getLegacyPageVaultProjectsPath,
+  getLegacyRootVaultCalendarTasksPath,
+  getLegacySystemVaultCalendarTasksPath,
   getLegacyVaultSettingsPath,
   getVaultCalendarTasksPath,
-  getVaultProjectIconsPath,
-  getVaultProjectsPath,
   getVaultSettingsPath
 } from './vaultData'
+import { ProjectStore } from './projectStore'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -46,11 +43,6 @@ interface VaultCoreSettings extends Omit<
   projects?: Project[]
   projectIcons?: Record<string, AppSettings['projectIcons'][string]>
   calendarTasks?: CalendarTask[]
-}
-
-interface LegacyVaultProjectsData {
-  projects: Project[]
-  projectIcons: AppSettings['projectIcons']
 }
 
 interface LegacyVaultTasksData {
@@ -179,7 +171,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
       name:
         typeof parsedProfile?.name === 'string' && parsedProfile.name.trim().length > 0
           ? parsedProfile.name
-          : defaults.profile.name,
+          : defaults.profile.name
     },
     ai: {
       mistralApiKey:
@@ -422,6 +414,23 @@ function normalizeProjectIcons(
   )
 }
 
+function applyProjectIconCompatibility(settings: AppSettings, input: unknown): AppSettings {
+  const legacyIcons =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? normalizeProjectIcons(input as Record<string, AppSettings['projectIcons'][string]>)
+      : {}
+  const projects = settings.projects.map((project) => {
+    const legacyIcon = legacyIcons[project.id]
+    return legacyIcon ? { ...project, icon: legacyIcon } : project
+  })
+
+  return {
+    ...settings,
+    projects,
+    projectIcons: Object.fromEntries(projects.map((project) => [project.id, project.icon]))
+  }
+}
+
 function isLegacyAppSettings(value: unknown): value is AppSettings {
   return (
     typeof value === 'object' && value !== null && 'calendarTasks' in value && 'projects' in value
@@ -619,6 +628,20 @@ function resolvePreferredData<T>(
   return current
 }
 
+function resolveLegacyTasksData(
+  rootTasks: CalendarTask[] | null,
+  systemTasks: LegacyVaultTasksData | null
+): CalendarTask[] | undefined {
+  if (
+    rootTasks === null ||
+    (!hasMaterialTasksData(rootTasks) && hasMaterialTasksData(systemTasks?.calendarTasks))
+  ) {
+    return systemTasks?.calendarTasks ?? rootTasks ?? undefined
+  }
+
+  return rootTasks
+}
+
 export class SettingsStore {
   private readonly globalSettingsPath: string
 
@@ -677,35 +700,26 @@ export class SettingsStore {
   async readVault(vaultRoot: string): Promise<AppSettings> {
     const settingsPath = getVaultSettingsPath(vaultRoot)
     const legacySettingsPath = getLegacyVaultSettingsPath(vaultRoot)
-    const projectsPath = getVaultProjectsPath(vaultRoot)
-    const projectIconsPath = getVaultProjectIconsPath(vaultRoot)
-    const legacyPageProjectsPath = getLegacyPageVaultProjectsPath(vaultRoot)
-    const legacyProjectsPath = getLegacyVaultProjectsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
-    const legacyPageTasksPath = getLegacyPageVaultCalendarTasksPath(vaultRoot)
-    const legacyTasksPath = getLegacyVaultCalendarTasksPath(vaultRoot)
+    const legacyRootTasksPath = getLegacyRootVaultCalendarTasksPath(vaultRoot)
+    const legacySystemTasksPath = getLegacySystemVaultCalendarTasksPath(vaultRoot)
+    const projectStore = new ProjectStore(vaultRoot)
 
     try {
       const [
         coreParsed,
         legacyCoreParsed,
-        projectsData,
-        projectIconsData,
-        legacyPageProjectsData,
-        legacyProjectsData,
+        projectStorage,
         tasksData,
-        legacyPageTasksData,
-        legacyTasksData
+        legacyRootTasksData,
+        legacySystemTasksData
       ] = await Promise.all([
         this.readJsonFile<VaultCoreSettings>(settingsPath),
         this.readJsonFile<VaultCoreSettings>(legacySettingsPath),
-        this.readJsonFile<Project[]>(projectsPath),
-        this.readJsonFile<AppSettings['projectIcons']>(projectIconsPath),
-        this.readJsonFile<LegacyVaultProjectsData>(legacyPageProjectsPath),
-        this.readJsonFile<LegacyVaultProjectsData>(legacyProjectsPath),
+        projectStore.read(),
         this.readJsonFile<CalendarTask[]>(tasksPath),
-        this.readJsonFile<LegacyVaultTasksData>(legacyPageTasksPath),
-        this.readJsonFile<LegacyVaultTasksData>(legacyTasksPath)
+        this.readJsonFile<CalendarTask[]>(legacyRootTasksPath),
+        this.readJsonFile<LegacyVaultTasksData>(legacySystemTasksPath)
       ])
 
       const resolvedCore =
@@ -714,67 +728,50 @@ export class SettingsStore {
           ? (legacyCoreParsed ?? coreParsed)
           : coreParsed
 
-      const resolvedLegacyProjects =
-        legacyPageProjectsData === null ||
-        (!hasMaterialProjectsData(legacyPageProjectsData.projects) &&
-          !hasMaterialProjectIconsData(legacyPageProjectsData.projectIcons) &&
-          (hasMaterialProjectsData(legacyProjectsData?.projects) ||
-            hasMaterialProjectIconsData(legacyProjectsData?.projectIcons)))
-          ? (legacyProjectsData ?? legacyPageProjectsData)
-          : legacyPageProjectsData
-
-      const resolvedLegacyTasks =
-        legacyPageTasksData === null ||
-        (!hasMaterialTasksData(legacyPageTasksData.calendarTasks) &&
-          hasMaterialTasksData(legacyTasksData?.calendarTasks))
-          ? (legacyTasksData ?? legacyPageTasksData)
-          : legacyPageTasksData
-
       const resolvedProjects = resolvePreferredData(
-        projectsData,
-        resolvedLegacyProjects?.projects ?? resolvedCore?.projects,
+        projectStorage.canonicalFiles || projectStorage.projects.length > 0
+          ? projectStorage.projects
+          : null,
+        resolvedCore?.projects,
         hasMaterialProjectsData
       )
       const resolvedProjectIcons = resolvePreferredData(
-        projectIconsData,
-        resolvedLegacyProjects?.projectIcons ?? resolvedCore?.projectIcons,
+        Object.keys(projectStorage.projectIcons).length > 0 ? projectStorage.projectIcons : null,
+        resolvedCore?.projectIcons,
         hasMaterialProjectIconsData
       )
       const resolvedTasks = resolvePreferredData(
         tasksData,
-        resolvedLegacyTasks?.calendarTasks ?? resolvedCore?.calendarTasks,
+        resolveLegacyTasksData(legacyRootTasksData, legacySystemTasksData) ??
+          resolvedCore?.calendarTasks,
         hasMaterialTasksData
       )
       const needsSplitMigration =
         coreParsed === null ||
-        projectsData === null ||
-        projectIconsData === null ||
         tasksData === null ||
         legacyCoreParsed !== null ||
-        legacyPageProjectsData !== null ||
-        legacyProjectsData !== null ||
-        legacyPageTasksData !== null ||
-        legacyTasksData !== null ||
+        !projectStorage.canonicalFiles ||
+        legacyRootTasksData !== null ||
+        legacySystemTasksData !== null ||
         hasLegacyAppearanceSettings(resolvedCore) ||
         resolvedCore !== coreParsed ||
-        resolvedProjects !== projectsData ||
-        resolvedProjectIcons !== projectIconsData ||
         resolvedTasks !== tasksData ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
         Boolean(resolvedCore?.calendarTasks)
 
-      const merged = normalizeSettings({
+      const normalized = normalizeSettings({
         ...(resolvedCore ?? {}),
         projects: resolvedProjects,
         projectIcons: resolvedProjectIcons,
         calendarTasks: resolvedTasks,
         lastVaultPath: vaultRoot
       })
+      const merged = applyProjectIconCompatibility(normalized, resolvedProjectIcons)
 
       if (needsSplitMigration) {
         await this.persistVaultFiles(vaultRoot, merged)
-        await this.cleanupLegacyVaultFiles(vaultRoot)
+        await this.cleanupLegacyVaultFiles(vaultRoot, projectStore)
       }
       return merged
     } catch (error) {
@@ -785,7 +782,10 @@ export class SettingsStore {
       // Try migrating from legacy global file
       const legacy = await this.readLegacyAppSettings()
       if (legacy) {
-        const migrated = normalizeSettings({ ...legacy, lastVaultPath: vaultRoot })
+        const migrated = applyProjectIconCompatibility(
+          normalizeSettings({ ...legacy, lastVaultPath: vaultRoot }),
+          legacy.projectIcons
+        )
         await this.persistVaultFiles(vaultRoot, migrated)
         await this.rememberVault(legacy.lastVaultPath ?? vaultRoot)
         return migrated
@@ -830,9 +830,8 @@ export class SettingsStore {
 
   private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
     const corePath = getVaultSettingsPath(vaultRoot)
-    const projectsPath = getVaultProjectsPath(vaultRoot)
-    const projectIconsPath = getVaultProjectIconsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
+    const projectStore = new ProjectStore(vaultRoot)
 
     const coreSettings: VaultCoreSettings = {
       isSidebarCollapsed: settings.isSidebarCollapsed,
@@ -851,19 +850,20 @@ export class SettingsStore {
 
     await Promise.all([
       this.writeJsonFile(corePath, coreSettings),
-      this.writeJsonFile(projectsPath, settings.projects),
-      this.writeJsonFile(projectIconsPath, settings.projectIcons),
+      projectStore.writeAll(settings.projects),
       this.writeJsonFile(tasksPath, settings.calendarTasks)
     ])
   }
 
-  private async cleanupLegacyVaultFiles(vaultRoot: string): Promise<void> {
+  private async cleanupLegacyVaultFiles(
+    vaultRoot: string,
+    projectStore = new ProjectStore(vaultRoot)
+  ): Promise<void> {
     await Promise.all([
       deleteLegacyVaultPath(getLegacyVaultSettingsPath(vaultRoot), vaultRoot),
-      deleteLegacyVaultPath(getLegacyPageVaultProjectsPath(vaultRoot), vaultRoot),
-      deleteLegacyVaultPath(getLegacyVaultProjectsPath(vaultRoot), vaultRoot),
-      deleteLegacyVaultPath(getLegacyPageVaultCalendarTasksPath(vaultRoot), vaultRoot),
-      deleteLegacyVaultPath(getLegacyVaultCalendarTasksPath(vaultRoot), vaultRoot)
+      projectStore.cleanupLegacyFiles(),
+      deleteLegacyVaultPath(getLegacyRootVaultCalendarTasksPath(vaultRoot), vaultRoot),
+      deleteLegacyVaultPath(getLegacySystemVaultCalendarTasksPath(vaultRoot), vaultRoot)
     ])
   }
 

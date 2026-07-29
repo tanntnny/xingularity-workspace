@@ -7,36 +7,65 @@
 @layer base {
   :root {
     color-scheme: light;
-    --background: #dfe3e8;
-    --foreground: #17202a;
-    --card: #f8fafc;
-    --card-foreground: #17202a;
+    --background: var(--sidebar-background);
+    --workspace-background: #f4f4f4;
+    --foreground: #1a1a1a;
+    --card: #fafafa;
+    --card-foreground: #1a1a1a;
     --popover: #ffffff;
-    --popover-foreground: #17202a;
-    --primary: #1f2937;
-    --primary-foreground: #f8fafc;
-    --secondary: #e3e7eb;
-    --secondary-foreground: #1f2937;
-    --muted: #eef1f4;
-    --muted-foreground: #5f6b78;
-    --accent: #e8edf2;
-    --accent-foreground: #1f2937;
+    --popover-foreground: #1a1a1a;
+    --primary: #202020;
+    --primary-foreground: #fafafa;
+    --secondary: #e9e9e9;
+    --secondary-foreground: #202020;
+    --muted: #eeeeee;
+    --muted-foreground: #707070;
+    --accent: #e5e5e5;
+    --accent-foreground: #202020;
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
-    --border: #c4cbd3;
-    --input: #c4cbd3;
-    --ring: #64748b;
+    --border: #c7c7c7;
+    --input: #c7c7c7;
+    --ring: #666666;
     --radius: 0.5rem;
-    --sidebar-background: #cbd1d8;
-    --sidebar-foreground: #17202a;
-    --sidebar-primary: #1f2937;
-    --sidebar-primary-foreground: #f8fafc;
-    --sidebar-accent: #dce2e8;
-    --sidebar-accent-foreground: #17202a;
-    --sidebar-border: #b8c1ca;
-    --sidebar-ring: #475569;
+    --sidebar-background: #d1d1d1;
+    --sidebar-foreground: #1a1a1a;
+    --sidebar-primary: #202020;
+    --sidebar-primary-foreground: #fafafa;
+    --sidebar-accent: #dfdfdf;
+    --sidebar-accent-foreground: #1a1a1a;
+    --sidebar-border: #bdbdbd;
+    --sidebar-ring: #555555;
 
     --app-font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+    --radius-button: calc(var(--radius) - 2px);
+    --radius-button-pill: 9999px;
+    --radius-control: 9999px;
+    --control-height: 2rem;
+    --control-font-size: 0.875rem;
+    --control-icon-size: 1rem;
+    --control-padding-x: 1rem;
+    --workspace-chrome-height: 2rem;
+    --workspace-tab-control-height: 1.5rem;
+    --calendar-task-stack-gap-y: 0.5rem;
+    --calendar-task-meeting-bg: #fce7f3;
+    --calendar-task-meeting-border: #d38ab2;
+    --calendar-task-assignment-bg: #e0f2fe;
+    --calendar-task-assignment-border: #74a9df;
+    --calendar-task-review-bg: #ffedd5;
+    --calendar-task-review-border: #d19a7c;
+    --calendar-task-personal-bg: #dcfce7;
+    --calendar-task-personal-border: #7fbe94;
+    --calendar-task-call-bg: #cffafe;
+    --calendar-task-call-border: #78b6c3;
+    --calendar-task-deep-work-bg: #e0e7ff;
+    --calendar-task-deep-work-border: #8b9de0;
+    --calendar-task-errand-bg: #fef3c7;
+    --calendar-task-errand-border: #d4a65b;
+    --calendar-task-follow-up-bg: #fce7f3;
+    --calendar-task-follow-up-border: #d38ab2;
+    --calendar-task-other-bg: #f3f4f6;
+    --calendar-task-other-border: #a3a3a8;
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
   }
@@ -44,33 +73,52 @@
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --background: #0b0f14;
-      --foreground: #e6edf3;
-      --card: #171c23;
-      --card-foreground: #e6edf3;
-      --popover: #20262e;
-      --popover-foreground: #e6edf3;
-      --primary: #dbe4ee;
-      --primary-foreground: #0b0f14;
-      --secondary: #252c35;
-      --secondary-foreground: #e6edf3;
-      --muted: #20262e;
-      --muted-foreground: #aab6c3;
-      --accent: #2a323c;
-      --accent-foreground: #f2f6fa;
+      --background: var(--sidebar-background);
+      --workspace-background: #101010;
+      --foreground: #eeeeee;
+      --card: #181818;
+      --card-foreground: #eeeeee;
+      --popover: #222222;
+      --popover-foreground: #eeeeee;
+      --primary: #e5e5e5;
+      --primary-foreground: #0c0c0c;
+      --secondary: #262626;
+      --secondary-foreground: #eeeeee;
+      --muted: #222222;
+      --muted-foreground: #a3a3a3;
+      --accent: #2b2b2b;
+      --accent-foreground: #f2f2f2;
       --destructive: #7f1d1d;
       --destructive-foreground: #fafafa;
-      --border: #303945;
-      --input: #3a4552;
-      --ring: #94a3b8;
-      --sidebar-background: #070a0e;
-      --sidebar-foreground: #e6edf3;
-      --sidebar-primary: #dbe4ee;
+      --border: #353535;
+      --input: #404040;
+      --ring: #a3a3a3;
+      --sidebar-background: #080808;
+      --sidebar-foreground: #eeeeee;
+      --sidebar-primary: #e5e5e5;
       --sidebar-primary-foreground: #ffffff;
-      --sidebar-accent: #171e27;
-      --sidebar-accent-foreground: #f2f6fa;
-      --sidebar-border: #222b35;
-      --sidebar-ring: #94a3b8;
+      --sidebar-accent: #1b1b1b;
+      --sidebar-accent-foreground: #f2f2f2;
+      --sidebar-border: #242424;
+      --sidebar-ring: #a3a3a3;
+      --calendar-task-meeting-bg: #4c0d30;
+      --calendar-task-meeting-border: #a70e65;
+      --calendar-task-assignment-bg: #0d2a55;
+      --calendar-task-assignment-border: #1b63c7;
+      --calendar-task-review-bg: #531c11;
+      --calendar-task-review-border: #a74424;
+      --calendar-task-personal-bg: #042e1b;
+      --calendar-task-personal-border: #0b9958;
+      --calendar-task-call-bg: #073642;
+      --calendar-task-call-border: #0e8e9e;
+      --calendar-task-deep-work-bg: #1e1b4b;
+      --calendar-task-deep-work-border: #5b48c9;
+      --calendar-task-errand-bg: #542c0e;
+      --calendar-task-errand-border: #a26a22;
+      --calendar-task-follow-up-bg: #4c0d30;
+      --calendar-task-follow-up-border: #a70e65;
+      --calendar-task-other-bg: #1e1e20;
+      --calendar-task-other-border: #3f3f46;
     }
   }
 
@@ -97,7 +145,130 @@
   }
 }
 
+@layer components {
+  .sidebar-brand-shimmer {
+    background: linear-gradient(
+      110deg,
+      var(--sidebar-foreground) 20%,
+      var(--sidebar-foreground) 42%,
+      var(--sidebar-primary-foreground) 50%,
+      var(--sidebar-foreground) 58%,
+      var(--sidebar-foreground) 80%
+    );
+    background-size: 220% 100%;
+    background-position: 100% 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: sidebar-brand-shimmer 4.5s ease-in-out infinite;
+  }
+
+  @keyframes sidebar-brand-shimmer {
+    0%,
+    35% {
+      background-position: 100% 0;
+    }
+
+    75%,
+    100% {
+      background-position: -100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-brand-shimmer {
+      background: none;
+      animation: none;
+      color: var(--sidebar-foreground);
+      -webkit-text-fill-color: currentColor;
+    }
+  }
+
+  .ui-control {
+    height: var(--control-height);
+    font-size: var(--control-font-size);
+  }
+
+  .ui-control svg {
+    height: var(--control-icon-size);
+    width: var(--control-icon-size);
+  }
+
+  .calendar-full .fc {
+    --fc-border-color: var(--border);
+    --fc-page-bg-color: transparent;
+    --fc-neutral-bg-color: var(--muted);
+    --fc-today-bg-color: var(--accent);
+    color: var(--foreground);
+  }
+
+  .calendar-full .fc-scrollgrid {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background-color: transparent;
+  }
+
+  .calendar-full .fc-scrollgrid-section > td,
+  .calendar-full .fc-scrollgrid-section > th {
+    border-color: var(--border);
+    background-color: var(--card);
+  }
+
+  .calendar-full .fc-col-header-cell {
+    border-color: var(--border);
+    background-color: var(--card);
+  }
+
+  .calendar-full .fc-scrollgrid-section-body > td {
+    background-color: transparent;
+  }
+
+  .calendar-full .fc-daygrid-day {
+    border-color: var(--border);
+    background-color: transparent;
+  }
+
+  .calendar-full .fc-event.calendar-task-event {
+    border: 0;
+    background-color: transparent;
+    margin-top: var(--calendar-task-stack-gap-y);
+  }
+
+  .calendar-full .fc-daygrid-day:not(.bg-accent):not(.fc-day-today):hover {
+    background-color: var(--accent);
+  }
+
+  .calendar-full .fc-daygrid-day.bg-accent,
+  .calendar-full .fc-daygrid-day.fc-day-today {
+    background-color: var(--accent);
+  }
+
+  .calendar-full .fc-col-header-cell-cushion {
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+}
+
 @layer utilities {
+  .note-editor-surface .milkdown {
+    --crepe-color-background: transparent;
+    --crepe-color-on-background: var(--foreground);
+    --crepe-color-selected: var(--foreground);
+    --crepe-font-default: var(--app-font-family);
+    --crepe-font-title: var(--app-font-family);
+    background: transparent;
+    color: var(--foreground);
+    font-family: var(--app-font-family);
+  }
+
+  .note-editor-surface .milkdown .ProseMirror *::selection {
+    background: var(--foreground);
+    color: var(--workspace-background);
+  }
+
   .app-drag-region {
     -webkit-app-region: drag;
   }

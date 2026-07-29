@@ -15,7 +15,6 @@ Cross-process contracts live in `src/shared/`, especially:
 - `src/shared/types.ts`
 - `src/shared/scheduleTypes.ts`
 - `src/shared/ipc.ts`
-- `src/shared/projectFolders.ts`
 - `src/shared/subscriptions.ts`
 
 ## Storage Boundaries
@@ -29,17 +28,15 @@ User workspace content lives in a selected local vault:
 - `notebooks/**/*.md`
 - `attachments/**`
 - `settings.json`
-- `projects.json`
-- `project-icons.json`
-- `tasks.json`
-- `weekly-plan.json`
-- `subscriptions.json`
-- `schedule-jobs.json`
-- `schedule-runs.json`
-- `agent-chats.json`
-- `agent-runs.json`
-- `generative-ui-artifacts.json`
-- `excalidraw-sessions.json`
+- `projects/<project-id>.json`
+- `calendar/tasks.json`
+- `weekly-plan/state.json`
+- `subscriptions/data.json`
+- `schedules/jobs.json`
+- `schedules/runs.json`
+- `agent/chats.json`
+- `agent/runs.json`
+- `excalidraw/sessions.json`
 - `vault.json`
 - `migrations.json`
 - `filemap.json`
@@ -75,7 +72,7 @@ Legacy vault behavior:
 
 - older `notes/` roots are copied into `notebooks/`
 - older `.appmeta/` and `.xingularity/` metadata is promoted into root-level canonical files
-- older page-folder JSON stores are read once and persisted into standalone root-level files
+- older page-folder JSON stores are read once and persisted into the canonical page folders
 - if both `notes/` and `notebooks/` already exist before migration, vault open fails with a conflict instead of merging automatically
 
 ## Top-Level App Settings
@@ -181,11 +178,13 @@ Variants:
 - `NoteTreeFolder`
 - `NoteTreeFile`
 
-Protected tree behavior is driven by `src/shared/projectFolders.ts`.
+Notebook tree folders are user-managed; compatibility fields for older protected-tree
+metadata are ignored by the current runtime.
 
 ## Project Domain Models
 
-Projects are stored in app settings and synchronized into the notes tree through the managed `Projects/` folder.
+Projects are stored as independent records in `projects/<project-id>.json`. They do not
+create, own, or infer membership in notebook folders.
 
 ### `Project`
 
@@ -247,21 +246,11 @@ Supported icon fields are defined by:
 - `ProjectIconShape`
 - `ProjectIconVariant`
 
-### Project folder synchronization
+### Notebook relationship
 
-Project note membership is currently folder-based, not tag-assignment-based in the project page.
-
-Shared helpers in `src/shared/projectFolders.ts` define:
-
-- `PROJECTS_ROOT_FOLDER_NAME`
-- `getProjectsRootPath()`
-- `getProjectFolderPath(project)`
-- `isProtectedProjectTreePath(relPath, projects)`
-- `resolveProjectByFolderPath(relPath, projects)`
-
-Current rule:
-
-- notes under `Projects/<project>/...` belong to that project in the UI
+Notebook files are created and organized independently by the user. Project pages expose
+project metadata, milestones, and subtasks; they do not contain a managed project-note
+list or rewrite notebook tags when projects change.
 
 ## Calendar Domain Models
 
@@ -751,7 +740,7 @@ Reads and mutates:
 - `Project[]`
 - `ProjectMilestone[]`
 - `ProjectSubtask[]`
-- project notes inferred from `Projects/<project>/...`
+- projects do not infer or manage notebook membership
 
 ### Grid
 

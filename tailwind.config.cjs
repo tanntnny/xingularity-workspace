@@ -5,6 +5,7 @@ module.exports = {
     extend: {
       colors: {
         background: 'var(--background)',
+        workspace: 'var(--workspace-background)',
         foreground: 'var(--foreground)',
         card: {
           DEFAULT: 'var(--card)',

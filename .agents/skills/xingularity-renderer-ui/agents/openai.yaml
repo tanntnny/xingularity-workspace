@@ -1,4 +1,0 @@
-interface:
-  display_name: 'Xingularity Renderer UI'
-  short_description: 'Maintain Xingularity’s accessible React interface.'
-  default_prompt: 'Use $xingularity-renderer-ui to implement a polished Xingularity renderer UI change using the project’s layout and component conventions.'

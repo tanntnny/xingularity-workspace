@@ -4,8 +4,8 @@ import path from 'node:path'
 import type { SubscriptionRecord } from '../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyPageVaultSubscriptionsPath,
-  getLegacyVaultSubscriptionsPath,
+  getLegacyRootVaultSubscriptionsPath,
+  getLegacySystemVaultSubscriptionsPath,
   getVaultSubscriptionsPath
 } from './vaultData'
 
@@ -19,14 +19,12 @@ function normalizeState(records: unknown): SubscriptionRecord[] {
 export class SubscriptionsStore {
   private readonly vaultRoot: string
   private readonly filePath: string
-  private readonly legacyPageFilePath: string
-  private readonly legacyFilePath: string
+  private readonly legacySystemFilePath: string
 
   constructor(vaultRoot: string) {
     this.vaultRoot = vaultRoot
     this.filePath = getVaultSubscriptionsPath(vaultRoot)
-    this.legacyPageFilePath = getLegacyPageVaultSubscriptionsPath(vaultRoot)
-    this.legacyFilePath = getLegacyVaultSubscriptionsPath(vaultRoot)
+    this.legacySystemFilePath = getLegacySystemVaultSubscriptionsPath(vaultRoot)
   }
 
   async read(): Promise<SubscriptionRecord[]> {
@@ -35,15 +33,15 @@ export class SubscriptionsStore {
       return normalizeState(current)
     }
 
-    const legacyPage = await this.readJsonFile(this.legacyPageFilePath)
-    if (legacyPage) {
-      const normalized = normalizeState(legacyPage)
+    const legacyRoot = await this.readJsonFile(getLegacyRootVaultSubscriptionsPath(this.vaultRoot))
+    if (legacyRoot) {
+      const normalized = normalizeState(legacyRoot)
       await this.write(normalized)
       await this.cleanupLegacyFiles()
       return normalized
     }
 
-    const legacy = await this.readJsonFile(this.legacyFilePath)
+    const legacy = await this.readJsonFile(this.legacySystemFilePath)
     if (legacy) {
       const normalized = normalizeState(legacy)
       await this.write(normalized)
@@ -85,8 +83,8 @@ export class SubscriptionsStore {
 
   private async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(this.legacyPageFilePath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+      deleteLegacyVaultPath(getLegacyRootVaultSubscriptionsPath(this.vaultRoot), this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemFilePath, this.vaultRoot)
     ])
   }
 }

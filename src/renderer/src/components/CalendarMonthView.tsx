@@ -551,8 +551,8 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="min-h-full rounded-lg" data-testid="calendar-month-view">
-      <div className="relative">
+    <section className="min-h-full overflow-hidden rounded-b-2xl" data-testid="calendar-month-view">
+      <div className="calendar-full relative overflow-hidden rounded-b-2xl">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -580,7 +580,7 @@ export function CalendarMonthView({
 
             return (
               <div
-                className={`flex w-full flex-col items-center px-3 py-3 text-center transition-colors ${
+                className={`flex w-full flex-col items-center bg-card px-3 py-3 text-center transition-colors ${
                   isHighlighted ? 'bg-accent' : 'hover:bg-accent'
                 }`}
               >
@@ -640,11 +640,11 @@ export function CalendarMonthView({
             if (!task) {
               return ['rounded-md', 'border', 'bg-card']
             }
-            return ['rounded-md', 'border', 'bg-card', task.completed ? 'opacity-60' : '']
+            return ['calendar-task-event', 'rounded-md', task.completed ? 'opacity-60' : '']
           }}
           dayCellClassNames={(arg) => {
             const iso = toIsoDate(arg.date)
-            return iso === selectedDate ? ['bg-accent'] : []
+            return iso === selectedDate || iso === todayIso ? ['bg-accent'] : []
           }}
           eventContent={(arg) => {
             const source = String(arg.event.extendedProps.source ?? 'task')

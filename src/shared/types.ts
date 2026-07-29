@@ -63,7 +63,8 @@ export interface FolderPdfExportResult {
 }
 
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
-export type ProjectIconSet = 'shape' | 'lucide'
+export type ProjectIconSet = 'tabler'
+export type LegacyProjectIconSet = 'shape' | 'lucide'
 export type ProjectIconSymbol =
   | 'briefcase'
   | 'folder-kanban'
@@ -86,11 +87,19 @@ export type ProjectIconGlyph = ProjectIconShape | ProjectIconSymbol
 
 export interface ProjectIconStyle {
   set?: ProjectIconSet
-  glyph?: ProjectIconGlyph
+  glyph?: ProjectIconSymbol
   // Compatibility alias for legacy stored shape icons.
   shape?: ProjectIconShape
-  variant: ProjectIconVariant
+  variant: 'filled'
   color: string
+}
+
+export interface ProjectIconInput {
+  set?: ProjectIconSet | LegacyProjectIconSet
+  glyph?: ProjectIconGlyph
+  shape?: ProjectIconShape
+  variant?: ProjectIconVariant
+  color?: string
 }
 
 export interface NoteListItem {

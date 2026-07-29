@@ -4,7 +4,8 @@ import path from 'node:path'
 import type { ExcalidrawSession, ExcalidrawSessionScene } from '../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyVaultExcalidrawSessionsPath,
+  getLegacyRootVaultExcalidrawSessionsPath,
+  getLegacySystemVaultExcalidrawSessionsPath,
   getVaultExcalidrawSessionsPath
 } from './vaultData'
 
@@ -78,12 +79,14 @@ function normalizeSessions(value: unknown): ExcalidrawSession[] {
 export class ExcalidrawSessionStore {
   private readonly vaultRoot: string
   private readonly filePath: string
-  private readonly legacyFilePath: string
+  private readonly legacyRootFilePath: string
+  private readonly legacySystemFilePath: string
 
   constructor(vaultRoot: string) {
     this.vaultRoot = vaultRoot
     this.filePath = getVaultExcalidrawSessionsPath(vaultRoot)
-    this.legacyFilePath = getLegacyVaultExcalidrawSessionsPath(vaultRoot)
+    this.legacyRootFilePath = getLegacyRootVaultExcalidrawSessionsPath(vaultRoot)
+    this.legacySystemFilePath = getLegacySystemVaultExcalidrawSessionsPath(vaultRoot)
   }
 
   async listSessions(): Promise<ExcalidrawSession[]> {
@@ -97,10 +100,19 @@ export class ExcalidrawSessionStore {
       }
 
       try {
-        const legacyRaw = await fs.readFile(this.legacyFilePath, 'utf-8')
+        let legacyRaw: string
+        try {
+          legacyRaw = await fs.readFile(this.legacyRootFilePath, 'utf-8')
+        } catch (rootError) {
+          if ((rootError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw rootError
+          }
+          legacyRaw = await fs.readFile(this.legacySystemFilePath, 'utf-8')
+        }
         const normalized = normalizeSessions(JSON.parse(legacyRaw))
         await this.writeSessions(normalized)
-        await deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+        await deleteLegacyVaultPath(this.legacyRootFilePath, this.vaultRoot)
+        await deleteLegacyVaultPath(this.legacySystemFilePath, this.vaultRoot)
         return normalized
       } catch (legacyError) {
         if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {

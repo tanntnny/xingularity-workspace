@@ -155,14 +155,8 @@ export function dispatchWorkspaceShellShortcut(
     return true
   }
 
-  const pageByCode: Partial<Record<string, string>> = {
-    KeyI: 'agentHistory',
-    Comma: 'settings'
-  }
-  const pageByKey: Partial<Record<string, string>> = {
-    i: 'agentHistory',
-    ',': 'settings'
-  }
+  const pageByCode: Partial<Record<string, string>> = { Comma: 'settings' }
+  const pageByKey: Partial<Record<string, string>> = { ',': 'settings' }
   const normalizedKey = event.key.length === 1 ? event.key.toLowerCase() : event.key
   const nextPage = pageByKey[normalizedKey] ?? pageByCode[event.code]
   if (nextPage && isPageAvailable(nextPage) && !typingTarget) {

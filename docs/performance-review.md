@@ -29,7 +29,7 @@ Measured in-browser with long-task observation and DOM mutation counting.
 - `Dashboard -> Notes`: `107.6 ms`, `9` DOM mutations, `1` long task of `90 ms`
 - `Projects -> Dashboard`: `115.9 ms`, `16` DOM mutations, `1` long task of `89 ms`
 - `Projects: Due Date sort`: `53.9 ms`, `8` DOM mutations, no long task observed
-- `Projects: switch to Project Notes`: `50.0 ms`, `6` DOM mutations, no long task observed
+- `Projects: open project details`: `50.0 ms`, `6` DOM mutations, no long task observed
 - `Calendar: Next month`: `97.0 ms`, `46` DOM mutations, `1` long task of `84 ms`
 - `Calendar: Previous month`: `83.1 ms`, `42` DOM mutations, `1` long task of `56 ms`
 

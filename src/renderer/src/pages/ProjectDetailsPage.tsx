@@ -18,13 +18,10 @@ import {
   Funnel,
   MoreHorizontal,
   Plus,
-  Tag,
   Trash2
 } from '../components/ui/icons'
-import { type NativeMenuItemDescriptor, type NoteListItem } from '../../../shared/types'
-import { generateProjectTag, isProjectTag } from '../../../shared/noteTags'
+import { type NativeMenuItemDescriptor } from '../../../shared/types'
 import { InlineEditableText } from '../components/InlineEditableText'
-import { TagChip } from '../components/TagChip'
 import { type ProjectListItem, type ProjectMilestone } from '../components/ProjectPreviewList'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { Badge } from '../components/ui/badge'
@@ -33,7 +30,6 @@ import { Calendar } from '../components/ui/calendar'
 import { Checkbox } from '../components/ui/checkbox'
 import { Input } from '../components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
-import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip'
 import {
   ContextMenu,
@@ -70,7 +66,6 @@ import { cn } from '../lib/utils'
 
 interface ProjectDetailsPageProps {
   project: ProjectListItem
-  notes: NoteListItem[]
   focusedMilestoneId?: string | null
   focusedMilestoneToken?: number
   nameEditToken?: number
@@ -101,19 +96,6 @@ interface ProjectDetailsPageProps {
   onDuplicateSubtask?: (milestoneId: string, subtaskId: string) => void
   onCopyMilestoneLink?: (milestoneId: string) => void
   onCopySubtaskLink?: (milestoneId: string, subtaskId: string) => void
-  onCreateProjectNote: () => void
-  onOpenNote: (relPath: string) => void
-}
-
-type ProjectNoteRow = {
-  relPath: string
-  name: string
-  tags: string[]
-}
-
-const defaultProjectNoteSort: ProjectNoteSortState = {
-  key: 'name',
-  direction: 'asc'
 }
 const defaultProjectMilestoneSort: ProjectMilestoneSortState = {
   key: 'dueDate',
@@ -122,7 +104,6 @@ const defaultProjectMilestoneSort: ProjectMilestoneSortState = {
 
 export function ProjectDetailsPage({
   project,
-  notes,
   focusedMilestoneId = null,
   focusedMilestoneToken = 0,
   nameEditToken = 0,
@@ -142,9 +123,7 @@ export function ProjectDetailsPage({
   onDuplicateMilestone,
   onDuplicateSubtask,
   onCopyMilestoneLink,
-  onCopySubtaskLink,
-  onCreateProjectNote,
-  onOpenNote
+  onCopySubtaskLink
 }: ProjectDetailsPageProps): ReactElement {
   const useNativeMenus = canUseNativeMenus()
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false)
@@ -158,12 +137,6 @@ export function ProjectDetailsPage({
   const [newSubtaskTitleByMilestoneId, setNewSubtaskTitleByMilestoneId] = useState<
     Record<string, string>
   >({})
-  const [activeTab, setActiveTab] = useState<'milestones' | 'notes'>('milestones')
-  const [noteSort, setNoteSort] = usePersistentState<ProjectNoteSortState>(
-    'beacon:project-details:note-sort',
-    defaultProjectNoteSort,
-    { validate: isProjectNoteSortState }
-  )
   const [milestoneSort, setMilestoneSort] = usePersistentState<ProjectMilestoneSortState>(
     'beacon:project-details:milestone-sort',
     defaultProjectMilestoneSort,
@@ -177,12 +150,6 @@ export function ProjectDetailsPage({
   const [highlightedMilestoneId, setHighlightedMilestoneId] = useState<string | null>(null)
   const milestoneRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
-  const projectTag = useMemo(() => generateProjectTag(project.id), [project.id])
-
-  const projectNotes = useMemo(() => {
-    return notes.filter((note) => note.tags.includes(projectTag))
-  }, [notes, projectTag])
-
   useEffect(() => {
     if (!focusedMilestoneId) {
       return
@@ -191,11 +158,6 @@ export function ProjectDetailsPage({
     const frame = window.requestAnimationFrame(() => {
       if (hideCompletedItems) {
         setHideCompletedItems(false)
-      }
-
-      if (activeTab !== 'milestones') {
-        setActiveTab('milestones')
-        return
       }
 
       const target = milestoneRowRefs.current[focusedMilestoneId]
@@ -215,7 +177,6 @@ export function ProjectDetailsPage({
       window.clearTimeout(timeout)
     }
   }, [
-    activeTab,
     focusedMilestoneId,
     focusedMilestoneToken,
     hideCompletedItems,
@@ -256,12 +217,6 @@ export function ProjectDetailsPage({
     cancelCreatingSubtask(milestoneId)
   }
 
-  const projectNoteRows = useMemo<ProjectNoteRow[]>(() => {
-    return [...projectNotes]
-      .map((note) => ({ relPath: note.relPath, name: note.name, tags: note.tags }))
-      .sort((left, right) => compareProjectNoteRows(left, right, noteSort))
-  }, [noteSort, projectNotes])
-
   const visibleMilestones = useMemo(() => {
     return [...project.milestones]
       .sort((left, right) => compareMilestones(left, right, milestoneSort))
@@ -283,29 +238,6 @@ export function ProjectDetailsPage({
       }, [])
   }, [hideCompletedItems, milestoneSort, project.milestones])
   const healthSummary = useMemo(() => getProjectHealthSummary(project), [project])
-
-  const openProjectNoteMenu = async (
-    items: NativeMenuItemDescriptor[],
-    relPath: string,
-    position: { x: number; y: number }
-  ): Promise<void> => {
-    const actionId = await showNativeMenu(items, position)
-
-    if (!actionId) {
-      return
-    }
-    if (actionId === 'open') {
-      onOpenNote(relPath)
-    }
-  }
-
-  const handleProjectNoteContextMenu = async (
-    event: ReactMouseEvent<HTMLElement>,
-    relPath: string
-  ): Promise<void> => {
-    event.preventDefault()
-    await openProjectNoteMenu(buildProjectNoteMenuItems(), relPath, getMouseMenuPosition(event))
-  }
 
   const openMilestoneMenu = async (
     items: NativeMenuItemDescriptor[],
@@ -387,14 +319,6 @@ export function ProjectDetailsPage({
       milestoneId,
       subtaskId,
       getMouseMenuPosition(event)
-    )
-  }
-
-  const toggleNoteSort = (key: ProjectNoteSortKey): void => {
-    setNoteSort((current) =>
-      current.key === key
-        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
-        : { key, direction: 'asc' }
     )
   }
 
@@ -480,174 +404,7 @@ export function ProjectDetailsPage({
         </div>
       </div>
 
-      <div className="bg-transparent flex shrink-0 flex-col gap-2 px-8 py-2">
-        <ToggleGroup
-          type="single"
-          className="w-full"
-          value={activeTab}
-          onValueChange={(value) => value && setActiveTab(value as 'milestones' | 'notes')}
-          variant="outline"
-          aria-label="Project sections"
-        >
-          <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="milestones">
-            <span className="inline-flex items-center gap-1.5">
-              <Flag size={14} aria-hidden="true" />
-              Milestones
-            </span>
-          </ToggleGroupItem>
-          <ToggleGroupItem className="min-w-0 flex-1 justify-center text-center" value="notes">
-            <span className="inline-flex items-center gap-1.5">
-              <FileText size={14} aria-hidden="true" />
-              Project Notes
-            </span>
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
-      {activeTab === 'notes' && (
-        <section className="px-8 pb-6">
-          <div className="p-4">
-            <Table className="rounded-lg">
-              <TableHeader>
-                <TableRow>
-                  <SortableTableHead
-                    className="w-[45%]"
-                    isActive={noteSort.key === 'name'}
-                    sortDirection={noteSort.direction}
-                    onToggleSort={() => toggleNoteSort('name')}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <FileText size={12} aria-hidden="true" />
-                      Note
-                    </span>
-                  </SortableTableHead>
-                  <SortableTableHead
-                    className="w-[45%]"
-                    isActive={noteSort.key === 'tags'}
-                    sortDirection={noteSort.direction}
-                    onToggleSort={() => toggleNoteSort('tags')}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <Tag size={12} aria-hidden="true" />
-                      Tags
-                    </span>
-                  </SortableTableHead>
-                  <TableHead className="w-[120px] text-center">
-                    <span className="inline-flex items-center justify-center text-xs font-semibold tracking-wide text-muted-foreground">
-                      ACTIONS
-                    </span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {projectNoteRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <div className="py-2 text-sm text-muted-foreground">
-                        No notes tagged for this project yet.
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-                {projectNoteRows.map((row) => (
-                  <ContextMenu key={row.relPath}>
-                    <ContextMenuTrigger asChild>
-                      <TableRow
-                        onContextMenu={
-                          useNativeMenus
-                            ? (event) => void handleProjectNoteContextMenu(event, row.relPath)
-                            : undefined
-                        }
-                      >
-                        <TableCell className="p-0">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="h-auto w-full justify-start gap-2 px-3 py-2 text-left"
-                            onClick={() => onOpenNote(row.relPath)}
-                          >
-                            <span>{row.name}</span>
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {row.tags
-                              .filter((tag) => !isProjectTag(tag))
-                              .slice(0, 3)
-                              .map((tag) => (
-                                <TagChip key={tag} tag={tag} />
-                              ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-2 py-1 text-left">
-                          {useNativeMenus ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground"
-                              aria-label="Open note actions"
-                              onClick={(event) => {
-                                void openProjectNoteMenu(
-                                  buildProjectNoteMenuItems(),
-                                  row.relPath,
-                                  getElementMenuPosition(event.currentTarget)
-                                )
-                              }}
-                            >
-                              <MoreHorizontal size={14} />
-                            </Button>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground"
-                                  aria-label="Open note actions"
-                                >
-                                  <MoreHorizontal size={14} />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem onClick={() => onOpenNote(row.relPath)}>
-                                  Open note
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent className="w-44">
-                      <ContextMenuItem onClick={() => onOpenNote(row.relPath)}>
-                        <FileText />
-                        Open note
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                ))}
-                <TableRow className="hover:bg-accent/60">
-                  <TableCell colSpan={3} className="p-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full justify-start gap-2 px-3 py-2 text-left text-sm text-muted-foreground"
-                      onClick={onCreateProjectNote}
-                    >
-                      <Plus size={14} className="shrink-0" />
-                      <span>New note</span>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-        </section>
-      )}
-
-      {activeTab === 'milestones' && (
+      <section className="px-8 pb-8">
         <section className="px-8 pb-8">
           <div className="p-4">
             <Table className="rounded-lg">
@@ -775,7 +532,7 @@ export function ProjectDetailsPage({
                                 onUpdateMilestoneDueDate(milestone.id, nextDate)
                               }
                               aria-label="Milestone due date"
-                              className="h-8 justify-start bg-transparent px-2 text-xs hover:bg-transparent"
+                              className="h-8 justify-start bg-transparent px-2 text-xs hover:bg-accent hover:text-accent-foreground"
                             />
                           </TableCell>
                           <TableCell className="px-2 py-1">
@@ -1169,7 +926,7 @@ export function ProjectDetailsPage({
             </Table>
           </div>
         </section>
-      )}
+      </section>
     </div>
   )
 }
@@ -1263,10 +1020,6 @@ function formatSubtaskPriority(priority?: 'low' | 'medium' | 'high'): string {
   return 'Low'
 }
 
-function buildProjectNoteMenuItems(): NativeMenuItemDescriptor[] {
-  return [{ id: 'open', label: 'Open note' }]
-}
-
 function buildMilestoneMenuItems(options: {
   canDuplicate: boolean
   canCopyLink: boolean
@@ -1306,29 +1059,12 @@ function subtaskPriorityButtonClass(priority?: 'low' | 'medium' | 'high'): strin
   return 'border-border bg-muted text-muted-foreground hover:border-primary'
 }
 
-type ProjectNoteSortKey = 'name' | 'tags'
 type ProjectMilestoneSortKey = 'title' | 'dueDate'
 type SortDirection = 'asc' | 'desc'
-
-interface ProjectNoteSortState {
-  key: ProjectNoteSortKey
-  direction: SortDirection
-}
 
 interface ProjectMilestoneSortState {
   key: ProjectMilestoneSortKey
   direction: SortDirection
-}
-
-function isProjectNoteSortState(value: unknown): value is ProjectNoteSortState {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { key?: unknown }).key !== undefined &&
-    ((value as { key?: unknown }).key === 'name' || (value as { key?: unknown }).key === 'tags') &&
-    ((value as { direction?: unknown }).direction === 'asc' ||
-      (value as { direction?: unknown }).direction === 'desc')
-  )
 }
 
 function isProjectMilestoneSortState(value: unknown): value is ProjectMilestoneSortState {
@@ -1340,28 +1076,6 @@ function isProjectMilestoneSortState(value: unknown): value is ProjectMilestoneS
     ((value as { direction?: unknown }).direction === 'asc' ||
       (value as { direction?: unknown }).direction === 'desc')
   )
-}
-
-function compareProjectNoteRows(
-  left: ProjectNoteRow,
-  right: ProjectNoteRow,
-  sort: ProjectNoteSortState
-): number {
-  const factor = sort.direction === 'asc' ? 1 : -1
-
-  if (sort.key === 'tags') {
-    const tagLabelResult = buildTagSortLabel(left.tags).localeCompare(buildTagSortLabel(right.tags))
-    if (tagLabelResult !== 0) {
-      return tagLabelResult * factor
-    }
-  } else {
-    const nameResult = left.name.localeCompare(right.name)
-    if (nameResult !== 0) {
-      return nameResult * factor
-    }
-  }
-
-  return left.name.localeCompare(right.name)
 }
 
 function compareMilestones(
@@ -1432,11 +1146,4 @@ function compareNullableText(left?: string, right?: string): number {
     return 1
   }
   return 0
-}
-
-function buildTagSortLabel(tags: string[]): string {
-  return tags
-    .filter((tag) => !isProjectTag(tag))
-    .sort((left, right) => left.localeCompare(right))
-    .join('|')
 }

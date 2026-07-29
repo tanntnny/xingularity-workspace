@@ -42,7 +42,7 @@ When a vault is created or opened, Xingularity ensures this structure exists:
 <vault-root>/
   notebooks/
   projects/
-    index.json
+    <project-id>.json
   calendar/
     tasks.json
   weekly-plan/
@@ -55,8 +55,8 @@ When a vault is created or opened, Xingularity ensures this structure exists:
   agent/
     chats.json
     runs.json
-  generative-ui/
-    artifacts.json
+  excalidraw/
+    sessions.json
   attachments/
   settings.json
   .xingularity/
@@ -67,13 +67,13 @@ When a vault is created or opened, Xingularity ensures this structure exists:
 ```
 
 - `notebooks/`: Markdown notebook files
-- `projects/index.json`: project records and icon overrides
+- `projects/<project-id>.json`: one project record per stable project id
 - `calendar/tasks.json`: scheduled and unscheduled calendar tasks
 - `weekly-plan/state.json`: weekly planning state
 - `subscriptions/data.json`: subscription records
 - `schedules/jobs.json` and `schedules/runs.json`: automation definitions and run history
 - `agent/chats.json` and `agent/runs.json`: chat sessions and agent run history
-- `generative-ui/artifacts.json`: saved generated UI artifacts
+- `excalidraw/sessions.json`: saved drawing sessions
 - `attachments/`: imported files and pasted images
 - `settings.json`: vault-scoped UI and workspace settings
 - `.xingularity/vault.json`: vault metadata
@@ -89,7 +89,7 @@ App settings and higher-level workspace state include:
 - last opened vault, note, and project
 - favorite notes and projects
 - font family
-- project collection and icon styles
+- project collection and icon styles, stored in per-project files
 - calendar tasks
 - weekly plan data
 - schedules and run history
@@ -114,7 +114,7 @@ Legacy vaults are migrated forward on open. Old `notes/` content is copied into 
 - Project detail view with summary, health status, and progress
 - Milestones with due dates and status
 - Subtasks with completion tracking
-- Related-note workflows based on generated project tags
+- user-created notebooks remain independent of projects
 - Per-project icon customization
 
 ## Calendar And Weekly Planning

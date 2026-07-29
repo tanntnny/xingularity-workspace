@@ -413,7 +413,7 @@ export function TaskContextMenu({
                     <button
                       type="button"
                       onClick={() => handleToggleReminder(reminder.id)}
-                      className="flex items-center gap-1.5 text-foreground"
+                      className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {reminder.enabled ? (
                         <BellRing size={12} className="text-muted-foreground" />
@@ -425,7 +425,7 @@ export function TaskContextMenu({
                     <button
                       type="button"
                       onClick={() => handleRemoveReminder(reminder.id)}
-                      className="rounded p-0.5 text-muted-foreground hover:bg-card hover:text-destructive"
+                      className="rounded-[var(--radius-control)] p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       title="Remove reminder"
                     >
                       <X size={12} />

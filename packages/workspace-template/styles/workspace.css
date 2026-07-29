@@ -37,6 +37,8 @@
     --sidebar-ring: #2563eb;
 
     --app-font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+    --radius-button: calc(var(--radius) - 2px);
+    --radius-button-pill: 9999px;
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
   }

@@ -4,8 +4,8 @@ import path from 'node:path'
 import { WeeklyPlanState } from '../../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyPageVaultWeeklyPlanPath,
-  getLegacyVaultWeeklyPlanPath,
+  getLegacyRootVaultWeeklyPlanPath,
+  getLegacySystemVaultWeeklyPlanPath,
   getVaultWeeklyPlanPath
 } from '../vaultData'
 
@@ -29,14 +29,14 @@ function normalizeState(parsed: Partial<WeeklyPlanState>): WeeklyPlanState {
 export class WeeklyPlanStore {
   private readonly vaultRoot: string
   private readonly filePath: string
-  private readonly legacyPageFilePath: string
-  private readonly legacyFilePath: string
+  private readonly legacyRootFilePath: string
+  private readonly legacySystemFilePath: string
 
   constructor(vaultRoot: string) {
     this.vaultRoot = vaultRoot
     this.filePath = getVaultWeeklyPlanPath(vaultRoot)
-    this.legacyPageFilePath = getLegacyPageVaultWeeklyPlanPath(vaultRoot)
-    this.legacyFilePath = getLegacyVaultWeeklyPlanPath(vaultRoot)
+    this.legacyRootFilePath = getLegacyRootVaultWeeklyPlanPath(vaultRoot)
+    this.legacySystemFilePath = getLegacySystemVaultWeeklyPlanPath(vaultRoot)
   }
 
   async read(): Promise<WeeklyPlanState> {
@@ -45,17 +45,17 @@ export class WeeklyPlanStore {
       return normalizeState(migrated)
     }
 
-    const legacyPage = await this.readJsonFile(this.legacyPageFilePath)
-    if (legacyPage) {
-      const normalized = normalizeState(legacyPage)
+    const legacy = await this.readJsonFile(this.legacyRootFilePath)
+    if (legacy) {
+      const normalized = normalizeState(legacy)
       await this.write(normalized)
       await this.cleanupLegacyFiles()
       return normalized
     }
 
-    const legacy = await this.readJsonFile(this.legacyFilePath)
-    if (legacy) {
-      const normalized = normalizeState(legacy)
+    const legacySystem = await this.readJsonFile(this.legacySystemFilePath)
+    if (legacySystem) {
+      const normalized = normalizeState(legacySystem)
       await this.write(normalized)
       await this.cleanupLegacyFiles()
       return normalized
@@ -94,8 +94,8 @@ export class WeeklyPlanStore {
 
   private async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(this.legacyPageFilePath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacyFilePath, this.vaultRoot)
+      deleteLegacyVaultPath(this.legacyRootFilePath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemFilePath, this.vaultRoot)
     ])
   }
 }

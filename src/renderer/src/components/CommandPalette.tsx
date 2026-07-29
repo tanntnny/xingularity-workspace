@@ -54,7 +54,6 @@ type CommandPalettePage =
   | 'calendar'
   | 'designAudit'
   | 'weeklyPlan'
-  | 'schedules'
   | 'settings'
 
 interface CommandPaletteProps {
@@ -329,13 +328,6 @@ export function CommandPalette({
         label: 'Go to Weekly Plan',
         onSelect: () => onOpenPage('weeklyPlan'),
         keywords: ['week', 'planning'],
-        icon: FolderKanban
-      },
-      {
-        value: '>go schedules',
-        label: 'Go to Schedules',
-        onSelect: () => onOpenPage('schedules'),
-        keywords: ['schedule', 'timeline'],
         icon: FolderKanban
       },
       {
@@ -766,7 +758,7 @@ export function CommandPalette({
         {/* Note Preview Panel */}
         {hoveredResult && (
           <div className="hidden w-64 shrink-0 border-l bg-muted/30 p-4 md:block">
-            <div className="mb-3 inline-flex size-10 items-center justify-center rounded-md border bg-background text-primary">
+            <div className="mb-3 inline-flex size-10 items-center justify-center rounded-md border bg-card text-primary">
               {hoveredResult.kind === 'project' ? (
                 <FolderKanban className="h-4 w-4" />
               ) : (

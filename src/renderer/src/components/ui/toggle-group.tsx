@@ -4,11 +4,11 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/utils'
 
-const toggleGroupVariants = cva('flex items-center justify-center gap-1', {
+const toggleGroupVariants = cva('ui-control flex items-center justify-center gap-1', {
   variants: {
     variant: {
-      default: 'rounded-lg bg-muted p-1',
-      outline: 'rounded-lg border border-input'
+      default: 'rounded-[var(--radius-button)] bg-muted',
+      outline: 'rounded-[var(--radius-button)] border border-input bg-card'
     }
   },
   defaultVariants: {
@@ -17,19 +17,19 @@ const toggleGroupVariants = cva('flex items-center justify-center gap-1', {
 })
 
 const toggleGroupItemVariants = cva(
-  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'ui-control inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-[var(--radius-button)] px-3 font-medium text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-[var(--control-icon-size)]',
   {
     variants: {
       variant: {
         default:
-          'text-muted-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm hover:text-foreground',
+          'hover:bg-accent hover:text-accent-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm',
         outline:
-          'border border-transparent text-muted-foreground data-[state=on]:border-input data-[state=on]:bg-accent data-[state=on]:text-accent-foreground hover:bg-accent hover:text-accent-foreground'
+          'border border-transparent hover:bg-accent hover:text-accent-foreground data-[state=on]:border-input data-[state=on]:bg-accent data-[state=on]:text-accent-foreground'
       },
       size: {
-        default: 'h-9 px-3',
-        sm: 'h-8 px-2 text-xs',
-        lg: 'h-10 px-4'
+        default: '',
+        sm: 'px-2',
+        lg: 'px-4'
       }
     },
     defaultVariants: {

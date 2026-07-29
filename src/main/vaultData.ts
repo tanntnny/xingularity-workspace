@@ -6,11 +6,18 @@ export const LEGACY_VAULT_SYSTEM_DIRNAME = '.appmeta'
 export const VAULT_NOTEBOOKS_DIRNAME = 'notebooks'
 export const LEGACY_VAULT_NOTES_DIRNAME = 'notes'
 export const VAULT_ATTACHMENTS_DIRNAME = 'attachments'
+export const VAULT_PROJECTS_DIRNAME = 'projects'
+export const VAULT_CALENDAR_DIRNAME = 'calendar'
+export const VAULT_WEEKLY_PLAN_DIRNAME = 'weekly-plan'
+export const VAULT_SUBSCRIPTIONS_DIRNAME = 'subscriptions'
+export const VAULT_SCHEDULES_DIRNAME = 'schedules'
+export const VAULT_AGENT_DIRNAME = 'agent'
+export const VAULT_EXCALIDRAW_DIRNAME = 'excalidraw'
 export const VAULT_SETTINGS_FILE_NAME = 'settings.json'
 export const VAULT_MIGRATIONS_FILE_NAME = 'migrations.json'
 
 export interface VaultMigrationState {
-  version: 1
+  version: 2
   copiedFromLegacyNotesAt?: string
   copiedFromLegacySystemAt?: string
 }
@@ -41,6 +48,34 @@ export function getVaultAttachmentsDir(rootPath: string): string {
   return path.join(rootPath, VAULT_ATTACHMENTS_DIRNAME)
 }
 
+export function getVaultProjectsDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_PROJECTS_DIRNAME)
+}
+
+export function getVaultCalendarDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_CALENDAR_DIRNAME)
+}
+
+export function getVaultWeeklyPlanDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_WEEKLY_PLAN_DIRNAME)
+}
+
+export function getVaultSubscriptionsDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_SUBSCRIPTIONS_DIRNAME)
+}
+
+export function getVaultSchedulesDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_SCHEDULES_DIRNAME)
+}
+
+export function getVaultAgentDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_AGENT_DIRNAME)
+}
+
+export function getVaultExcalidrawDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_EXCALIDRAW_DIRNAME)
+}
+
 export function getVaultSettingsPath(rootPath: string): string {
   return path.join(rootPath, VAULT_SETTINGS_FILE_NAME)
 }
@@ -49,23 +84,31 @@ export function getLegacyVaultSettingsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), VAULT_SETTINGS_FILE_NAME)
 }
 
-export function getVaultProjectsPath(rootPath: string): string {
-  return path.join(rootPath, 'projects.json')
+export function getVaultProjectPath(rootPath: string, projectId: string): string {
+  return path.join(getVaultProjectsDir(rootPath), `${encodeURIComponent(projectId)}.json`)
 }
 
-export function getVaultProjectIconsPath(rootPath: string): string {
-  return path.join(rootPath, 'project-icons.json')
+export function getLegacyVaultProjectsPath(rootPath: string): string {
+  return path.join(rootPath, 'projects.json')
 }
 
 export function getLegacyPageVaultProjectsPath(rootPath: string): string {
   return path.join(rootPath, 'projects', 'index.json')
 }
 
-export function getLegacyVaultProjectsPath(rootPath: string): string {
+export function getLegacyVaultProjectIconsPath(rootPath: string): string {
+  return path.join(rootPath, 'project-icons.json')
+}
+
+export function getLegacySystemVaultProjectsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'projects.json')
 }
 
 export function getVaultCalendarTasksPath(rootPath: string): string {
+  return path.join(getVaultCalendarDir(rootPath), 'tasks.json')
+}
+
+export function getLegacyRootVaultCalendarTasksPath(rootPath: string): string {
   return path.join(rootPath, 'tasks.json')
 }
 
@@ -73,11 +116,15 @@ export function getLegacyPageVaultCalendarTasksPath(rootPath: string): string {
   return path.join(rootPath, 'calendar', 'tasks.json')
 }
 
-export function getLegacyVaultCalendarTasksPath(rootPath: string): string {
+export function getLegacySystemVaultCalendarTasksPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'tasks.json')
 }
 
 export function getVaultWeeklyPlanPath(rootPath: string): string {
+  return path.join(getVaultWeeklyPlanDir(rootPath), 'state.json')
+}
+
+export function getLegacyRootVaultWeeklyPlanPath(rootPath: string): string {
   return path.join(rootPath, 'weekly-plan.json')
 }
 
@@ -85,11 +132,15 @@ export function getLegacyPageVaultWeeklyPlanPath(rootPath: string): string {
   return path.join(rootPath, 'weekly-plan', 'state.json')
 }
 
-export function getLegacyVaultWeeklyPlanPath(rootPath: string): string {
+export function getLegacySystemVaultWeeklyPlanPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'weekly-plan.json')
 }
 
 export function getVaultSubscriptionsPath(rootPath: string): string {
+  return path.join(getVaultSubscriptionsDir(rootPath), 'data.json')
+}
+
+export function getLegacyRootVaultSubscriptionsPath(rootPath: string): string {
   return path.join(rootPath, 'subscriptions.json')
 }
 
@@ -97,15 +148,23 @@ export function getLegacyPageVaultSubscriptionsPath(rootPath: string): string {
   return path.join(rootPath, 'subscriptions', 'data.json')
 }
 
-export function getLegacyVaultSubscriptionsPath(rootPath: string): string {
+export function getLegacySystemVaultSubscriptionsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'subscriptions.json')
 }
 
 export function getVaultScheduleJobsPath(rootPath: string): string {
-  return path.join(rootPath, 'schedule-jobs.json')
+  return path.join(getVaultSchedulesDir(rootPath), 'jobs.json')
 }
 
 export function getVaultScheduleRunsPath(rootPath: string): string {
+  return path.join(getVaultSchedulesDir(rootPath), 'runs.json')
+}
+
+export function getLegacyRootVaultScheduleJobsPath(rootPath: string): string {
+  return path.join(rootPath, 'schedule-jobs.json')
+}
+
+export function getLegacyRootVaultScheduleRunsPath(rootPath: string): string {
   return path.join(rootPath, 'schedule-runs.json')
 }
 
@@ -117,19 +176,27 @@ export function getLegacyPageVaultScheduleRunsPath(rootPath: string): string {
   return path.join(rootPath, 'schedules', 'runs.json')
 }
 
-export function getLegacyVaultScheduleJobsPath(rootPath: string): string {
+export function getLegacySystemVaultScheduleJobsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'schedule-jobs.json')
 }
 
-export function getLegacyVaultScheduleRunsPath(rootPath: string): string {
+export function getLegacySystemVaultScheduleRunsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'schedule-runs.json')
 }
 
 export function getVaultAgentChatsPath(rootPath: string): string {
-  return path.join(rootPath, 'agent-chats.json')
+  return path.join(getVaultAgentDir(rootPath), 'chats.json')
 }
 
 export function getVaultAgentRunsPath(rootPath: string): string {
+  return path.join(getVaultAgentDir(rootPath), 'runs.json')
+}
+
+export function getLegacyRootVaultAgentChatsPath(rootPath: string): string {
+  return path.join(rootPath, 'agent-chats.json')
+}
+
+export function getLegacyRootVaultAgentRunsPath(rootPath: string): string {
   return path.join(rootPath, 'agent-runs.json')
 }
 
@@ -141,19 +208,23 @@ export function getLegacyPageVaultAgentRunsPath(rootPath: string): string {
   return path.join(rootPath, 'agent', 'runs.json')
 }
 
-export function getLegacyVaultAgentChatsPath(rootPath: string): string {
+export function getLegacySystemVaultAgentChatsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'agent-chats.json')
 }
 
-export function getLegacyVaultAgentRunsPath(rootPath: string): string {
+export function getLegacySystemVaultAgentRunsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'agent-runs.json')
 }
 
 export function getVaultExcalidrawSessionsPath(rootPath: string): string {
+  return path.join(getVaultExcalidrawDir(rootPath), 'sessions.json')
+}
+
+export function getLegacyRootVaultExcalidrawSessionsPath(rootPath: string): string {
   return path.join(rootPath, 'excalidraw-sessions.json')
 }
 
-export function getLegacyVaultExcalidrawSessionsPath(rootPath: string): string {
+export function getLegacySystemVaultExcalidrawSessionsPath(rootPath: string): string {
   return path.join(getVaultSystemDir(rootPath), 'excalidraw-sessions.json')
 }
 
@@ -195,7 +266,7 @@ export async function readVaultMigrations(rootPath: string): Promise<VaultMigrat
     const raw = await fs.readFile(getVaultMigrationsPath(rootPath), 'utf-8')
     const parsed = JSON.parse(raw) as Partial<VaultMigrationState>
     return {
-      version: 1,
+      version: 2,
       copiedFromLegacyNotesAt:
         typeof parsed.copiedFromLegacyNotesAt === 'string'
           ? parsed.copiedFromLegacyNotesAt
@@ -214,7 +285,7 @@ export async function readVaultMigrations(rootPath: string): Promise<VaultMigrat
       const legacyRaw = await fs.readFile(getLegacyVaultMigrationsPath(rootPath), 'utf-8')
       const parsed = JSON.parse(legacyRaw) as Partial<VaultMigrationState>
       const nextState: VaultMigrationState = {
-        version: 1,
+        version: 2,
         copiedFromLegacyNotesAt:
           typeof parsed.copiedFromLegacyNotesAt === 'string'
             ? parsed.copiedFromLegacyNotesAt
@@ -231,7 +302,7 @@ export async function readVaultMigrations(rootPath: string): Promise<VaultMigrat
       if ((legacyError as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw legacyError
       }
-      return { version: 1 }
+      return { version: 2 }
     }
   }
 }

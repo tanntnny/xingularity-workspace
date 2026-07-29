@@ -3,12 +3,12 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/utils'
 
-const buttonGroupVariants = cva('inline-flex items-center', {
+const buttonGroupVariants = cva('ui-control inline-flex items-center', {
   variants: {
     variant: {
-      default: 'gap-0.5 rounded-md bg-muted p-1',
-      outline: 'gap-0.5 rounded-md border bg-card p-1',
-      ghost: 'gap-1'
+      default: 'gap-0.5 rounded-[var(--radius-button)] bg-muted',
+      outline: 'gap-0.5 rounded-[var(--radius-button)] border bg-card',
+      ghost: 'gap-1 rounded-[var(--radius-button)] bg-transparent'
     },
     size: {
       default: '',
@@ -23,13 +23,13 @@ const buttonGroupVariants = cva('inline-flex items-center', {
 })
 
 const actionButtonGroupVariants = cva(
-  'inline-flex items-center gap-0 overflow-hidden rounded-md border bg-card [&>*]:h-full [&>*:not(:first-child)]:border-l',
+  'ui-control inline-flex items-center gap-0 overflow-hidden rounded-[var(--radius-button)] border bg-card [&>*]:h-full [&>*:not(:first-child)]:border-l',
   {
     variants: {
       size: {
-        default: 'h-8',
-        sm: 'h-7',
-        lg: 'h-9'
+        default: '',
+        sm: '',
+        lg: ''
       }
     },
     defaultVariants: {

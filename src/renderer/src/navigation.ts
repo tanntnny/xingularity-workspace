@@ -7,9 +7,6 @@ export type AppPage =
   | 'calendar'
   | 'designAudit'
   | 'settings'
-  | 'schedules'
-  | 'scheduleDocs'
-  | 'agentHistory'
 
 export const ALL_APP_PAGES: AppPage[] = [
   'knowledge',
@@ -19,8 +16,5 @@ export const ALL_APP_PAGES: AppPage[] = [
   'weeklyPlan',
   'calendar',
   'designAudit',
-  'settings',
-  'schedules',
-  'scheduleDocs',
-  'agentHistory'
+  'settings'
 ]

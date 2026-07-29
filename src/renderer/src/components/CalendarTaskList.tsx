@@ -419,7 +419,7 @@ export function CalendarTaskList({
         </Select>
         <button
           type="button"
-          className="border border-input bg-background text-foreground inline-flex h-8 items-center gap-2 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:text-foreground"
+          className="border border-input bg-card text-foreground inline-flex h-8 items-center gap-2 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
           title={`Sort direction: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
           onClick={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
@@ -480,10 +480,10 @@ export function CalendarTaskList({
                     <button
                       type="button"
                       onClick={() => onToggle(task.id)}
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         task.completed
                           ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-card hover:border-primary'
+                          : 'border-border bg-card hover:border-primary hover:bg-accent'
                       }`}
                       title={task.completed ? 'Mark as pending' : 'Mark as complete'}
                     >
@@ -511,7 +511,7 @@ export function CalendarTaskList({
                         <button
                           type="button"
                           onClick={() => startEditing(task)}
-                          className={`w-full text-left text-base font-medium text-foreground hover:text-primary whitespace-normal break-words ${
+                          className={`w-full rounded-md text-left text-base font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring whitespace-normal break-words ${
                             task.completed ? 'line-through' : ''
                           }`}
                           title="Click to edit"
@@ -553,7 +553,7 @@ export function CalendarTaskList({
                             <button
                               type="button"
                               onClick={() => setTimeEditingTaskId(task.id)}
-                              className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground hover:border-primary"
+                              className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground transition-colors hover:border-primary hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title={task.time ? 'Change time' : 'Set time'}
                             >
                               <Clock size={12} aria-hidden="true" />
@@ -567,7 +567,7 @@ export function CalendarTaskList({
                           <button
                             type="button"
                             onClick={() => setPriorityMenuTaskId(showPriorityMenu ? null : task.id)}
-                            className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground hover:border-primary"
+                            className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground transition-colors hover:border-primary hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             title="Change priority"
                           >
                             <Flag
@@ -592,7 +592,7 @@ export function CalendarTaskList({
                                       onUpdatePriority(task.id, priority)
                                       setPriorityMenuTaskId(null)
                                     }}
-                                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted ${
+                                    className={`flex w-full items-center gap-2 rounded-sm px-3 py-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                                       task.priority === priority ? 'bg-accent' : ''
                                     }`}
                                   >
@@ -610,7 +610,7 @@ export function CalendarTaskList({
                           <button
                             type="button"
                             onClick={() => setReminderMenuTaskId(showReminderMenu ? null : task.id)}
-                            className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs leading-[1.2] hover:border-primary ${
+                            className={`inline-flex min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs leading-[1.2] transition-colors hover:border-primary hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                               hasReminders && enabledReminders.length > 0
                                 ? 'border-border bg-accent text-muted-foreground'
                                 : 'border-border bg-muted text-muted-foreground'
@@ -640,7 +640,7 @@ export function CalendarTaskList({
                                 <button
                                   type="button"
                                   onClick={() => setReminderMenuTaskId(null)}
-                                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  className="rounded-[var(--radius-control)] p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
                                   <X size={14} />
                                 </button>
@@ -663,7 +663,7 @@ export function CalendarTaskList({
                                         onClick={() =>
                                           handleToggleReminder(task.id, reminder.id, task)
                                         }
-                                        className="flex items-center gap-1.5 text-foreground"
+                                        className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                         title={
                                           reminder.enabled ? 'Disable reminder' : 'Enable reminder'
                                         }
@@ -680,7 +680,7 @@ export function CalendarTaskList({
                                         onClick={() =>
                                           handleRemoveReminder(task.id, reminder.id, task)
                                         }
-                                        className="rounded p-0.5 text-muted-foreground hover:bg-card hover:text-destructive"
+                                        className="rounded-[var(--radius-control)] p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                         title="Remove reminder"
                                       >
                                         <X size={12} />
@@ -730,7 +730,7 @@ export function CalendarTaskList({
                                   <button
                                     type="button"
                                     onClick={() => handleAddReminder(task.id, task)}
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-ring bg-accent text-primary hover:bg-primary hover:text-white"
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-ring bg-accent text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     title="Add reminder"
                                   >
                                     <Plus size={14} />
@@ -751,7 +751,7 @@ export function CalendarTaskList({
                     <button
                       type="button"
                       onClick={() => onDelete(task.id)}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:border-primary hover:text-foreground"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-card text-muted-foreground transition-colors hover:border-primary hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       title="Delete task"
                     >
                       <Trash2 size={14} />
@@ -834,10 +834,10 @@ export function CalendarTaskList({
                       onToggleSubtask(item.projectId, item.milestoneId, item.id)
                     }
                   }}
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     item.completed
                       ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-card hover:border-primary'
+                      : 'border-border bg-card hover:border-primary hover:bg-accent'
                   }`}
                   title={item.completed ? 'Mark as pending' : 'Mark as complete'}
                 >

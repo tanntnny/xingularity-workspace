@@ -23,8 +23,6 @@ import {
   withExcalidrawExtension
 } from '../shared/excalidrawFile'
 import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
-import { getProjectProtectionKind } from '../shared/projectFolders'
-import { generateProjectTag } from '../shared/noteTags'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -213,8 +211,7 @@ export class VaultRuntime {
 
   async listNoteTree(): ReturnType<FileService['listTree']> {
     this.assertReady()
-    const [tree, settings] = await Promise.all([this.fileService!.listTree(), this.getSettings()])
-    return this.decorateProjectTree(tree, settings.projects)
+    return this.fileService!.listTree()
   }
 
   async readNote(relPath: string): Promise<string> {
@@ -1010,11 +1007,13 @@ export class VaultRuntime {
       }
     }
 
-    console.log('[VaultRuntime] getSettings for vault', this.currentPaths.rootPath)
-    const settings = await this.settings.readVault(this.getCurrentVaultRoot())
-    // Initialize reminder service with current tasks
-    this.reminderService.updateTasks(settings.calendarTasks)
-    return settings
+    return this.enqueueSettingsUpdate(async () => {
+      console.log('[VaultRuntime] getSettings for vault', this.currentPaths?.rootPath)
+      const settings = await this.settings.readVault(this.getCurrentVaultRoot())
+      // Initialize reminder service with current tasks
+      this.reminderService.updateTasks(settings.calendarTasks)
+      return settings
+    })
   }
 
   async updateSettings(
@@ -1037,10 +1036,6 @@ export class VaultRuntime {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
-
-      if (next.projects) {
-        await this.reconcileProjectTags(current.projects, merged.projects)
-      }
 
       if (next.calendarTasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
@@ -1068,10 +1063,6 @@ export class VaultRuntime {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
       const { next, result } = await updater(current)
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
-
-      if (next.projects) {
-        await this.reconcileProjectTags(current.projects, merged.projects)
-      }
 
       if (next.calendarTasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
@@ -1156,8 +1147,7 @@ export class VaultRuntime {
       await this.remapSettingsForMigratedNotes(migratedLegacyPaths)
     }
 
-    const settings = await this.settings.readVault(this.currentPaths.rootPath)
-    await this.reconcileProjectTags(settings.projects, settings.projects)
+    await this.settings.readVault(this.currentPaths.rootPath)
 
     this.indexer = await initializeIndexerWithRetry(
       this.currentPaths.indexPath,
@@ -1170,7 +1160,7 @@ export class VaultRuntime {
     await this.settings.rememberVault(this.currentPaths.rootPath)
     this.notifyVaultChange(this.currentPaths)
     const notes = await this.fileService.listNotes()
-    const tree = this.decorateProjectTree(await this.fileService.listTree(), settings.projects)
+    const tree = await this.fileService.listTree()
     return {
       info: toInfo(this.currentPaths),
       notes,
@@ -1340,75 +1330,6 @@ export class VaultRuntime {
         )
       }
     })
-  }
-
-  private decorateProjectTree(
-    nodes: Awaited<ReturnType<FileService['listTree']>>,
-    projects: Project[]
-  ): Awaited<ReturnType<FileService['listTree']>> {
-    return nodes.map((node) => {
-      const protectionKind = getProjectProtectionKind(node.relPath, projects)
-      if (node.kind === 'folder') {
-        return {
-          ...node,
-          isProtected: Boolean(protectionKind),
-          protectionKind,
-          projectId: undefined,
-          children: this.decorateProjectTree(node.children, projects)
-        }
-      }
-
-      return {
-        ...node,
-        isProtected: false,
-        protectionKind: null,
-        projectId: undefined
-      }
-    })
-  }
-
-  private async reconcileProjectTags(
-    previousProjects: Project[],
-    nextProjects: Project[]
-  ): Promise<void> {
-    if (!this.currentPaths || !this.fileService) {
-      return
-    }
-
-    const nextProjectTags = new Set(nextProjects.map((project) => generateProjectTag(project.id)))
-    const removedProjectTags = previousProjects
-      .map((project) => generateProjectTag(project.id))
-      .filter((tag) => !nextProjectTags.has(tag))
-
-    if (removedProjectTags.length === 0) {
-      return
-    }
-
-    const removedTagSet = new Set(removedProjectTags)
-    const notes = await this.fileService.listNotes()
-    let changed = false
-
-    for (const note of notes) {
-      if (!note.tags.some((tag) => removedTagSet.has(tag))) {
-        continue
-      }
-
-      const document = await this.fileService.readNoteDocument(note.relPath)
-      const nextTags = document.tags.filter((tag) => !removedTagSet.has(tag))
-      if (sameStringArray(document.tags, nextTags)) {
-        continue
-      }
-
-      await this.fileService.writeNoteDocument(note.relPath, {
-        ...document,
-        tags: nextTags
-      })
-      changed = true
-    }
-
-    if (changed) {
-      await this.indexer?.rebuild(this.currentPaths.notebooksPath)
-    }
   }
 
   private createTrashService(): TrashService {
@@ -1727,14 +1648,6 @@ export class VaultRuntime {
       }
     }
   }
-}
-
-function sameStringArray(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  return left.every((value, index) => value === right[index])
 }
 
 async function resetIndexArtifacts(indexPath: string, fileMapPath: string): Promise<void> {

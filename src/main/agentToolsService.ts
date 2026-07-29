@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createRandomProjectIcon } from '../shared/projectIcons'
+import { normalizeProjectIcon } from '../shared/projectIcons'
 import { upsertTagsInMarkdown } from '../shared/noteTags'
 import {
   AppSettings,
@@ -45,8 +45,34 @@ const noteAppendSchema = z.object({
 })
 
 const projectIconSchema = z.object({
-  shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']),
-  variant: z.enum(['filled', 'outlined']),
+  set: z.enum(['tabler', 'shape', 'lucide']).optional(),
+  glyph: z
+    .enum([
+      'circle',
+      'square',
+      'triangle',
+      'diamond',
+      'hex',
+      'briefcase',
+      'folder-kanban',
+      'rocket',
+      'lightbulb',
+      'target',
+      'book-open',
+      'package',
+      'flask-conical',
+      'sparkles',
+      'pen-tool',
+      'monitor',
+      'megaphone',
+      'globe',
+      'shield',
+      'camera',
+      'calendar'
+    ])
+    .optional(),
+  shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']).optional(),
+  variant: z.enum(['filled', 'outlined']).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
 
@@ -385,7 +411,7 @@ export class AgentToolsService {
         name,
         summary: input.summary?.trim() || 'Add project details here.',
         status: input.status ?? 'on-track',
-        icon: input.icon ?? createRandomProjectIcon(name),
+        icon: normalizeProjectIcon(input.icon, name),
         updatedAt: nowIso,
         progress: 0,
         milestones: []
@@ -409,7 +435,7 @@ export class AgentToolsService {
         name: input.name?.trim() || project.name,
         summary: input.summary !== undefined ? input.summary.trim() : project.summary,
         status: input.status ?? project.status,
-        icon: input.icon ?? project.icon,
+        icon: input.icon ? normalizeProjectIcon(input.icon, project.id) : project.icon,
         updatedAt: new Date().toISOString()
       })
       const nextProjects = settings.projects.map((item) =>

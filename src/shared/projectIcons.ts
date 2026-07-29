@@ -1,5 +1,6 @@
 import {
   ProjectIconGlyph,
+  ProjectIconInput,
   ProjectIconSet,
   ProjectIconShape,
   ProjectIconStyle,
@@ -15,7 +16,7 @@ export const PROJECT_ICON_SHAPES: ProjectIconShape[] = [
   'hex'
 ]
 
-export const PROJECT_ICON_SETS: ProjectIconSet[] = ['shape', 'lucide']
+export const PROJECT_ICON_SETS: ProjectIconSet[] = ['tabler']
 export const PROJECT_ICON_SYMBOLS: ProjectIconSymbol[] = [
   'briefcase',
   'folder-kanban',
@@ -34,7 +35,7 @@ export const PROJECT_ICON_SYMBOLS: ProjectIconSymbol[] = [
   'camera',
   'calendar'
 ]
-export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled', 'outlined']
+export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled']
 
 export const PROJECT_ICON_COLORS: string[] = [
   '#0ea5e9',
@@ -62,7 +63,7 @@ export function createRandomProjectIcon(seed: string): ProjectIconStyle {
   const glyph = PROJECT_ICON_SYMBOLS[hash % PROJECT_ICON_SYMBOLS.length]
 
   return {
-    set: 'lucide',
+    set: 'tabler',
     glyph,
     shape: undefined,
     variant: 'filled',
@@ -70,22 +71,14 @@ export function createRandomProjectIcon(seed: string): ProjectIconStyle {
   }
 }
 
-export function coerceFilledLucideProjectIcon(
-  icon: Partial<ProjectIconStyle> | null | undefined,
+export function coerceFilledTablerProjectIcon(
+  icon: ProjectIconInput | null | undefined,
   fallbackSeed: string
 ): ProjectIconStyle {
   const normalized = normalizeProjectIcon(icon, fallbackSeed)
-  const glyph =
-    normalized.set === 'lucide'
-      ? normalizeSymbolGlyph(typeof normalized.glyph === 'string' ? normalized.glyph : null)
-      : PROJECT_ICON_SYMBOLS[
-          hashString(`${fallbackSeed}:${normalized.glyph ?? normalized.shape ?? ''}`) %
-            PROJECT_ICON_SYMBOLS.length
-        ]
-
   return {
-    set: 'lucide',
-    glyph,
+    set: 'tabler',
+    glyph: normalized.glyph,
     shape: undefined,
     variant: 'filled',
     color: normalized.color
@@ -93,44 +86,42 @@ export function coerceFilledLucideProjectIcon(
 }
 
 export function normalizeProjectIcon(
-  icon: Partial<ProjectIconStyle> | null | undefined,
+  icon: ProjectIconInput | null | undefined,
   fallbackSeed: string
 ): ProjectIconStyle {
   if (!icon || typeof icon !== 'object') {
     return createRandomProjectIcon(fallbackSeed)
   }
 
-  const set = icon.set === 'lucide' ? 'lucide' : 'shape'
   const candidateGlyph =
     typeof icon.glyph === 'string' ? icon.glyph : typeof icon.shape === 'string' ? icon.shape : null
-  const glyph =
-    set === 'shape' ? normalizeShapeGlyph(candidateGlyph) : normalizeSymbolGlyph(candidateGlyph)
+  const preservesSymbolGlyph =
+    icon.set === 'tabler' ||
+    icon.set === 'lucide' ||
+    (icon.set === undefined && PROJECT_ICON_SYMBOLS.includes(candidateGlyph as ProjectIconSymbol))
+  const glyph = preservesSymbolGlyph
+    ? normalizeSymbolGlyph(candidateGlyph)
+    : PROJECT_ICON_SYMBOLS[
+        hashString(`${fallbackSeed}:${candidateGlyph ?? ''}`) % PROJECT_ICON_SYMBOLS.length
+      ]
 
   return {
-    set,
+    set: 'tabler',
     glyph,
-    shape: set === 'shape' ? (glyph as ProjectIconShape) : undefined,
-    variant: icon.variant === 'outlined' ? 'outlined' : 'filled',
+    shape: undefined,
+    variant: 'filled',
     color: isProjectIconColor(icon.color) ? icon.color : DEFAULT_PROJECT_ICON_COLOR
   }
 }
 
-export function resolveProjectIconSet(
-  icon: Pick<ProjectIconStyle, 'set' | 'glyph' | 'shape'>
-): ProjectIconSet {
-  return icon.set === 'lucide' ? 'lucide' : 'shape'
+export function resolveProjectIconSet(): ProjectIconSet {
+  return 'tabler'
 }
 
 export function resolveProjectIconGlyph(
   icon: Pick<ProjectIconStyle, 'set' | 'glyph' | 'shape'>
 ): ProjectIconGlyph {
-  if (resolveProjectIconSet(icon) === 'lucide') {
-    return normalizeSymbolGlyph(typeof icon.glyph === 'string' ? icon.glyph : null)
-  }
-
-  return normalizeShapeGlyph(
-    typeof icon.glyph === 'string' ? icon.glyph : typeof icon.shape === 'string' ? icon.shape : null
-  )
+  return normalizeSymbolGlyph(typeof icon.glyph === 'string' ? icon.glyph : null)
 }
 
 export function isProjectIconColor(value: unknown): value is string {
@@ -145,12 +136,6 @@ function hashString(value: string): number {
   }
 
   return hash >>> 0
-}
-
-function normalizeShapeGlyph(value: string | null): ProjectIconShape {
-  return PROJECT_ICON_SHAPES.includes(value as ProjectIconShape)
-    ? (value as ProjectIconShape)
-    : PROJECT_ICON_SHAPES[0]
 }
 
 function normalizeSymbolGlyph(value: string | null): ProjectIconSymbol {

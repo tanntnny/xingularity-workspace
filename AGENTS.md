@@ -52,4 +52,5 @@
 - Use design system principles like always use component-based UI, semantic HTML
 
 ## 2. Application UI Styles
-- The fronter components always have ligher bg color
+- Panel Style: The fronter components always have ligher bg color
+- Consistency: The buttons, selection buttons, action buttons, and toggle group buttons, have to have consistent design like roundedness, height, font-size, border color, etc.

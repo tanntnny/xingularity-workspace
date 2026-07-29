@@ -1,6 +1,8 @@
 // Shadcn UI Components - Barrel Export
 // Import these components from '@/components/ui' or './components/ui'
 
+export * from './icons'
+
 export { Button, buttonVariants } from './button'
 export type { ButtonProps } from './button'
 
@@ -149,6 +151,7 @@ export {
 export { Toaster } from './sonner'
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip'
+export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
 
 export {
   Sidebar,
@@ -188,6 +191,7 @@ export {
 } from './breadcrumb'
 
 export {
+  WorkspaceContextProvider,
   DocumentWorkspace,
   WorkspaceTabManager,
   DocumentWorkspaceMain,
@@ -197,6 +201,7 @@ export {
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,
+  WorkspaceFooter,
   WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,

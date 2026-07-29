@@ -9,21 +9,84 @@ import { ToggleGroup, ToggleGroupItem } from '../src/renderer/src/components/ui/
 import { WorkspaceTabManager } from '../src/renderer/src/components/ui/document-workspace'
 
 describe('sidebar shortcuts', () => {
-  it('adds macOS traffic-light clearance to the shared sidebar header', () => {
-    const macMarkup = renderToStaticMarkup(
+  it('uses the native sidebar composition and keeps macOS clearance at the app boundary', () => {
+    const markup = renderToStaticMarkup(
       createElement(
         SidebarProvider,
-        { macosTrafficLightInset: true },
-        createElement(SidebarHeader, null, 'Header')
+        null,
+        createElement(AppSidebar, {
+          activePage: 'notes',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          notesCount: 3,
+          projectsCount: 2,
+          calendarUndoneCount: 4,
+          macosTrafficLightInset: true
+        })
       )
     )
+
+    expect(markup).toContain('data-sidebar="content"')
+    expect(markup).toContain('data-sidebar="group-label"')
+    expect(markup).toContain('data-sidebar="group-content"')
+    expect(markup).toContain('data-sidebar="rail"')
+    expect(markup).toContain('role="separator"')
+    expect(markup).toContain('aria-label="Resize or toggle Sidebar"')
+    expect(markup).toContain('--sidebar-width:256px')
+    expect(markup).toContain('data-testid="sidebar-command-palette"')
+    expect(markup).toContain('sidebar-brand-shimmer')
+    expect(markup).toContain('!pt-11')
+    expect(markup).not.toContain('<details')
+    expect(markup).not.toContain('<summary')
+    expect(markup.match(/data-testid="sidebar-command-palette"/g)).toHaveLength(1)
+
     const defaultMarkup = renderToStaticMarkup(
       createElement(SidebarProvider, null, createElement(SidebarHeader, null, 'Header'))
     )
 
-    expect(macMarkup).toContain('--sidebar-macos-traffic-light-inset:32px')
-    expect(macMarkup).toContain('pt-[calc(0.75rem+var(--sidebar-macos-traffic-light-inset))]')
-    expect(defaultMarkup).toContain('--sidebar-macos-traffic-light-inset:0px')
+    expect(defaultMarkup).not.toContain('sidebar-macos-traffic-light-inset')
+  })
+
+  it('keeps the normal sidebar visible at its minimum width', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        { open: false },
+        createElement(AppSidebar, {
+          activePage: 'notes',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          notesCount: 0,
+          projectsCount: 0,
+          calendarUndoneCount: 0
+        })
+      )
+    )
+
+    expect(markup).toContain('data-collapsible="min"')
+    expect(markup).toContain('data-testid="sidebar-page:notes"')
+    expect(markup).toContain('--sidebar-width-min:220px')
+  })
+
+  it('keeps focus mode on the off-canvas path', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        { open: false },
+        createElement(AppSidebar, {
+          activePage: 'notes',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          notesCount: 0,
+          projectsCount: 0,
+          calendarUndoneCount: 0,
+          collapsible: 'offcanvas'
+        })
+      )
+    )
+
+    expect(markup).toContain('data-collapsible="offcanvas"')
+    expect(markup).toContain('group-data-[collapsible=offcanvas]:opacity-0')
   })
 
   it('renders icon-based Option+Tab shortcut keys', () => {
@@ -47,7 +110,7 @@ describe('sidebar shortcuts', () => {
           notesCount: 3,
           projectsCount: 2,
           calendarUndoneCount: 4,
-          profileName: 'Tanny'
+          macosTrafficLightInset: false
         })
       )
     )
@@ -114,6 +177,7 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-testid="workspace-tab-add"')
     expect(markup).toContain('data-testid="workspace-tab-icon:notes"')
     expect(markup).toContain('data-testid="workspace-tab-shortcut:notes"')
+    expect(markup).toContain('rounded-[var(--radius-button-pill)]')
     expect(markup).toContain('aria-label="Command"')
     expect(markup).toContain('aria-label="1"')
     expect(markup).toContain('data-active="true"')

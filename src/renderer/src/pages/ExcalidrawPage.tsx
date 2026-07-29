@@ -662,7 +662,7 @@ export function ExcalidrawSidebar(): ReactElement {
                           event.preventDefault()
                           void handleDeleteSession(session.id)
                         }}
-                        className="w-full text-left"
+                        className="w-full rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <div className="truncate text-sm font-semibold text-foreground">
                           {session.title}

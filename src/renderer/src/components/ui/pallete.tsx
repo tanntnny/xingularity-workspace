@@ -6,7 +6,7 @@ import { Search } from './icons'
 import { cn } from '../../lib/utils'
 
 export const palleteInputClassName =
-  'flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-10 w-full rounded-[var(--radius-control)] bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
 
 type PalleteProps = DialogProps &
   Omit<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>, 'children'> & {

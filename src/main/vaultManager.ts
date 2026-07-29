@@ -12,11 +12,18 @@ import {
   getLegacyVaultNotesDir,
   getLegacyVaultSystemDir,
   getVaultAttachmentsDir,
+  getVaultAgentDir,
+  getVaultCalendarDir,
   getVaultConfigPath,
+  getVaultExcalidrawDir,
   getVaultFileMapPath,
   getVaultIndexPath,
   getVaultNotebooksDir,
+  getVaultProjectsDir,
+  getVaultSchedulesDir,
+  getVaultSubscriptionsDir,
   getVaultSystemDir,
+  getVaultWeeklyPlanDir,
   readVaultMigrations,
   writeVaultMigrations
 } from './vaultData'
@@ -72,8 +79,7 @@ export async function chooseVaultFolder(title: string): Promise<string | null> {
 export async function initializeVault(rootPath: string): Promise<VaultPaths> {
   const paths = createVaultPaths(path.resolve(rootPath))
   await fs.mkdir(paths.rootPath, { recursive: true })
-  await fs.mkdir(paths.notebooksPath, { recursive: true })
-  await fs.mkdir(paths.attachmentsPath, { recursive: true })
+  await ensureVaultPageDirectories(paths)
 
   const vaultSettings: VaultSettings = {
     version: 1,
@@ -82,7 +88,7 @@ export async function initializeVault(rootPath: string): Promise<VaultPaths> {
 
   await ensureJsonFile(paths.vaultConfigPath, vaultSettings)
   await ensureJsonFile(paths.fileMapPath, {})
-  await writeVaultMigrations(paths.rootPath, { version: 1 })
+  await writeVaultMigrations(paths.rootPath, { version: 2 })
 
   return paths
 }
@@ -92,13 +98,12 @@ export async function validateVault(rootPath: string): Promise<VaultPaths> {
   const paths = createVaultPaths(resolved)
 
   await fs.access(paths.rootPath)
-  await fs.mkdir(paths.attachmentsPath, { recursive: true })
 
   let migrations = await readVaultMigrations(paths.rootPath)
   migrations = await migrateLegacyNotebookRoot(paths.rootPath, migrations)
   await migrateLegacySystemMetadata(paths.rootPath, migrations)
+  await ensureVaultPageDirectories(paths)
 
-  await fs.mkdir(paths.notebooksPath, { recursive: true })
   await ensureJsonFile(paths.vaultConfigPath, {
     version: 1,
     createdAt: new Date().toISOString()
@@ -205,6 +210,20 @@ async function ensureJsonFile(filePath: string, defaultValue: object): Promise<v
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify(defaultValue, null, 2), 'utf-8')
   }
+}
+
+async function ensureVaultPageDirectories(paths: VaultPaths): Promise<void> {
+  await Promise.all([
+    fs.mkdir(paths.notebooksPath, { recursive: true }),
+    fs.mkdir(paths.attachmentsPath, { recursive: true }),
+    fs.mkdir(getVaultProjectsDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultCalendarDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultWeeklyPlanDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultSubscriptionsDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultSchedulesDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultAgentDir(paths.rootPath), { recursive: true }),
+    fs.mkdir(getVaultExcalidrawDir(paths.rootPath), { recursive: true })
+  ])
 }
 
 async function promoteFirstLegacyFile(

@@ -6,7 +6,6 @@ import {
   IconArrowLeftCircleFilled,
   IconArrowRightCircleFilled,
   IconArrowUpCircleFilled,
-  IconArrowUpRightCircleFilled,
   IconBellFilled,
   IconBellRingingFilled,
   IconBookFilled,
@@ -25,7 +24,7 @@ import {
   IconCircleDotFilled,
   IconCircleFilled,
   IconCircleKeyFilled,
-  IconCirclePlusFilled,
+  IconCircleArrowUpRightFilled,
   IconCircleXFilled,
   IconClockFilled,
   IconCopyFilled,
@@ -91,7 +90,7 @@ export const ArrowRight = IconArrowRightCircleFilled
 export const ArrowRightToLine = IconDirectionArrowsFilled
 export const ArrowUp = IconArrowUpCircleFilled
 export const ArrowUpDown = IconDirectionArrowsFilled
-export const ArrowUpRight = IconArrowUpRightCircleFilled
+export const ArrowUpRight = IconCircleArrowUpRightFilled
 export const AtSign = IconCircleKeyFilled
 export const Bell = IconBellFilled
 export const BellRing = IconBellRingingFilled
@@ -134,6 +133,7 @@ export const GitBranch = IconBrandGithubFilled
 export const Globe = IconWorldFilled
 export const HardDrive = IconDeviceDesktopFilled
 export const Heart = IconHeartFilled
+export const Home = IconHomeFilled
 export const House = IconHomeFilled
 export const Keyboard = IconKeyboardFilled
 export const Landmark = IconDeviceDesktopFilled
@@ -149,6 +149,7 @@ export const LoaderCircle = IconHourglassFilled
 export const Megaphone = IconDeviceSpeakerFilled
 export const MessageSquare = IconMessageFilled
 export const MessageSquarePlus = IconMessage2Filled
+export const Milestone = IconTrophyFilled
 export const Monitor = IconDeviceDesktopFilled
 export const MoreHorizontal = IconDotsFilled
 export const NotebookPen = IconBookFilled
@@ -175,6 +176,7 @@ export const SlidersHorizontal = IconAdjustmentsHorizontalFilled
 export const Sparkles = IconSparklesFilled
 export const Star = IconStarFilled
 export const Tag = IconTagFilled
+export const Terminal = IconDeviceDesktopFilled
 export const Target = IconCircleDotFilled
 export const Trash2 = IconTrashFilled
 export const Trophy = IconTrophyFilled

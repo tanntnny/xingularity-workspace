@@ -1,8 +1,6 @@
 import { Fragment, ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
-  Bot,
-  BookOpen,
   ChevronDown,
   Copy,
   CreditCard,
@@ -51,7 +49,7 @@ import {
   stripNotebookFileExtension,
   withExcalidrawExtension
 } from '../../shared/excalidrawFile'
-import { createRandomProjectIcon } from '../../shared/projectIcons'
+import { normalizeProjectIcon } from '../../shared/projectIcons'
 import {
   appendTextToNoteMarkdown,
   getNoteDisplayName,
@@ -60,7 +58,7 @@ import {
   withNoteExtension
 } from '../../shared/noteDocument'
 import { splitNoteContent } from '../../shared/noteContent'
-import { generateProjectTag, normalizeTag } from '../../shared/noteTags'
+import { normalizeTag } from '../../shared/noteTags'
 import {
   createNoteMentionResolver,
   extractMentionTargetsFromMarkdown,
@@ -81,7 +79,7 @@ import {
   isPageAvailable,
   normalizePageForPlatform
 } from './platform/pageAvailability'
-import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
+import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { Button } from './components/ui/button'
 import { Badge } from './components/ui/badge'
 import { Input } from './components/ui/input'
@@ -99,6 +97,8 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceContextProvider,
+  WorkspaceFooter,
   WorkspaceTabManager,
   WorkspaceContextEmptyState,
   WorkspaceIconButton,
@@ -111,18 +111,12 @@ import {
   WorkspacePanelSectionHeader
 } from './components/ui/workspace-panel-section'
 import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
-import { ActionButtonGroup } from './components/ui/button-group'
+import { ButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
 import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { AgentHistoryPage } from './pages/AgentHistoryPage'
-import { SchedulesPage } from './pages/SchedulesPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
-import {
-  ScheduleDocumentationPage,
-  SCHEDULE_DOCUMENTATION_MARKDOWN
-} from './pages/ScheduleDocumentationPage'
 import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
 import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
@@ -158,7 +152,6 @@ import {
   normalizeNoteTreeSelection,
   type NoteTreeSelection
 } from './lib/noteTreeSelection'
-import { hideManagedProjectTree } from './lib/noteTreeVisibility'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 import { type ProjectsWorkspaceFilterMode } from './lib/projectTaskRows'
 import { getNextActiveWorkspaceTabId } from './lib/workspaceTabs'
@@ -171,10 +164,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   designAudit: 'Design Audit',
-  settings: 'Settings',
-  schedules: 'Schedules',
-  scheduleDocs: 'Schedule API Guide',
-  agentHistory: 'Agent Chat'
+  settings: 'Settings'
 }
 
 const PAGE_TAB_ICONS: Record<AppPage, typeof LayoutGrid> = {
@@ -185,10 +175,7 @@ const PAGE_TAB_ICONS: Record<AppPage, typeof LayoutGrid> = {
   weeklyPlan: ListTodo,
   calendar: CalendarDays,
   designAudit: Paintbrush,
-  settings: SlidersHorizontal,
-  schedules: CalendarDays,
-  scheduleDocs: BookOpen,
-  agentHistory: Bot
+  settings: SlidersHorizontal
 }
 
 type CalendarViewMode = 'month' | 'week'
@@ -365,6 +352,7 @@ function App(): ReactElement {
     () => window.matchMedia('(prefers-color-scheme: dark)').matches
   )
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const settingsMutationVersionRef = useRef(0)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
     'calendar-view-mode',
@@ -418,7 +406,7 @@ function App(): ReactElement {
   const handlePendingNoteTreeEditHandled = useCallback((): void => {
     setPendingNoteTreeEditId(null)
   }, [])
-  const visibleNoteTree = useMemo(() => hideManagedProjectTree(noteTree), [noteTree])
+  const visibleNoteTree = noteTree
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
@@ -430,10 +418,6 @@ function App(): ReactElement {
       validate: (value): value is ProjectsWorkspaceTab => value === 'board' || value === 'taskList'
     }
   )
-  const [projectDrawerRequest, setProjectDrawerRequest] = useState<{
-    projectId: string
-    token: number
-  } | null>(null)
   const [newProjectRequest, setNewProjectRequest] = useState<{ token: number } | null>(null)
   const [newSubtaskRequest] = useState<{
     projectId: string
@@ -681,6 +665,7 @@ function App(): ReactElement {
       }
 
       try {
+        settingsMutationVersionRef.current += 1
         const nextSettings = await vaultApi.settings.update(
           { lastOpenedProjectId: projectId },
           options
@@ -1062,12 +1047,15 @@ function App(): ReactElement {
     }
 
     let cancelled = false
+    const loadVersion = settingsMutationVersionRef.current
     setSettingsLoaded(false)
     void vaultApi.settings
       .get()
       .then((nextSettings) => {
-        if (!cancelled) {
+        if (!cancelled && loadVersion === settingsMutationVersionRef.current) {
           setSettings(nextSettings)
+        }
+        if (!cancelled) {
           setSettingsLoaded(true)
         }
       })
@@ -1876,6 +1864,7 @@ function App(): ReactElement {
       return false
     }
 
+    settingsMutationVersionRef.current += 1
     flushSync(() => {
       setSettings({
         ...useVaultStore.getState().settings,
@@ -1895,24 +1884,28 @@ function App(): ReactElement {
 
   const persistProjectData = async (
     nextProjects: Project[],
-    nextProjectIcons: Record<string, ProjectIconStyle>
+    nextProjectIcons: Record<string, ProjectIconStyle>,
+    lastOpenedProjectId?: string | null
   ): Promise<boolean> => {
     if (!vaultApi) {
       return false
     }
 
+    settingsMutationVersionRef.current += 1
     flushSync(() => {
       setSettings({
         ...useVaultStore.getState().settings,
         projects: nextProjects,
-        projectIcons: nextProjectIcons
+        projectIcons: nextProjectIcons,
+        ...(lastOpenedProjectId === undefined ? {} : { lastOpenedProjectId })
       })
     })
 
     try {
       const nextSettings = await vaultApi.settings.update({
         projects: nextProjects,
-        projectIcons: nextProjectIcons
+        projectIcons: nextProjectIcons,
+        ...(lastOpenedProjectId === undefined ? {} : { lastOpenedProjectId })
       })
       setSettings(nextSettings)
       return true
@@ -3042,12 +3035,13 @@ function App(): ReactElement {
   }
 
   const updateProjectIcon = (projectId: string, nextIcon: ProjectIconStyle): void => {
+    const normalizedIcon = normalizeProjectIcon(nextIcon, projectId)
     const nextProjects = projects.map((project) =>
       project.id === projectId
-        ? { ...project, icon: nextIcon, updatedAt: new Date().toISOString() }
+        ? { ...project, icon: normalizedIcon, updatedAt: new Date().toISOString() }
         : project
     )
-    const nextProjectIcons = { ...projectIcons, [projectId]: nextIcon }
+    const nextProjectIcons = { ...projectIcons, [projectId]: normalizedIcon }
     void persistProjectData(nextProjects, nextProjectIcons)
   }
 
@@ -3254,47 +3248,13 @@ function App(): ReactElement {
     }
   }
 
-  const downloadScheduleDocumentation = async (): Promise<void> => {
-    if (!vaultApi) {
-      pushToast('error', 'Documentation export is only available inside the Electron app')
-      return
-    }
-
-    try {
-      const exportedPath = await vaultApi.files.exportNote(
-        'Schedule API Guide.md',
-        SCHEDULE_DOCUMENTATION_MARKDOWN
-      )
-      if (!exportedPath) {
-        return
-      }
-      pushToast('success', `Guide exported to ${exportedPath}`)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }
-
   const exportProject = async (project: Project): Promise<void> => {
     if (!vaultApi) {
       pushToast('error', 'Project export is only available inside the Electron app')
       return
     }
 
-    const projectTag = generateProjectTag(project.id)
-    const projectNotes = notes
-      .filter((note) => note.tags.includes(projectTag))
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-
     try {
-      const noteSections = await Promise.all(
-        projectNotes.map(async (note) => {
-          const noteContent = await vaultApi.files.readNote(note.relPath)
-          return [`### ${note.name}`, '', `Source: ${note.relPath}`, '', noteContent.trim()].join(
-            '\n'
-          )
-        })
-      )
-
       const milestoneLines =
         project.milestones.length === 0
           ? ['- None yet']
@@ -3321,11 +3281,6 @@ function App(): ReactElement {
               return lines
             })
 
-      const projectNotesSection =
-        noteSections.length > 0
-          ? noteSections.join('\n\n---\n\n')
-          : '_No notes tagged for this project yet._'
-
       const exportContent = [
         `# ${project.name}`,
         '',
@@ -3340,10 +3295,6 @@ function App(): ReactElement {
         '## Milestones',
         '',
         ...milestoneLines,
-        '',
-        '## Project Notes',
-        '',
-        projectNotesSection,
         ''
       ].join('\n')
 
@@ -3512,7 +3463,7 @@ function App(): ReactElement {
       name: nextName,
       summary: input?.summary?.trim() ?? 'Add project details here.',
       status: 'on-track',
-      icon: input?.icon ?? createRandomProjectIcon(nextName),
+      icon: normalizeProjectIcon(input?.icon, nextName),
       updatedAt: new Date().toISOString(),
       progress: 0,
       milestones: []
@@ -3520,8 +3471,8 @@ function App(): ReactElement {
 
     const nextProjects = [withComputedProjectState(nextProject), ...projects]
     const nextProjectIcons = { ...projectIcons, [nextProject.id]: nextProject.icon }
-    void persistProjectData(nextProjects, nextProjectIcons)
-    selectProject(nextProject.id)
+    void persistProjectData(nextProjects, nextProjectIcons, nextProject.id)
+    setSelectedProjectId(nextProject.id)
     pushToast('success', 'Project created')
     return nextProject.id
   }
@@ -3560,12 +3511,15 @@ function App(): ReactElement {
             ...project,
             name: normalizedName,
             summary: draft.summary.trim(),
-            icon: draft.icon,
+            icon: normalizeProjectIcon(draft.icon, projectId),
             updatedAt: new Date().toISOString()
           }
         : project
     )
-    const nextProjectIcons = { ...projectIcons, [projectId]: draft.icon }
+    const nextProjectIcons = {
+      ...projectIcons,
+      [projectId]: normalizeProjectIcon(draft.icon, projectId)
+    }
     void persistProjectData(nextProjects, nextProjectIcons)
   }
 
@@ -4156,7 +4110,7 @@ function App(): ReactElement {
     }
 
     const confirmed = window.confirm(
-      `Remove project "${project.name}" from this workspace? Tagged notes will stay in the vault. Use Undo to restore.`
+      `Remove project "${project.name}" from this workspace? Notebook files are unaffected. Use Undo to restore.`
     )
     if (!confirmed) {
       return
@@ -4963,8 +4917,6 @@ function App(): ReactElement {
     )
   }
 
-  const isStandalonePage =
-    activePage === 'schedules' || activePage === 'scheduleDocs' || activePage === 'agentHistory'
   const paletteSurfaceClass = ''
   const headerPageLabel =
     hasVault && activePage === 'subscriptions'
@@ -5034,7 +4986,6 @@ function App(): ReactElement {
         data-focus-mode={isFocusMode ? 'true' : 'false'}
         open={isFocusMode ? false : isSidebarOpen}
         onOpenChange={setIsSidebarOpen}
-        macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
       >
         <AppSidebar
           activePage={activePage}
@@ -5044,113 +4995,81 @@ function App(): ReactElement {
           notesCount={notes.length}
           projectsCount={projects.length}
           calendarUndoneCount={calendarUndoneCount}
-          profileName={profileName}
-          activeVaultPath={vault?.rootPath ?? null}
           isLocked={!hasVault}
           availablePages={availablePages}
           className={paletteSurfaceClass}
-          collapsible={isFocusMode ? 'offcanvas' : 'icon'}
+          collapsible={isFocusMode ? 'offcanvas' : 'min'}
+          macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
         />
 
-        <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased">
-          <div className="flex h-full min-w-0 flex-col">
-            <WorkspaceTabManager
-              tabs={workspaceTabs.map((tab, index) => ({
-                id: tab.id,
-                label: hasVault ? PAGE_LABELS[tab.page] : 'Vault',
-                icon: hasVault ? PAGE_TAB_ICONS[tab.page] : FolderOpen,
-                shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
-              }))}
-              activeTabId={activeWorkspaceTabId}
-              onSelectTab={handleSelectWorkspaceTab}
-              onCloseTab={handleCloseWorkspaceTab}
-              onAddTab={handleCreateWorkspaceTab}
-              addDisabled={!hasVault}
-            />
-            {hasVault && activePage === 'schedules' ? (
-              <SchedulesPage
-                vaultApi={vaultApi}
-                pushToast={pushToast}
-                isRightPanelCollapsed={isRightPanelCollapsed}
-                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
-                onOpenDocumentation={() => {
-                  void navigateToPage('scheduleDocs')
-                }}
-              />
-            ) : null}
-            {hasVault && activePage === 'scheduleDocs' ? (
-              <ScheduleDocumentationPage
-                onBack={() => {
-                  void navigateToPage('schedules')
-                }}
-                onDownload={() => {
-                  void downloadScheduleDocumentation()
-                }}
-                isRightPanelCollapsed={isRightPanelCollapsed}
-                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
-              />
-            ) : null}
-            {hasVault && activePage === 'agentHistory' ? (
-              <AgentHistoryPage
-                vaultApi={vaultApi}
-                pushToast={pushToast}
-                notes={notes}
-                projects={projects}
-                isRightPanelCollapsed={isRightPanelCollapsed}
-                onToggleRightPanel={() => setIsRightPanelCollapsed((current) => !current)}
-              />
-            ) : null}
-            <DocumentWorkspace
+        <SidebarInset className="!min-h-0 overflow-hidden p-2 text-foreground antialiased">
+          <div className="flex h-full min-w-0 flex-col gap-2">
+            <WorkspaceContextProvider
               hasPanel={hasRightPanel}
               panelCollapsed={isRightPanelCollapsed}
               onTogglePanel={() => setIsRightPanelCollapsed((current) => !current)}
-              className={isStandalonePage ? 'hidden' : undefined}
             >
-              <DocumentWorkspaceMain className={paletteSurfaceClass}>
+              <WorkspaceTabManager
+                tabs={workspaceTabs.map((tab, index) => ({
+                  id: tab.id,
+                  label: hasVault ? PAGE_LABELS[tab.page] : 'Vault',
+                  icon: hasVault ? PAGE_TAB_ICONS[tab.page] : FolderOpen,
+                  shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
+                }))}
+                activeTabId={activeWorkspaceTabId}
+                onSelectTab={handleSelectWorkspaceTab}
+                onCloseTab={handleCloseWorkspaceTab}
+                onAddTab={handleCreateWorkspaceTab}
+                addDisabled={!hasVault}
+              />
+              <DocumentWorkspace hasPanel={hasRightPanel}>
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
-                    activePage === 'projects' || activePage === 'calendar' ? null : (
-                      <Breadcrumb>
-                        <BreadcrumbList className="text-muted-foreground">
-                          <BreadcrumbItem>
-                            <BreadcrumbPage className="text-sm text-muted-foreground">
-                              {headerPageLabel}
-                            </BreadcrumbPage>
-                          </BreadcrumbItem>
-                          {noteHeaderBreadcrumbSegments ? (
-                            noteHeaderBreadcrumbSegments.map((segment, index) => {
-                              const isLast = index === noteHeaderBreadcrumbSegments.length - 1
+                    <div className="flex min-w-0 items-center gap-2">
+                      <SidebarTrigger />
+                      {activePage === 'projects' || activePage === 'calendar' ? null : (
+                        <Breadcrumb>
+                          <BreadcrumbList className="text-muted-foreground">
+                            <BreadcrumbItem>
+                              <BreadcrumbPage className="text-sm text-muted-foreground">
+                                {headerPageLabel}
+                              </BreadcrumbPage>
+                            </BreadcrumbItem>
+                            {noteHeaderBreadcrumbSegments ? (
+                              noteHeaderBreadcrumbSegments.map((segment, index) => {
+                                const isLast = index === noteHeaderBreadcrumbSegments.length - 1
 
-                              return (
-                                <Fragment key={`${segment}:${index}`}>
-                                  <BreadcrumbSeparator className="text-muted-foreground" />
-                                  <BreadcrumbItem>
-                                    <BreadcrumbPage
-                                      className={
-                                        isLast
-                                          ? 'max-w-[220px] truncate text-sm font-semibold text-foreground'
-                                          : 'max-w-[140px] truncate text-sm text-muted-foreground'
-                                      }
-                                    >
-                                      {segment}
-                                    </BreadcrumbPage>
-                                  </BreadcrumbItem>
-                                </Fragment>
-                              )
-                            })
-                          ) : middleHeaderBreadcrumbItem ? (
-                            <>
-                              <BreadcrumbSeparator className="text-muted-foreground" />
-                              <BreadcrumbItem>
-                                <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
-                                  {middleHeaderBreadcrumbItem}
-                                </BreadcrumbPage>
-                              </BreadcrumbItem>
-                            </>
-                          ) : null}
-                        </BreadcrumbList>
-                      </Breadcrumb>
-                    )
+                                return (
+                                  <Fragment key={`${segment}:${index}`}>
+                                    <BreadcrumbSeparator className="text-muted-foreground" />
+                                    <BreadcrumbItem>
+                                      <BreadcrumbPage
+                                        className={
+                                          isLast
+                                            ? 'max-w-[220px] truncate text-sm font-semibold text-foreground'
+                                            : 'max-w-[140px] truncate text-sm text-muted-foreground'
+                                        }
+                                      >
+                                        {segment}
+                                      </BreadcrumbPage>
+                                    </BreadcrumbItem>
+                                  </Fragment>
+                                )
+                              })
+                            ) : middleHeaderBreadcrumbItem ? (
+                              <>
+                                <BreadcrumbSeparator className="text-muted-foreground" />
+                                <BreadcrumbItem>
+                                  <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
+                                    {middleHeaderBreadcrumbItem}
+                                  </BreadcrumbPage>
+                                </BreadcrumbItem>
+                              </>
+                            ) : null}
+                          </BreadcrumbList>
+                        </Breadcrumb>
+                      )}
+                    </div>
                   }
                   secondaryActions={
                     activePage === 'calendar' ? (
@@ -5197,7 +5116,12 @@ function App(): ReactElement {
                             </ToggleGroupItem>
                           ))}
                         </ToggleGroup>
-                        <ActionButtonGroup size="sm" aria-label="Calendar period navigation">
+                        <ButtonGroup
+                          variant="outline"
+                          size="sm"
+                          className="[&>button]:border-0"
+                          aria-label="Calendar period navigation"
+                        >
                           <WorkspaceIconButton
                             onClick={goToPrevCalendarPeriod}
                             title={calendarViewMode === 'week' ? 'Previous week' : 'Previous month'}
@@ -5223,7 +5147,7 @@ function App(): ReactElement {
                             title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
                             icon={<ChevronRight size={18} />}
                           />
-                        </ActionButtonGroup>
+                        </ButtonGroup>
                       </div>
                     ) : null
                   }
@@ -5433,531 +5357,532 @@ function App(): ReactElement {
                   }
                 />
 
-                <DocumentWorkspaceMainContent
-                  className={
-                    activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
-                  }
-                >
-                  <div
-                    key={activePage}
-                    className={`w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                <DocumentWorkspaceMain className={paletteSurfaceClass}>
+                  <DocumentWorkspaceMainContent
+                    className={
+                      activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
+                    }
                   >
-                    {!hasVault ? (
-                      <VaultSelectionPage
-                        lastVaultPath={lastVaultPath}
-                        platformKind={platform.kind}
-                        supportsVaultPicker={platform.capabilities.supportsVaultPicker}
-                        onManageVaults={openVaultSwapper}
-                      />
-                    ) : activePage === 'notes' ? (
-                      searchQuery.trim() ? (
-                        <SearchPage
-                          results={searchResults}
-                          onOpen={(relPath) => {
-                            void openNotebookPath(relPath)
+                    <div
+                      key={activePage}
+                      className={`w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                    >
+                      {!hasVault ? (
+                        <VaultSelectionPage
+                          lastVaultPath={lastVaultPath}
+                          platformKind={platform.kind}
+                          supportsVaultPicker={platform.capabilities.supportsVaultPicker}
+                          onManageVaults={openVaultSwapper}
+                        />
+                      ) : activePage === 'notes' ? (
+                        searchQuery.trim() ? (
+                          <SearchPage
+                            results={searchResults}
+                            onOpen={(relPath) => {
+                              void openNotebookPath(relPath)
+                              setSearchQuery('')
+                              setSearchResults([])
+                            }}
+                          />
+                        ) : currentExcalidrawPath ? (
+                          <ExcalidrawFileEditor
+                            notePath={currentExcalidrawPath}
+                            vaultApi={vaultApi}
+                            pushToast={pushToast}
+                          />
+                        ) : noteIsOpen && currentNotePath ? (
+                          <EditorPage
+                            editorRef={currentNoteEditorRef}
+                            initialContent={currentNoteEditorDraft}
+                            notePath={currentNotePath}
+                            tags={currentNoteTags}
+                            notes={notes}
+                            onDirty={handleCurrentNoteEditorDirty}
+                            onSnapshotChange={handleCurrentNoteSnapshotChange}
+                            onDropFile={(sourcePath) => importAttachment(sourcePath)}
+                            onPasteImage={importImageFromBlob}
+                            onAddTag={addTagToCurrentNote}
+                            onRemoveTag={removeTagFromCurrentNote}
+                            onFindByTag={findByTag}
+                            onOpenNoteLink={(target) => {
+                              void openOrCreateNoteMention(target)
+                            }}
+                            onRename={renameCurrentNote}
+                            titleEditToken={
+                              noteTitleEditTarget?.relPath === currentNotePath
+                                ? noteTitleEditTarget.token
+                                : 0
+                            }
+                            vimModeEnabled={editorVimModeEnabled}
+                            vimKeyMappings={editorVimKeyMappings}
+                          />
+                        ) : (
+                          <div className="p-5 text-sm text-muted-foreground">
+                            Pick a note or drawing from the right panel to open it
+                          </div>
+                        )
+                      ) : activePage === 'knowledge' ? (
+                        <KnowledgePage
+                          notes={notes}
+                          orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
+                          onOpenNote={(relPath) => {
+                            void navigateToPage('notes')
                             setSearchQuery('')
                             setSearchResults([])
+                            void openNote(relPath)
                           }}
                         />
-                      ) : currentExcalidrawPath ? (
-                        <ExcalidrawFileEditor
-                          notePath={currentExcalidrawPath}
-                          vaultApi={vaultApi}
-                          pushToast={pushToast}
+                      ) : activePage === 'projects' ? (
+                        <ProjectsWorkspacePage
+                          projects={projects}
+                          favoriteProjectIds={favoriteProjectIds}
+                          selectedProjectId={selectedProjectId}
+                          activeTab={projectsWorkspaceTab}
+                          filterMode={projectFilterMode}
+                          newProjectRequest={newProjectRequest}
+                          newSubtaskRequest={newSubtaskRequest}
+                          taskListCollapseAllRequest={projectTaskListCollapseAllRequest}
+                          focusedMilestoneTarget={focusedMilestoneTarget}
+                          onFilterModeChange={setProjectFilterMode}
+                          onTaskListCollapseStateChange={setAreProjectTaskListGroupsCollapsed}
+                          onMilestoneContextChange={setProjectsWorkspaceMilestoneContext}
+                          onActiveTabChange={setProjectsWorkspaceTab}
+                          onSelectProject={selectProject}
+                          onCreateProject={createProject}
+                          onRenameProject={renameProject}
+                          onUpdateProjectSummary={updateProjectSummary}
+                          onUpdateProjectIcon={updateProjectIcon}
+                          onToggleProjectDone={toggleProjectDone}
+                          onToggleProjectFavorite={toggleProjectFavoriteById}
+                          onOpenProjectFolder={openProjectFolder}
+                          onExportProject={exportProject}
+                          onDeleteProject={removeProjectById}
+                          onAddMilestone={addMilestoneToProject}
+                          onRenameMilestone={renameProjectMilestone}
+                          onUpdateMilestoneDescription={updateProjectMilestoneDescription}
+                          onUpdateMilestoneDueDate={updateProjectMilestoneDueDate}
+                          onUpdateMilestoneStatus={updateProjectMilestoneStatus}
+                          onUpdateMilestonePriority={updateProjectMilestonePriority}
+                          onRemoveMilestone={removeProjectMilestone}
+                          onAddSubtask={addSubtaskToMilestone}
+                          onToggleSubtask={toggleMilestoneSubtask}
+                          onRenameSubtask={renameMilestoneSubtask}
+                          onUpdateSubtaskDescription={updateMilestoneSubtaskDescription}
+                          onUpdateSubtaskDueDate={updateMilestoneSubtaskDueDate}
+                          onUpdateSubtaskPriority={updateMilestoneSubtaskPriority}
+                          onRemoveSubtask={removeMilestoneSubtask}
+                          onSaveProject={saveProject}
+                          onSaveMilestone={saveProjectMilestone}
+                          onSaveSubtask={saveMilestoneSubtask}
                         />
-                      ) : noteIsOpen && currentNotePath ? (
-                        <EditorPage
-                          editorRef={currentNoteEditorRef}
-                          initialContent={currentNoteEditorDraft}
-                          notePath={currentNotePath}
-                          tags={currentNoteTags}
-                          notes={notes}
-                          onDirty={handleCurrentNoteEditorDirty}
-                          onSnapshotChange={handleCurrentNoteSnapshotChange}
-                          onDropFile={(sourcePath) => importAttachment(sourcePath)}
-                          onPasteImage={importImageFromBlob}
-                          onAddTag={addTagToCurrentNote}
-                          onRemoveTag={removeTagFromCurrentNote}
-                          onFindByTag={findByTag}
-                          onOpenNoteLink={(target) => {
-                            void openOrCreateNoteMention(target)
+                      ) : activePage === 'subscriptions' ? (
+                        <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
+                      ) : activePage === 'weeklyPlan' ? (
+                        <WeeklyPlanWorkspace
+                          state={weeklyPlanState}
+                          loading={weeklyPlanLoading}
+                          selectedWeekId={selectedWeeklyPlanWeekId}
+                          isReady={weeklyPlanReady}
+                          onUpdateWeek={(input) => updateWeek(input)}
+                          onAddPriority={(input) => addPriority(input)}
+                          onUpdatePriority={(input) => updatePriority(input)}
+                          onDeletePriority={(priorityId) => deletePriority(priorityId)}
+                          onReorderPriorities={(input) => reorderPriorities(input)}
+                          onUpsertReview={(input) => upsertReview(input)}
+                        />
+                      ) : activePage === 'calendar' ? (
+                        <div className="min-h-full">
+                          <section
+                            data-testid={
+                              calendarViewMode === 'week'
+                                ? 'calendar-week-shell'
+                                : 'calendar-month-shell'
+                            }
+                            className="min-h-full rounded-lg border border-border"
+                          >
+                            <div>
+                              {calendarViewMode === 'week' ? (
+                                <CalendarWeekView
+                                  selectedDate={selectedCalendarDate}
+                                  tasks={visibleCalendarTasks}
+                                  milestoneEvents={visibleMilestoneCalendarEvents}
+                                  onSelectDate={setSelectedCalendarDate}
+                                  onOpenMilestone={openMilestoneFromCalendar}
+                                  onCreateTask={createTaskForWeeklyTime}
+                                  onRescheduleTask={(taskId, newDate) => {
+                                    void rescheduleCalendarTask(taskId, newDate)
+                                  }}
+                                  onToggleTask={(taskId) => {
+                                    void toggleCalendarTask(taskId)
+                                  }}
+                                  onDeleteTask={(taskId) => {
+                                    void removeCalendarTask(taskId)
+                                  }}
+                                  onRenameTask={(taskId, newTitle) => {
+                                    void renameCalendarTask(taskId, newTitle)
+                                  }}
+                                  onUpdateTaskPriority={(taskId, priority) => {
+                                    void updateCalendarTaskPriority(taskId, priority)
+                                  }}
+                                  onUpdateTaskType={(taskId, taskType) => {
+                                    void updateCalendarTaskType(taskId, taskType)
+                                  }}
+                                  onUpdateTaskSchedule={(taskId, schedule) => {
+                                    void updateCalendarTaskSchedule(taskId, schedule)
+                                  }}
+                                />
+                              ) : (
+                                <CalendarMonthView
+                                  selectedDate={selectedCalendarDate}
+                                  tasks={visibleScheduledCalendarTasks}
+                                  milestoneEvents={visibleMilestoneCalendarEvents}
+                                  onSelectDate={setSelectedCalendarDate}
+                                  onCreateTask={createTaskForDate}
+                                  onOpenMilestone={openMilestoneFromCalendar}
+                                  onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
+                                  onRescheduleTask={(taskId, newDate) => {
+                                    void rescheduleCalendarTask(taskId, newDate)
+                                  }}
+                                  onResizeTaskStart={(taskId, newStartDate) => {
+                                    void resizeCalendarTaskStart(taskId, newStartDate)
+                                  }}
+                                  onResizeTaskEnd={(taskId, newEndDate) => {
+                                    void resizeCalendarTaskEnd(taskId, newEndDate)
+                                  }}
+                                  onToggleTask={(taskId) => {
+                                    void toggleCalendarTask(taskId)
+                                  }}
+                                  onDeleteTask={(taskId) => {
+                                    void removeCalendarTask(taskId)
+                                  }}
+                                  onRenameTask={(taskId, newTitle) => {
+                                    void renameCalendarTask(taskId, newTitle)
+                                  }}
+                                  onUpdateTaskPriority={(taskId, priority) => {
+                                    void updateCalendarTaskPriority(taskId, priority)
+                                  }}
+                                  onUpdateTaskType={(taskId, taskType) => {
+                                    void updateCalendarTaskType(taskId, taskType)
+                                  }}
+                                  onUpdateTaskTime={(taskId, time) => {
+                                    void updateCalendarTaskTime(taskId, time)
+                                  }}
+                                  onUpdateTaskSchedule={(taskId, schedule) => {
+                                    void updateCalendarTaskSchedule(taskId, schedule)
+                                  }}
+                                  onUpdateTaskReminders={(taskId, reminders) => {
+                                    void updateCalendarTaskReminders(taskId, reminders)
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </section>
+                        </div>
+                      ) : activePage === 'designAudit' ? (
+                        <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
+                      ) : activePage === 'settings' ? (
+                        <SettingsPage
+                          profileName={profileName}
+                          mistralApiKey={mistralApiKey}
+                          editorVimModeEnabled={editorVimModeEnabled}
+                          editorVimKeyMappings={editorVimKeyMappings}
+                          vaultLocation={vault?.rootPath ?? lastVaultPath}
+                          savedVaultCount={savedVaultCount}
+                          onSaveProfile={(name) => {
+                            void updateProfileName(name)
                           }}
-                          onRename={renameCurrentNote}
-                          titleEditToken={
-                            noteTitleEditTarget?.relPath === currentNotePath
-                              ? noteTitleEditTarget.token
-                              : 0
-                          }
-                          vimModeEnabled={editorVimModeEnabled}
-                          vimKeyMappings={editorVimKeyMappings}
+                          onSaveMistralApiKey={(apiKey) => {
+                            void updateMistralApiKey(apiKey)
+                          }}
+                          onToggleEditorVimMode={(enabled) => {
+                            void updateEditorVimMode(enabled)
+                          }}
+                          onUpdateEditorVimKeyMappings={(mappings) => {
+                            void updateEditorVimKeyMappings(mappings)
+                          }}
+                          onManageVaults={openVaultSwapper}
+                          onMigrateBlockNoteNotes={() => {
+                            void migrateBlockNoteNotes()
+                          }}
+                          onMigrateTaggedNoteBodyFrontmatter={() => {
+                            void migrateTaggedNoteBodyFrontmatter()
+                          }}
+                          onImportLegacyExcalidrawSessions={() => {
+                            void importLegacyExcalidrawSessions()
+                          }}
+                          onOpenDesignAudit={() => {
+                            void navigateToPage('designAudit')
+                          }}
                         />
                       ) : (
                         <div className="p-5 text-sm text-muted-foreground">
-                          Pick a note or drawing from the right panel to open it
+                          {activePage} workspace ready. Notes remain fully functional.
                         </div>
-                      )
-                    ) : activePage === 'knowledge' ? (
-                      <KnowledgePage
-                        notes={notes}
-                        orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
-                        onOpenNote={(relPath) => {
-                          void navigateToPage('notes')
-                          setSearchQuery('')
-                          setSearchResults([])
-                          void openNote(relPath)
-                        }}
-                      />
-                    ) : activePage === 'projects' ? (
-                      <ProjectsWorkspacePage
-                        projects={projects}
-                        favoriteProjectIds={favoriteProjectIds}
-                        selectedProjectId={selectedProjectId}
-                        activeTab={projectsWorkspaceTab}
-                        filterMode={projectFilterMode}
-                        newProjectRequest={newProjectRequest}
-                        newSubtaskRequest={newSubtaskRequest}
-                        taskListCollapseAllRequest={projectTaskListCollapseAllRequest}
-                        projectDrawerRequest={projectDrawerRequest}
-                        focusedMilestoneTarget={focusedMilestoneTarget}
-                        onFilterModeChange={setProjectFilterMode}
-                        onTaskListCollapseStateChange={setAreProjectTaskListGroupsCollapsed}
-                        onMilestoneContextChange={setProjectsWorkspaceMilestoneContext}
-                        onActiveTabChange={setProjectsWorkspaceTab}
-                        onSelectProject={selectProject}
-                        onCreateProject={createProject}
-                        onRenameProject={renameProject}
-                        onUpdateProjectSummary={updateProjectSummary}
-                        onUpdateProjectIcon={updateProjectIcon}
-                        onToggleProjectDone={toggleProjectDone}
-                        onToggleProjectFavorite={toggleProjectFavoriteById}
-                        onOpenProjectFolder={openProjectFolder}
-                        onExportProject={exportProject}
-                        onDeleteProject={removeProjectById}
-                        onAddMilestone={addMilestoneToProject}
-                        onRenameMilestone={renameProjectMilestone}
-                        onUpdateMilestoneDescription={updateProjectMilestoneDescription}
-                        onUpdateMilestoneDueDate={updateProjectMilestoneDueDate}
-                        onUpdateMilestoneStatus={updateProjectMilestoneStatus}
-                        onUpdateMilestonePriority={updateProjectMilestonePriority}
-                        onRemoveMilestone={removeProjectMilestone}
-                        onAddSubtask={addSubtaskToMilestone}
-                        onToggleSubtask={toggleMilestoneSubtask}
-                        onRenameSubtask={renameMilestoneSubtask}
-                        onUpdateSubtaskDescription={updateMilestoneSubtaskDescription}
-                        onUpdateSubtaskDueDate={updateMilestoneSubtaskDueDate}
-                        onUpdateSubtaskPriority={updateMilestoneSubtaskPriority}
-                        onRemoveSubtask={removeMilestoneSubtask}
-                        onSaveProject={saveProject}
-                        onSaveMilestone={saveProjectMilestone}
-                        onSaveSubtask={saveMilestoneSubtask}
-                      />
-                    ) : activePage === 'subscriptions' ? (
-                      <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
-                    ) : activePage === 'weeklyPlan' ? (
-                      <WeeklyPlanWorkspace
+                      )}
+                    </div>
+                  </DocumentWorkspaceMainContent>
+                  <DocumentWorkspacePanel
+                    data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
+                    className={`${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      shouldSlideWorkspacePanelOut
+                        ? 'pointer-events-none translate-x-full opacity-0'
+                        : 'translate-x-0 opacity-100'
+                    } ${paletteSurfaceClass}`}
+                    style={
+                      shouldSlideWorkspacePanelOut
+                        ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
+                        : undefined
+                    }
+                  >
+                    {activePage === 'weeklyPlan' ? (
+                      <WeeklyPlanSidebar
                         state={weeklyPlanState}
                         loading={weeklyPlanLoading}
                         selectedWeekId={selectedWeeklyPlanWeekId}
+                        currentWeekId={weeklyPlanCurrentWeekId}
+                        nextWeekStart={nextWeeklyPlanStart}
+                        todayIso={todayIso}
                         isReady={weeklyPlanReady}
-                        onUpdateWeek={(input) => updateWeek(input)}
-                        onAddPriority={(input) => addPriority(input)}
-                        onUpdatePriority={(input) => updatePriority(input)}
-                        onDeletePriority={(priorityId) => deletePriority(priorityId)}
-                        onReorderPriorities={(input) => reorderPriorities(input)}
-                        onUpsertReview={(input) => upsertReview(input)}
-                      />
-                    ) : activePage === 'calendar' ? (
-                      <div className="min-h-full">
-                        <section
-                          data-testid={
-                            calendarViewMode === 'week'
-                              ? 'calendar-week-shell'
-                              : 'calendar-month-shell'
-                          }
-                          className="min-h-full rounded-lg border border-border"
-                        >
-                          <div>
-                            {calendarViewMode === 'week' ? (
-                              <CalendarWeekView
-                                selectedDate={selectedCalendarDate}
-                                tasks={visibleCalendarTasks}
-                                milestoneEvents={visibleMilestoneCalendarEvents}
-                                onSelectDate={setSelectedCalendarDate}
-                                onOpenMilestone={openMilestoneFromCalendar}
-                                onCreateTask={createTaskForWeeklyTime}
-                                onRescheduleTask={(taskId, newDate) => {
-                                  void rescheduleCalendarTask(taskId, newDate)
-                                }}
-                                onToggleTask={(taskId) => {
-                                  void toggleCalendarTask(taskId)
-                                }}
-                                onDeleteTask={(taskId) => {
-                                  void removeCalendarTask(taskId)
-                                }}
-                                onRenameTask={(taskId, newTitle) => {
-                                  void renameCalendarTask(taskId, newTitle)
-                                }}
-                                onUpdateTaskPriority={(taskId, priority) => {
-                                  void updateCalendarTaskPriority(taskId, priority)
-                                }}
-                                onUpdateTaskType={(taskId, taskType) => {
-                                  void updateCalendarTaskType(taskId, taskType)
-                                }}
-                                onUpdateTaskSchedule={(taskId, schedule) => {
-                                  void updateCalendarTaskSchedule(taskId, schedule)
-                                }}
-                              />
-                            ) : (
-                              <CalendarMonthView
-                                selectedDate={selectedCalendarDate}
-                                tasks={visibleScheduledCalendarTasks}
-                                milestoneEvents={visibleMilestoneCalendarEvents}
-                                onSelectDate={setSelectedCalendarDate}
-                                onCreateTask={createTaskForDate}
-                                onOpenMilestone={openMilestoneFromCalendar}
-                                onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
-                                onRescheduleTask={(taskId, newDate) => {
-                                  void rescheduleCalendarTask(taskId, newDate)
-                                }}
-                                onResizeTaskStart={(taskId, newStartDate) => {
-                                  void resizeCalendarTaskStart(taskId, newStartDate)
-                                }}
-                                onResizeTaskEnd={(taskId, newEndDate) => {
-                                  void resizeCalendarTaskEnd(taskId, newEndDate)
-                                }}
-                                onToggleTask={(taskId) => {
-                                  void toggleCalendarTask(taskId)
-                                }}
-                                onDeleteTask={(taskId) => {
-                                  void removeCalendarTask(taskId)
-                                }}
-                                onRenameTask={(taskId, newTitle) => {
-                                  void renameCalendarTask(taskId, newTitle)
-                                }}
-                                onUpdateTaskPriority={(taskId, priority) => {
-                                  void updateCalendarTaskPriority(taskId, priority)
-                                }}
-                                onUpdateTaskType={(taskId, taskType) => {
-                                  void updateCalendarTaskType(taskId, taskType)
-                                }}
-                                onUpdateTaskTime={(taskId, time) => {
-                                  void updateCalendarTaskTime(taskId, time)
-                                }}
-                                onUpdateTaskSchedule={(taskId, schedule) => {
-                                  void updateCalendarTaskSchedule(taskId, schedule)
-                                }}
-                                onUpdateTaskReminders={(taskId, reminders) => {
-                                  void updateCalendarTaskReminders(taskId, reminders)
-                                }}
-                              />
-                            )}
-                          </div>
-                        </section>
-                      </div>
-                    ) : activePage === 'designAudit' ? (
-                      <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
-                    ) : activePage === 'settings' ? (
-                      <SettingsPage
-                        profileName={profileName}
-                        mistralApiKey={mistralApiKey}
-                        editorVimModeEnabled={editorVimModeEnabled}
-                        editorVimKeyMappings={editorVimKeyMappings}
-                        vaultLocation={vault?.rootPath ?? lastVaultPath}
-                        savedVaultCount={savedVaultCount}
-                        onSaveProfile={(name) => {
-                          void updateProfileName(name)
-                        }}
-                        onSaveMistralApiKey={(apiKey) => {
-                          void updateMistralApiKey(apiKey)
-                        }}
-                        onToggleEditorVimMode={(enabled) => {
-                          void updateEditorVimMode(enabled)
-                        }}
-                        onUpdateEditorVimKeyMappings={(mappings) => {
-                          void updateEditorVimKeyMappings(mappings)
-                        }}
-                        onManageVaults={openVaultSwapper}
-                        onMigrateBlockNoteNotes={() => {
-                          void migrateBlockNoteNotes()
-                        }}
-                        onMigrateTaggedNoteBodyFrontmatter={() => {
-                          void migrateTaggedNoteBodyFrontmatter()
-                        }}
-                        onImportLegacyExcalidrawSessions={() => {
-                          void importLegacyExcalidrawSessions()
-                        }}
-                        onOpenDesignAudit={() => {
-                          void navigateToPage('designAudit')
-                        }}
+                        onSelectWeek={setSelectedWeeklyPlanWeekId}
+                        onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
                       />
                     ) : (
-                      <div className="p-5 text-sm text-muted-foreground">
-                        {activePage} workspace ready. Notes remain fully functional.
-                      </div>
-                    )}
-                  </div>
-                </DocumentWorkspaceMainContent>
-              </DocumentWorkspaceMain>
-
-              <DocumentWorkspacePanel
-                data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
-                className={`${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden transition-[transform,opacity,width,flex-basis] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  shouldSlideWorkspacePanelOut
-                    ? 'pointer-events-none translate-x-full opacity-0'
-                    : 'translate-x-0 opacity-100'
-                } ${paletteSurfaceClass}`}
-                style={
-                  shouldSlideWorkspacePanelOut
-                    ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
-                    : undefined
-                }
-              >
-                {activePage === 'weeklyPlan' ? (
-                  <WeeklyPlanSidebar
-                    state={weeklyPlanState}
-                    loading={weeklyPlanLoading}
-                    selectedWeekId={selectedWeeklyPlanWeekId}
-                    currentWeekId={weeklyPlanCurrentWeekId}
-                    nextWeekStart={nextWeeklyPlanStart}
-                    todayIso={todayIso}
-                    isReady={weeklyPlanReady}
-                    onSelectWeek={setSelectedWeeklyPlanWeekId}
-                    onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
-                  />
-                ) : (
-                  <div key={activePage} className="flex h-full flex-col">
-                    <DocumentWorkspacePanelHeader
-                      actions={
-                        hasVault && activePage === 'notes' ? (
-                          <WorkspaceHeaderActions>
-                            <WorkspaceIconButton
-                              aria-label={
-                                areAllNoteFoldersCollapsed
-                                  ? 'Expand all folders'
-                                  : 'Collapse all folders'
-                              }
-                              title={
-                                areAllNoteFoldersCollapsed
-                                  ? 'Expand all folders'
-                                  : 'Collapse all folders'
-                              }
-                              icon={
-                                areAllNoteFoldersCollapsed ? (
-                                  <ChevronDown size={18} aria-hidden="true" />
-                                ) : (
-                                  <ChevronUp size={18} aria-hidden="true" />
-                                )
-                              }
-                              onClick={() => {
-                                setAreAllNoteFoldersCollapsed((current) => !current)
-                                setCollapseAllNotesTreeToken((current) => current + 1)
-                              }}
-                            />
-                            {useNativeMenus ? (
-                              <WorkspaceIconButton
-                                ref={noteActionsButtonRef}
-                                onClick={() => {
-                                  void openNativeNoteActionsMenu()
-                                }}
-                                aria-label="Notebook actions"
-                                title="Notebook actions"
-                                icon={<Plus size={18} aria-hidden="true" />}
-                              />
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
+                      <div key={activePage} className="flex h-full flex-col">
+                        <DocumentWorkspacePanelHeader
+                          actions={
+                            hasVault && activePage === 'notes' ? (
+                              <WorkspaceHeaderActions>
+                                <WorkspaceIconButton
+                                  aria-label={
+                                    areAllNoteFoldersCollapsed
+                                      ? 'Expand all folders'
+                                      : 'Collapse all folders'
+                                  }
+                                  title={
+                                    areAllNoteFoldersCollapsed
+                                      ? 'Expand all folders'
+                                      : 'Collapse all folders'
+                                  }
+                                  icon={
+                                    areAllNoteFoldersCollapsed ? (
+                                      <ChevronDown size={18} aria-hidden="true" />
+                                    ) : (
+                                      <ChevronUp size={18} aria-hidden="true" />
+                                    )
+                                  }
+                                  onClick={() => {
+                                    setAreAllNoteFoldersCollapsed((current) => !current)
+                                    setCollapseAllNotesTreeToken((current) => current + 1)
+                                  }}
+                                />
+                                {useNativeMenus ? (
                                   <WorkspaceIconButton
+                                    ref={noteActionsButtonRef}
+                                    onClick={() => {
+                                      void openNativeNoteActionsMenu()
+                                    }}
                                     aria-label="Notebook actions"
                                     title="Notebook actions"
                                     icon={<Plus size={18} aria-hidden="true" />}
                                   />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void createNoteFromTree()
-                                    }}
-                                  >
-                                    New note
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void createExcalidrawFromTree()
-                                    }}
-                                  >
-                                    New drawing
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void createFolderFromTree()
-                                    }}
-                                  >
-                                    New folder
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      void importNotes()
-                                    }}
-                                  >
-                                    Import markdown
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </WorkspaceHeaderActions>
-                        ) : null
-                      }
-                    />
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <WorkspaceIconButton
+                                        aria-label="Notebook actions"
+                                        title="Notebook actions"
+                                        icon={<Plus size={18} aria-hidden="true" />}
+                                      />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void createNoteFromTree()
+                                        }}
+                                      >
+                                        New note
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void createExcalidrawFromTree()
+                                        }}
+                                      >
+                                        New drawing
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void createFolderFromTree()
+                                        }}
+                                      >
+                                        New folder
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          void importNotes()
+                                        }}
+                                      >
+                                        Import markdown
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </WorkspaceHeaderActions>
+                            ) : null
+                          }
+                        />
 
-                    <DocumentWorkspacePanelContent
-                      className={activePage === 'knowledge' ? 'p-3' : undefined}
-                    >
-                      {!hasVault ? (
-                        <WorkspaceContextEmptyState description="Select a vault to see workspace properties and secondary tools." />
-                      ) : activePage === 'notes' ? (
-                        <NotesTreeView
-                          tree={visibleNoteTree}
-                          searchTerm={searchQuery}
-                          activeNotePath={currentNotePath ?? currentExcalidrawPath}
-                          selectedEntries={selectedNoteTreeEntries}
-                          collapseAllToken={collapseAllNotesTreeToken}
-                          shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
-                          pendingEditId={pendingNoteTreeEditId}
-                          onPendingEditHandled={handlePendingNoteTreeEditHandled}
-                          onSelectionChange={setSelectedNoteTreeEntries}
-                          onOpenNote={(relPath) => {
-                            setSearchQuery('')
-                            setSearchResults([])
-                            void openNotebookPath(relPath)
-                          }}
-                          onCreateNote={(parentDir) => {
-                            setSelectedNoteTreeEntries(
-                              parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                            )
-                            void createNoteFromTree(parentDir)
-                          }}
-                          onCreateExcalidraw={(parentDir) => {
-                            setSelectedNoteTreeEntries(
-                              parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                            )
-                            void createExcalidrawFromTree(parentDir)
-                          }}
-                          onCreateFolder={(parentDir) => {
-                            setSelectedNoteTreeEntries(
-                              parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                            )
-                            void createFolderFromTree(parentDir)
-                          }}
-                          onExportFolderPdf={(folderPath) => {
-                            void exportFolderPdf(folderPath)
-                          }}
-                          onRenamePath={(relPath, nextName, kind) => {
-                            void renameTreePath(relPath, nextName, kind)
-                          }}
-                          onDeleteEntries={(entries) => {
-                            void deleteTreeEntries(entries)
-                          }}
-                          onMoveEntries={moveTreeEntries}
-                        />
-                      ) : activePage === 'knowledge' ? (
-                        <WorkspacePanelSection data-testid="knowledge-graph-editor">
-                          <WorkspacePanelSectionHeader
-                            icon={<SlidersHorizontal size={16} aria-hidden="true" />}
-                            iconContainerClassName="bg-accent text-primary"
-                            heading="Graph view"
-                            description="Configure how disconnected notes are arranged."
-                          />
-                          <div className="space-y-2">
-                            <label
-                              htmlFor="knowledge-orphan-radius-input"
-                              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                            >
-                              Orphan ring radius
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <Input
-                                id="knowledge-orphan-radius-input"
-                                data-testid="knowledge-orphan-radius-input"
-                                type="number"
-                                min={72}
-                                step={1}
-                                value={knowledgeOrphanRingRadiusInput}
-                                onChange={(event) => {
-                                  setKnowledgeOrphanRingRadiusInput(event.target.value)
-                                }}
-                                placeholder="Auto"
-                                className="min-w-0 flex-1"
-                                aria-label="Orphan ring radius in pixels"
-                              />
-                              <span className="text-xs text-muted-foreground">px</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-                            <p className="text-xs text-muted-foreground">
-                              Applied radius:{' '}
-                              {knowledgeOrphanRingRadiusPx == null
-                                ? 'Auto'
-                                : `${knowledgeOrphanRingRadiusPx}px`}
-                            </p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setKnowledgeOrphanRingRadiusInput('')
+                        <DocumentWorkspacePanelContent
+                          className={activePage === 'knowledge' ? 'p-3' : undefined}
+                        >
+                          {!hasVault ? (
+                            <WorkspaceContextEmptyState description="Select a vault to see workspace properties and secondary tools." />
+                          ) : activePage === 'notes' ? (
+                            <NotesTreeView
+                              tree={visibleNoteTree}
+                              searchTerm={searchQuery}
+                              activeNotePath={currentNotePath ?? currentExcalidrawPath}
+                              selectedEntries={selectedNoteTreeEntries}
+                              collapseAllToken={collapseAllNotesTreeToken}
+                              shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
+                              pendingEditId={pendingNoteTreeEditId}
+                              onPendingEditHandled={handlePendingNoteTreeEditHandled}
+                              onSelectionChange={setSelectedNoteTreeEntries}
+                              onOpenNote={(relPath) => {
+                                setSearchQuery('')
+                                setSearchResults([])
+                                void openNotebookPath(relPath)
                               }}
-                            >
-                              Reset
-                            </Button>
-                          </div>
-                        </WorkspacePanelSection>
-                      ) : activePage === 'calendar' ? (
-                        <UnscheduledTaskList
-                          tasks={unscheduledTasks}
-                          selectedDate={selectedCalendarDate}
-                          newTaskValue={calendarHeaderNewTask}
-                          onNewTaskValueChange={setCalendarHeaderNewTask}
-                          onToggle={(taskId) => {
-                            void toggleCalendarTask(taskId)
-                          }}
-                          onDelete={(taskId) => {
-                            void removeCalendarTask(taskId)
-                          }}
-                          onRename={(taskId, newTitle) => {
-                            void renameCalendarTask(taskId, newTitle)
-                          }}
-                          onUpdatePriority={(taskId, priority) => {
-                            void updateCalendarTaskPriority(taskId, priority)
-                          }}
-                          onUpdateTaskType={(taskId, taskType) => {
-                            void updateCalendarTaskType(taskId, taskType)
-                          }}
-                          onUpdateTime={(taskId, time) => {
-                            void updateCalendarTaskTime(taskId, time)
-                          }}
-                          onUpdateReminders={(taskId, reminders) => {
-                            void updateCalendarTaskReminders(taskId, reminders)
-                          }}
-                          onScheduleTask={(taskId, date) => {
-                            void rescheduleCalendarTask(taskId, date)
-                          }}
-                          onUnscheduleTask={(taskId) => {
-                            void rescheduleCalendarTask(taskId, undefined)
-                          }}
-                          onInsertTask={() => {
-                            void addUnscheduledFromHeader()
-                          }}
-                        />
-                      ) : activePage === 'settings' ? (
-                        <SettingsRightPanelSections />
-                      ) : (
-                        <WorkspaceContextEmptyState description="Properties, activity, and secondary tools for this workspace will appear here." />
-                      )}
-                    </DocumentWorkspacePanelContent>
-                  </div>
-                )}
-              </DocumentWorkspacePanel>
-            </DocumentWorkspace>
+                              onCreateNote={(parentDir) => {
+                                setSelectedNoteTreeEntries(
+                                  parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                )
+                                void createNoteFromTree(parentDir)
+                              }}
+                              onCreateExcalidraw={(parentDir) => {
+                                setSelectedNoteTreeEntries(
+                                  parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                )
+                                void createExcalidrawFromTree(parentDir)
+                              }}
+                              onCreateFolder={(parentDir) => {
+                                setSelectedNoteTreeEntries(
+                                  parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                )
+                                void createFolderFromTree(parentDir)
+                              }}
+                              onExportFolderPdf={(folderPath) => {
+                                void exportFolderPdf(folderPath)
+                              }}
+                              onRenamePath={(relPath, nextName, kind) => {
+                                void renameTreePath(relPath, nextName, kind)
+                              }}
+                              onDeleteEntries={(entries) => {
+                                void deleteTreeEntries(entries)
+                              }}
+                              onMoveEntries={moveTreeEntries}
+                            />
+                          ) : activePage === 'knowledge' ? (
+                            <WorkspacePanelSection data-testid="knowledge-graph-editor">
+                              <WorkspacePanelSectionHeader
+                                icon={<SlidersHorizontal size={16} aria-hidden="true" />}
+                                iconContainerClassName="bg-accent text-primary"
+                                heading="Graph view"
+                                description="Configure how disconnected notes are arranged."
+                              />
+                              <div className="space-y-2">
+                                <label
+                                  htmlFor="knowledge-orphan-radius-input"
+                                  className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                                >
+                                  Orphan ring radius
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    id="knowledge-orphan-radius-input"
+                                    data-testid="knowledge-orphan-radius-input"
+                                    type="number"
+                                    min={72}
+                                    step={1}
+                                    value={knowledgeOrphanRingRadiusInput}
+                                    onChange={(event) => {
+                                      setKnowledgeOrphanRingRadiusInput(event.target.value)
+                                    }}
+                                    placeholder="Auto"
+                                    className="min-w-0 flex-1"
+                                    aria-label="Orphan ring radius in pixels"
+                                  />
+                                  <span className="text-xs text-muted-foreground">px</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                                <p className="text-xs text-muted-foreground">
+                                  Applied radius:{' '}
+                                  {knowledgeOrphanRingRadiusPx == null
+                                    ? 'Auto'
+                                    : `${knowledgeOrphanRingRadiusPx}px`}
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setKnowledgeOrphanRingRadiusInput('')
+                                  }}
+                                >
+                                  Reset
+                                </Button>
+                              </div>
+                            </WorkspacePanelSection>
+                          ) : activePage === 'calendar' ? (
+                            <UnscheduledTaskList
+                              tasks={unscheduledTasks}
+                              selectedDate={selectedCalendarDate}
+                              newTaskValue={calendarHeaderNewTask}
+                              onNewTaskValueChange={setCalendarHeaderNewTask}
+                              onToggle={(taskId) => {
+                                void toggleCalendarTask(taskId)
+                              }}
+                              onDelete={(taskId) => {
+                                void removeCalendarTask(taskId)
+                              }}
+                              onRename={(taskId, newTitle) => {
+                                void renameCalendarTask(taskId, newTitle)
+                              }}
+                              onUpdatePriority={(taskId, priority) => {
+                                void updateCalendarTaskPriority(taskId, priority)
+                              }}
+                              onUpdateTaskType={(taskId, taskType) => {
+                                void updateCalendarTaskType(taskId, taskType)
+                              }}
+                              onUpdateTime={(taskId, time) => {
+                                void updateCalendarTaskTime(taskId, time)
+                              }}
+                              onUpdateReminders={(taskId, reminders) => {
+                                void updateCalendarTaskReminders(taskId, reminders)
+                              }}
+                              onScheduleTask={(taskId, date) => {
+                                void rescheduleCalendarTask(taskId, date)
+                              }}
+                              onUnscheduleTask={(taskId) => {
+                                void rescheduleCalendarTask(taskId, undefined)
+                              }}
+                              onInsertTask={() => {
+                                void addUnscheduledFromHeader()
+                              }}
+                            />
+                          ) : activePage === 'settings' ? (
+                            <SettingsRightPanelSections />
+                          ) : (
+                            <WorkspaceContextEmptyState description="Properties, activity, and secondary tools for this workspace will appear here." />
+                          )}
+                        </DocumentWorkspacePanelContent>
+                      </div>
+                    )}
+                  </DocumentWorkspacePanel>
+                </DocumentWorkspaceMain>
+              </DocumentWorkspace>
+              <WorkspaceFooter />
+            </WorkspaceContextProvider>
           </div>
 
           <SonnerBridge />
@@ -5996,10 +5921,6 @@ function App(): ReactElement {
         onOpenProject={(projectId) => {
           setProjectsWorkspaceTab('board')
           selectProject(projectId)
-          setProjectDrawerRequest({
-            projectId,
-            token: Date.now()
-          })
           void navigateToPage('projects')
         }}
         onOpenPage={(page) => {

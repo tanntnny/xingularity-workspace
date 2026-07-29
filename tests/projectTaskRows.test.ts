@@ -15,9 +15,9 @@ const alphaProject: Project = {
   updatedAt: '2026-07-05T10:00:00.000Z',
   progress: 50,
   icon: {
-    set: 'shape',
-    glyph: 'circle',
-    shape: 'circle',
+    set: 'tabler',
+    glyph: 'briefcase',
+    shape: undefined,
     variant: 'filled',
     color: '#2563eb'
   },

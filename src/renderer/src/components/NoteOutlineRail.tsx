@@ -129,7 +129,7 @@ export function NoteOutlineRail({
                       buttonRefs.current[index] = node
                     }}
                     aria-label={`Jump to heading level ${item.level}: ${item.label}`}
-                    className="group flex h-3 w-full items-center rounded-full"
+                    className="group flex h-3 w-full items-center rounded-full transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid={`note-outline-rod:${index}`}
                     onClick={() => onJumpToIndex(index)}
                     style={{ marginTop: `${marginTop}px` }}

@@ -105,7 +105,7 @@ export function EditorPage({
   }
 
   return (
-    <div className="bg-transparent flex h-full min-h-0 flex-col">
+    <div className="note-editor-surface flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-8 py-5">
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 items-center">
@@ -170,7 +170,7 @@ export function EditorPage({
                   editorRef?.current?.blur()
                   setIsAddingTag(true)
                 }}
-                  className="border border-input bg-card text-foreground inline-flex items-center justify-center rounded-md border border-dashed border-border p-1"
+                className="border border-input bg-card text-foreground inline-flex items-center justify-center rounded-md border border-dashed border-border p-1 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="Add tag"
               >
                 <Plus size={16} />

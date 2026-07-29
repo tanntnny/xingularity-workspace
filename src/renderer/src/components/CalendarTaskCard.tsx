@@ -1,7 +1,11 @@
-import { forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
+import { CSSProperties, forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
 import { Check } from './ui/icons'
 import { CalendarTask } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
+import {
+  getCalendarTaskBackgroundToken,
+  getCalendarTaskBorderToken
+} from '../lib/calendarTaskTypeBackground'
 
 interface CalendarTaskCardProps {
   task: CalendarTask
@@ -14,18 +18,23 @@ export const CalendarTaskCard = forwardRef<
   HTMLDivElement,
   CalendarTaskCardProps & Omit<HTMLAttributes<HTMLDivElement>, keyof CalendarTaskCardProps>
 >(function CalendarTaskCard(
-  { task, onToggle, onMouseMove, className, ...rest },
+  { task, onToggle, onMouseMove, className, style, ...rest },
   ref
 ): ReactElement {
   const priorityMarker = task.priority === 'high' ? '!!' : task.priority === 'medium' ? '!' : null
   const priorityMarkerColor =
     task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : null
+  const taskTypeStyle = {
+    '--calendar-task-bg': getCalendarTaskBackgroundToken(task.taskType),
+    '--calendar-task-border': getCalendarTaskBorderToken(task.taskType)
+  } as CSSProperties
 
   return (
     <div
       ref={ref}
-      className={`group flex h-full w-full flex-col justify-start rounded-md px-1.5 py-1 ${className ?? ''}`}
+      className={`group mx-1 flex h-full w-[calc(100%-0.5rem)] flex-col justify-start rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${className ?? ''}`}
       onMouseMove={onMouseMove}
+      style={{ ...taskTypeStyle, ...style }}
       {...rest}
     >
       <div className="flex items-center justify-between gap-1.5">
@@ -36,7 +45,7 @@ export const CalendarTaskCard = forwardRef<
             event.preventDefault()
             onToggle?.(task.id)
           }}
-          className="inline-flex items-center gap-1"
+          className="inline-flex items-center gap-1 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title={task.completed ? 'Mark as pending' : 'Mark as complete'}
         >
           <span
@@ -48,11 +57,11 @@ export const CalendarTaskCard = forwardRef<
           >
             {task.completed ? <Check size={8} strokeWidth={3} /> : null}
           </span>
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="text-[11px] font-medium text-muted-foreground">
             {task.completed ? 'Completed' : 'Pending'}
           </span>
         </button>
-        <span className="pointer-events-none shrink-0 text-xs text-muted-foreground">
+        <span className="pointer-events-none shrink-0 text-[11px] text-muted-foreground">
           {formatCalendarTaskTimeLabel(task)}
         </span>
       </div>

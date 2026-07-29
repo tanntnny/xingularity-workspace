@@ -24,7 +24,7 @@ function Calendar({
         caption_label: 'select-none whitespace-nowrap text-sm font-medium',
         dropdowns: 'flex h-7 items-center justify-center gap-1.5 whitespace-nowrap',
         dropdown_root:
-          'relative inline-flex items-center whitespace-nowrap rounded-md border border-input bg-card shadow-sm has-[select:focus-visible]:outline-none has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring has-[select:focus-visible]:ring-offset-2 has-[select:focus-visible]:ring-offset-background',
+          'relative inline-flex items-center whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card shadow-sm has-[select:focus-visible]:outline-none has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring has-[select:focus-visible]:ring-offset-2 has-[select:focus-visible]:ring-offset-background',
         dropdown: 'absolute inset-0 opacity-0',
         nav: 'absolute inset-x-0 top-0 flex items-center justify-between',
         button_previous: cn(
@@ -39,7 +39,7 @@ function Calendar({
         weekdays: 'flex',
         weekday: 'w-8 rounded-md text-xs font-normal text-muted-foreground',
         week: 'mt-2 flex w-full',
-        day: 'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-md',
+        day: 'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-[var(--radius-control)]',
         day_button: cn(
           buttonVariants({ variant: 'ghost' }),
           'h-8 w-8 p-0 font-normal aria-selected:opacity-100'

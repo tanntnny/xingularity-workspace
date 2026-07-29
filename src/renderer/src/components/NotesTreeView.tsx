@@ -775,7 +775,7 @@ function TreeNode({
         >
           <button
             type="button"
-            className={`flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground ${
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               isFolder ? 'opacity-100' : 'opacity-0'
             }`}
             onClick={(event) => {
@@ -830,7 +830,7 @@ function TreeNode({
               <button
                 type="button"
                 data-testid={`note-tree-menu:${node.data.relPath}`}
-                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-card hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-card hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
                 onPointerDown={(event) => {
                   event.stopPropagation()
                 }}
@@ -846,7 +846,7 @@ function TreeNode({
                   <button
                     type="button"
                     data-testid={`note-tree-menu:${node.data.relPath}`}
-                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-card hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-card hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
                     onPointerDown={(event) => {
                       event.stopPropagation()
                     }}

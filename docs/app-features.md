@@ -64,20 +64,11 @@ Notes are shown in two ways:
 - flat list and preview flows
 - tree view with folders and protected system folders
 
-## Project-Backed Notes Tree
+## User-Managed Notebook Tree
 
-The notes tree contains a managed `Projects/` root folder.
-
-Current behavior:
-
-- `Projects/` is system-managed and cannot be renamed or removed
-- each first-level folder inside `Projects/` mirrors one app project
-- direct project folders under `Projects/` cannot be renamed or removed from the tree
-- notes created inside a project folder automatically belong to that project
-- dragging a note into a project folder makes it part of that project
-- dragging a note between project folders reassigns it to the destination project
-- dragging a note out of a project folder removes the folder-based assignment
-- the project page note table and the notes tree stay in sync through folder membership
+The notes tree is entirely user-managed. Notebook folders and files are created, renamed,
+moved, and deleted as ordinary notebook content; projects do not create or own a
+managed notebook subtree, and notebook tags remain user-defined.
 
 ## Projects
 
@@ -91,7 +82,7 @@ Project management features include:
 - subtask creation, editing, due dates, completion, and deletion
 - project icon customization using shape, variant, and color
 - export project summaries
-- project notes shown from the matching `Projects/<project>/...` folder subtree
+- notebooks remain independent of project records
 
 ## Dashboard
 
@@ -232,17 +223,15 @@ Vault-backed content:
 - `notebooks/**/*.md`
 - `attachments/**`
 - `settings.json`
-- `projects.json`
-- `project-icons.json`
-- `tasks.json`
-- `weekly-plan.json`
-- `subscriptions.json`
-- `schedule-jobs.json`
-- `schedule-runs.json`
-- `agent-chats.json`
-- `agent-runs.json`
-- `generative-ui-artifacts.json`
-- `excalidraw-sessions.json`
+- `projects/<project-id>.json`
+- `calendar/tasks.json`
+- `weekly-plan/state.json`
+- `subscriptions/data.json`
+- `schedules/jobs.json`
+- `schedules/runs.json`
+- `agent/chats.json`
+- `agent/runs.json`
+- `excalidraw/sessions.json`
 - `vault.json`
 - `filemap.json`
 - `index.sqlite`

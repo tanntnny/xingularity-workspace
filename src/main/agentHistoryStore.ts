@@ -5,8 +5,8 @@ import path from 'node:path'
 import type { AgentRunRecord } from '../shared/types'
 import {
   deleteLegacyVaultPath,
-  getLegacyPageVaultAgentRunsPath,
-  getLegacyVaultAgentRunsPath,
+  getLegacyRootVaultAgentRunsPath,
+  getLegacySystemVaultAgentRunsPath,
   getVaultAgentRunsPath
 } from './vaultData'
 
@@ -15,22 +15,22 @@ const MAX_AGENT_RUNS = 200
 export class AgentHistoryStore {
   private readonly vaultRoot: string
   private readonly runsPath: string
-  private readonly legacyPageRunsPath: string
   private readonly legacyRunsPath: string
+  private readonly legacySystemRunsPath: string
   private readonly deviceLegacyRunsPath: string
 
   constructor(vaultRoot: string) {
     this.vaultRoot = vaultRoot
     this.runsPath = getVaultAgentRunsPath(vaultRoot)
-    this.legacyPageRunsPath = getLegacyPageVaultAgentRunsPath(vaultRoot)
-    this.legacyRunsPath = getLegacyVaultAgentRunsPath(vaultRoot)
+    this.legacyRunsPath = getLegacyRootVaultAgentRunsPath(vaultRoot)
+    this.legacySystemRunsPath = getLegacySystemVaultAgentRunsPath(vaultRoot)
     this.deviceLegacyRunsPath = path.join(app.getPath('userData'), 'agent-runs.json')
   }
 
   async readRuns(): Promise<AgentRunRecord[]> {
     const runs = await this.readJsonFile<AgentRunRecord[]>(
       this.runsPath,
-      [this.legacyPageRunsPath, this.legacyRunsPath, this.deviceLegacyRunsPath],
+      [this.legacyRunsPath, this.legacySystemRunsPath, this.deviceLegacyRunsPath],
       []
     )
     return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
@@ -81,8 +81,8 @@ export class AgentHistoryStore {
 
   private async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(this.legacyPageRunsPath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacyRunsPath, this.vaultRoot)
+      deleteLegacyVaultPath(this.legacyRunsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemRunsPath, this.vaultRoot)
     ])
   }
 }

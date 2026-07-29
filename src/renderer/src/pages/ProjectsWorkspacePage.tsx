@@ -35,7 +35,7 @@ import type {
   TaskPriority
 } from '../../../shared/types'
 import {
-  coerceFilledLucideProjectIcon,
+  coerceFilledTablerProjectIcon,
   createRandomProjectIcon,
   PROJECT_ICON_COLORS,
   PROJECT_ICON_SYMBOLS,
@@ -100,7 +100,6 @@ interface ProjectsWorkspacePageProps {
   newProjectRequest: { token: number } | null
   newSubtaskRequest: { projectId: string; milestoneId: string; token: number } | null
   taskListCollapseAllRequest: { token: number; collapsed: boolean } | null
-  projectDrawerRequest: { projectId: string; token: number } | null
   focusedMilestoneTarget: { projectId: string; milestoneId: string; token: number } | null
   onFilterModeChange: (mode: ProjectsWorkspaceFilterMode) => void
   onTaskListCollapseStateChange: (collapsed: boolean) => void
@@ -386,7 +385,6 @@ export function ProjectsWorkspacePage({
   newProjectRequest,
   newSubtaskRequest,
   taskListCollapseAllRequest,
-  projectDrawerRequest,
   focusedMilestoneTarget,
   onFilterModeChange,
   onTaskListCollapseStateChange,
@@ -522,16 +520,6 @@ export function ProjectsWorkspacePage({
       setDrawerState({ kind: 'new-project' })
     })
   }, [newProjectRequest])
-
-  useEffect(() => {
-    if (!projectDrawerRequest) {
-      return
-    }
-
-    startTransition(() => {
-      setDrawerState({ kind: 'project', projectId: projectDrawerRequest.projectId })
-    })
-  }, [projectDrawerRequest])
 
   useEffect(() => {
     if (!newSubtaskRequest) {
@@ -1414,7 +1402,6 @@ export function ProjectsWorkspacePage({
         onDrawerStateChange={setDrawerState}
         onMilestoneContextChange={onMilestoneContextChange}
         onActiveTabChange={onActiveTabChange}
-        onSelectProject={onSelectProject}
         onCreateProject={onCreateProject}
         onToggleProjectDone={onToggleProjectDone}
         onToggleProjectFavorite={onToggleProjectFavorite}
@@ -1439,7 +1426,6 @@ type ProjectsDrawerProps = Pick<
   | 'favoriteProjectIds'
   | 'onMilestoneContextChange'
   | 'onActiveTabChange'
-  | 'onSelectProject'
   | 'onCreateProject'
   | 'onToggleProjectDone'
   | 'onToggleProjectFavorite'
@@ -1465,7 +1451,6 @@ function ProjectsDrawer({
   onDrawerStateChange,
   onMilestoneContextChange,
   onActiveTabChange,
-  onSelectProject,
   onCreateProject,
   onToggleProjectDone,
   onToggleProjectFavorite,
@@ -1586,16 +1571,11 @@ function ProjectsDrawer({
         const currentProjectDraft = projectDraftRef.current
         const normalizedName = currentProjectDraft.name.trim()
 
-        if (!normalizedName) {
-          return
-        }
-
-        const nextProjectId = onCreateProject({
+        onCreateProject({
           name: normalizedName,
           summary: currentProjectDraft.summary.trim(),
           icon: currentProjectDraft.icon
         })
-        onSelectProject(nextProjectId)
         onActiveTabChange('board')
         return
       }
@@ -1655,7 +1635,6 @@ function ProjectsDrawer({
       onAddMilestone,
       onAddSubtask,
       onCreateProject,
-      onSelectProject,
       persistMilestoneDraft,
       persistProjectDraft,
       persistSubtaskDraft,
@@ -1724,7 +1703,7 @@ function ProjectsDrawer({
       const nextProjectDraft = {
         name: drawerProject.name,
         summary: drawerProject.summary,
-        icon: coerceFilledLucideProjectIcon(drawerProject.icon, drawerProject.id)
+        icon: coerceFilledTablerProjectIcon(drawerProject.icon, drawerProject.id)
       }
       projectDraftRef.current = nextProjectDraft
       startTransition(() => {
@@ -1817,9 +1796,6 @@ function ProjectsDrawer({
   const handleProjectSave = (): void => {
     const currentProjectDraft = projectDraftRef.current
     const normalizedName = currentProjectDraft.name.trim()
-    if (!normalizedName) {
-      return
-    }
 
     if (drawerState?.kind === 'new-project') {
       const nextProjectId = onCreateProject({
@@ -1827,7 +1803,6 @@ function ProjectsDrawer({
         summary: currentProjectDraft.summary.trim(),
         icon: currentProjectDraft.icon
       })
-      onSelectProject(nextProjectId)
       onActiveTabChange('board')
       transitionDrawerState({ kind: 'project', projectId: nextProjectId })
       return
@@ -2067,7 +2042,7 @@ function ProjectForm({
   draft: ProjectDraft
   onChange: (next: ProjectDraft) => void
 }): ReactElement {
-  const icon = coerceFilledLucideProjectIcon(draft.icon, draft.name || 'project-icon')
+  const icon = coerceFilledTablerProjectIcon(draft.icon, draft.name || 'project-icon')
   const iconGlyph = resolveProjectIconGlyph(icon)
 
   return (
@@ -2093,7 +2068,7 @@ function ProjectForm({
           <NoteShapeIcon icon={icon} size={32} />
           <div>
             <div className="text-sm text-muted-foreground">Project icon</div>
-            <div className="text-xs text-muted-foreground/80">Filled Lucide icons</div>
+            <div className="text-xs text-muted-foreground/80">Filled Tabler icons</div>
           </div>
         </div>
         <div className="space-y-4">
@@ -2103,7 +2078,7 @@ function ProjectForm({
                 const isActive = iconGlyph === glyph
                 const nextIcon: ProjectIconStyle = {
                   ...icon,
-                  set: 'lucide',
+                  set: 'tabler',
                   glyph,
                   shape: undefined,
                   variant: 'filled'

@@ -79,7 +79,7 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToPrevDay}
-            className="border border-input bg-background text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+            className="border border-input bg-card text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             &lt;
           </button>
@@ -94,7 +94,7 @@ export function CalendarDayView({
           <button
             type="button"
             onClick={goToNextDay}
-            className="border border-input bg-background text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+            className="border border-input bg-card text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             &gt;
           </button>

@@ -5,10 +5,10 @@ import path from 'node:path'
 import type { ScheduleJob, ScheduleRunRecord } from '../shared/scheduleTypes'
 import {
   deleteLegacyVaultPath,
-  getLegacyPageVaultScheduleJobsPath,
-  getLegacyPageVaultScheduleRunsPath,
-  getLegacyVaultScheduleJobsPath,
-  getLegacyVaultScheduleRunsPath,
+  getLegacyRootVaultScheduleJobsPath,
+  getLegacyRootVaultScheduleRunsPath,
+  getLegacySystemVaultScheduleJobsPath,
+  getLegacySystemVaultScheduleRunsPath,
   getVaultScheduleJobsPath,
   getVaultScheduleRunsPath
 } from './vaultData'
@@ -19,10 +19,10 @@ export class ScheduleStore {
   private readonly vaultRoot: string
   private readonly jobsPath: string
   private readonly runsPath: string
-  private readonly legacyPageJobsPath: string
-  private readonly legacyPageRunsPath: string
   private readonly legacyJobsPath: string
   private readonly legacyRunsPath: string
+  private readonly legacySystemJobsPath: string
+  private readonly legacySystemRunsPath: string
   private readonly deviceLegacyJobsPath: string
   private readonly deviceLegacyRunsPath: string
 
@@ -30,10 +30,10 @@ export class ScheduleStore {
     this.vaultRoot = vaultRoot
     this.jobsPath = getVaultScheduleJobsPath(vaultRoot)
     this.runsPath = getVaultScheduleRunsPath(vaultRoot)
-    this.legacyPageJobsPath = getLegacyPageVaultScheduleJobsPath(vaultRoot)
-    this.legacyPageRunsPath = getLegacyPageVaultScheduleRunsPath(vaultRoot)
-    this.legacyJobsPath = getLegacyVaultScheduleJobsPath(vaultRoot)
-    this.legacyRunsPath = getLegacyVaultScheduleRunsPath(vaultRoot)
+    this.legacyJobsPath = getLegacyRootVaultScheduleJobsPath(vaultRoot)
+    this.legacyRunsPath = getLegacyRootVaultScheduleRunsPath(vaultRoot)
+    this.legacySystemJobsPath = getLegacySystemVaultScheduleJobsPath(vaultRoot)
+    this.legacySystemRunsPath = getLegacySystemVaultScheduleRunsPath(vaultRoot)
     this.deviceLegacyJobsPath = path.join(app.getPath('userData'), 'schedule-jobs.json')
     this.deviceLegacyRunsPath = path.join(app.getPath('userData'), 'schedule-runs.json')
   }
@@ -41,7 +41,7 @@ export class ScheduleStore {
   async readJobs(): Promise<ScheduleJob[]> {
     return this.readJsonFile<ScheduleJob[]>(
       this.jobsPath,
-      [this.legacyPageJobsPath, this.legacyJobsPath, this.deviceLegacyJobsPath],
+      [this.legacyJobsPath, this.legacySystemJobsPath, this.deviceLegacyJobsPath],
       []
     )
   }
@@ -71,7 +71,7 @@ export class ScheduleStore {
   async readRuns(): Promise<ScheduleRunRecord[]> {
     return this.readJsonFile<ScheduleRunRecord[]>(
       this.runsPath,
-      [this.legacyPageRunsPath, this.legacyRunsPath, this.deviceLegacyRunsPath],
+      [this.legacyRunsPath, this.legacySystemRunsPath, this.deviceLegacyRunsPath],
       []
     )
   }
@@ -150,10 +150,10 @@ export class ScheduleStore {
 
   private async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(this.legacyPageJobsPath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacyPageRunsPath, this.vaultRoot),
       deleteLegacyVaultPath(this.legacyJobsPath, this.vaultRoot),
-      deleteLegacyVaultPath(this.legacyRunsPath, this.vaultRoot)
+      deleteLegacyVaultPath(this.legacyRunsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemJobsPath, this.vaultRoot),
+      deleteLegacyVaultPath(this.legacySystemRunsPath, this.vaultRoot)
     ])
   }
 }

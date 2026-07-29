@@ -30,7 +30,7 @@ export function TagChip({ tag, onClick, onRemove }: TagChipProps): ReactElement 
           type="button"
           variant="ghost"
           size="sm"
-          className="h-auto min-w-0 gap-1 p-0 text-inherit hover:bg-transparent hover:text-inherit"
+          className="h-auto min-w-0 gap-1 rounded-[var(--radius-control)] px-1 text-inherit hover:bg-accent/50 hover:text-foreground"
           onClick={() => onClick(tag)}
           aria-label={`Search tag ${tag}`}
         >
@@ -48,7 +48,7 @@ export function TagChip({ tag, onClick, onRemove }: TagChipProps): ReactElement 
           type="button"
           variant="ghost"
           size="sm"
-          className="h-auto w-auto p-0 text-xs leading-none text-inherit opacity-80 hover:bg-transparent hover:text-inherit hover:opacity-100"
+          className="h-auto w-auto rounded-[var(--radius-control)] p-0.5 text-xs leading-none text-inherit opacity-80 hover:bg-accent/50 hover:text-foreground hover:opacity-100"
           onClick={() => onRemove(tag)}
           aria-label={`Remove tag ${tag}`}
         >
