@@ -10,7 +10,10 @@ import {
 import {
   Dialog,
   DialogActionButton,
-  DialogCloseAction
+  DialogBody,
+  DialogCloseAction,
+  DialogShell,
+  DialogShellFooter
 } from '../src/renderer/src/components/ui/dialog'
 
 describe('ActionButtonGroup', () => {
@@ -72,24 +75,31 @@ describe('ActionButtonGroup', () => {
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
   })
 
-  it('uses the pill radius for centered dialog footer actions', () => {
+  it('uses the shared shell regions and pill radius for centered dialog actions', () => {
     const markup = renderToStaticMarkup(
       createElement(
         Dialog,
         null,
         createElement(
-          'div',
+          DialogShell,
           null,
-          createElement(DialogCloseAction, { label: 'Close' }),
-          createElement(DialogActionButton, {
-            icon: 'Done',
-            tone: 'primary',
-            'aria-label': 'Done'
-          })
+          createElement(DialogBody, null, 'Body'),
+          createElement(
+            DialogShellFooter,
+            { closeAction: createElement(DialogCloseAction, { label: 'Close' }) },
+            createElement(DialogActionButton, {
+              icon: 'Done',
+              tone: 'primary',
+              'aria-label': 'Done'
+            })
+          )
         )
       )
     )
 
+    expect(markup).toContain('data-dialog-body')
+    expect(markup).toContain('--radius-control:var(--radius-button)')
+    expect(markup.indexOf('aria-label="Close"')).toBeLessThan(markup.indexOf('aria-label="Done"'))
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
   })
 })

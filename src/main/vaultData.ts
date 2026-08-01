@@ -7,6 +7,7 @@ export const VAULT_NOTEBOOKS_DIRNAME = 'notebooks'
 export const LEGACY_VAULT_NOTES_DIRNAME = 'notes'
 export const VAULT_ATTACHMENTS_DIRNAME = 'attachments'
 export const VAULT_PROJECTS_DIRNAME = 'projects'
+export const VAULT_TASKS_DIRNAME = 'tasks'
 export const VAULT_CALENDAR_DIRNAME = 'calendar'
 export const VAULT_WEEKLY_PLAN_DIRNAME = 'weekly-plan'
 export const VAULT_SUBSCRIPTIONS_DIRNAME = 'subscriptions'
@@ -50,6 +51,14 @@ export function getVaultAttachmentsDir(rootPath: string): string {
 
 export function getVaultProjectsDir(rootPath: string): string {
   return path.join(rootPath, VAULT_PROJECTS_DIRNAME)
+}
+
+export function getVaultTasksDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_TASKS_DIRNAME)
+}
+
+export function getVaultTaskPath(rootPath: string, taskId: string): string {
+  return path.join(getVaultTasksDir(rootPath), `${encodeURIComponent(taskId)}.json`)
 }
 
 export function getVaultCalendarDir(rootPath: string): string {

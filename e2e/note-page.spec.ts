@@ -1232,6 +1232,17 @@ test.describe('note page block editor switching', () => {
       await insertCodeBlockFromSlash(page)
       await focusFirstCodeBlock(page)
 
+      const codeBlock = page
+        .locator('[data-testid="note-block-editor"] .ProseMirror pre[data-language]')
+        .first()
+      await expect(codeBlock).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
+      await expect(codeBlock).toHaveCSS('border-top-width', '1px')
+      await expect(codeBlock.locator('code')).toHaveCSS(
+        'font-family',
+        /JetBrains Mono/
+      )
+
       await page.keyboard.type('const value = 42')
       await page.keyboard.press('Enter')
       await page.keyboard.type('console.log(value)')

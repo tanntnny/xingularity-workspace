@@ -91,6 +91,7 @@ describe('SettingsStore', () => {
               completed: false,
               createdAt: '2026-05-01T00:00:00.000Z',
               priority: 'medium',
+              taskType: 'call',
               reminders: []
             }
           ]
@@ -122,6 +123,7 @@ describe('SettingsStore', () => {
     ])
     expect(settings.projects).toHaveLength(1)
     expect(settings.calendarTasks).toHaveLength(1)
+    expect(settings.calendarTasks[0].taskType).toBe('follow-up')
 
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
@@ -135,9 +137,12 @@ describe('SettingsStore', () => {
     await expect(
       fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ).resolves.toContain('"name": "Migration"')
-    await expect(
-      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
-    ).resolves.toContain('"title": "Legacy task"')
+    const canonicalTask = JSON.parse(
+      await fs.readFile(path.join(root, 'tasks', 'task-1.json'), 'utf-8')
+    ) as { title: string; taskType?: string }
+    expect(canonicalTask).toEqual(
+      expect.objectContaining({ title: 'Legacy task', taskType: 'follow-up' })
+    )
     await expect(fs.access(path.join(legacyDir, 'settings.json'))).rejects.toThrow()
     await expect(fs.access(path.join(legacyDir, 'projects.json'))).rejects.toThrow()
     await expect(fs.access(path.join(legacyDir, 'tasks.json'))).rejects.toThrow()
@@ -248,7 +253,7 @@ describe('SettingsStore', () => {
       fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ).resolves.toContain('"name": "Migration"')
     await expect(
-      fs.readFile(path.join(root, 'calendar', 'tasks.json'), 'utf-8')
+      fs.readFile(path.join(root, 'tasks', 'task-1.json'), 'utf-8')
     ).resolves.toContain('"title": "Legacy task"')
   })
 

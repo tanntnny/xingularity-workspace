@@ -64,7 +64,7 @@ describe('TrashService', () => {
     )
   })
 
-  it('archives settings-backed project, milestone, subtask, task, and grid deletes', async () => {
+  it('archives settings-backed project, task, and grid deletes', async () => {
     const { rootDir, trash } = await makeVault()
     const project = makeProject()
     const before: AppSettings = {
@@ -129,8 +129,6 @@ describe('TrashService', () => {
 
     const records = await fs.readdir(path.join(rootDir, '.trash', 'records'))
     expect(records.some((record) => record.includes('project-delete'))).toBe(true)
-    expect(records.some((record) => record.includes('milestone-delete'))).toBe(true)
-    expect(records.some((record) => record.includes('subtask-delete'))).toBe(true)
     expect(records.some((record) => record.includes('calendar-task-delete'))).toBe(true)
     expect(records.some((record) => record.includes('grid-item-delete'))).toBe(true)
   })

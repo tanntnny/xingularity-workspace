@@ -3,8 +3,7 @@ import {
   AGENT_TOOL_CHANNELS,
   IPC_CHANNELS,
   SCHEDULE_CHANNELS,
-  SUBSCRIPTION_CHANNELS,
-  WEEKLY_PLAN_CHANNELS
+  SUBSCRIPTION_CHANNELS
 } from '../shared/ipc'
 import { AgentChatEvent, AppErrorEvent, RendererVaultApi } from '../shared/types'
 
@@ -140,18 +139,6 @@ const api: RendererVaultApi = {
     archive: (id) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.archive, id),
     getAnalytics: (filters) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.getAnalytics, filters)
   },
-  weeklyPlan: {
-    getState: () => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.getState),
-    createWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.createWeek, input),
-    updateWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.updateWeek, input),
-    deleteWeek: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.deleteWeek, input),
-    addPriority: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.addPriority, input),
-    updatePriority: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.updatePriority, input),
-    deletePriority: (priorityId) =>
-      ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.deletePriority, priorityId),
-    reorderPriorities: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.reorderPriorities, input),
-    upsertReview: (input) => ipcRenderer.invoke(WEEKLY_PLAN_CHANNELS.upsertReview, input)
-  },
   agentTools: {
     note: {
       search: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.search', input),
@@ -164,19 +151,15 @@ const api: RendererVaultApi = {
       create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'project.create', input),
       update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'project.update', input)
     },
-    milestone: {
-      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'milestone.create', input),
-      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'milestone.update', input)
-    },
-    subtask: {
-      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'subtask.create', input),
-      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'subtask.update', input)
-    },
     calendarTask: {
       create: (input) =>
         ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'calendarTask.create', input),
       update: (input) =>
         ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'calendarTask.update', input)
+    },
+    task: {
+      create: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'task.create', input),
+      update: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'task.update', input)
     },
     weeklyPlan: {
       createWeek: (input) =>

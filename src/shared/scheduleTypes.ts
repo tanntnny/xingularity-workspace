@@ -44,10 +44,13 @@ export type RunStatus = 'idle' | 'running' | 'success' | 'error' | 'review' | 'c
 export interface TaskCreateAction {
   type: 'task.create'
   title: string
+  description?: string
+  projectId?: string
   date?: string
   time?: string
   priority?: 'low' | 'medium' | 'high'
   taskType?: string
+  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
   automationSource: string
   automationSourceKey: string
 }
@@ -57,8 +60,11 @@ export interface TaskUpdateAction {
   automationSource: string
   automationSourceKey: string
   title?: string
+  description?: string
+  projectId?: string | null
   date?: string
   completed?: boolean
+  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
 }
 
 export interface NoteCreateAction {
@@ -79,10 +85,13 @@ export interface NoteAppendAction {
 export interface CalendarEventCreateAction {
   type: 'calendar.event.create'
   title: string
+  description?: string
   date: string
   endDate?: string
   time?: string
   taskType?: string
+  projectId?: string
+  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
   automationSource: string
   automationSourceKey: string
 }

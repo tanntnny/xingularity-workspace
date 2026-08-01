@@ -53,7 +53,6 @@ type CommandPalettePage =
   | 'subscriptions'
   | 'calendar'
   | 'designAudit'
-  | 'weeklyPlan'
   | 'settings'
 
 interface CommandPaletteProps {
@@ -322,13 +321,6 @@ export function CommandPalette({
         onSelect: () => onOpenPage('designAudit'),
         keywords: ['design system', 'components', 'colors', 'tokens', 'ui'],
         icon: Paintbrush
-      },
-      {
-        value: '>go weekly plan',
-        label: 'Go to Weekly Plan',
-        onSelect: () => onOpenPage('weeklyPlan'),
-        keywords: ['week', 'planning'],
-        icon: FolderKanban
       },
       {
         value: '>go settings',

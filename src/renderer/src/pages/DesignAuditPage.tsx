@@ -3,10 +3,9 @@ import { Check, Layers3, Palette, PanelsTopLeft, Sparkles } from '../components/
 import {
   AlertDialog,
   AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogCloseAction,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
@@ -25,12 +24,14 @@ import {
   CardTitle,
   Dialog,
   DialogActionButton,
+  DialogBody,
   DialogClose,
   DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogShell,
+  DialogShellFooter,
   DialogTitle,
   DialogTrigger,
   Drawer,
@@ -528,23 +529,28 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                     <Button variant="outline">Open dialog</Button>
                   </DialogTrigger>
                   <DialogContent data-testid="design-audit-dialog" showCloseButton={false}>
-                    <DialogHeader>
-                      <DialogTitle>Dialog specimen</DialogTitle>
-                      <DialogDescription>
-                        Shared modal surface and focus behavior.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-                      <DialogCloseAction label="Close dialog specimen" />
-                      <DialogClose asChild>
-                        <DialogActionButton
-                          icon={<Check />}
-                          tone="primary"
-                          title="Done"
-                          aria-label="Done"
-                        />
-                      </DialogClose>
-                    </DialogFooter>
+                    <DialogShell>
+                      <DialogHeader>
+                        <DialogTitle>Dialog specimen</DialogTitle>
+                      </DialogHeader>
+                      <DialogBody>
+                        <DialogDescription>
+                          Shared modal surface and focus behavior.
+                        </DialogDescription>
+                      </DialogBody>
+                      <DialogShellFooter
+                        closeAction={<DialogCloseAction label="Close dialog specimen" />}
+                      >
+                        <DialogClose asChild>
+                          <DialogActionButton
+                            icon={<Check />}
+                            tone="primary"
+                            title="Done"
+                            aria-label="Done"
+                          />
+                        </DialogClose>
+                      </DialogShellFooter>
+                    </DialogShell>
                   </DialogContent>
                 </Dialog>
                 <AlertDialog>
@@ -552,16 +558,21 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                     <Button variant="outline">Open alert</Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Confirm specimen</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action only demonstrates the alert dialog treatment.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction>Confirm</AlertDialogAction>
-                    </AlertDialogFooter>
+                    <DialogShell>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm specimen</AlertDialogTitle>
+                      </AlertDialogHeader>
+                      <DialogBody>
+                        <AlertDialogDescription>
+                          This action only demonstrates the alert dialog treatment.
+                        </AlertDialogDescription>
+                      </DialogBody>
+                      <DialogShellFooter
+                        closeAction={<AlertDialogCloseAction label="Close alert specimen" />}
+                      >
+                        <AlertDialogAction>Confirm</AlertDialogAction>
+                      </DialogShellFooter>
+                    </DialogShell>
                   </AlertDialogContent>
                 </AlertDialog>
                 <Drawer>

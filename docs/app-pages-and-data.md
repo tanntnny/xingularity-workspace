@@ -188,52 +188,13 @@ create, own, or infer membership in notebook folders.
 
 ### `Project`
 
-Main project record:
+Main project record stored in `projects/<project-id>.json`:
 
 - `id`
 - `name`
-- `summary`
-- `folderPath`
-- `status`
+- `description`
 - `updatedAt`
-- `progress`
-- `milestones`
 - `icon`
-
-Project status values:
-
-- `on-track`
-- `at-risk`
-- `blocked`
-- `completed`
-
-### `ProjectMilestone`
-
-- `id`
-- `title`
-- `description`
-- `collapsed`
-- `dueDate`
-- `priority`
-- `status`
-- `subtasks`
-
-Milestone status values:
-
-- `pending`
-- `in-progress`
-- `completed`
-- `blocked`
-
-### `ProjectSubtask`
-
-- `id`
-- `title`
-- `description`
-- `completed`
-- `priority`
-- `createdAt`
-- `dueDate`
 
 ### `ProjectIconStyle`
 
@@ -249,20 +210,24 @@ Supported icon fields are defined by:
 ### Notebook relationship
 
 Notebook files are created and organized independently by the user. Project pages expose
-project metadata, milestones, and subtasks; they do not contain a managed project-note
-list or rewrite notebook tags when projects change.
+project metadata and linked tasks; they do not contain a managed project-note list or
+rewrite notebook tags when projects change.
 
 ## Calendar Domain Models
 
-### `CalendarTask`
+### `Task`
 
-Task record used by the calendar and unscheduled list:
+Unified task record used by Projects, Calendar, automation, and weekly planning. Each task
+is stored in `tasks/<task-id>.json`:
 
 - `id`
 - `title`
+- `description`
+- `projectId`
 - `date`
 - `endDate`
 - `completed`
+- `status`
 - `createdAt`
 - `priority`
 - `taskType`
@@ -283,27 +248,6 @@ Reminder types:
 - `minutes`
 - `hours`
 - `days`
-
-### `CalendarItem`
-
-Unified render model for calendar views:
-
-- `id`
-- `type`
-- `title`
-- `date`
-- `completed`
-- `priority`
-- `projectId`
-- `projectName`
-- `milestoneId`
-- `milestoneName`
-
-Item types:
-
-- `task`
-- `milestone`
-- `subtask`
 
 ## Weekly Plan Domain Models
 
@@ -332,8 +276,6 @@ Root weekly-plan store:
 - `status`
 - `order`
 - `linkedProjectId`
-- `linkedMilestoneId`
-- `linkedSubtaskId`
 - `linkedTaskId`
 - `createdAt`
 - `updatedAt`
@@ -738,8 +680,7 @@ Reads and mutates:
 Reads and mutates:
 
 - `Project[]`
-- `ProjectMilestone[]`
-- `ProjectSubtask[]`
+- `Task[]` filtered by `projectId`
 - projects do not infer or manage notebook membership
 
 ### Grid
@@ -753,15 +694,14 @@ Reads and mutates:
 
 Reads and mutates:
 
-- `CalendarTask[]`
-- milestone-derived and subtask-derived calendar items
+- `Task[]` with optional project assignment
 
 ### Weekly Plan
 
 Reads and mutates:
 
 - `WeeklyPlanState`
-- links to projects, milestones, subtasks, and tasks
+- links to projects and tasks
 
 ### Schedules
 

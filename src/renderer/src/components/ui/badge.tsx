@@ -15,12 +15,12 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
         outline: 'border-border text-foreground',
-        tag0: 'border-border bg-secondary text-secondary-foreground',
-        tag1: 'border-border bg-secondary text-secondary-foreground',
-        tag2: 'border-border bg-secondary text-secondary-foreground',
-        tag3: 'border-border bg-secondary text-secondary-foreground',
-        tag4: 'border-border bg-secondary text-secondary-foreground',
-        tag5: 'border-border bg-secondary text-secondary-foreground',
+        tag0: 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200 dark:hover:bg-rose-950/60',
+        tag1: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60',
+        tag2: 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/60',
+        tag3: 'border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60',
+        tag4: 'border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-950/60',
+        tag5: 'border-pink-200 bg-pink-50 text-pink-800 hover:bg-pink-100 dark:border-pink-800 dark:bg-pink-950/40 dark:text-pink-200 dark:hover:bg-pink-950/60',
         neutral: 'border-border bg-muted text-muted-foreground'
       }
     },

@@ -8,9 +8,11 @@ import {
   DialogActionButton,
   DialogCloseAction,
   DialogContent,
+  DialogBody,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogShell,
+  DialogShellFooter,
   DialogTitle
 } from './ui/dialog'
 
@@ -147,82 +149,83 @@ export function CalendarMilestoneDialog({
         data-testid="calendar-milestone-dialog"
         showCloseButton={false}
       >
-        <DialogHeader>
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1 rounded-md border border-ring bg-accent px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
-              <Milestone size={12} />
-              Milestone
-            </span>
-            <span
-              className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ${statusClassName}`}
-            >
-              {statusLabel}
-            </span>
-          </div>
-          <DialogTitle className="pt-2">{milestone.title}</DialogTitle>
-          <DialogDescription>
-            Review milestone details from the calendar without editing them here.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogShell>
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1 rounded-md border border-ring bg-accent px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                <Milestone size={12} />
+                Milestone
+              </span>
+              <span
+                className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ${statusClassName}`}
+              >
+                {statusLabel}
+              </span>
+            </div>
+            <DialogTitle className="pt-2">{milestone.title}</DialogTitle>
+            <DialogDescription>
+              Review milestone details from the calendar without editing them here.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="bg-muted rounded-lg border p-4">
-            <div className="flex items-center gap-3">
-              {milestone.projectIcon ? (
-                <NoteShapeIcon icon={milestone.projectIcon} size={24} className="shrink-0" />
-              ) : null}
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Project
+          <DialogBody>
+            <div className="space-y-4">
+              <div className="bg-muted rounded-lg border p-4">
+                <div className="flex items-center gap-3">
+                  {milestone.projectIcon ? (
+                    <NoteShapeIcon icon={milestone.projectIcon} size={24} className="shrink-0" />
+                  ) : null}
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Project
+                    </div>
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {milestone.projectName}
+                    </div>
+                  </div>
                 </div>
-                <div className="truncate text-sm font-medium text-foreground">
-                  {milestone.projectName}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Due date
+                    </div>
+                    <div className="mt-1 text-sm text-foreground">
+                      {milestone.milestoneDueDate?.trim() || 'No due date'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Status
+                    </div>
+                    <div className="mt-1 text-sm text-foreground">{statusLabel}</div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{progressSummary}</span>
+                    <span>{progressDetail}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${clampProgress(milestone.milestoneProgressPercent)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Due date
+                  Description
                 </div>
-                <div className="mt-1 text-sm text-foreground">
-                  {milestone.milestoneDueDate?.trim() || 'No due date'}
+                <div className="bg-muted mt-1 rounded-lg border p-4 text-sm leading-6 text-foreground">
+                  {milestone.milestoneDescription?.trim() || 'No milestone description.'}
                 </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Status
-                </div>
-                <div className="mt-1 text-sm text-foreground">{statusLabel}</div>
               </div>
             </div>
-            <div className="mt-4">
-              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{progressSummary}</span>
-                <span>{progressDetail}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${clampProgress(milestone.milestoneProgressPercent)}%` }}
-                />
-              </div>
-            </div>
-          </div>
+          </DialogBody>
 
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Description
-            </div>
-            <div className="bg-muted mt-1 rounded-lg border p-4 text-sm leading-6 text-foreground">
-              {milestone.milestoneDescription?.trim() || 'No milestone description.'}
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-          <DialogCloseAction label="Close milestone details" />
-          <div className="flex items-center gap-2">
+          <DialogShellFooter closeAction={<DialogCloseAction label="Close milestone details" />}>
             <DialogActionButton
               onClick={() => {
                 onOpenMilestone?.(milestone.projectId, milestone.milestoneId)
@@ -239,8 +242,8 @@ export function CalendarMilestoneDialog({
               icon={<Check />}
               tone="primary"
             />
-          </div>
-        </DialogFooter>
+          </DialogShellFooter>
+        </DialogShell>
       </DialogContent>
     </Dialog>
   )

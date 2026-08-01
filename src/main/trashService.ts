@@ -84,51 +84,6 @@ export class TrashService {
       }
     }
 
-    for (const previousProject of previous.projects) {
-      const nextProject = nextProjectsById.get(previousProject.id)
-      if (!nextProject) {
-        continue
-      }
-
-      const nextMilestonesById = new Map(
-        nextProject.milestones.map((milestone) => [milestone.id, milestone])
-      )
-      previousProject.milestones.forEach((milestone, index) => {
-        if (!nextMilestonesById.has(milestone.id)) {
-          records.push({
-            type: 'milestone-delete',
-            payload: {
-              projectId: previousProject.id,
-              index,
-              milestone
-            }
-          })
-        }
-      })
-
-      for (const previousMilestone of previousProject.milestones) {
-        const nextMilestone = nextMilestonesById.get(previousMilestone.id)
-        if (!nextMilestone) {
-          continue
-        }
-
-        const nextSubtasksById = new Set(nextMilestone.subtasks.map((subtask) => subtask.id))
-        previousMilestone.subtasks.forEach((subtask, index) => {
-          if (!nextSubtasksById.has(subtask.id)) {
-            records.push({
-              type: 'subtask-delete',
-              payload: {
-                projectId: previousProject.id,
-                milestoneId: previousMilestone.id,
-                index,
-                subtask
-              }
-            })
-          }
-        })
-      }
-    }
-
     const nextTaskIds = new Set(next.calendarTasks.map((task) => task.id))
     previous.calendarTasks.forEach((task, index) => {
       if (!nextTaskIds.has(task.id)) {

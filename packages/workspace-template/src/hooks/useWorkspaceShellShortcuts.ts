@@ -92,8 +92,7 @@ export function useWorkspaceShellShortcuts({
         Digit1: 'notes',
         Digit2: 'projects',
         Digit3: 'calendar',
-        Digit4: 'weeklyPlan',
-        Digit5: 'schedules',
+        Digit4: 'schedules',
         KeyI: 'agentHistory',
         Comma: 'settings'
       }
@@ -101,8 +100,7 @@ export function useWorkspaceShellShortcuts({
         '1': 'notes',
         '2': 'projects',
         '3': 'calendar',
-        '4': 'weeklyPlan',
-        '5': 'schedules',
+        '4': 'schedules',
         i: 'agentHistory',
         ',': 'settings'
       }

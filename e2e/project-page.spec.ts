@@ -240,6 +240,32 @@ test.describe('projects workspace', () => {
     }
   })
 
+  test('shows the selected project details beside the project list', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByRole('radio', { name: 'Project Details' }).click()
+
+      await expect(page.getByTestId('projects-workspace-sidebar')).toBeVisible()
+      await expect(page.getByTestId('projects-sidebar-item:project-1')).toBeVisible()
+      await expect(page.getByTestId('projects-sidebar-item:project-2')).toBeVisible()
+      await expect(page.getByTestId('project-detail-view')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Alpha Project' })).toBeVisible()
+      await expect(page.getByText('Milestones and tasks')).toBeVisible()
+      await expect(page.getByText('Launch')).toBeVisible()
+      await expect(page.getByText('Write copy')).toBeVisible()
+
+      await page.getByTestId('projects-sidebar-item:project-2').click()
+      await expect(page.getByRole('heading', { name: 'Beta Project' })).toBeVisible()
+      await expect(page.getByText('No milestones yet.')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('shows task-list create rows in project and due-date grouping', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)

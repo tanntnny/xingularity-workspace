@@ -25,7 +25,6 @@ import {
 } from './components/ui/icons'
 import {
   CalendarTask,
-  CreateWeeklyPlanWeekInput,
   NoteVimKeyMapping,
   NoteListItem,
   NoteImportResult,
@@ -40,7 +39,6 @@ import {
   TaskPriority,
   TaskReminder,
   CalendarTaskType,
-  WeeklyPlanWeek,
   HistoryAffectedAreas,
   VaultOpenResult
 } from '../../shared/types'
@@ -79,7 +77,7 @@ import {
   isPageAvailable,
   normalizePageForPlatform
 } from './platform/pageAvailability'
-import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
+import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Button } from './components/ui/button'
 import { Badge } from './components/ui/badge'
 import { Input } from './components/ui/input'
@@ -113,18 +111,20 @@ import {
 import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { ButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
-import { ProjectsWorkspacePage, type ProjectsWorkspaceTab } from './pages/ProjectsWorkspacePage'
+import {
+  ProjectsWorkspacePage,
+  ProjectsWorkspaceSidebar,
+  type ProjectsWorkspaceTab
+} from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
-import { WeeklyPlanWorkspace, WeeklyPlanSidebar } from './pages/WeeklyPlanPage'
 import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
 import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { DesignAuditPage } from './pages/DesignAuditPage'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
-import { useWeeklyPlan } from './hooks/useWeeklyPlan'
 import { usePersistentState } from './hooks/usePersistentState'
 import { useStaggeredScrollReveal } from './hooks/useStaggeredScrollReveal'
 import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
@@ -136,7 +136,7 @@ import {
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
 import { Shortcut } from './components/ui/kbd'
-import { buildMilestoneCalendarEvents, normalizeCalendarTasks } from './lib/calendarTasks'
+import { normalizeCalendarTasks } from './lib/calendarTasks'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
 import {
@@ -145,15 +145,14 @@ import {
   getProjectHealthSummary,
   toLocalIsoDate
 } from './lib/projectStatus'
-import { findWeekForDate, formatWeekRange, getSortedWeeks } from './lib/weeklyPlan'
-import { shiftIsoMonthClamped } from './lib/calendarDate'
+import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
   normalizeNoteTreeSelection,
   type NoteTreeSelection
 } from './lib/noteTreeSelection'
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
-import { type ProjectsWorkspaceFilterMode } from './lib/projectTaskRows'
+import { type ProjectsWorkspaceFilterMode } from './pages/ProjectsWorkspacePage'
 import { getNextActiveWorkspaceTabId } from './lib/workspaceTabs'
 
 const PAGE_LABELS: Record<AppPage, string> = {
@@ -161,7 +160,6 @@ const PAGE_LABELS: Record<AppPage, string> = {
   notes: 'Notebooks',
   projects: 'Projects',
   subscriptions: 'Subscriptions',
-  weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   designAudit: 'Design Audit',
   settings: 'Settings'
@@ -172,14 +170,13 @@ const PAGE_TAB_ICONS: Record<AppPage, typeof LayoutGrid> = {
   notes: NotebookPen,
   projects: FolderKanban,
   subscriptions: CreditCard,
-  weeklyPlan: ListTodo,
   calendar: CalendarDays,
   designAudit: Paintbrush,
   settings: SlidersHorizontal
 }
 
 type CalendarViewMode = 'month' | 'week'
-type CalendarContentFilter = 'all' | 'tasks' | 'milestones'
+type CalendarContentFilter = 'all' | 'tasks'
 
 type WorkspacePageTab = {
   id: string
@@ -364,13 +361,8 @@ function App(): ReactElement {
   const [calendarContentFilter, setCalendarContentFilter] =
     usePersistentState<CalendarContentFilter>('calendar-content-filter', 'all', {
       validate: (value): value is CalendarContentFilter =>
-        value === 'all' || value === 'tasks' || value === 'milestones'
+        value === 'all' || value === 'tasks'
     })
-  const [focusedMilestoneTarget, setFocusedMilestoneTarget] = useState<{
-    projectId: string
-    milestoneId: string
-    token: number
-  } | null>(null)
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
@@ -415,55 +407,17 @@ function App(): ReactElement {
     'projects-workspace-tab',
     'board',
     {
-      validate: (value): value is ProjectsWorkspaceTab => value === 'board' || value === 'taskList'
+      validate: (value): value is ProjectsWorkspaceTab =>
+        value === 'board' || value === 'taskList' || value === 'projectDetail'
     }
   )
-  const [newProjectRequest, setNewProjectRequest] = useState<{ token: number } | null>(null)
-  const [newSubtaskRequest] = useState<{
-    projectId: string
-    milestoneId: string
-    token: number
-  } | null>(null)
-  const [projectTaskListCollapseAllRequest, setProjectTaskListCollapseAllRequest] = useState<{
+  const [, setNewProjectRequest] = useState<{ token: number } | null>(null)
+  const [, setProjectTaskListCollapseAllRequest] = useState<{
     token: number
     collapsed: boolean
   } | null>(null)
-  const [areProjectTaskListGroupsCollapsed, setAreProjectTaskListGroupsCollapsed] = useState(false)
-  const [, setProjectsWorkspaceMilestoneContext] = useState<{
-    projectId: string
-    milestoneId: string
-  } | null>(null)
-  const {
-    data: weeklyPlanState,
-    loading: weeklyPlanLoading,
-    isReady: weeklyPlanReady,
-    createWeek,
-    updateWeek,
-    deleteWeek,
-    addPriority,
-    updatePriority,
-    deletePriority,
-    reorderPriorities,
-    upsertReview,
-    refresh: refreshWeeklyPlan
-  } = useWeeklyPlan(vaultApi, pushToast, vault)
-  const [selectedWeeklyPlanWeekId, setSelectedWeeklyPlanWeekId] = useState<string | null>(null)
-  const [pendingWeekStart, setPendingWeekStart] = useState<string | null>(null)
-  const weeklyPlanWeeks = useMemo(() => getSortedWeeks(weeklyPlanState), [weeklyPlanState])
+  const [areProjectTaskListGroupsCollapsed] = useState(false)
   const todayIso = toLocalIsoDate(new Date())
-  const currentWeeklyPlanWeek = useMemo(
-    () => findWeekForDate(weeklyPlanWeeks, todayIso) ?? null,
-    [weeklyPlanWeeks, todayIso]
-  )
-  const weeklyPlanCurrentWeekId = currentWeeklyPlanWeek?.id ?? null
-  const selectedWeeklyPlanWeek = useMemo(
-    () => weeklyPlanWeeks.find((week) => week.id === selectedWeeklyPlanWeekId) ?? null,
-    [weeklyPlanWeeks, selectedWeeklyPlanWeekId]
-  )
-  const nextWeeklyPlanStart = useMemo(
-    () => getNextWeeklyPlanStart(weeklyPlanWeeks),
-    [weeklyPlanWeeks]
-  )
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
     []
   )
@@ -496,7 +450,9 @@ function App(): ReactElement {
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
   const hasAttemptedVaultRestoreRef = useRef(false)
-  const hasRightPanel = activePage !== 'designAudit' && activePage !== 'projects'
+  const hasRightPanel =
+    activePage !== 'designAudit' &&
+    (activePage !== 'projects' || projectsWorkspaceTab === 'projectDetail')
   const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
 
   useEffect(() => {
@@ -742,25 +698,6 @@ function App(): ReactElement {
     [persistLastOpenedProjectId]
   )
 
-  const handleCreateWeeklyPlanWeek = async (input: CreateWeeklyPlanWeekInput): Promise<void> => {
-    if (!weeklyPlanReady) {
-      pushToast('error', 'Weekly Plan is unavailable. Restart Beacon after updating to enable it.')
-      return
-    }
-    setPendingWeekStart(startOfWeekIso(parseIsoDate(input.startDate)))
-    await createWeek(input)
-  }
-
-  const handleDeleteSelectedWeeklyPlanWeek = async (): Promise<void> => {
-    if (!selectedWeeklyPlanWeek) {
-      return
-    }
-    if (!window.confirm('Delete this week plan? Moved to Trash. Use Undo to restore.')) {
-      return
-    }
-    await deleteWeek({ id: selectedWeeklyPlanWeek.id })
-  }
-
   const noteIsOpen = Boolean(currentNotePath)
   const currentNoteBacklinks = useMemo(() => {
     if (!currentNotePath) {
@@ -885,45 +822,30 @@ function App(): ReactElement {
   const scheduledCalendarTasks = useMemo(() => {
     return normalizeCalendarTasks(calendarTasks).filter((task) => Boolean(task.date))
   }, [calendarTasks])
-  const milestoneCalendarEvents = useMemo(() => buildMilestoneCalendarEvents(projects), [projects])
   const calendarContentFilterOptions = useMemo(
     () => [
       {
         value: 'all' as const,
         label: 'All',
-        count: scheduledCalendarTasks.length + milestoneCalendarEvents.length
+        count: scheduledCalendarTasks.length
       },
       {
         value: 'tasks' as const,
         label: 'Tasks',
         count: scheduledCalendarTasks.length
       },
-      {
-        value: 'milestones' as const,
-        label: 'Milestones',
-        count: milestoneCalendarEvents.length
-      }
     ],
-    [milestoneCalendarEvents.length, scheduledCalendarTasks.length]
+    [scheduledCalendarTasks.length]
   )
   const visibleCalendarTasks = useMemo(() => {
-    if (calendarContentFilter === 'milestones') {
-      return []
-    }
     return calendarTasks
-  }, [calendarContentFilter, calendarTasks])
+  }, [calendarTasks])
   const visibleScheduledCalendarTasks = useMemo(() => {
-    if (calendarContentFilter === 'milestones') {
-      return []
-    }
     return scheduledCalendarTasks
-  }, [calendarContentFilter, scheduledCalendarTasks])
+  }, [scheduledCalendarTasks])
   const visibleMilestoneCalendarEvents = useMemo(() => {
-    if (calendarContentFilter === 'tasks') {
-      return []
-    }
-    return milestoneCalendarEvents
-  }, [calendarContentFilter, milestoneCalendarEvents])
+    return []
+  }, [])
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -968,12 +890,6 @@ function App(): ReactElement {
       return 'Note graph'
     }
 
-    if (activePage === 'weeklyPlan') {
-      return selectedWeeklyPlanWeek
-        ? formatWeekRange(selectedWeeklyPlanWeek.startDate, selectedWeeklyPlanWeek.endDate)
-        : 'No Week Selected'
-    }
-
     if (activePage === 'subscriptions') {
       return 'Subscriptions'
     }
@@ -984,8 +900,7 @@ function App(): ReactElement {
     hasVault,
     searchQuery,
     currentExcalidrawPath,
-    currentNotePath,
-    selectedWeeklyPlanWeek
+    currentNotePath
   ])
   const calendarCurrentPeriodTitle = useMemo(() => {
     if (calendarViewMode === 'week') {
@@ -1012,33 +927,6 @@ function App(): ReactElement {
       .split('/')
       .filter(Boolean)
   }, [activePage, currentExcalidrawPath, currentNotePath, searchQuery])
-
-  useEffect(() => {
-    if (!weeklyPlanWeeks.length) {
-      setSelectedWeeklyPlanWeekId(null)
-      return
-    }
-    if (
-      selectedWeeklyPlanWeekId &&
-      weeklyPlanWeeks.some((week) => week.id === selectedWeeklyPlanWeekId)
-    ) {
-      return
-    }
-    const fallback =
-      findWeekForDate(weeklyPlanWeeks, todayIso) ?? weeklyPlanWeeks[weeklyPlanWeeks.length - 1]
-    setSelectedWeeklyPlanWeekId(fallback.id)
-  }, [weeklyPlanWeeks, selectedWeeklyPlanWeekId, todayIso])
-
-  useEffect(() => {
-    if (!pendingWeekStart || !weeklyPlanState) {
-      return
-    }
-    const match = weeklyPlanState.weeks.find((week) => week.startDate === pendingWeekStart)
-    if (match) {
-      setSelectedWeeklyPlanWeekId(match.id)
-      setPendingWeekStart(null)
-    }
-  }, [pendingWeekStart, weeklyPlanState])
 
   useEffect(() => {
     if (!vaultApi || !vault?.rootPath) {
@@ -1645,14 +1533,10 @@ function App(): ReactElement {
         }
       }
 
-      if (affected.weeklyPlan) {
-        await refreshWeeklyPlan()
-      }
     },
     [
       persistLastOpenedNotePath,
       replaceNotes,
-      refreshWeeklyPlan,
       resetCurrentNoteEditorSession,
       setCurrentNoteContent,
       setCurrentNotePath,
@@ -1839,7 +1723,10 @@ function App(): ReactElement {
 
     try {
       const normalizedTasks = normalizeCalendarTasks(calendarTasks)
-      const nextSettings = await vaultApi.settings.update({ calendarTasks: normalizedTasks })
+      const nextSettings = await vaultApi.settings.update({
+        tasks: normalizedTasks,
+        calendarTasks: normalizedTasks
+      })
       setSettings(nextSettings)
     } catch (error) {
       pushToast('error', String(error))
@@ -1853,7 +1740,8 @@ function App(): ReactElement {
     calendarTasksRef.current = nextTasks
     setSettings({
       ...useVaultStore.getState().settings,
-      calendarTasks: nextTasks
+      calendarTasks: nextTasks,
+      tasks: nextTasks
     })
     await persistCalendarTasks(nextTasks)
     return nextTasks
@@ -1921,16 +1809,19 @@ function App(): ReactElement {
     title: string,
     date?: string,
     time?: string,
-    endTime?: string
+    endTime?: string,
+    projectId?: string
   ): Promise<CalendarTask> => {
     const trimmed = title.trim() || 'New Task'
     const nextTask: CalendarTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: trimmed,
+      projectId,
       date,
       time,
       endTime,
       completed: false,
+      status: 'pending',
       createdAt: new Date().toISOString(),
       priority: 'low',
       taskType: 'assignment',
@@ -1941,6 +1832,21 @@ function App(): ReactElement {
     calendarTasksRef.current = nextTasks
     await persistCalendarTasks(nextTasks)
     return nextTask
+  }
+
+  const createProjectTask = (projectId: string | undefined, title: string): void => {
+    void createCalendarTask(title, undefined, undefined, undefined, projectId)
+  }
+
+  const updateProjectTask = (taskId: string, patch: Partial<CalendarTask>): void => {
+    void updateCalendarTasks((tasks) =>
+      tasks.map((task) => {
+        if (task.id !== taskId) return task
+        const next = { ...task, ...patch }
+        const status = next.status ?? (next.completed ? 'completed' : 'pending')
+        return { ...next, status, completed: status === 'completed' }
+      })
+    )
   }
 
   const addUnscheduledFromHeader = async (): Promise<void> => {
@@ -1965,7 +1871,11 @@ function App(): ReactElement {
 
   const toggleCalendarTask = async (taskId: string): Promise<void> => {
     await updateCalendarTasks((tasks) =>
-      tasks.map((task) => (task.id === taskId ? { ...task, completed: !task.completed } : task))
+      tasks.map((task) => {
+        if (task.id !== taskId) return task
+        const completed = !task.completed
+        return { ...task, completed, status: completed ? 'completed' : 'pending' }
+      })
     )
   }
 
@@ -2148,13 +2058,9 @@ function App(): ReactElement {
 
   const openMilestoneFromCalendar = useCallback(
     (projectId: string, milestoneId: string): void => {
-      setProjectsWorkspaceTab('taskList')
+      void milestoneId
+      setProjectsWorkspaceTab('projectDetail')
       selectProject(projectId)
-      setFocusedMilestoneTarget({
-        projectId,
-        milestoneId,
-        token: Date.now()
-      })
       void navigateToPage('projects')
     },
     [navigateToPage, selectProject, setProjectsWorkspaceTab]
@@ -3445,7 +3351,7 @@ function App(): ReactElement {
 
   const createProject = (input?: {
     name?: string
-    summary?: string
+    description?: string
     icon?: ProjectIconStyle
   }): string => {
     const baseName = input?.name?.trim() || 'Untitled Project'
@@ -3461,7 +3367,8 @@ function App(): ReactElement {
     const nextProject: Project = {
       id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: nextName,
-      summary: input?.summary?.trim() ?? 'Add project details here.',
+      summary: input?.description?.trim() ?? 'Add project details here.',
+      description: input?.description?.trim() ?? 'Add project details here.',
       status: 'on-track',
       icon: normalizeProjectIcon(input?.icon, nextName),
       updatedAt: new Date().toISOString(),
@@ -3498,7 +3405,7 @@ function App(): ReactElement {
 
   const saveProject = (
     projectId: string,
-    draft: { name: string; summary: string; icon: ProjectIconStyle }
+    draft: { name: string; description: string; icon: ProjectIconStyle }
   ): void => {
     const normalizedName = draft.name.trim()
     if (!normalizedName) {
@@ -3510,7 +3417,8 @@ function App(): ReactElement {
         ? {
             ...project,
             name: normalizedName,
-            summary: draft.summary.trim(),
+            summary: draft.description.trim(),
+            description: draft.description.trim(),
             icon: normalizeProjectIcon(draft.icon, projectId),
             updatedAt: new Date().toISOString()
           }
@@ -4099,6 +4007,32 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
+  // Legacy project/milestone handlers remain temporarily for history compatibility while
+  // migrated vaults use the flat task workflow above.
+  void [
+    updateProjectIcon,
+    exportProject,
+    openProjectFolder,
+    renameProject,
+    updateProjectSummary,
+    toggleProjectDone,
+    addMilestoneToProject,
+    renameProjectMilestone,
+    updateProjectMilestoneDescription,
+    saveProjectMilestone,
+    updateProjectMilestoneStatus,
+    updateProjectMilestonePriority,
+    removeProjectMilestone,
+    addSubtaskToMilestone,
+    toggleMilestoneSubtask,
+    renameMilestoneSubtask,
+    updateMilestoneSubtaskDescription,
+    saveMilestoneSubtask,
+    updateMilestoneSubtaskDueDate,
+    updateMilestoneSubtaskPriority,
+    removeMilestoneSubtask
+  ]
+
   const removeProjectById = async (projectId: string): Promise<void> => {
     if (!vaultApi) {
       return
@@ -4116,7 +4050,19 @@ function App(): ReactElement {
       return
     }
 
+    const linkedTasks = calendarTasksRef.current.filter((task) => task.projectId === projectId)
+    const deleteLinkedTasks =
+      linkedTasks.length > 0 &&
+      window.confirm(
+        `Delete ${linkedTasks.length} linked ${linkedTasks.length === 1 ? 'task' : 'tasks'} too? Choose Cancel to keep them as unassigned tasks.`
+      )
+
     const nextProjects = projects.filter((item) => item.id !== projectId)
+    const nextTasks = deleteLinkedTasks
+      ? calendarTasksRef.current.filter((task) => task.projectId !== projectId)
+      : calendarTasksRef.current.map((task) =>
+          task.projectId === projectId ? { ...task, projectId: undefined } : task
+        )
     const nextSelectedProject =
       nextProjects.find((item) => item.id === selectedProjectId) ?? nextProjects[0] ?? null
     const nextProjectIcons = { ...projectIcons }
@@ -4130,6 +4076,8 @@ function App(): ReactElement {
     try {
       const nextSettings = await vaultApi.settings.update({
         projects: nextProjects,
+        tasks: nextTasks,
+        calendarTasks: nextTasks,
         projectIcons: nextProjectIcons,
         favoriteProjectIds: nextFavoriteProjectIds,
         lastOpenedProjectId: nextLastOpenedProjectId
@@ -4991,7 +4939,9 @@ function App(): ReactElement {
           activePage={activePage}
           onChange={handleSidebarPageChange}
           onOpenSearchPalette={handleOpenSearchPalette}
+          onOpenVaultManager={openVaultSwapper}
           onSidebarInteract={handleSidebarInteract}
+          vaultName={vault?.rootPath ? getVaultDisplayName(vault.rootPath) : null}
           notesCount={notes.length}
           projectsCount={projects.length}
           calendarUndoneCount={calendarUndoneCount}
@@ -5026,7 +4976,6 @@ function App(): ReactElement {
                 <DocumentWorkspaceMainHeader
                   breadcrumb={
                     <div className="flex min-w-0 items-center gap-2">
-                      <SidebarTrigger />
                       {activePage === 'projects' || activePage === 'calendar' ? null : (
                         <Breadcrumb>
                           <BreadcrumbList className="text-muted-foreground">
@@ -5296,6 +5245,12 @@ function App(): ReactElement {
                                 Task List
                               </span>
                             </ToggleGroupItem>
+                            <ToggleGroupItem value="projectDetail">
+                              <span className="inline-flex items-center gap-2">
+                                <FolderKanban size={15} className="shrink-0" aria-hidden="true" />
+                                Project Details
+                              </span>
+                            </ToggleGroupItem>
                             <Shortcut
                               keys={['option', 'tab']}
                               data-testid="workspace-shortcut:projects-view-toggle"
@@ -5339,18 +5294,6 @@ function App(): ReactElement {
                               className="shrink-0"
                             />
                           </ToggleGroup>
-                        </WorkspaceHeaderActionGroup>
-                      </WorkspaceHeaderActions>
-                    ) : activePage === 'weeklyPlan' && selectedWeeklyPlanWeek ? (
-                      <WorkspaceHeaderActions>
-                        <WorkspaceHeaderActionGroup>
-                          <WorkspaceIconButton
-                            onClick={() => {
-                              void handleDeleteSelectedWeeklyPlanWeek()
-                            }}
-                            title="Delete week"
-                            icon={<Trash2 size={18} />}
-                          />
                         </WorkspaceHeaderActionGroup>
                       </WorkspaceHeaderActions>
                     ) : null
@@ -5435,61 +5378,30 @@ function App(): ReactElement {
                       ) : activePage === 'projects' ? (
                         <ProjectsWorkspacePage
                           projects={projects}
+                          tasks={calendarTasks}
                           favoriteProjectIds={favoriteProjectIds}
                           selectedProjectId={selectedProjectId}
                           activeTab={projectsWorkspaceTab}
                           filterMode={projectFilterMode}
-                          newProjectRequest={newProjectRequest}
-                          newSubtaskRequest={newSubtaskRequest}
-                          taskListCollapseAllRequest={projectTaskListCollapseAllRequest}
-                          focusedMilestoneTarget={focusedMilestoneTarget}
                           onFilterModeChange={setProjectFilterMode}
-                          onTaskListCollapseStateChange={setAreProjectTaskListGroupsCollapsed}
-                          onMilestoneContextChange={setProjectsWorkspaceMilestoneContext}
                           onActiveTabChange={setProjectsWorkspaceTab}
                           onSelectProject={selectProject}
                           onCreateProject={createProject}
-                          onRenameProject={renameProject}
-                          onUpdateProjectSummary={updateProjectSummary}
-                          onUpdateProjectIcon={updateProjectIcon}
-                          onToggleProjectDone={toggleProjectDone}
+                          onUpdateProject={(projectId, draft) =>
+                            saveProject(projectId, {
+                              name: draft.name,
+                              description: draft.description,
+                              icon: draft.icon
+                            })
+                          }
                           onToggleProjectFavorite={toggleProjectFavoriteById}
-                          onOpenProjectFolder={openProjectFolder}
-                          onExportProject={exportProject}
                           onDeleteProject={removeProjectById}
-                          onAddMilestone={addMilestoneToProject}
-                          onRenameMilestone={renameProjectMilestone}
-                          onUpdateMilestoneDescription={updateProjectMilestoneDescription}
-                          onUpdateMilestoneDueDate={updateProjectMilestoneDueDate}
-                          onUpdateMilestoneStatus={updateProjectMilestoneStatus}
-                          onUpdateMilestonePriority={updateProjectMilestonePriority}
-                          onRemoveMilestone={removeProjectMilestone}
-                          onAddSubtask={addSubtaskToMilestone}
-                          onToggleSubtask={toggleMilestoneSubtask}
-                          onRenameSubtask={renameMilestoneSubtask}
-                          onUpdateSubtaskDescription={updateMilestoneSubtaskDescription}
-                          onUpdateSubtaskDueDate={updateMilestoneSubtaskDueDate}
-                          onUpdateSubtaskPriority={updateMilestoneSubtaskPriority}
-                          onRemoveSubtask={removeMilestoneSubtask}
-                          onSaveProject={saveProject}
-                          onSaveMilestone={saveProjectMilestone}
-                          onSaveSubtask={saveMilestoneSubtask}
+                          onCreateTask={createProjectTask}
+                          onUpdateTask={updateProjectTask}
+                          onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
                         />
                       ) : activePage === 'subscriptions' ? (
                         <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
-                      ) : activePage === 'weeklyPlan' ? (
-                        <WeeklyPlanWorkspace
-                          state={weeklyPlanState}
-                          loading={weeklyPlanLoading}
-                          selectedWeekId={selectedWeeklyPlanWeekId}
-                          isReady={weeklyPlanReady}
-                          onUpdateWeek={(input) => updateWeek(input)}
-                          onAddPriority={(input) => addPriority(input)}
-                          onUpdatePriority={(input) => updatePriority(input)}
-                          onDeletePriority={(priorityId) => deletePriority(priorityId)}
-                          onReorderPriorities={(input) => reorderPriorities(input)}
-                          onUpsertReview={(input) => upsertReview(input)}
-                        />
                       ) : activePage === 'calendar' ? (
                         <div className="min-h-full">
                           <section
@@ -5505,6 +5417,7 @@ function App(): ReactElement {
                                 <CalendarWeekView
                                   selectedDate={selectedCalendarDate}
                                   tasks={visibleCalendarTasks}
+                                  projects={projects}
                                   milestoneEvents={visibleMilestoneCalendarEvents}
                                   onSelectDate={setSelectedCalendarDate}
                                   onOpenMilestone={openMilestoneFromCalendar}
@@ -5527,6 +5440,9 @@ function App(): ReactElement {
                                   onUpdateTaskType={(taskId, taskType) => {
                                     void updateCalendarTaskType(taskId, taskType)
                                   }}
+                                  onUpdateTaskProject={(taskId, projectId) => {
+                                    void updateProjectTask(taskId, { projectId })
+                                  }}
                                   onUpdateTaskSchedule={(taskId, schedule) => {
                                     void updateCalendarTaskSchedule(taskId, schedule)
                                   }}
@@ -5535,6 +5451,7 @@ function App(): ReactElement {
                                 <CalendarMonthView
                                   selectedDate={selectedCalendarDate}
                                   tasks={visibleScheduledCalendarTasks}
+                                  projects={projects}
                                   milestoneEvents={visibleMilestoneCalendarEvents}
                                   onSelectDate={setSelectedCalendarDate}
                                   onCreateTask={createTaskForDate}
@@ -5563,6 +5480,9 @@ function App(): ReactElement {
                                   }}
                                   onUpdateTaskType={(taskId, taskType) => {
                                     void updateCalendarTaskType(taskId, taskType)
+                                  }}
+                                  onUpdateTaskProject={(taskId, projectId) => {
+                                    void updateProjectTask(taskId, { projectId })
                                   }}
                                   onUpdateTaskTime={(taskId, time) => {
                                     void updateCalendarTaskTime(taskId, time)
@@ -5634,21 +5554,18 @@ function App(): ReactElement {
                         : undefined
                     }
                   >
-                    {activePage === 'weeklyPlan' ? (
-                      <WeeklyPlanSidebar
-                        state={weeklyPlanState}
-                        loading={weeklyPlanLoading}
-                        selectedWeekId={selectedWeeklyPlanWeekId}
-                        currentWeekId={weeklyPlanCurrentWeekId}
-                        nextWeekStart={nextWeeklyPlanStart}
-                        todayIso={todayIso}
-                        isReady={weeklyPlanReady}
-                        onSelectWeek={setSelectedWeeklyPlanWeekId}
-                        onCreateWeek={(input) => handleCreateWeeklyPlanWeek(input)}
-                      />
-                    ) : (
-                      <div key={activePage} className="flex h-full flex-col">
+                    <div key={activePage} className="flex h-full flex-col">
                         <DocumentWorkspacePanelHeader
+                          leading={
+                            hasVault &&
+                            activePage === 'projects' &&
+                            projectsWorkspaceTab === 'projectDetail' ? (
+                              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                <FolderKanban size={16} aria-hidden="true" />
+                                Projects
+                              </div>
+                            ) : undefined
+                          }
                           actions={
                             hasVault && activePage === 'notes' ? (
                               <WorkspaceHeaderActions>
@@ -5833,6 +5750,15 @@ function App(): ReactElement {
                                 </Button>
                               </div>
                             </WorkspacePanelSection>
+                          ) : activePage === 'projects' && projectsWorkspaceTab === 'projectDetail' ? (
+                            <ProjectsWorkspaceSidebar
+                              projects={projects}
+                              favoriteProjectIds={favoriteProjectIds}
+                              selectedProjectId={selectedProjectId}
+                              filterMode={projectFilterMode}
+                              onFilterModeChange={setProjectFilterMode}
+                              onSelectProject={selectProject}
+                            />
                           ) : activePage === 'calendar' ? (
                             <UnscheduledTaskList
                               tasks={unscheduledTasks}
@@ -5876,8 +5802,7 @@ function App(): ReactElement {
                             <WorkspaceContextEmptyState description="Properties, activity, and secondary tools for this workspace will appear here." />
                           )}
                         </DocumentWorkspacePanelContent>
-                      </div>
-                    )}
+                    </div>
                   </DocumentWorkspacePanel>
                 </DocumentWorkspaceMain>
               </DocumentWorkspace>
@@ -6012,11 +5937,9 @@ function VaultSelectionPage({
   )
 }
 
-function getNextWeeklyPlanStart(weeks: WeeklyPlanWeek[]): string {
-  if (!weeks.length) {
-    return startOfWeekIso(new Date())
-  }
-  return startOfWeekIso(parseIsoDate(addIsoDays(weeks[weeks.length - 1]!.endDate, 1)))
+function getVaultDisplayName(rootPath: string): string {
+  const normalizedPath = rootPath.replace(/[\\/]+$/, '')
+  return normalizedPath.split(/[\\/]/).filter(Boolean).pop() ?? 'Vault'
 }
 
 function startOfWeekIso(date: Date): string {

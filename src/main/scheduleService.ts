@@ -286,9 +286,12 @@ export class ScheduleService {
     const newTask: CalendarTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: action.title,
+      description: action.description,
+      projectId: action.projectId,
       date: action.date,
       time: action.time,
-      completed: false,
+      completed: action.status === 'completed',
+      status: action.status ?? 'pending',
       createdAt: new Date().toISOString(),
       priority: action.priority ?? 'low',
       taskType: (action.taskType as CalendarTask['taskType']) ?? 'other',
@@ -321,8 +324,11 @@ export class ScheduleService {
     updated[idx] = {
       ...updated[idx],
       ...(action.title !== undefined ? { title: action.title } : {}),
+      ...(action.description !== undefined ? { description: action.description } : {}),
+      ...(action.projectId !== undefined ? { projectId: action.projectId || undefined } : {}),
       ...(action.date !== undefined ? { date: action.date } : {}),
-      ...(action.completed !== undefined ? { completed: action.completed } : {})
+      ...(action.completed !== undefined ? { completed: action.completed, status: action.completed ? 'completed' : 'pending' } : {}),
+      ...(action.status !== undefined ? { status: action.status, completed: action.status === 'completed' } : {})
     }
 
     await this.runtime.updateSettings({ calendarTasks: updated })
@@ -402,10 +408,13 @@ export class ScheduleService {
     const newTask: CalendarTask = {
       id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: action.title,
+      description: action.description,
+      projectId: action.projectId,
       date: action.date,
       endDate: action.endDate,
       time: action.time,
-      completed: false,
+      completed: action.status === 'completed',
+      status: action.status ?? 'pending',
       createdAt: new Date().toISOString(),
       priority: 'low',
       taskType: (action.taskType as CalendarTask['taskType']) ?? 'meeting',

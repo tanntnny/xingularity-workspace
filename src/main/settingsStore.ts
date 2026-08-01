@@ -23,6 +23,7 @@ import {
   getVaultSettingsPath
 } from './vaultData'
 import { ProjectStore } from './projectStore'
+import { TaskStore } from './taskStore'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -59,6 +60,24 @@ function isNoteVimMappingAction(value: unknown): value is NoteVimKeyMapping['act
 
 function isValidNoteVimSequence(value: string): boolean {
   return value.trim().length > 0 && value.length <= 8 && /^[\x20-\x7E]+$/.test(value)
+}
+
+function normalizeCalendarTasks(tasks: CalendarTask[]): CalendarTask[] {
+  return tasks.map((task) => {
+    const taskType = (task as { taskType?: string }).taskType
+    const status = task.status ?? (task.completed ? 'completed' : 'pending')
+    return {
+      ...task,
+      taskType: taskType === 'call' ? 'follow-up' : task.taskType,
+      status,
+      completed: status === 'completed',
+      reminders: Array.isArray(task.reminders) ? task.reminders : []
+    }
+  })
+}
+
+function hasLegacyCalendarTaskTypes(tasks: CalendarTask[] | undefined): boolean {
+  return Boolean(tasks?.some((task) => (task as { taskType?: string }).taskType === 'call'))
 }
 
 function normalizeEditorVimKeyMappings(value: unknown): NoteVimKeyMapping[] {
@@ -136,6 +155,7 @@ export function createDefaultAppSettings(): AppSettings {
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
+    tasks: [],
     projectIcons: {},
     projects: [],
     gridBoard: {
@@ -163,6 +183,14 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   }
 
   const parsedProfile = sanitizedParsed.profile as Partial<AppSettings['profile']> | undefined
+  const normalizedTasks = Array.isArray(parsed.tasks)
+    ? normalizeCalendarTasks(parsed.tasks)
+    : Array.isArray(parsed.calendarTasks)
+      ? normalizeCalendarTasks(parsed.calendarTasks)
+      : (defaults.tasks ?? defaults.calendarTasks)
+  const normalizedProjects = Array.isArray(parsed.projects)
+    ? parsed.projects.flatMap((project) => normalizeProject(project))
+    : defaults.projects
 
   return {
     ...defaults,
@@ -184,13 +212,13 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
         ? parsed.editorVimModeEnabled
         : defaults.editorVimModeEnabled,
     editorVimKeyMappings: normalizeEditorVimKeyMappings(parsed.editorVimKeyMappings),
-    calendarTasks: Array.isArray(parsed.calendarTasks)
-      ? parsed.calendarTasks
-      : defaults.calendarTasks,
+    calendarTasks: normalizedTasks,
+    tasks: normalizedTasks,
     projectIcons: normalizeProjectIcons(parsed.projectIcons),
-    projects: Array.isArray(parsed.projects)
-      ? parsed.projects.flatMap((project) => normalizeProject(project))
-      : defaults.projects,
+    projects: normalizedProjects.map((project) => ({
+      ...project,
+      tasks: normalizedTasks.filter((task) => task.projectId === project.id)
+    })),
     gridBoard:
       parsedGridBoard &&
       typeof parsedGridBoard === 'object' &&
@@ -373,6 +401,12 @@ function normalizeProject(input: unknown): Project[] {
       id: candidate.id,
       name,
       summary: typeof candidate.summary === 'string' ? candidate.summary.trim() : '',
+      description:
+        typeof candidate.description === 'string'
+          ? candidate.description.trim()
+          : typeof candidate.summary === 'string'
+            ? candidate.summary.trim()
+            : '',
       folderPath:
         typeof candidate.folderPath === 'string' && candidate.folderPath.trim()
           ? candidate.folderPath
@@ -398,6 +432,86 @@ function normalizeProject(input: unknown): Project[] {
       )
     }
   ]
+}
+
+function migrateProjectWork(
+  projects: Project[],
+  tasks: CalendarTask[]
+): { projects: Project[]; tasks: CalendarTask[]; migrated: boolean } {
+  const usedTaskIds = new Set(tasks.map((task) => task.id))
+  const migratedTasks = [...tasks]
+  let migrated = false
+
+  const reserveTaskId = (candidate: string, kind: string, projectId: string): string => {
+    if (!usedTaskIds.has(candidate)) {
+      usedTaskIds.add(candidate)
+      return candidate
+    }
+
+    let index = 1
+    let next = `task-${projectId}-${kind}-${candidate}`
+    while (usedTaskIds.has(next)) {
+      index += 1
+      next = `task-${projectId}-${kind}-${candidate}-${index}`
+    }
+    usedTaskIds.add(next)
+    return next
+  }
+
+  const nextProjects = projects.map((project) => {
+    const milestones = Array.isArray(project.milestones) ? project.milestones : []
+    if (milestones.length === 0) {
+      return {
+        ...project,
+        description: project.description ?? project.summary
+      }
+    }
+
+    migrated = true
+    for (const milestone of milestones) {
+      const milestoneStatus = milestone.status ?? 'pending'
+      migratedTasks.push({
+        id: reserveTaskId(milestone.id, 'milestone', project.id),
+        title: milestone.title,
+        description: milestone.description,
+        projectId: project.id,
+        date: milestone.dueDate,
+        completed: milestoneStatus === 'completed',
+        status: milestoneStatus,
+        createdAt: project.updatedAt,
+        priority: milestone.priority ?? 'medium',
+        reminders: []
+      })
+
+      for (const subtask of milestone.subtasks ?? []) {
+        const status = subtask.completed ? 'completed' : 'pending'
+        migratedTasks.push({
+          id: reserveTaskId(subtask.id, 'subtask', project.id),
+          title: subtask.title,
+          description: subtask.description,
+          projectId: project.id,
+          date: subtask.dueDate,
+          completed: subtask.completed,
+          status,
+          createdAt: subtask.createdAt,
+          priority: subtask.priority ?? 'medium',
+          reminders: []
+        })
+      }
+    }
+
+    return {
+      ...project,
+      description: project.description ?? project.summary,
+      milestones: []
+    }
+  })
+
+  return {
+    projects: nextProjects,
+    tasks: normalizeCalendarTasks(migratedTasks),
+    migrated
+  }
 }
 
 function normalizeProjectIcons(
@@ -697,19 +811,21 @@ export class SettingsStore {
 
   // ── Vault-specific settings ───────────────────────────────────────────────
 
-  async readVault(vaultRoot: string): Promise<AppSettings> {
+async readVault(vaultRoot: string): Promise<AppSettings> {
     const settingsPath = getVaultSettingsPath(vaultRoot)
     const legacySettingsPath = getLegacyVaultSettingsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
     const legacyRootTasksPath = getLegacyRootVaultCalendarTasksPath(vaultRoot)
     const legacySystemTasksPath = getLegacySystemVaultCalendarTasksPath(vaultRoot)
     const projectStore = new ProjectStore(vaultRoot)
+    const taskStore = new TaskStore(vaultRoot)
 
     try {
       const [
         coreParsed,
         legacyCoreParsed,
         projectStorage,
+        taskFiles,
         tasksData,
         legacyRootTasksData,
         legacySystemTasksData
@@ -717,6 +833,7 @@ export class SettingsStore {
         this.readJsonFile<VaultCoreSettings>(settingsPath),
         this.readJsonFile<VaultCoreSettings>(legacySettingsPath),
         projectStore.read(),
+        taskStore.read(),
         this.readJsonFile<CalendarTask[]>(tasksPath),
         this.readJsonFile<CalendarTask[]>(legacyRootTasksPath),
         this.readJsonFile<LegacyVaultTasksData>(legacySystemTasksPath)
@@ -740,31 +857,37 @@ export class SettingsStore {
         resolvedCore?.projectIcons,
         hasMaterialProjectIconsData
       )
-      const resolvedTasks = resolvePreferredData(
+      const legacyTasks = resolvePreferredData(
         tasksData,
         resolveLegacyTasksData(legacyRootTasksData, legacySystemTasksData) ??
           resolvedCore?.calendarTasks,
         hasMaterialTasksData
       )
+      const resolvedTasks = taskFiles.length > 0 ? taskFiles : legacyTasks
+      const migratedProjectWork = migrateProjectWork(resolvedProjects ?? [], resolvedTasks ?? [])
       const needsSplitMigration =
         coreParsed === null ||
+        taskFiles.length === 0 ||
         tasksData === null ||
         legacyCoreParsed !== null ||
         !projectStorage.canonicalFiles ||
         legacyRootTasksData !== null ||
         legacySystemTasksData !== null ||
+        hasLegacyCalendarTaskTypes(resolvedTasks) ||
         hasLegacyAppearanceSettings(resolvedCore) ||
         resolvedCore !== coreParsed ||
         resolvedTasks !== tasksData ||
+        migratedProjectWork.migrated ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
         Boolean(resolvedCore?.calendarTasks)
 
       const normalized = normalizeSettings({
         ...(resolvedCore ?? {}),
-        projects: resolvedProjects,
+        projects: migratedProjectWork.projects,
         projectIcons: resolvedProjectIcons,
-        calendarTasks: resolvedTasks,
+        calendarTasks: migratedProjectWork.tasks,
+        tasks: migratedProjectWork.tasks,
         lastVaultPath: vaultRoot
       })
       const merged = applyProjectIconCompatibility(normalized, resolvedProjectIcons)
@@ -799,9 +922,11 @@ export class SettingsStore {
 
   async updateVault(vaultRoot: string, next: AppSettingsUpdate): Promise<AppSettings> {
     const current = await this.readVault(vaultRoot)
+    const nextTasks = next.tasks ?? next.calendarTasks
     const merged = normalizeSettings({
       ...current,
       ...next,
+      ...(nextTasks ? { tasks: nextTasks, calendarTasks: nextTasks } : {}),
       profile: next.profile ? { ...current.profile, ...next.profile } : current.profile,
       ai: next.ai ? { ...current.ai, ...next.ai } : current.ai,
       lastVaultPath: vaultRoot
@@ -830,7 +955,6 @@ export class SettingsStore {
 
   private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
     const corePath = getVaultSettingsPath(vaultRoot)
-    const tasksPath = getVaultCalendarTasksPath(vaultRoot)
     const projectStore = new ProjectStore(vaultRoot)
 
     const coreSettings: VaultCoreSettings = {
@@ -851,7 +975,7 @@ export class SettingsStore {
     await Promise.all([
       this.writeJsonFile(corePath, coreSettings),
       projectStore.writeAll(settings.projects),
-      this.writeJsonFile(tasksPath, settings.calendarTasks)
+      new TaskStore(vaultRoot).writeAll(settings.tasks ?? settings.calendarTasks)
     ])
   }
 
@@ -862,6 +986,7 @@ export class SettingsStore {
     await Promise.all([
       deleteLegacyVaultPath(getLegacyVaultSettingsPath(vaultRoot), vaultRoot),
       projectStore.cleanupLegacyFiles(),
+      deleteLegacyVaultPath(getVaultCalendarTasksPath(vaultRoot), vaultRoot),
       deleteLegacyVaultPath(getLegacyRootVaultCalendarTasksPath(vaultRoot), vaultRoot),
       deleteLegacyVaultPath(getLegacySystemVaultCalendarTasksPath(vaultRoot), vaultRoot)
     ])

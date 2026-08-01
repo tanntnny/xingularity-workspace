@@ -7,8 +7,8 @@ This document summarizes the current user-facing feature set of Xingularity base
 Xingularity is a local-first Electron workspace for:
 
 - Markdown notes stored in a user-selected vault
-- project planning with milestones and subtasks
-- calendar task management
+- project records with linked tasks
+- unified task management across Projects and Calendar
 - weekly planning
 - subscription spend tracking
 - automation schedules
@@ -75,11 +75,9 @@ managed notebook subtree, and notebook tags remain user-defined.
 Project management features include:
 
 - create, open, favorite, rename, and delete projects
-- editable project summary
-- project status tracking: `on-track`, `at-risk`, `blocked`, `completed`
-- automatic progress calculation from milestone and subtask state
-- milestone creation, editing, collapse state, and status tracking
-- subtask creation, editing, due dates, completion, and deletion
+- editable project description
+- linked task list with reassignment between projects
+- task statuses: `pending`, `in-progress`, `blocked`, `completed`
 - project icon customization using shape, variant, and color
 - export project summaries
 - notebooks remain independent of project records
@@ -132,7 +130,7 @@ Calendar and task features include:
 - optional task time and multi-day ranges
 - task priority and task type metadata
 - reminder support on tasks
-- unified calendar rendering of tasks, project milestones, and subtasks
+- unified calendar rendering of tasks with project assignment
 
 ## Weekly Plan
 
@@ -142,7 +140,7 @@ Weekly planning features include:
 - define week focus and date range
 - add ordered weekly priorities
 - mark priorities as `planned`, `in_progress`, or `done`
-- link priorities to projects, milestones, subtasks, or calendar tasks
+- link priorities to projects or tasks
 - capture week review fields for wins, misses, blockers, and next week
 
 ## Subscriptions

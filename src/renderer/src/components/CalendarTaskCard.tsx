@@ -1,5 +1,5 @@
 import { CSSProperties, forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
-import { Check } from './ui/icons'
+import { TaskStatusIcon } from './TaskStatusIcon'
 import { CalendarTask } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import {
@@ -32,12 +32,12 @@ export const CalendarTaskCard = forwardRef<
   return (
     <div
       ref={ref}
-      className={`group mx-1 flex h-full w-[calc(100%-0.5rem)] flex-col justify-start rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${className ?? ''}`}
+      className={`group flex h-full w-full flex-col justify-start overflow-hidden rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${className ?? ''}`}
       onMouseMove={onMouseMove}
       style={{ ...taskTypeStyle, ...style }}
       {...rest}
     >
-      <div className="flex items-center justify-between gap-1.5">
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
         <button
           type="button"
           onClick={(event) => {
@@ -45,19 +45,11 @@ export const CalendarTaskCard = forwardRef<
             event.preventDefault()
             onToggle?.(task.id)
           }}
-          className="inline-flex items-center gap-1 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          title={task.completed ? 'Mark as pending' : 'Mark as complete'}
+          className="inline-flex min-w-0 flex-1 items-center gap-1 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={task.completed ? 'Mark as pending' : 'Mark as in progress'}
         >
-          <span
-            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 ${
-              task.completed
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card'
-            }`}
-          >
-            {task.completed ? <Check size={8} strokeWidth={3} /> : null}
-          </span>
-          <span className="text-[11px] font-medium text-muted-foreground">
+          <TaskStatusIcon status={task.status} completed={task.completed} size={14} />
+          <span className="truncate text-[11px] font-medium text-muted-foreground">
             {task.completed ? 'Completed' : 'Pending'}
           </span>
         </button>
@@ -65,7 +57,7 @@ export const CalendarTaskCard = forwardRef<
           {formatCalendarTaskTimeLabel(task)}
         </span>
       </div>
-      <div className="mt-0.5 flex items-start gap-1">
+      <div className="mt-0.5 flex min-w-0 items-start gap-1 overflow-hidden">
         {priorityMarker && priorityMarkerColor ? (
           <span
             className="pointer-events-none shrink-0 text-xs font-semibold leading-none"
@@ -75,7 +67,7 @@ export const CalendarTaskCard = forwardRef<
             {priorityMarker}
           </span>
         ) : null}
-        <span className="pointer-events-none truncate text-xs font-semibold leading-tight text-foreground">
+        <span className="pointer-events-none min-w-0 flex-1 truncate text-xs font-semibold leading-tight text-foreground">
           {task.title}
         </span>
         {(task.reminders || []).some((reminder) => reminder.enabled) ? (

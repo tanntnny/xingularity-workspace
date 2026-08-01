@@ -10,7 +10,6 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
       'notes',
       'projects',
       'subscriptions',
-      'weeklyPlan',
       'calendar',
       'designAudit',
       'settings'
@@ -18,10 +17,6 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
   }
 
   const pages = [...CORE_MOBILE_PAGES]
-
-  if (platform.capabilities.supportsWeeklyPlan) {
-    pages.splice(3, 0, 'weeklyPlan')
-  }
 
   if (platform.capabilities.supportsSubscriptions) {
     pages.splice(pages.length - 1, 0, 'subscriptions')

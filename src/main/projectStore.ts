@@ -53,7 +53,7 @@ export class ProjectStore {
       projects.map(async (project) => {
         const targetPath = getVaultProjectPath(this.vaultRoot, project.id)
         nextPaths.add(path.basename(targetPath))
-        await writeJsonAtomically(targetPath, project)
+        await writeJsonAtomically(targetPath, serializeProject(project))
       })
     )
 
@@ -160,6 +160,16 @@ export class ProjectStore {
     }
 
     return fallback
+  }
+}
+
+function serializeProject(project: Project): Pick<Project, 'id' | 'name' | 'description' | 'icon' | 'updatedAt'> {
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description ?? project.summary ?? '',
+    icon: project.icon,
+    updatedAt: project.updatedAt
   }
 }
 

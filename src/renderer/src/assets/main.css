@@ -1,4 +1,5 @@
 @import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
 
 @tailwind base;
 @tailwind components;
@@ -7,8 +8,9 @@
 @layer base {
   :root {
     color-scheme: light;
-    --background: var(--sidebar-background);
-    --workspace-background: #f4f4f4;
+    --app-background: #f4f4f4;
+    --background: var(--app-background);
+    --workspace-background: #f8f8f8;
     --foreground: #1a1a1a;
     --card: #fafafa;
     --card-foreground: #1a1a1a;
@@ -25,10 +27,12 @@
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
     --border: #c7c7c7;
+    --note-block-border: var(--border);
+    --note-block-radius: var(--radius);
     --input: #c7c7c7;
     --ring: #666666;
     --radius: 0.5rem;
-    --sidebar-background: #d1d1d1;
+    --sidebar-background: var(--app-background);
     --sidebar-foreground: #1a1a1a;
     --sidebar-primary: #202020;
     --sidebar-primary-foreground: #fafafa;
@@ -56,14 +60,12 @@
     --calendar-task-review-border: #d19a7c;
     --calendar-task-personal-bg: #dcfce7;
     --calendar-task-personal-border: #7fbe94;
-    --calendar-task-call-bg: #cffafe;
-    --calendar-task-call-border: #78b6c3;
     --calendar-task-deep-work-bg: #e0e7ff;
     --calendar-task-deep-work-border: #8b9de0;
     --calendar-task-errand-bg: #fef3c7;
     --calendar-task-errand-border: #d4a65b;
-    --calendar-task-follow-up-bg: #fce7f3;
-    --calendar-task-follow-up-border: #d38ab2;
+    --calendar-task-follow-up-bg: #cffafe;
+    --calendar-task-follow-up-border: #78b6c3;
     --calendar-task-other-bg: #f3f4f6;
     --calendar-task-other-border: #a3a3a8;
     --drawer-width: 640px;
@@ -91,6 +93,7 @@
       --destructive: #7f1d1d;
       --destructive-foreground: #fafafa;
       --border: #353535;
+      --note-block-border: #4a4a4a;
       --input: #404040;
       --ring: #a3a3a3;
       --sidebar-background: #080808;
@@ -109,14 +112,12 @@
       --calendar-task-review-border: #a74424;
       --calendar-task-personal-bg: #042e1b;
       --calendar-task-personal-border: #0b9958;
-      --calendar-task-call-bg: #073642;
-      --calendar-task-call-border: #0e8e9e;
       --calendar-task-deep-work-bg: #1e1b4b;
       --calendar-task-deep-work-border: #5b48c9;
       --calendar-task-errand-bg: #542c0e;
       --calendar-task-errand-border: #a26a22;
-      --calendar-task-follow-up-bg: #4c0d30;
-      --calendar-task-follow-up-border: #a70e65;
+      --calendar-task-follow-up-bg: #073642;
+      --calendar-task-follow-up-border: #0e8e9e;
       --calendar-task-other-bg: #1e1e20;
       --calendar-task-other-border: #3f3f46;
     }
@@ -264,6 +265,10 @@
     font-family: var(--app-font-family);
   }
 
+  .note-editor-surface .milkdown .ProseMirror blockquote {
+    padding-left: 34px;
+  }
+
   .note-editor-surface .milkdown .ProseMirror *::selection {
     background: var(--foreground);
     color: var(--workspace-background);
@@ -276,4 +281,52 @@
   .app-no-drag {
     -webkit-app-region: no-drag;
   }
+}
+
+.note-editor-surface .milkdown-code-block,
+.note-editor-surface .note-fenced-code-block {
+  background: transparent !important;
+  border: 1px solid var(--note-block-border) !important;
+  border-radius: var(--note-block-radius);
+  box-shadow: none;
+}
+
+.note-editor-surface .milkdown .ProseMirror pre {
+  background: transparent !important;
+  border: 1px solid var(--note-block-border) !important;
+  border-radius: var(--note-block-radius);
+  box-shadow: none;
+}
+
+.note-editor-surface .milkdown .ProseMirror .milkdown-table-block {
+  border: 1px solid var(--note-block-border) !important;
+  border-radius: var(--note-block-radius);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.note-editor-surface .milkdown .ProseMirror .milkdown-table-block table {
+  border: 1px solid var(--note-block-border) !important;
+  border-radius: var(--note-block-radius);
+  overflow: hidden;
+}
+
+.note-editor-surface .milkdown .ProseMirror .milkdown-table-block th,
+.note-editor-surface .milkdown .ProseMirror .milkdown-table-block td {
+  border-color: var(--note-block-border) !important;
+}
+
+.note-editor-surface .milkdown-code-block .note-code-block-body,
+.note-editor-surface .milkdown-code-block .note-code-block-content,
+.note-editor-surface .note-fenced-code-block .note-code-block-body,
+.note-editor-surface .note-fenced-code-block .note-code-block-content,
+.note-editor-surface .milkdown .ProseMirror pre code {
+  background: transparent !important;
+}
+
+.note-editor-surface .milkdown-code-block .note-code-block-content,
+.note-editor-surface .note-fenced-code-block .note-code-block-content,
+.note-editor-surface .milkdown .ProseMirror pre code {
+  color: var(--foreground);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
 }

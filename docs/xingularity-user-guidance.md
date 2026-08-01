@@ -101,11 +101,10 @@ Use the Projects page to manage active work streams.
 Available actions:
 
 - create a project
-- edit project name and summary
+- edit project name and description
 - favorite or delete a project
 - customize the project icon
-- add and manage milestones
-- add and manage subtasks
+- add, edit, assign, and delete tasks
 
 Project status values are:
 
@@ -114,7 +113,7 @@ Project status values are:
 - `blocked`
 - `completed`
 
-Projects remain independent records; notebook files and tags are created and managed by the user. Milestones and subtasks also appear in planning surfaces.
+Projects remain independent records; notebook files and tags are created and managed by the user. Tasks are shared across Projects, Calendar, automation, and weekly planning through their `projectId`.
 
 ## Subscriptions Workflow
 
@@ -173,7 +172,7 @@ Available actions:
 - mark tasks complete
 - delete tasks
 
-Calendar views may also include milestone and subtask items from projects.
+Calendar views show the unified task collection, including each task's project assignment.
 
 ## Weekly Plan Workflow
 
@@ -186,7 +185,7 @@ Available actions:
 - adjust start and end dates
 - add ordered priorities
 - move priorities up or down
-- link priorities to a project, milestone, subtask, or task
+- link priorities to a project or task
 - record wins, misses, blockers, and next-week notes
 
 ## Schedules Workflow

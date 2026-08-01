@@ -15,6 +15,8 @@ export type { SwitchProps } from './switch'
 
 export { Badge, badgeVariants } from './badge'
 export type { BadgeProps } from './badge'
+export { CalendarTaskTypeBadge } from './calendar-task-type-badge'
+export type { CalendarTaskTypeBadgeProps } from './calendar-task-type-badge'
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
 
@@ -42,8 +44,11 @@ export {
   DialogTrigger,
   DialogClose,
   DialogContent,
+  DialogShell,
   DialogHeader,
+  DialogBody,
   DialogFooter,
+  DialogShellFooter,
   DialogActionButton,
   DialogCloseAction,
   DialogTitle,
@@ -74,7 +79,8 @@ export {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogAction,
-  AlertDialogCancel
+  AlertDialogCancel,
+  AlertDialogCloseAction
 } from './alert-dialog'
 
 export {

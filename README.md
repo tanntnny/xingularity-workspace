@@ -7,8 +7,8 @@ The app keeps user-facing workspace data inside a user-selected vault on disk. T
 ## Current Product Scope
 
 - Markdown notes stored in a local vault with attachments, tags, mentions, export, and full-text search
-- Project tracking with milestones, subtasks, progress, favorites, and custom project icons
-- Calendar planning with scheduled and unscheduled tasks, task types, reminders, and completion state
+- Project records with descriptions, favorites, custom icons, and linked tasks
+- Unified task planning with scheduled and unscheduled tasks, project assignment, statuses, task types, and reminders
 - Weekly plan workspace for week creation, priorities, linked work items, and end-of-week review notes
 - Schedules page for script-based automations with permissions, triggers, run history, and review-before-apply flows
 - Agent Chat page for chat sessions, workspace mentions, run history, and tool activity rendering
@@ -111,9 +111,8 @@ Legacy vaults are migrated forward on open. Old `notes/` content is copied into 
 ## Projects
 
 - Project list with search and favorites
-- Project detail view with summary, health status, and progress
-- Milestones with due dates and status
-- Subtasks with completion tracking
+- Project detail view with editable description and linked tasks
+- Task status, project assignment, due dates, priorities, and reminders
 - user-created notebooks remain independent of projects
 - Per-project icon customization
 
@@ -122,8 +121,8 @@ Legacy vaults are migrated forward on open. Old `notes/` content is copied into 
 - Month-based calendar view
 - Unscheduled task queue
 - Tasks with priority, type, date, optional end date, optional time, and reminders
-- Unified calendar rendering for tasks, project milestones, and subtasks
-- Weekly plan weeks with focus text, ordered priorities, linked items, and review fields
+- Unified calendar rendering for tasks
+- Weekly plan weeks with focus text, ordered priorities linked to projects or tasks, and review fields
 
 ## Automation And Agent Features
 

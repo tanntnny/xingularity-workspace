@@ -3,6 +3,8 @@ import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
 
 import { cn } from '../../lib/utils'
 import { buttonVariants } from './button'
+import { DialogActionButton } from './dialog'
+import { X } from './icons'
 
 const AlertDialog = AlertDialogPrimitive.Root
 
@@ -90,7 +92,11 @@ const AlertDialogAction = React.forwardRef<
   React.ComponentRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
 >(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Action ref={ref} className={cn(buttonVariants(), className)} {...props} />
+  <AlertDialogPrimitive.Action
+    ref={ref}
+    className={cn(buttonVariants(), 'rounded-[var(--radius-button-pill)]', className)}
+    {...props}
+  />
 ))
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 
@@ -100,11 +106,31 @@ const AlertDialogCancel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
-    className={cn(buttonVariants({ variant: 'outline' }), 'mt-2 sm:mt-0', className)}
+    className={cn(
+      buttonVariants({ variant: 'outline' }),
+      'mt-2 rounded-[var(--radius-button-pill)] sm:mt-0',
+      className
+    )}
     {...props}
   />
 ))
 AlertDialogCancel.displayName = AlertDialogPrimitive.Cancel.displayName
+
+interface AlertDialogCloseActionProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof DialogActionButton>,
+  'icon' | 'label' | 'tone'
+> {
+  label?: string
+}
+
+const AlertDialogCloseAction = React.forwardRef<HTMLButtonElement, AlertDialogCloseActionProps>(
+  ({ label = 'Close alert dialog', ...props }, ref) => (
+    <AlertDialogPrimitive.Cancel asChild>
+      <DialogActionButton ref={ref} icon={<X />} title={label} aria-label={label} {...props} />
+    </AlertDialogPrimitive.Cancel>
+  )
+)
+AlertDialogCloseAction.displayName = 'AlertDialogCloseAction'
 
 export {
   AlertDialog,
@@ -117,5 +143,6 @@ export {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogAction,
-  AlertDialogCancel
+  AlertDialogCancel,
+  AlertDialogCloseAction
 }

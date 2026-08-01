@@ -18,6 +18,8 @@ describe('sidebar shortcuts', () => {
           activePage: 'notes',
           onChange: () => undefined,
           onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
+          vaultName: 'Personal Vault',
           notesCount: 3,
           projectsCount: 2,
           calendarUndoneCount: 4,
@@ -34,6 +36,31 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('aria-label="Resize or toggle Sidebar"')
     expect(markup).toContain('--sidebar-width:256px')
     expect(markup).toContain('data-testid="sidebar-command-palette"')
+    expect(markup).toContain('data-testid="sidebar-vault-manager"')
+    expect(markup).toContain('>Personal Vault</span>')
+    expect(markup).not.toContain('>Board</span>')
+    const viewIndex = markup.indexOf('>View</span>')
+    expect(viewIndex).toBeGreaterThanOrEqual(0)
+    expect(markup.indexOf('>Notebooks</span>')).toBeGreaterThan(viewIndex)
+    expect(markup.indexOf('>Projects</span>')).toBeGreaterThan(markup.indexOf('>Notebooks</span>'))
+    expect(markup.indexOf('>Calendar</span>')).toBeGreaterThan(markup.indexOf('>Projects</span>'))
+    expect(markup.indexOf('>Knowledge</span>')).toBeGreaterThan(markup.indexOf('>Calendar</span>'))
+    expect(markup).toContain(
+      'data-sidebar="group" class="relative flex w-full min-w-0 flex-col p-1 mt-2"'
+    )
+    const firstSeparatorIndex = markup.indexOf('data-sidebar="separator"')
+    const lastSeparatorIndex = markup.lastIndexOf('data-sidebar="separator"')
+    expect(markup.match(/data-sidebar="separator"/g)).toHaveLength(2)
+    expect(markup).toContain(
+      'data-sidebar="separator" class="h-px w-auto bg-sidebar-border mx-1"'
+    )
+    expect(markup.indexOf('data-testid="sidebar-vault-manager"')).toBeLessThan(
+      firstSeparatorIndex
+    )
+    expect(firstSeparatorIndex).toBeLessThan(
+      markup.indexOf('data-testid="sidebar-command-palette"')
+    )
+    expect(lastSeparatorIndex).toBeLessThan(markup.indexOf('data-testid="sidebar-page:settings"'))
     expect(markup).toContain('sidebar-brand-shimmer')
     expect(markup).toContain('!pt-11')
     expect(markup).not.toContain('<details')
@@ -56,6 +83,7 @@ describe('sidebar shortcuts', () => {
           activePage: 'notes',
           onChange: () => undefined,
           onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
           notesCount: 0,
           projectsCount: 0,
           calendarUndoneCount: 0
@@ -77,6 +105,7 @@ describe('sidebar shortcuts', () => {
           activePage: 'notes',
           onChange: () => undefined,
           onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
           notesCount: 0,
           projectsCount: 0,
           calendarUndoneCount: 0,
@@ -107,6 +136,7 @@ describe('sidebar shortcuts', () => {
           activePage: 'notes',
           onChange: () => undefined,
           onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
           notesCount: 3,
           projectsCount: 2,
           calendarUndoneCount: 4,
@@ -119,15 +149,10 @@ describe('sidebar shortcuts', () => {
     expect(markup).not.toContain('data-testid="sidebar-shortcut:knowledge"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:projects"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:calendar"')
-    expect(markup).not.toContain('data-testid="sidebar-shortcut:weeklyPlan"')
     expect(markup).not.toContain('data-testid="sidebar-shortcut:schedules"')
     expect(markup).not.toContain('data-testid="sidebar-page:designAudit"')
-
-    const weeklyPlanIndex = markup.indexOf('data-testid="sidebar-page:weeklyPlan"')
-    expect(weeklyPlanIndex).toBeGreaterThanOrEqual(0)
-    expect(markup.slice(Math.max(0, weeklyPlanIndex - 500), weeklyPlanIndex + 500)).toContain(
-      'disabled=""'
-    )
+    expect(markup).not.toContain('sidebar-page:weeklyPlan')
+    expect(markup).not.toContain('Weekly Plan')
   })
 
   it('renders shortcut content inside a toggle group', () => {

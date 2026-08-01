@@ -185,12 +185,26 @@ export interface AppErrorEvent {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high'
+export type TaskStatus = 'pending' | 'in-progress' | 'blocked' | 'completed'
+
+export const TASK_STATUS_VALUES: TaskStatus[] = [
+  'pending',
+  'in-progress',
+  'blocked',
+  'completed'
+]
+
+export const TASK_STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'in-progress', label: 'In progress' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'completed', label: 'Completed' }
+]
 export const CALENDAR_TASK_TYPE_VALUES = [
   'meeting',
   'assignment',
   'review',
   'personal',
-  'call',
   'deep-work',
   'errand',
   'follow-up',
@@ -204,7 +218,6 @@ export const CALENDAR_TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label:
   { value: 'assignment', label: 'Assignment' },
   { value: 'review', label: 'Review' },
   { value: 'personal', label: 'Personal' },
-  { value: 'call', label: 'Call' },
   { value: 'deep-work', label: 'Deep Work' },
   { value: 'errand', label: 'Errand' },
   { value: 'follow-up', label: 'Follow-up' },
@@ -225,9 +238,13 @@ export interface TaskReminder {
 export interface CalendarTask {
   id: string
   title: string
+  description?: string
+  projectId?: string
   date?: string // Optional - undefined means unscheduled
   endDate?: string // Optional - if set, task spans from `date` through `endDate`
+  // Compatibility field for older vaults. New records use status as the source of truth.
   completed: boolean
+  status?: TaskStatus
   createdAt: string
   priority: TaskPriority
   taskType?: CalendarTaskType
@@ -238,6 +255,10 @@ export interface CalendarTask {
   automationSource?: string
   automationSourceKey?: string
 }
+
+// CalendarTask remains as a compatibility alias while the renderer and persisted data
+// transition to the domain-neutral Task name.
+export type Task = CalendarTask
 
 // Unified calendar item for displaying tasks, milestones, and subtasks together
 export type CalendarItemType = 'task' | 'milestone' | 'subtask'
@@ -282,12 +303,17 @@ export interface ProjectMilestone {
 export interface Project {
   id: string
   name: string
+  // Description replaces summary in the redesigned project model.
+  description?: string
   summary: string
   folderPath?: string
   status: ProjectStatus
   updatedAt: string
   progress: number
   milestones: ProjectMilestone[]
+  // Tasks are resolved from Task.projectId at runtime; this optional field is only
+  // used by project-focused renderer projections.
+  tasks?: CalendarTask[]
   icon: ProjectIconStyle
 }
 
@@ -378,6 +404,9 @@ export interface AppSettings {
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   calendarTasks: CalendarTask[]
+  // Canonical task projection. calendarTasks is retained for compatibility with
+  // existing renderer consumers during the migration.
+  tasks?: CalendarTask[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
   gridBoard: GridBoardState
@@ -395,6 +424,7 @@ export interface AppSettingsUpdate {
   editorVimModeEnabled?: boolean
   editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
+  tasks?: CalendarTask[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
   gridBoard?: GridBoardState
@@ -446,8 +476,6 @@ export interface WeeklyPlanPriority {
   status: WeeklyPlanPriorityStatus
   order: number
   linkedProjectId?: string
-  linkedMilestoneId?: string
-  linkedSubtaskId?: string
   linkedTaskId?: string
   createdAt: string
   updatedAt: string
@@ -491,8 +519,6 @@ export interface CreateWeeklyPlanPriorityInput {
   weekId: string
   title: string
   linkedProjectId?: string
-  linkedMilestoneId?: string
-  linkedSubtaskId?: string
   linkedTaskId?: string
 }
 
@@ -501,8 +527,6 @@ export interface UpdateWeeklyPlanPriorityInput {
   title?: string
   status?: WeeklyPlanPriorityStatus
   linkedProjectId?: string | null
-  linkedMilestoneId?: string | null
-  linkedSubtaskId?: string | null
   linkedTaskId?: string | null
 }
 
@@ -518,18 +542,6 @@ export interface UpsertWeeklyPlanReviewInput {
   misses?: string | null
   blockers?: string | null
   nextWeek?: string | null
-}
-
-export interface RendererWeeklyPlanApi {
-  getState: () => Promise<WeeklyPlanState>
-  createWeek: (input: CreateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
-  updateWeek: (input: UpdateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
-  deleteWeek: (input: DeleteWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
-  addPriority: (input: CreateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
-  updatePriority: (input: UpdateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
-  deletePriority: (priorityId: string) => Promise<WeeklyPlanState>
-  reorderPriorities: (input: ReorderWeeklyPlanPrioritiesInput) => Promise<WeeklyPlanState>
-  upsertReview: (input: UpsertWeeklyPlanReviewInput) => Promise<WeeklyPlanState>
 }
 
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'archived'
@@ -645,63 +657,16 @@ export interface RendererAgentToolsApi {
   project: {
     create: (input: {
       name?: string
-      summary?: string
-      status?: ProjectStatus
+      description?: string
       icon?: ProjectIconStyle
     }) => Promise<Project>
     update: (input: {
       projectId?: string
       projectName?: string
       name?: string
-      summary?: string
-      status?: ProjectStatus
+      description?: string
       icon?: ProjectIconStyle
     }) => Promise<Project>
-  }
-  milestone: {
-    create: (input: {
-      projectId?: string
-      projectName?: string
-      title: string
-      description?: string
-      dueDate?: string
-      collapsed?: boolean
-    }) => Promise<ProjectMilestone>
-    update: (input: {
-      projectId?: string
-      projectName?: string
-      milestoneId?: string
-      milestoneTitle?: string
-      title?: string
-      description?: string
-      dueDate?: string | null
-      collapsed?: boolean
-      status?: ProjectMilestone['status']
-    }) => Promise<ProjectMilestone>
-  }
-  subtask: {
-    create: (input: {
-      projectId?: string
-      projectName?: string
-      milestoneId?: string
-      milestoneTitle?: string
-      title: string
-      description?: string
-      dueDate?: string
-      completed?: boolean
-    }) => Promise<ProjectSubtask>
-    update: (input: {
-      projectId?: string
-      projectName?: string
-      milestoneId?: string
-      milestoneTitle?: string
-      subtaskId?: string
-      subtaskTitle?: string
-      title?: string
-      description?: string
-      dueDate?: string | null
-      completed?: boolean
-    }) => Promise<ProjectSubtask>
   }
   calendarTask: {
     create: (input: {
@@ -729,6 +694,39 @@ export interface RendererAgentToolsApi {
       completed?: boolean
     }) => Promise<CalendarTask>
   }
+  task: {
+    create: (input: {
+      title: string
+      description?: string
+      projectId?: string
+      projectName?: string
+      date?: string
+      endDate?: string
+      time?: string
+      endTime?: string
+      priority?: TaskPriority
+      taskType?: CalendarTaskType
+      reminders?: TaskReminder[]
+      status?: TaskStatus
+      completed?: boolean
+    }) => Promise<CalendarTask>
+    update: (input: {
+      taskId?: string
+      titleMatch?: string
+      title?: string
+      description?: string
+      projectId?: string | null
+      date?: string | null
+      endDate?: string | null
+      time?: string | null
+      endTime?: string | null
+      priority?: TaskPriority
+      taskType?: CalendarTaskType | null
+      reminders?: TaskReminder[]
+      status?: TaskStatus
+      completed?: boolean
+    }) => Promise<CalendarTask>
+  }
   weeklyPlan: {
     createWeek: (input: CreateWeeklyPlanWeekInput) => Promise<WeeklyPlanWeek>
     createPriority: (input: {
@@ -736,8 +734,6 @@ export interface RendererAgentToolsApi {
       weekStartDate?: string
       title: string
       linkedProjectId?: string
-      linkedMilestoneId?: string
-      linkedSubtaskId?: string
       linkedTaskId?: string
     }) => Promise<WeeklyPlanPriority>
     upsertReview: (input: {
@@ -1059,6 +1055,5 @@ export interface RendererVaultApi {
   }
   schedules: import('./scheduleTypes').RendererScheduleApi
   subscriptions: RendererSubscriptionsApi
-  weeklyPlan: RendererWeeklyPlanApi
   agentTools: RendererAgentToolsApi
 }

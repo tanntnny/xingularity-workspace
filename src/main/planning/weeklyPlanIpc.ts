@@ -26,8 +26,6 @@ const priorityCreateSchema = z.object({
   weekId: z.string().min(1).max(200),
   title: z.string().trim().min(1).max(300),
   linkedProjectId: z.string().min(1).max(200).optional(),
-  linkedMilestoneId: z.string().min(1).max(200).optional(),
-  linkedSubtaskId: z.string().min(1).max(200).optional(),
   linkedTaskId: z.string().min(1).max(200).optional()
 })
 
@@ -36,8 +34,6 @@ const priorityUpdateSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   status: z.enum(['planned', 'in_progress', 'done']).optional(),
   linkedProjectId: z.string().min(1).max(200).optional().nullable(),
-  linkedMilestoneId: z.string().min(1).max(200).optional().nullable(),
-  linkedSubtaskId: z.string().min(1).max(200).optional().nullable(),
   linkedTaskId: z.string().min(1).max(200).optional().nullable()
 })
 

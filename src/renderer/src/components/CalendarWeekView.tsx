@@ -7,7 +7,7 @@ import {
   useRef,
   useState
 } from 'react'
-import { CalendarTask, CalendarTaskType, TaskPriority } from '../../../shared/types'
+import { CalendarTask, CalendarTaskType, Project, TaskPriority } from '../../../shared/types'
 import {
   buildWeeklyCalendarEntries,
   layoutWeeklyAllDayItems,
@@ -58,6 +58,7 @@ import { TaskEditDialog } from './CalendarMonthView'
 interface CalendarWeekViewProps {
   selectedDate: string
   tasks: CalendarTask[]
+  projects?: Project[]
   milestoneEvents?: CalendarEventInput[]
   onSelectDate: (date: string) => void
   onOpenMilestone?: (projectId: string, milestoneId: string) => void
@@ -73,6 +74,7 @@ interface CalendarWeekViewProps {
   onRenameTask?: (taskId: string, newTitle: string) => void
   onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
+  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
   onUpdateTaskSchedule?: (
     taskId: string,
     schedule: {
@@ -146,6 +148,7 @@ interface WeeklyTimeScaleMetrics {
 export function CalendarWeekView({
   selectedDate,
   tasks,
+  projects = [],
   milestoneEvents = [],
   onSelectDate,
   onOpenMilestone,
@@ -156,6 +159,7 @@ export function CalendarWeekView({
   onRenameTask,
   onUpdateTaskPriority,
   onUpdateTaskType,
+  onUpdateTaskProject,
   onUpdateTaskSchedule
 }: CalendarWeekViewProps): ReactElement {
   const [currentDateTime, setCurrentDateTime] = useState(() => new Date())
@@ -1138,6 +1142,8 @@ export function CalendarWeekView({
           onRename={safeRenameTask}
           onUpdateTaskPriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
+          onUpdateTaskProject={onUpdateTaskProject ?? (() => undefined)}
+          projects={projects}
           onUpdateTaskSchedule={safeUpdateTaskSchedule}
           onDelete={safeDeleteTask}
         />

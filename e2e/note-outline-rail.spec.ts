@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-async function createFixtureVault(alphaContent: string): Promise<string> {
+async function createFixtureVault(alphaContent: string, betaContent?: string): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-outline-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
@@ -27,6 +27,13 @@ async function createFixtureVault(alphaContent: string): Promise<string> {
     serializeStoredNoteDocument(createStoredNoteDocumentFromText(alphaContent)),
     'utf-8'
   )
+  if (betaContent !== undefined) {
+    await fs.writeFile(
+      path.join(rootPath, 'notes', 'beta.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText(betaContent)),
+      'utf-8'
+    )
+  }
   return rootPath
 }
 
@@ -207,6 +214,28 @@ async function getOutlineRodVisuals(page: Page): Promise<
 }
 
 test.describe('note outline rail', () => {
+  test('persists while switching between notes without leaving the notes page', async () => {
+    const vaultRoot = await createFixtureVault(
+      '# Alpha Title\n\n## Alpha Section\n',
+      '# Beta Title\n\n## Beta Section\n'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await expect(page.getByTestId('note-outline-rail')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('heading', { name: 'Alpha Title' })).toBeVisible()
+
+      await openNote(page, 'beta.md')
+      await expect(page.getByRole('heading', { name: 'Beta Title' })).toBeVisible()
+      await expect(page.getByTestId('note-outline-rail')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('note-outline-rod:0')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('renders a textless rail with heading tooltips and click-to-jump navigation', async () => {
     const filler = Array.from({ length: 18 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
     const vaultRoot = await createFixtureVault(

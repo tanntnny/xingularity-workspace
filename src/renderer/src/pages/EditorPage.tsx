@@ -193,9 +193,9 @@ export function EditorPage({
                 notes={notes}
                 currentNotePath={notePath}
                 onOpenNoteLink={onOpenNoteLink}
-                onOutlineChange={(items) => {
+                onOutlineChange={(items, outlineNotePath) => {
                   setOutlineState({
-                    notePath,
+                    notePath: outlineNotePath ?? notePath,
                     items
                   })
                 }}

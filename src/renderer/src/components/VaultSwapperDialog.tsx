@@ -344,7 +344,7 @@ export function VaultSwapperDialog({
     <Pallete
       open={open}
       aria-label="Manage vaults"
-      className="!top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
+      className="!p-3"
       onOpenChange={(nextOpen) => {
         onOpenChange(nextOpen)
       }}

@@ -6,8 +6,6 @@ import {
   CALENDAR_TASK_TYPE_VALUES,
   CalendarTask,
   Project,
-  ProjectMilestone,
-  ProjectSubtask,
   SearchResult,
   WeeklyPlanPriority,
   WeeklyPlanReview,
@@ -78,8 +76,7 @@ const projectIconSchema = z.object({
 
 const projectCreateSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
-  summary: z.string().max(2000).optional(),
-  status: z.enum(['on-track', 'at-risk', 'blocked', 'completed']).optional(),
+  description: z.string().max(2000).optional(),
   icon: projectIconSchema.optional()
 })
 
@@ -88,8 +85,7 @@ const projectUpdateSchema = z
     projectId: z.string().trim().min(1).max(120).optional(),
     projectName: z.string().trim().min(1).max(200).optional(),
     name: z.string().trim().min(1).max(200).optional(),
-    summary: z.string().max(2000).optional(),
-    status: z.enum(['on-track', 'at-risk', 'blocked', 'completed']).optional(),
+    description: z.string().max(2000).optional(),
     icon: projectIconSchema.optional()
   })
   .refine((value) => value.projectId || value.projectName, {
@@ -98,111 +94,10 @@ const projectUpdateSchema = z
   .refine(
     (value) =>
       value.name !== undefined ||
-      value.summary !== undefined ||
-      value.status !== undefined ||
+      value.description !== undefined ||
       value.icon !== undefined,
     {
       message: 'Provide at least one project field to update'
-    }
-  )
-
-const milestoneCreateSchema = z
-  .object({
-    projectId: z.string().trim().min(1).max(120).optional(),
-    projectName: z.string().trim().min(1).max(200).optional(),
-    title: z.string().trim().min(1).max(200),
-    description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema.optional(),
-    priority: z.enum(['low', 'medium', 'high']).optional(),
-    collapsed: z.boolean().optional()
-  })
-  .refine((value) => value.projectId || value.projectName, {
-    message: 'Provide projectId or projectName'
-  })
-
-const milestoneUpdateSchema = z
-  .object({
-    projectId: z.string().trim().min(1).max(120).optional(),
-    projectName: z.string().trim().min(1).max(200).optional(),
-    milestoneId: z.string().trim().min(1).max(120).optional(),
-    milestoneTitle: z.string().trim().min(1).max(200).optional(),
-    title: z.string().trim().min(1).max(200).optional(),
-    description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema.nullable().optional(),
-    priority: z.enum(['low', 'medium', 'high']).optional(),
-    collapsed: z.boolean().optional(),
-    status: z.enum(['pending', 'in-progress', 'completed', 'blocked']).optional()
-  })
-  .refine((value) => value.projectId || value.projectName, {
-    message: 'Provide projectId or projectName'
-  })
-  .refine((value) => value.milestoneId || value.milestoneTitle, {
-    message: 'Provide milestoneId or milestoneTitle'
-  })
-  .refine(
-    (value) =>
-      value.title !== undefined ||
-      value.description !== undefined ||
-      value.dueDate !== undefined ||
-      value.priority !== undefined ||
-      value.collapsed !== undefined ||
-      value.status !== undefined,
-    {
-      message: 'Provide at least one milestone field to update'
-    }
-  )
-
-const subtaskCreateSchema = z
-  .object({
-    projectId: z.string().trim().min(1).max(120).optional(),
-    projectName: z.string().trim().min(1).max(200).optional(),
-    milestoneId: z.string().trim().min(1).max(120).optional(),
-    milestoneTitle: z.string().trim().min(1).max(200).optional(),
-    title: z.string().trim().min(1).max(200),
-    description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema.optional(),
-    completed: z.boolean().optional(),
-    priority: z.enum(['low', 'medium', 'high']).optional()
-  })
-  .refine((value) => value.projectId || value.projectName, {
-    message: 'Provide projectId or projectName'
-  })
-  .refine((value) => value.milestoneId || value.milestoneTitle, {
-    message: 'Provide milestoneId or milestoneTitle'
-  })
-
-const subtaskUpdateSchema = z
-  .object({
-    projectId: z.string().trim().min(1).max(120).optional(),
-    projectName: z.string().trim().min(1).max(200).optional(),
-    milestoneId: z.string().trim().min(1).max(120).optional(),
-    milestoneTitle: z.string().trim().min(1).max(200).optional(),
-    subtaskId: z.string().trim().min(1).max(120).optional(),
-    subtaskTitle: z.string().trim().min(1).max(200).optional(),
-    title: z.string().trim().min(1).max(200).optional(),
-    description: z.string().max(2000).optional(),
-    dueDate: isoDateSchema.nullable().optional(),
-    completed: z.boolean().optional(),
-    priority: z.enum(['low', 'medium', 'high']).optional()
-  })
-  .refine((value) => value.projectId || value.projectName, {
-    message: 'Provide projectId or projectName'
-  })
-  .refine((value) => value.milestoneId || value.milestoneTitle, {
-    message: 'Provide milestoneId or milestoneTitle'
-  })
-  .refine((value) => value.subtaskId || value.subtaskTitle, {
-    message: 'Provide subtaskId or subtaskTitle'
-  })
-  .refine(
-    (value) =>
-      value.title !== undefined ||
-      value.description !== undefined ||
-      value.dueDate !== undefined ||
-      value.completed !== undefined ||
-      value.priority !== undefined,
-    {
-      message: 'Provide at least one subtask field to update'
     }
   )
 
@@ -215,6 +110,9 @@ const reminderSchema = z.object({
 
 const calendarTaskCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  projectId: z.string().trim().min(1).max(120).optional(),
+  projectName: z.string().trim().min(1).max(200).optional(),
   date: isoDateSchema.optional(),
   endDate: isoDateSchema.optional(),
   time: timeSchema.optional(),
@@ -222,6 +120,7 @@ const calendarTaskCreateSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(reminderSchema).max(10).optional(),
+  status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
   completed: z.boolean().optional()
 })
 
@@ -230,6 +129,8 @@ const calendarTaskUpdateSchema = z
     taskId: z.string().trim().min(1).max(120).optional(),
     titleMatch: z.string().trim().min(1).max(200).optional(),
     title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().max(2000).optional(),
+    projectId: z.string().trim().min(1).max(120).optional().nullable(),
     date: isoDateSchema.nullable().optional(),
     endDate: isoDateSchema.nullable().optional(),
     time: timeSchema.nullable().optional(),
@@ -237,6 +138,7 @@ const calendarTaskUpdateSchema = z
     priority: z.enum(['low', 'medium', 'high']).optional(),
     taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
+    status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
     completed: z.boolean().optional()
   })
   .refine((value) => value.taskId || value.titleMatch, {
@@ -245,6 +147,8 @@ const calendarTaskUpdateSchema = z
   .refine(
     (value) =>
       value.title !== undefined ||
+      value.description !== undefined ||
+      value.projectId !== undefined ||
       value.date !== undefined ||
       value.endDate !== undefined ||
       value.time !== undefined ||
@@ -252,6 +156,7 @@ const calendarTaskUpdateSchema = z
       value.priority !== undefined ||
       value.taskType !== undefined ||
       value.reminders !== undefined ||
+      value.status !== undefined ||
       value.completed !== undefined,
     {
       message: 'Provide at least one calendar task field to update'
@@ -270,8 +175,6 @@ const weeklyPlanCreatePrioritySchema = z
     weekStartDate: isoDateSchema.optional(),
     title: z.string().trim().min(1).max(300),
     linkedProjectId: z.string().trim().min(1).max(200).optional(),
-    linkedMilestoneId: z.string().trim().min(1).max(200).optional(),
-    linkedSubtaskId: z.string().trim().min(1).max(200).optional(),
     linkedTaskId: z.string().trim().min(1).max(200).optional()
   })
   .refine((value) => value.weekId || value.weekStartDate, {
@@ -300,12 +203,10 @@ export type AgentToolName =
   | 'note.append'
   | 'project.create'
   | 'project.update'
-  | 'milestone.create'
-  | 'milestone.update'
-  | 'subtask.create'
-  | 'subtask.update'
   | 'calendarTask.create'
   | 'calendarTask.update'
+  | 'task.create'
+  | 'task.update'
   | 'weeklyPlan.createWeek'
   | 'weeklyPlan.createPriority'
   | 'weeklyPlan.upsertReview'
@@ -332,17 +233,13 @@ export class AgentToolsService {
         return this.projectCreate(projectCreateSchema.parse(input))
       case 'project.update':
         return this.projectUpdate(projectUpdateSchema.parse(input))
-      case 'milestone.create':
-        return this.milestoneCreate(milestoneCreateSchema.parse(input))
-      case 'milestone.update':
-        return this.milestoneUpdate(milestoneUpdateSchema.parse(input))
-      case 'subtask.create':
-        return this.subtaskCreate(subtaskCreateSchema.parse(input))
-      case 'subtask.update':
-        return this.subtaskUpdate(subtaskUpdateSchema.parse(input))
       case 'calendarTask.create':
         return this.calendarTaskCreate(calendarTaskCreateSchema.parse(input))
       case 'calendarTask.update':
+        return this.calendarTaskUpdate(calendarTaskUpdateSchema.parse(input))
+      case 'task.create':
+        return this.calendarTaskCreate(calendarTaskCreateSchema.parse(input))
+      case 'task.update':
         return this.calendarTaskUpdate(calendarTaskUpdateSchema.parse(input))
       case 'weeklyPlan.createWeek':
         return this.weeklyPlanCreateWeek(weeklyPlanCreateWeekSchema.parse(input))
@@ -406,16 +303,17 @@ export class AgentToolsService {
     return this.runtime.mutateSettings(async (settings) => {
       const name = buildProjectName(settings.projects, input.name)
       const nowIso = new Date().toISOString()
-      const project: Project = withComputedProjectState({
+      const project: Project = {
         id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name,
-        summary: input.summary?.trim() || 'Add project details here.',
-        status: input.status ?? 'on-track',
+        description: input.description?.trim() || '',
         icon: normalizeProjectIcon(input.icon, name),
         updatedAt: nowIso,
+        summary: input.description?.trim() || '',
+        status: 'on-track',
         progress: 0,
         milestones: []
-      })
+      }
 
       return {
         next: {
@@ -430,14 +328,16 @@ export class AgentToolsService {
   private async projectUpdate(input: z.infer<typeof projectUpdateSchema>): Promise<Project> {
     return this.runtime.mutateSettings(async (settings) => {
       const project = resolveProject(settings, input.projectId, input.projectName)
-      const updated: Project = withComputedProjectState({
+      const updated: Project = {
         ...project,
         name: input.name?.trim() || project.name,
-        summary: input.summary !== undefined ? input.summary.trim() : project.summary,
-        status: input.status ?? project.status,
+        description:
+          input.description !== undefined ? input.description.trim() : project.description,
+        summary:
+          input.description !== undefined ? input.description.trim() : project.summary,
         icon: input.icon ? normalizeProjectIcon(input.icon, project.id) : project.icon,
         updatedAt: new Date().toISOString()
-      })
+      }
       const nextProjects = settings.projects.map((item) =>
         item.id === project.id ? updated : item
       )
@@ -452,194 +352,24 @@ export class AgentToolsService {
     })
   }
 
-  private async milestoneCreate(
-    input: z.infer<typeof milestoneCreateSchema>
-  ): Promise<ProjectMilestone> {
-    return this.runtime.mutateSettings(async (settings) => {
-      const project = resolveProject(settings, input.projectId, input.projectName)
-      const milestone: ProjectMilestone = {
-        id: `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: input.title.trim(),
-        description: input.description?.trim() || '',
-        collapsed: input.collapsed ?? false,
-        dueDate: input.dueDate,
-        priority: input.priority,
-        status: 'pending',
-        subtasks: []
-      }
-
-      const updatedProject = withComputedProjectState({
-        ...project,
-        milestones: [...project.milestones, milestone],
-        updatedAt: new Date().toISOString()
-      })
-
-      return {
-        next: {
-          projects: settings.projects.map((item) =>
-            item.id === project.id ? updatedProject : item
-          )
-        },
-        result: updatedProject.milestones.find((item) => item.id === milestone.id) ?? milestone
-      }
-    })
-  }
-
-  private async milestoneUpdate(
-    input: z.infer<typeof milestoneUpdateSchema>
-  ): Promise<ProjectMilestone> {
-    return this.runtime.mutateSettings(async (settings) => {
-      const project = resolveProject(settings, input.projectId, input.projectName)
-      const milestone = resolveMilestone(project, input.milestoneId, input.milestoneTitle)
-      const nowIso = new Date().toISOString()
-
-      const nextMilestones = project.milestones.map((item) => {
-        if (item.id !== milestone.id) {
-          return item
-        }
-        return {
-          ...item,
-          title: input.title?.trim() || item.title,
-          description:
-            input.description !== undefined ? input.description.trim() : item.description,
-          dueDate:
-            input.dueDate === undefined
-              ? item.dueDate
-              : input.dueDate === null
-                ? undefined
-                : input.dueDate,
-          priority: input.priority ?? item.priority,
-          collapsed: input.collapsed ?? item.collapsed,
-          status: input.status ?? item.status
-        }
-      })
-
-      const updatedProject = withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: nowIso
-      })
-      const updatedMilestone = resolveMilestone(updatedProject, milestone.id)
-
-      return {
-        next: {
-          projects: settings.projects.map((item) =>
-            item.id === project.id ? updatedProject : item
-          )
-        },
-        result: updatedMilestone
-      }
-    })
-  }
-
-  private async subtaskCreate(input: z.infer<typeof subtaskCreateSchema>): Promise<ProjectSubtask> {
-    return this.runtime.mutateSettings(async (settings) => {
-      const project = resolveProject(settings, input.projectId, input.projectName)
-      const milestone = resolveMilestone(project, input.milestoneId, input.milestoneTitle)
-      const nowIso = new Date().toISOString()
-      const subtask: ProjectSubtask = {
-        id: `subtask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: input.title.trim(),
-        description: input.description?.trim() || '',
-        completed: input.completed ?? false,
-        priority: input.priority,
-        createdAt: nowIso,
-        dueDate: input.dueDate
-      }
-
-      const nextMilestones = project.milestones.map((item) =>
-        item.id === milestone.id ? { ...item, subtasks: [...item.subtasks, subtask] } : item
-      )
-
-      const updatedProject = withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: nowIso
-      })
-      const updatedMilestone = resolveMilestone(updatedProject, milestone.id)
-      const updatedSubtask = resolveSubtask(updatedMilestone, subtask.id)
-
-      return {
-        next: {
-          projects: settings.projects.map((item) =>
-            item.id === project.id ? updatedProject : item
-          )
-        },
-        result: updatedSubtask
-      }
-    })
-  }
-
-  private async subtaskUpdate(input: z.infer<typeof subtaskUpdateSchema>): Promise<ProjectSubtask> {
-    return this.runtime.mutateSettings(async (settings) => {
-      const project = resolveProject(settings, input.projectId, input.projectName)
-      const milestone = resolveMilestone(project, input.milestoneId, input.milestoneTitle)
-      const subtask = resolveSubtask(milestone, input.subtaskId, input.subtaskTitle)
-      const nowIso = new Date().toISOString()
-
-      const nextMilestones = project.milestones.map((milestoneItem) => {
-        if (milestoneItem.id !== milestone.id) {
-          return milestoneItem
-        }
-
-        return {
-          ...milestoneItem,
-          subtasks: milestoneItem.subtasks.map((subtaskItem) => {
-            if (subtaskItem.id !== subtask.id) {
-              return subtaskItem
-            }
-
-            return {
-              ...subtaskItem,
-              title: input.title?.trim() || subtaskItem.title,
-              description:
-                input.description !== undefined
-                  ? input.description.trim()
-                  : subtaskItem.description,
-              completed: input.completed ?? subtaskItem.completed,
-              priority: input.priority ?? subtaskItem.priority,
-              dueDate:
-                input.dueDate === undefined
-                  ? subtaskItem.dueDate
-                  : input.dueDate === null
-                    ? undefined
-                    : input.dueDate
-            }
-          })
-        }
-      })
-
-      const updatedProject = withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: nowIso
-      })
-      const updatedMilestone = resolveMilestone(updatedProject, milestone.id)
-      const updatedSubtask = resolveSubtask(updatedMilestone, subtask.id)
-
-      return {
-        next: {
-          projects: settings.projects.map((item) =>
-            item.id === project.id ? updatedProject : item
-          )
-        },
-        result: updatedSubtask
-      }
-    })
-  }
-
   private async calendarTaskCreate(
     input: z.infer<typeof calendarTaskCreateSchema>
   ): Promise<CalendarTask> {
     return this.runtime.mutateSettings(async (settings) => {
+      const projectId = input.projectId ??
+        (input.projectName ? resolveProject(settings, undefined, input.projectName).id : undefined)
+      const status = input.status ?? (input.completed ? 'completed' : 'pending')
       const task: CalendarTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: input.title.trim(),
+        description: input.description?.trim(),
+        projectId,
         date: input.date,
         endDate: normalizeCalendarEndDate(input.date, input.endDate),
         time: input.time,
         endTime: input.endTime,
-        completed: input.completed ?? false,
+        completed: status === 'completed',
+        status,
         createdAt: new Date().toISOString(),
         priority: input.priority ?? 'low',
         taskType: input.taskType ?? 'assignment',
@@ -648,7 +378,8 @@ export class AgentToolsService {
 
       return {
         next: {
-          calendarTasks: [...settings.calendarTasks, task]
+          calendarTasks: [...settings.calendarTasks, task],
+          tasks: [...settings.calendarTasks, task]
         },
         result: task
       }
@@ -671,6 +402,10 @@ export class AgentToolsService {
       const updated: CalendarTask = {
         ...task,
         title: input.title?.trim() || task.title,
+        description:
+          input.description === undefined ? task.description : input.description.trim(),
+        projectId:
+          input.projectId === undefined ? task.projectId : input.projectId ?? undefined,
         date: nextDate,
         endDate: normalizeCalendarEndDate(nextDate, nextEndDate),
         time: input.time === undefined ? task.time : (input.time ?? undefined),
@@ -678,14 +413,23 @@ export class AgentToolsService {
         priority: input.priority ?? task.priority,
         taskType: input.taskType === undefined ? task.taskType : (input.taskType ?? undefined),
         reminders: input.reminders ?? task.reminders,
-        completed: input.completed ?? task.completed
+        completed:
+          input.status !== undefined
+            ? input.status === 'completed'
+            : input.completed ?? task.completed,
+        status:
+          input.status ??
+          (input.completed !== undefined
+            ? input.completed
+              ? 'completed'
+              : 'pending'
+            : task.status ?? (task.completed ? 'completed' : 'pending'))
       }
 
       return {
         next: {
-          calendarTasks: settings.calendarTasks.map((item) =>
-            item.id === task.id ? updated : item
-          )
+          calendarTasks: settings.calendarTasks.map((item) => item.id === task.id ? updated : item),
+          tasks: settings.calendarTasks.map((item) => item.id === task.id ? updated : item)
         },
         result: updated
       }
@@ -711,8 +455,6 @@ export class AgentToolsService {
       weekId: week.id,
       title: input.title,
       linkedProjectId: input.linkedProjectId,
-      linkedMilestoneId: input.linkedMilestoneId,
-      linkedSubtaskId: input.linkedSubtaskId,
       linkedTaskId: input.linkedTaskId
     })
     const match = findNewestByWeek(state.priorities, week.id)
@@ -803,65 +545,14 @@ function resolveProject(settings: AppSettings, projectId?: string, projectName?:
   throw new Error(`Project not found: ${projectName}`)
 }
 
-function resolveMilestone(
-  project: Project,
-  milestoneId?: string,
-  milestoneTitle?: string
-): ProjectMilestone {
-  if (milestoneId) {
-    const match = project.milestones.find((item) => item.id === milestoneId)
-    if (!match) {
-      throw new Error(`Milestone not found: ${milestoneId}`)
-    }
-    return match
-  }
-
-  const normalizedTitle = milestoneTitle!.trim().toLowerCase()
-  const matches = project.milestones.filter(
-    (item) => item.title.trim().toLowerCase() === normalizedTitle
-  )
-  if (matches.length === 1) {
-    return matches[0]
-  }
-  if (matches.length > 1) {
-    throw new Error(`Multiple milestones matched title: ${milestoneTitle}`)
-  }
-  throw new Error(`Milestone not found: ${milestoneTitle}`)
-}
-
-function resolveSubtask(
-  milestone: ProjectMilestone,
-  subtaskId?: string,
-  subtaskTitle?: string
-): ProjectSubtask {
-  if (subtaskId) {
-    const match = milestone.subtasks.find((item) => item.id === subtaskId)
-    if (!match) {
-      throw new Error(`Subtask not found: ${subtaskId}`)
-    }
-    return match
-  }
-
-  const normalizedTitle = subtaskTitle!.trim().toLowerCase()
-  const matches = milestone.subtasks.filter(
-    (item) => item.title.trim().toLowerCase() === normalizedTitle
-  )
-  if (matches.length === 1) {
-    return matches[0]
-  }
-  if (matches.length > 1) {
-    throw new Error(`Multiple subtasks matched title: ${subtaskTitle}`)
-  }
-  throw new Error(`Subtask not found: ${subtaskTitle}`)
-}
-
 function resolveCalendarTask(
   settings: AppSettings,
   taskId?: string,
   titleMatch?: string
 ): CalendarTask {
+  const tasks = settings.tasks ?? settings.calendarTasks
   if (taskId) {
-    const match = settings.calendarTasks.find((item) => item.id === taskId)
+    const match = tasks.find((item) => item.id === taskId)
     if (!match) {
       throw new Error(`Calendar task not found: ${taskId}`)
     }
@@ -869,7 +560,7 @@ function resolveCalendarTask(
   }
 
   const normalizedTitle = titleMatch!.trim().toLowerCase()
-  const matches = settings.calendarTasks.filter(
+  const matches = tasks.filter(
     (item) => item.title.trim().toLowerCase() === normalizedTitle
   )
   if (matches.length === 1) {
@@ -879,80 +570,6 @@ function resolveCalendarTask(
     throw new Error(`Multiple calendar tasks matched title: ${titleMatch}`)
   }
   throw new Error(`Calendar task not found: ${titleMatch}`)
-}
-
-function deriveMilestoneStatus(milestone: ProjectMilestone): ProjectMilestone['status'] {
-  const subtasks = milestone.subtasks
-  if (subtasks.length === 0) {
-    if (milestone.status === 'completed') {
-      return 'completed'
-    }
-
-    return milestone.status === 'blocked' ? 'blocked' : 'pending'
-  }
-
-  const completedCount = subtasks.filter((subtask) => subtask.completed).length
-  if (completedCount === subtasks.length) {
-    return 'completed'
-  }
-  if (completedCount > 0) {
-    return 'in-progress'
-  }
-  return milestone.status === 'blocked' ? 'blocked' : 'pending'
-}
-
-function computeProjectProgress(
-  milestones: ProjectMilestone[],
-  status?: Project['status']
-): number {
-  if (status === 'completed') {
-    return 100
-  }
-
-  if (milestones.length === 0) {
-    return 0
-  }
-
-  const total = milestones.reduce((sum, milestone) => {
-    if (milestone.status === 'completed') {
-      return sum + 1
-    }
-    if (milestone.status === 'in-progress') {
-      return sum + 0.5
-    }
-    return sum
-  }, 0)
-
-  return Math.round((total / milestones.length) * 100)
-}
-
-function withComputedProjectState(project: Project): Project {
-  const milestones = project.milestones.map((milestone) => {
-    const normalizedSubtasks = (milestone.subtasks ?? []).map((subtask) => ({
-      ...subtask,
-      description: subtask.description ?? ''
-    }))
-
-    const normalizedMilestone: ProjectMilestone = {
-      ...milestone,
-      description: milestone.description ?? '',
-      collapsed: milestone.collapsed ?? false,
-      subtasks: normalizedSubtasks,
-      status: deriveMilestoneStatus({ ...milestone, subtasks: normalizedSubtasks })
-    }
-
-    if (milestone.status === 'blocked' && normalizedMilestone.status !== 'completed') {
-      normalizedMilestone.status = 'blocked'
-    }
-
-    return normalizedMilestone
-  })
-
-  return {
-    ...project,
-    milestones,
-    progress: computeProjectProgress(milestones, project.status)
-  }
 }
 
 function normalizeCalendarEndDate(date?: string, endDate?: string): string | undefined {

@@ -20,5 +20,5 @@
 ## Data model
 
 - Weeks have `startDate`, `endDate`, optional `focus`, and timestamps.
-- Priorities stay scoped to a week, carry a sortable `order`, a status (`planned | in_progress | done`), and optional links into projects/milestones/subtasks/tasks.
+- Priorities stay scoped to a week, carry a sortable `order`, a status (`planned | in_progress | done`), and optional links into projects or unified tasks.
 - Reviews capture the lightweight weekly reflection (wins, misses, blockers, next week).

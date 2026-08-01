@@ -5,9 +5,10 @@ import {
   ChevronDown,
   CreditCard,
   FolderKanban,
-  ListTodo,
+  HardDrive,
   NotebookTabs,
   Search,
+  ChevronRight,
   Settings2,
   type FilledIcon
 } from './ui/icons'
@@ -39,7 +40,9 @@ interface AppSidebarProps {
   activePage: AppPage
   onChange: (page: AppPage) => void
   onOpenSearchPalette: () => void
+  onOpenVaultManager: () => void
   onSidebarInteract?: () => void
+  vaultName?: string | null
   notesCount: number
   projectsCount: number
   calendarUndoneCount: number
@@ -58,25 +61,20 @@ type SidebarPageItem = {
 }
 
 type SidebarSection = {
-  id: 'board' | 'home' | 'finance'
+  id: 'view' | 'finance'
   label: string
   items: readonly SidebarPageItem[]
 }
 
 const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   {
-    id: 'board',
-    label: 'Board',
-    items: [{ id: 'knowledge', label: 'Knowledge', icon: BookOpen }]
-  },
-  {
-    id: 'home',
-    label: 'Home',
+    id: 'view',
+    label: 'View',
     items: [
       { id: 'notes', label: 'Notebooks', icon: NotebookTabs },
       { id: 'projects', label: 'Projects', icon: FolderKanban },
       { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-      { id: 'weeklyPlan', label: 'Weekly Plan', icon: ListTodo }
+      { id: 'knowledge', label: 'Knowledge', icon: BookOpen }
     ]
   },
   {
@@ -91,8 +89,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 ]
 
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
-  board: true,
-  home: true,
+  view: true,
   finance: true
 }
 
@@ -100,7 +97,9 @@ export function AppSidebar({
   activePage,
   onChange,
   onOpenSearchPalette,
+  onOpenVaultManager,
   onSidebarInteract,
+  vaultName = null,
   notesCount,
   projectsCount,
   calendarUndoneCount,
@@ -113,7 +112,7 @@ export function AppSidebar({
   const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
-  const isPageDisabled = (page: SidebarPageItem): boolean => isLocked || page.id === 'weeklyPlan'
+  const isPageDisabled = (): boolean => isLocked
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
 
   const renderBadge = (pageId: AppPage): ReactElement | null => {
@@ -131,7 +130,7 @@ export function AppSidebar({
 
   const renderItem = (page: SidebarPageItem): ReactElement => {
     const PageIcon = page.icon
-    const disabled = isPageDisabled(page)
+    const disabled = isPageDisabled()
 
     return (
       <SidebarMenuItem key={page.id}>
@@ -185,13 +184,37 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        <SidebarGroup className="mt-2">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  variant="outline"
+                  onClick={onOpenVaultManager}
+                  tooltip="Manage vaults"
+                  aria-label="Open vault manager"
+                  data-testid="sidebar-vault-manager"
+                >
+                  <HardDrive aria-hidden="true" />
+                  <span className="min-w-0 truncate">{vaultName ?? 'Select a vault'}</span>
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="ml-auto group-data-[collapsible=icon]:hidden"
+                  />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator className="mx-1" />
+
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   variant="outline"
-                  className="rounded-full"
                   onClick={onOpenSearchPalette}
                   disabled={isLocked}
                   tooltip="Command palette"

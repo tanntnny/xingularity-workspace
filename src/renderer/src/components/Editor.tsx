@@ -84,7 +84,7 @@ interface EditorProps {
   notes: NoteListItem[]
   currentNotePath?: string
   onOpenNoteLink?: (target: string) => void
-  onOutlineChange?: (items: NoteOutlineItem[]) => void
+  onOutlineChange?: (items: NoteOutlineItem[], notePath: string | undefined) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
   onVimModeChange?: (mode: NoteVimMode) => void
@@ -636,7 +636,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
     contentRef.current = nextContent
     onSnapshotChangeRef.current?.({ content: nextContent })
-    onOutlineChangeRef.current?.(extractNoteOutlineFromMarkdown(nextContent))
+    onOutlineChangeRef.current?.(
+      extractNoteOutlineFromMarkdown(nextContent),
+      currentNotePathRef.current
+    )
     if (dirty) {
       onDirtyRef.current()
     }
@@ -813,7 +816,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         contentRef.current = nextContent
         if (!sameContent) {
           onSnapshotChangeRef.current?.({ content: nextContent })
-          onOutlineChangeRef.current?.(extractNoteOutlineFromMarkdown(nextContent))
+          onOutlineChangeRef.current?.(
+            extractNoteOutlineFromMarkdown(nextContent),
+            currentNotePathRef.current
+          )
         }
         return
       }
@@ -1195,7 +1201,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     editorReadyRef.current = false
     contentRef.current = initialValue
     onSnapshotChangeRef.current?.({ content: initialValue })
-    onOutlineChangeRef.current?.(extractNoteOutlineFromMarkdown(initialValue))
+    onOutlineChangeRef.current?.(
+      extractNoteOutlineFromMarkdown(initialValue),
+      currentNotePathRef.current
+    )
 
     void editor
       .create()

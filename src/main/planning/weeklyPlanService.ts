@@ -142,8 +142,6 @@ export class WeeklyPlanService {
           status: 'planned',
           order: weekPriorities.length ? weekPriorities[weekPriorities.length - 1]!.order + 1 : 1,
           linkedProjectId: input.linkedProjectId?.trim() || undefined,
-          linkedMilestoneId: input.linkedMilestoneId?.trim() || undefined,
-          linkedSubtaskId: input.linkedSubtaskId?.trim() || undefined,
           linkedTaskId: input.linkedTaskId?.trim() || undefined,
           createdAt: nowIso,
           updatedAt: nowIso
@@ -169,8 +167,6 @@ export class WeeklyPlanService {
           title: input.title?.trim() ? input.title.trim() : current.title,
           status: nextStatus,
           linkedProjectId: normalizeLink(input.linkedProjectId, current.linkedProjectId),
-          linkedMilestoneId: normalizeLink(input.linkedMilestoneId, current.linkedMilestoneId),
-          linkedSubtaskId: normalizeLink(input.linkedSubtaskId, current.linkedSubtaskId),
           linkedTaskId: normalizeLink(input.linkedTaskId, current.linkedTaskId),
           updatedAt: nowIso
         }

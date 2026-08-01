@@ -15,6 +15,7 @@ import {
   CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CalendarTaskType,
+  Project,
   TaskPriority,
   TaskReminder
 } from '../../../shared/types'
@@ -29,6 +30,7 @@ import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { Input } from './ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
 import {
   buildCalendarEvents,
   type CalendarEventInput,
@@ -39,17 +41,20 @@ import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import {
   Dialog,
   DialogActionButton,
+  DialogBody,
   DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogShell,
+  DialogShellFooter,
   DialogTitle
 } from './ui/dialog'
 
 interface CalendarMonthViewProps {
   selectedDate: string
   tasks: CalendarTask[]
+  projects?: Project[]
   onSelectDate: (date: string) => void
   onCreateTask?: (date: string) => Promise<CalendarTask>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
@@ -61,6 +66,7 @@ interface CalendarMonthViewProps {
   onRenameTask?: (taskId: string, newTitle: string) => void
   onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
+  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
   onUpdateTaskSchedule?: (
     taskId: string,
@@ -79,6 +85,7 @@ interface CalendarMonthViewProps {
 export function CalendarMonthView({
   selectedDate,
   tasks,
+  projects = [],
   onSelectDate,
   onCreateTask,
   onRescheduleTask,
@@ -90,6 +97,7 @@ export function CalendarMonthView({
   onRenameTask,
   onUpdateTaskPriority,
   onUpdateTaskType,
+  onUpdateTaskProject,
   onUpdateTaskTime,
   onUpdateTaskSchedule,
   onUpdateTaskReminders,
@@ -723,6 +731,8 @@ export function CalendarMonthView({
           onRename={safeRenameTask}
           onUpdateTaskPriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
+          onUpdateTaskProject={onUpdateTaskProject ?? (() => undefined)}
+          projects={projects}
           onUpdateTaskSchedule={safeUpdateTaskSchedule}
           onDelete={safeDeleteTask}
         />
@@ -733,10 +743,12 @@ export function CalendarMonthView({
 
 interface TaskEditDialogProps {
   task: CalendarTask
+  projects?: Project[]
   onClose: () => void
   onRename: (taskId: string, title: string) => void
   onUpdateTaskPriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
+  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
   onUpdateTaskSchedule: (
     taskId: string,
     schedule: {
@@ -751,16 +763,19 @@ interface TaskEditDialogProps {
 
 export function TaskEditDialog({
   task,
+  projects = [],
   onClose,
   onRename,
   onUpdateTaskPriority,
   onUpdateTaskType,
+  onUpdateTaskProject,
   onUpdateTaskSchedule,
   onDelete
 }: TaskEditDialogProps): ReactElement {
   const [title, setTitle] = useState(task.title)
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
   const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
+  const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [date, setDate] = useState(task.date ?? '')
   const [endDate, setEndDate] = useState(task.endDate ?? '')
   const [time, setTime] = useState(task.time ?? '')
@@ -781,6 +796,10 @@ export function TaskEditDialog({
     }
     if ((task.taskType ?? 'assignment') !== taskType) {
       onUpdateTaskType(task.id, taskType)
+    }
+    const normalizedProjectId = projectId.trim() || undefined
+    if ((task.projectId ?? undefined) !== normalizedProjectId) {
+      onUpdateTaskProject?.(task.id, normalizedProjectId)
     }
     const normalizedDate = date.trim()
     const normalizedEndDate = endDate.trim()
@@ -826,124 +845,151 @@ export function TaskEditDialog({
       }}
     >
       <DialogContent className="max-w-lg" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Edit task</DialogTitle>
-          <DialogDescription>Update task details without leaving the calendar.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Title
-            </label>
-            <Input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className=" mt-1"
-              placeholder="Task title"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Priority
-            </label>
-            <Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}>
-              <SelectTrigger className=" mt-1 w-full">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Type
-            </label>
-            <Select
-              value={taskType}
-              onValueChange={(value) => setTaskType(value as CalendarTaskType)}
-            >
-              <SelectTrigger className=" mt-1 w-full">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Start date
-              </label>
-              <Input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                className=" mt-1"
-              />
+        <DialogShell>
+          <DialogHeader>
+            <DialogTitle>Edit task</DialogTitle>
+            <DialogDescription>Update task details without leaving the calendar.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Project
+                </label>
+                <Select
+                  value={projectId || '__none__'}
+                  onValueChange={(value) => setProjectId(value === '__none__' ? '' : value)}
+                >
+                  <SelectTrigger className=" mt-1 w-full">
+                    <SelectValue placeholder="No project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Title
+                </label>
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className=" mt-1"
+                  placeholder="Task title"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Priority
+                </label>
+                <Select
+                  value={priority}
+                  onValueChange={(value) => setPriority(value as TaskPriority)}
+                >
+                  <SelectTrigger className=" mt-1 w-full">
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Type
+                </label>
+                <Select
+                  value={taskType}
+                  onValueChange={(value) => setTaskType(value as CalendarTaskType)}
+                >
+                  <SelectTrigger className=" mt-1 w-full">
+                    <SelectValue asChild>
+                      <CalendarTaskTypeBadge taskType={taskType} />
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <CalendarTaskTypeBadge taskType={option.value} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Start date
+                  </label>
+                  <Input
+                    type="date"
+                    value={date}
+                    onChange={(event) => setDate(event.target.value)}
+                    className=" mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Start time
+                  </label>
+                  <Input
+                    type="time"
+                    value={time}
+                    onChange={(event) => setTime(event.target.value)}
+                    className=" mt-1"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    End date
+                  </label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    className=" mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    End time
+                  </label>
+                  <Input
+                    type="time"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                    className=" mt-1"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Start time
-              </label>
-              <Input
-                type="time"
-                value={time}
-                onChange={(event) => setTime(event.target.value)}
-                className=" mt-1"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                End date
-              </label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className=" mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                End time
-              </label>
-              <Input
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-                className=" mt-1"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-          <div className="flex items-center gap-2">
-            <DialogCloseAction label="Close task editor" />
+          </DialogBody>
+          <DialogShellFooter closeAction={<DialogCloseAction label="Close task editor" />}>
             <DialogActionButton
               onClick={handleDelete}
               title="Delete task"
               aria-label="Delete task"
               icon={<Trash2 />}
             />
-          </div>
-          <DialogActionButton
-            onClick={handleClose}
-            title="Done"
-            aria-label="Done"
-            icon={<Check />}
-            tone="primary"
-          />
-        </DialogFooter>
+            <DialogActionButton
+              onClick={handleClose}
+              title="Done"
+              aria-label="Done"
+              icon={<Check />}
+              tone="primary"
+            />
+          </DialogShellFooter>
+        </DialogShell>
       </DialogContent>
     </Dialog>
   )

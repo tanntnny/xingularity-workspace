@@ -33,7 +33,7 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean
   }
->(({ className, children, showCloseButton = true, ...props }, ref) => (
+>(({ className, children, showCloseButton = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -64,6 +64,27 @@ const DialogHeader = ({
 )
 DialogHeader.displayName = 'DialogHeader'
 
+const DialogShell = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>): React.ReactElement => (
+  <div className={cn('flex min-h-0 flex-col gap-4', className)} {...props} />
+)
+DialogShell.displayName = 'DialogShell'
+
+const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, style, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-dialog-body
+      className={cn('min-h-0', className)}
+      style={{ '--radius-control': 'var(--radius-button)', ...style } as React.CSSProperties}
+      {...props}
+    />
+  )
+)
+DialogBody.displayName = 'DialogBody'
+
 const DialogFooter = ({
   className,
   ...props
@@ -74,6 +95,30 @@ const DialogFooter = ({
   />
 )
 DialogFooter.displayName = 'DialogFooter'
+
+interface DialogShellFooterProps extends React.HTMLAttributes<HTMLDivElement> {
+  closeAction: React.ReactNode
+}
+
+const DialogShellFooter = ({
+  className,
+  closeAction,
+  children,
+  ...props
+}: DialogShellFooterProps): React.ReactElement => (
+  <div
+    data-dialog-footer
+    className={cn(
+      'flex items-center justify-between gap-3 [&_button]:rounded-[var(--radius-button-pill)]',
+      className
+    )}
+    {...props}
+  >
+    <div className="shrink-0">{closeAction}</div>
+    <div className="ml-auto flex items-center gap-2">{children}</div>
+  </div>
+)
+DialogShellFooter.displayName = 'DialogShellFooter'
 
 interface DialogActionButtonProps extends Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -150,8 +195,11 @@ export {
   DialogTrigger,
   DialogClose,
   DialogContent,
+  DialogShell,
   DialogHeader,
+  DialogBody,
   DialogFooter,
+  DialogShellFooter,
   DialogActionButton,
   DialogCloseAction,
   DialogTitle,

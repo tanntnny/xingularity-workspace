@@ -33,9 +33,11 @@ describe('ProjectStore', () => {
     const store = new ProjectStore(root)
 
     await store.writeAll([makeProject('project-1', 'Alpha'), makeProject('project-2', 'Beta')])
-    await expect(
-      fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
-    ).resolves.toContain('"name": "Alpha"')
+    const serializedProject = JSON.parse(
+      await fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
+    ) as Record<string, unknown>
+    expect(serializedProject).toMatchObject({ name: 'Alpha', description: '' })
+    expect(serializedProject).not.toHaveProperty('milestones')
 
     await store.writeAll([makeProject('project-2', 'Beta')])
 
@@ -43,7 +45,14 @@ describe('ProjectStore', () => {
     await expect(fs.access(path.join(root, 'projects', 'project-2.json'))).resolves.toBeUndefined()
     await expect(store.read()).resolves.toMatchObject({
       canonicalFiles: true,
-      projects: [makeProject('project-2', 'Beta')]
+      projects: [
+        expect.objectContaining({
+          id: 'project-2',
+          name: 'Beta',
+          description: '',
+          updatedAt: '2026-07-29T00:00:00.000Z'
+        })
+      ]
     })
   })
 })

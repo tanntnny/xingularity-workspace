@@ -1,4 +1,4 @@
-import { cloneElement, ReactElement, useState } from 'react'
+import { ReactElement, useState } from 'react'
 import {
   Bell,
   BellRing,
@@ -15,7 +15,6 @@ import {
   CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CalendarTaskType,
-  NativeMenuItemDescriptor,
   TaskPriority,
   TaskReminder
 } from '../../../shared/types'
@@ -35,15 +34,17 @@ import { Button } from './ui/button'
 import {
   Dialog,
   DialogActionButton,
+  DialogBody,
   DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogShell,
+  DialogShellFooter,
   DialogTitle
 } from './ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
 
 interface TaskContextMenuProps {
   task: CalendarTask
@@ -89,7 +90,6 @@ export function TaskContextMenu({
   onUnscheduleTask,
   children
 }: TaskContextMenuProps): ReactElement {
-  const useNativeMenus = canUseNativeMenus()
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false)
   const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false)
   const [timeInputValue, setTimeInputValue] = useState(task.time ?? '')
@@ -133,354 +133,242 @@ export function TaskContextMenu({
     onRename(task.id, nextTitle)
   }
 
-  const handleNativeContextMenu = async (event: React.MouseEvent<HTMLElement>): Promise<void> => {
-    event.preventDefault()
-
-    const items: NativeMenuItemDescriptor[] = [
-      {
-        id: 'toggle',
-        label: task.completed ? 'Mark as pending' : 'Mark as complete'
-      },
-      { id: 'rename', label: 'Rename' },
-      {
-        type: 'submenu',
-        label: 'Set type',
-        submenu: CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => ({
-          id: `type:${taskType.value}`,
-          type: 'checkbox',
-          label: taskType.label,
-          checked: (task.taskType || 'assignment') === taskType.value
-        }))
-      },
-      {
-        type: 'submenu',
-        label: 'Set priority',
-        submenu: TASK_PRIORITY_OPTIONS.map((priority) => ({
-          id: `priority:${priority.value}`,
-          type: 'checkbox',
-          label: priority.label,
-          checked: (task.priority || 'low') === priority.value
-        }))
-      },
-      {
-        type: 'submenu',
-        label: 'Set time',
-        submenu: [
-          ...QUICK_TIME_OPTIONS.map((option) => ({
-            id: `time:${option.value}`,
-            type: 'checkbox' as const,
-            label: option.label,
-            checked: task.time === option.value
-          })),
-          { id: 'time-custom', label: 'Custom time...' },
-          { id: 'time-clear', label: 'Clear time' }
-        ]
-      },
-      { id: 'reminders', label: 'Manage reminders' },
-      { type: 'separator' },
-      task.date
-        ? { id: 'unschedule', label: 'Move to unscheduled' }
-        : { id: 'schedule', label: `Schedule to ${selectedDate}` },
-      { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
-    ]
-
-    const actionId = await showNativeMenu(items, getMouseMenuPosition(event))
-    if (!actionId) {
-      return
-    }
-
-    if (actionId === 'toggle') {
-      onToggle(task.id)
-      return
-    }
-    if (actionId === 'rename') {
-      handleRename()
-      return
-    }
-    if (actionId.startsWith('type:')) {
-      onUpdateTaskType(task.id, actionId.slice('type:'.length) as CalendarTaskType)
-      return
-    }
-    if (actionId.startsWith('priority:')) {
-      onUpdatePriority(task.id, actionId.slice('priority:'.length) as TaskPriority)
-      return
-    }
-    if (actionId.startsWith('time:')) {
-      const value = actionId.slice('time:'.length)
-      onUpdateTime(task.id, value)
-      return
-    }
-    if (actionId === 'time-custom') {
-      setTimeInputValue(task.time ?? '')
-      setIsTimeDialogOpen(true)
-      return
-    }
-    if (actionId === 'time-clear') {
-      onUpdateTime(task.id, undefined)
-      return
-    }
-    if (actionId === 'reminders') {
-      setIsReminderDialogOpen(true)
-      return
-    }
-    if (actionId === 'unschedule') {
-      onUnscheduleTask(task.id)
-      return
-    }
-    if (actionId === 'schedule') {
-      onScheduleTask(task.id, selectedDate)
-      return
-    }
-    if (actionId === 'delete') {
-      onDelete(task.id)
-    }
-  }
-
-  const triggerChild = useNativeMenus
-    ? cloneElement(children, {
-        onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
-          children.props.onContextMenu?.(event)
-          if (!event.defaultPrevented) {
-            void handleNativeContextMenu(event)
-          }
-        }
-      })
-    : children
-
   return (
     <>
-      {useNativeMenus ? (
-        triggerChild
-      ) : (
-        <ContextMenu>
-          <ContextMenuTrigger asChild>{triggerChild}</ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem onClick={() => onToggle(task.id)}>
-              <Check className="mr-2 h-4 w-4" />
-              {task.completed ? 'Mark as pending' : 'Mark as complete'}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={handleRename}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Rename
-            </ContextMenuItem>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>
-                <Target className="mr-2 h-4 w-4" />
-                Set type
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                {CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => (
-                  <ContextMenuItem
-                    key={taskType.value}
-                    onClick={() => onUpdateTaskType(task.id, taskType.value)}
-                  >
-                    {taskType.label}
-                    {(task.taskType || 'assignment') === taskType.value && (
-                      <Check className="ml-auto h-4 w-4" />
-                    )}
-                  </ContextMenuItem>
-                ))}
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>
-                <Flag className="mr-2 h-4 w-4" />
-                Set priority
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                {TASK_PRIORITY_OPTIONS.map((priority) => (
-                  <ContextMenuItem
-                    key={priority.value}
-                    onSelect={() => onUpdatePriority(task.id, priority.value)}
-                  >
-                    {priority.label}
-                    {(task.priority || 'low') === priority.value && (
-                      <Check className="ml-auto h-4 w-4" />
-                    )}
-                  </ContextMenuItem>
-                ))}
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>
-                <Clock3 className="mr-2 h-4 w-4" />
-                Set time
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                {QUICK_TIME_OPTIONS.map((option) => (
-                  <ContextMenuItem
-                    key={option.value}
-                    onClick={() => onUpdateTime(task.id, option.value)}
-                  >
-                    {option.label}
-                    {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
-                  </ContextMenuItem>
-                ))}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onToggle(task.id)}>
+            <Check className="mr-2 h-4 w-4" />
+            {task.completed ? 'Mark as pending' : 'Mark as complete'}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={handleRename}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Rename
+          </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Target className="mr-2 h-4 w-4" />
+              Set type
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => (
                 <ContextMenuItem
-                  onClick={() => {
-                    setTimeInputValue(task.time ?? '')
-                    setIsTimeDialogOpen(true)
-                  }}
+                  key={taskType.value}
+                  onClick={() => onUpdateTaskType(task.id, taskType.value)}
                 >
-                  Custom time...
+                  <CalendarTaskTypeBadge taskType={taskType.value} />
+                  {(task.taskType || 'assignment') === taskType.value && (
+                    <Check className="ml-auto h-4 w-4" />
+                  )}
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => onUpdateTime(task.id, undefined)}>
-                  Clear time
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Flag className="mr-2 h-4 w-4" />
+              Set priority
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {TASK_PRIORITY_OPTIONS.map((priority) => (
+                <ContextMenuItem
+                  key={priority.value}
+                  onSelect={() => onUpdatePriority(task.id, priority.value)}
+                >
+                  {priority.label}
+                  {(task.priority || 'low') === priority.value && (
+                    <Check className="ml-auto h-4 w-4" />
+                  )}
                 </ContextMenuItem>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            <ContextMenuItem
-              onClick={() => {
-                setIsReminderDialogOpen(true)
-              }}
-            >
-              <Bell className="mr-2 h-4 w-4" />
-              Manage reminders
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            {task.date ? (
-              <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
-                <Calendar className="mr-2 h-4 w-4" />
-                Move to unscheduled
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Clock3 className="mr-2 h-4 w-4" />
+              Set time
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {QUICK_TIME_OPTIONS.map((option) => (
+                <ContextMenuItem
+                  key={option.value}
+                  onClick={() => onUpdateTime(task.id, option.value)}
+                >
+                  {option.label}
+                  {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
+                </ContextMenuItem>
+              ))}
+              <ContextMenuItem
+                onClick={() => {
+                  setTimeInputValue(task.time ?? '')
+                  setIsTimeDialogOpen(true)
+                }}
+              >
+                Custom time...
               </ContextMenuItem>
-            ) : (
-              <ContextMenuItem onClick={() => onScheduleTask(task.id, selectedDate)}>
-                <Calendar className="mr-2 h-4 w-4" />
-                Schedule to {selectedDate}
+              <ContextMenuItem onClick={() => onUpdateTime(task.id, undefined)}>
+                Clear time
               </ContextMenuItem>
-            )}
-            <ContextMenuItem
-              className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-              onClick={() => onDelete(task.id)}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-              <ContextMenuShortcut>
-                <Shortcut keys={['cmd', 'backspace']} />
-              </ContextMenuShortcut>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem
+            onClick={() => {
+              setIsReminderDialogOpen(true)
+            }}
+          >
+            <Bell className="mr-2 h-4 w-4" />
+            Manage reminders
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          {task.date ? (
+            <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
+              <Calendar className="mr-2 h-4 w-4" />
+              Move to unscheduled
             </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      )}
+          ) : (
+            <ContextMenuItem onClick={() => onScheduleTask(task.id, selectedDate)}>
+              <Calendar className="mr-2 h-4 w-4" />
+              Schedule to {selectedDate}
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem
+            className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+            onClick={() => onDelete(task.id)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+            <ContextMenuShortcut>
+              <Shortcut keys={['cmd', 'backspace']} />
+            </ContextMenuShortcut>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
 
       <Dialog open={isTimeDialogOpen} onOpenChange={setIsTimeDialogOpen}>
         <DialogContent className="max-w-sm" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Set task time</DialogTitle>
-            <DialogDescription>Choose a time for this task.</DialogDescription>
-          </DialogHeader>
-          <input
-            type="time"
-            value={timeInputValue}
-            onChange={(event) => setTimeInputValue(event.target.value)}
-            className=" w-full rounded-lg border px-3 py-2 text-sm text-foreground outline-none"
-          />
-          <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-            <DialogCloseAction label="Close time dialog" />
-            <DialogActionButton
-              onClick={() => {
-                onUpdateTime(task.id, timeInputValue || undefined)
-                setIsTimeDialogOpen(false)
-              }}
-              title="Done"
-              aria-label="Done"
-              icon={<Check />}
-              tone="primary"
-            />
-          </DialogFooter>
+          <DialogShell>
+            <DialogHeader>
+              <DialogTitle>Set task time</DialogTitle>
+              <DialogDescription>Choose a time for this task.</DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <input
+                type="time"
+                value={timeInputValue}
+                onChange={(event) => setTimeInputValue(event.target.value)}
+                className=" w-full rounded-lg border px-3 py-2 text-sm text-foreground outline-none"
+              />
+            </DialogBody>
+            <DialogShellFooter closeAction={<DialogCloseAction label="Close time dialog" />}>
+              <DialogActionButton
+                onClick={() => {
+                  onUpdateTime(task.id, timeInputValue || undefined)
+                  setIsTimeDialogOpen(false)
+                }}
+                title="Done"
+                aria-label="Done"
+                icon={<Check />}
+                tone="primary"
+              />
+            </DialogShellFooter>
+          </DialogShell>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
         <DialogContent className="max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Task reminders</DialogTitle>
-            <DialogDescription>Manage notifications for this task.</DialogDescription>
-          </DialogHeader>
+          <DialogShell>
+            <DialogHeader>
+              <DialogTitle>Task reminders</DialogTitle>
+              <DialogDescription>Manage notifications for this task.</DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-3">
-            {(task.reminders || []).length > 0 ? (
-              <div className="space-y-1.5">
-                {(task.reminders || []).map((reminder) => (
-                  <div
-                    key={reminder.id}
-                    className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
-                      reminder.enabled
-                        ? 'border-ring bg-accent'
-                        : 'border-border bg-muted opacity-70'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleToggleReminder(reminder.id)}
-                      className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {reminder.enabled ? (
-                        <BellRing size={12} className="text-muted-foreground" />
-                      ) : (
-                        <Bell size={12} className="text-muted-foreground" />
-                      )}
-                      {formatReminderLabel(reminder)}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveReminder(reminder.id)}
-                      className="rounded-[var(--radius-control)] p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      title="Remove reminder"
-                    >
-                      <X size={12} />
-                    </button>
+            <DialogBody>
+              <div className="space-y-3">
+                {(task.reminders || []).length > 0 ? (
+                  <div className="space-y-1.5">
+                    {(task.reminders || []).map((reminder) => (
+                      <div
+                        key={reminder.id}
+                        className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
+                          reminder.enabled
+                            ? 'border-ring bg-accent'
+                            : 'border-border bg-muted opacity-70'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleToggleReminder(reminder.id)}
+                          className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {reminder.enabled ? (
+                            <BellRing size={12} className="text-muted-foreground" />
+                          ) : (
+                            <Bell size={12} className="text-muted-foreground" />
+                          )}
+                          {formatReminderLabel(reminder)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReminder(reminder.id)}
+                          className="rounded-[var(--radius-control)] p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          title="Remove reminder"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">No reminders yet.</p>
-            )}
+                ) : (
+                  <p className="text-xs text-muted-foreground">No reminders yet.</p>
+                )}
 
-            <div className="border-t border-border pt-2">
-              <div className="mb-2 text-xs text-muted-foreground">Add reminder</div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="999"
-                  value={newReminderValue}
-                  onChange={(event) =>
-                    setNewReminderValue(Math.max(1, Number(event.target.value) || 1))
-                  }
-                  className=" w-16 rounded-lg border px-2 py-1 text-xs text-foreground outline-none"
-                />
-                <Select
-                  value={newReminderType}
-                  onValueChange={(value) =>
-                    setNewReminderType(value as 'minutes' | 'hours' | 'days')
-                  }
-                >
-                  <SelectTrigger className=" flex-1 text-xs">
-                    <SelectValue placeholder="Unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="minutes">minutes</SelectItem>
-                    <SelectItem value="hours">hours</SelectItem>
-                    <SelectItem value="days">days</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button type="button" onClick={handleAddReminder} variant="outline" size="sm">
-                  Add
-                </Button>
+                <div className="border-t border-border pt-2">
+                  <div className="mb-2 text-xs text-muted-foreground">Add reminder</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={newReminderValue}
+                      onChange={(event) =>
+                        setNewReminderValue(Math.max(1, Number(event.target.value) || 1))
+                      }
+                      className=" w-16 rounded-lg border px-2 py-1 text-xs text-foreground outline-none"
+                    />
+                    <Select
+                      value={newReminderType}
+                      onValueChange={(value) =>
+                        setNewReminderType(value as 'minutes' | 'hours' | 'days')
+                      }
+                    >
+                      <SelectTrigger className=" flex-1 text-xs">
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minutes">minutes</SelectItem>
+                        <SelectItem value="hours">hours</SelectItem>
+                        <SelectItem value="days">days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" onClick={handleAddReminder} variant="outline" size="sm">
+                      Add
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-            <DialogCloseAction label="Close reminders" />
-            <DialogActionButton
-              onClick={() => setIsReminderDialogOpen(false)}
-              title="Done"
-              aria-label="Done"
-              icon={<Check />}
-              tone="primary"
-            />
-          </DialogFooter>
+            </DialogBody>
+            <DialogShellFooter closeAction={<DialogCloseAction label="Close reminders" />}>
+              <DialogActionButton
+                onClick={() => setIsReminderDialogOpen(false)}
+                title="Done"
+                aria-label="Done"
+                icon={<Check />}
+                tone="primary"
+              />
+            </DialogShellFooter>
+          </DialogShell>
         </DialogContent>
       </Dialog>
     </>

@@ -25,3 +25,23 @@ export function shiftIsoMonthClamped(isoDate: string, offset: number): string {
 
   return toIsoDate(new Date(year, targetMonth, clampedDay))
 }
+
+export function formatWeekRange(start: string, end: string): string {
+  const startDate = new Date(`${start}T00:00:00`)
+  const endDate = new Date(`${end}T00:00:00`)
+  const sameMonth = startDate.getMonth() === endDate.getMonth()
+  const sameYear = startDate.getFullYear() === endDate.getFullYear()
+
+  const startLabel = startDate.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' })
+  })
+  const endLabel = endDate.toLocaleDateString(undefined, {
+    month: sameMonth && sameYear ? undefined : 'short',
+    day: 'numeric',
+    year: sameYear ? undefined : 'numeric'
+  })
+
+  return `${startLabel} – ${endLabel}`
+}

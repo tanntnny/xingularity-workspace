@@ -52,7 +52,6 @@ type StarterNavigationId =
   | 'notes'
   | 'projects'
   | 'calendar'
-  | 'weeklyPlan'
   | 'subscriptions'
   | 'schedules'
   | 'agentHistory'
@@ -65,7 +64,6 @@ const PAGE_LABELS: Record<StarterNavigationId, string> = {
   notes: 'Notebooks',
   projects: 'Projects',
   calendar: 'Calendar',
-  weeklyPlan: 'Weekly Plan',
   subscriptions: 'Subscriptions',
   schedules: 'Schedules',
   agentHistory: 'Agent Chat',
@@ -77,7 +75,6 @@ const PAGE_ICONS: Record<StarterNavigationId, typeof LayoutDashboard> = {
   notes: NotebookPen,
   projects: FolderOpen,
   calendar: CalendarDays,
-  weeklyPlan: LayoutDashboard,
   subscriptions: CreditCard,
   schedules: CalendarDays,
   agentHistory: Bot,
@@ -88,20 +85,14 @@ const SIDEBAR_SECTIONS: ReadonlyArray<
   Omit<WorkspaceSidebarSection, 'items'> & { items: readonly SidebarItem[] }
 > = [
   {
-    id: 'board',
-    label: 'Board',
-    icon: LayoutDashboard,
-    items: [{ id: 'knowledge', label: 'Knowledge' }]
-  },
-  {
-    id: 'home',
-    label: 'Home',
+    id: 'view',
+    label: 'View',
     icon: House,
     items: [
       { id: 'notes', label: 'Notebooks' },
       { id: 'projects', label: 'Projects' },
       { id: 'calendar', label: 'Calendar' },
-      { id: 'weeklyPlan', label: 'Weekly Plan' }
+      { id: 'knowledge', label: 'Knowledge' }
     ]
   },
   {

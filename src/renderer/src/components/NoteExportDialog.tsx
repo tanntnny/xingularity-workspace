@@ -3,11 +3,13 @@ import { ReactElement } from 'react'
 import {
   Dialog,
   DialogActionButton,
+  DialogBody,
   DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogShell,
+  DialogShellFooter,
   DialogTitle
 } from './ui/dialog'
 import { Button } from './ui/button'
@@ -54,44 +56,49 @@ export function NoteExportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl" data-testid="note-export-dialog" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Export note</DialogTitle>
-          <DialogDescription>Choose a file format for the current note.</DialogDescription>
-        </DialogHeader>
+        <DialogShell>
+          <DialogHeader>
+            <DialogTitle>Export note</DialogTitle>
+            <DialogDescription>Choose a file format for the current note.</DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Export format">
-          {EXPORT_OPTIONS.map(({ format: optionFormat, title, description, Icon }) => {
-            const isSelected = format === optionFormat
+          <DialogBody>
+            <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Export format">
+              {EXPORT_OPTIONS.map(({ format: optionFormat, title, description, Icon }) => {
+                const isSelected = format === optionFormat
 
-            return (
-              <Button
-                key={optionFormat}
-                type="button"
-                variant={isSelected ? 'secondary' : 'outline'}
-                role="radio"
-                aria-checked={isSelected}
-                data-testid={`note-export-format:${optionFormat}`}
-                onClick={() => onFormatChange(optionFormat)}
-                className="h-auto flex-col items-start p-4 text-left whitespace-normal"
-              >
-                <Icon className="mb-3 h-6 w-6 text-primary" aria-hidden="true" />
-                <div className="font-semibold text-foreground">{title}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{description}</div>
-              </Button>
-            )
-          })}
-        </div>
+                return (
+                  <Button
+                    key={optionFormat}
+                    type="button"
+                    variant={isSelected ? 'secondary' : 'outline'}
+                    role="radio"
+                    aria-checked={isSelected}
+                    data-testid={`note-export-format:${optionFormat}`}
+                    onClick={() => onFormatChange(optionFormat)}
+                    className="h-auto flex-col items-start whitespace-normal p-4 text-left"
+                  >
+                    <Icon className="mb-3 h-6 w-6 text-primary" aria-hidden="true" />
+                    <div className="font-semibold text-foreground">{title}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{description}</div>
+                  </Button>
+                )
+              })}
+            </div>
+          </DialogBody>
 
-        <DialogFooter className="flex-row items-center justify-between sm:flex-row sm:justify-between">
-          <DialogCloseAction label="Close export dialog" disabled={isExporting} />
-          <DialogActionButton
-            icon={<FileDown />}
-            label={isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}
-            tone="primary"
-            onClick={onExport}
-            disabled={isExporting}
-          />
-        </DialogFooter>
+          <DialogShellFooter
+            closeAction={<DialogCloseAction label="Close export dialog" disabled={isExporting} />}
+          >
+            <DialogActionButton
+              icon={<FileDown />}
+              label={isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}
+              tone="primary"
+              onClick={onExport}
+              disabled={isExporting}
+            />
+          </DialogShellFooter>
+        </DialogShell>
       </DialogContent>
     </Dialog>
   )

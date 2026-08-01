@@ -99,6 +99,10 @@ test.describe('settings page', () => {
       await expect(page.getByText('Add Existing Vault')).toHaveCount(0)
       await page.keyboard.press('Escape')
       await expect(page.getByRole('dialog', { name: 'Manage vaults' })).toHaveCount(0)
+      await page.getByTestId('sidebar-vault-manager').click()
+      await expect(page.getByRole('dialog', { name: 'Manage vaults' })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog', { name: 'Manage vaults' })).toHaveCount(0)
       await expect(page.getByText('App Font')).toHaveCount(0)
 
       await page.getByRole('radio', { name: 'Appearance' }).click()

@@ -3,7 +3,6 @@ export type AppPage =
   | 'notes'
   | 'projects'
   | 'subscriptions'
-  | 'weeklyPlan'
   | 'calendar'
   | 'designAudit'
   | 'settings'
@@ -13,7 +12,6 @@ export const ALL_APP_PAGES: AppPage[] = [
   'notes',
   'projects',
   'subscriptions',
-  'weeklyPlan',
   'calendar',
   'designAudit',
   'settings'

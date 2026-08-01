@@ -23,7 +23,6 @@ const PAGE_LABELS: Record<AppPage, string> = {
   notes: 'Notebooks',
   projects: 'Projects',
   subscriptions: 'Subscriptions',
-  weeklyPlan: 'Weekly Plan',
   calendar: 'Calendar',
   designAudit: 'Design Audit',
   settings: 'Settings'

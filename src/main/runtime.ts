@@ -56,7 +56,6 @@ import {
   BlockNoteMigrationResult,
   NoteImportResult,
   Project,
-  ProjectMilestone,
   SavedVaultState,
   SearchResult,
   StoredNoteDocument,
@@ -1037,7 +1036,7 @@ export class VaultRuntime {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
-      if (next.calendarTasks) {
+      if (next.calendarTasks || next.tasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
       }
 
@@ -1064,7 +1063,7 @@ export class VaultRuntime {
       const { next, result } = await updater(current)
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
-      if (next.calendarTasks) {
+      if (next.calendarTasks || next.tasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
       }
 
@@ -1790,30 +1789,14 @@ function formatProjectContext(project: Project): string {
   return [
     'Context kind: project',
     `Name: ${project.name}`,
-    `Status: ${project.status}`,
-    `Progress: ${project.progress}%`,
-    `Summary: ${project.summary || 'None'}`,
-    'Milestones:',
-    project.milestones.length > 0
-      ? project.milestones
-          .map((milestone, index) => formatMilestoneContext(milestone, index + 1))
+    `Description: ${project.description ?? project.summary ?? 'None'}`,
+    'Tasks:',
+    project.tasks && project.tasks.length > 0
+      ? project.tasks
+          .map((task) => `- ${task.title} | due ${task.date ?? 'unscheduled'} | status ${task.status ?? (task.completed ? 'completed' : 'pending')}`)
           .join('\n')
       : '- None'
   ].join('\n')
-}
-
-function formatMilestoneContext(milestone: ProjectMilestone, index: number): string {
-  return [
-    `- ${index}. ${milestone.title} | due ${milestone.dueDate ?? 'unscheduled'} | status ${milestone.status}`,
-    milestone.description ? `  Description: ${milestone.description}` : '',
-    milestone.subtasks.length > 0
-      ? `  Subtasks: ${milestone.subtasks
-          .map((subtask) => `${subtask.completed ? '[x]' : '[ ]'} ${subtask.title}`)
-          .join('; ')}`
-      : '  Subtasks: none'
-  ]
-    .filter(Boolean)
-    .join('\n')
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -1924,12 +1907,10 @@ const WRITE_AGENT_TOOLS = new Set([
   'note.append',
   'project.create',
   'project.update',
-  'milestone.create',
-  'milestone.update',
-  'subtask.create',
-  'subtask.update',
   'calendarTask.create',
   'calendarTask.update',
+  'task.create',
+  'task.update',
   'weeklyPlan.createWeek',
   'weeklyPlan.createPriority',
   'weeklyPlan.upsertReview'
@@ -2015,12 +1996,10 @@ const AGENT_CHAT_TOOLS: MistralTool[] = [
   ...[
     'project.create',
     'project.update',
-    'milestone.create',
-    'milestone.update',
-    'subtask.create',
-    'subtask.update',
     'calendarTask.create',
     'calendarTask.update',
+    'task.create',
+    'task.update',
     'weeklyPlan.createWeek',
     'weeklyPlan.createPriority',
     'weeklyPlan.upsertReview'
@@ -2079,6 +2058,7 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     ai: settings.ai,
     fontFamily: settings.fontFamily,
     calendarTasks: settings.calendarTasks,
+    tasks: settings.tasks ?? settings.calendarTasks,
     projectIcons: settings.projectIcons,
     projects: settings.projects,
     gridBoard: settings.gridBoard,
@@ -2138,34 +2118,7 @@ function deriveSettingsHistoryLabel(
     }
   }
 
-  for (const project of previous.projects) {
-    const nextProject = next.projects.find((item) => item.id === project.id)
-    if (!nextProject) {
-      continue
-    }
-
-    if (project.milestones.length > nextProject.milestones.length) {
-      const nextMilestoneIds = new Set(nextProject.milestones.map((milestone) => milestone.id))
-      if (project.milestones.some((milestone) => !nextMilestoneIds.has(milestone.id))) {
-        return 'Delete milestone'
-      }
-    }
-
-    for (const milestone of project.milestones) {
-      const nextMilestone = nextProject.milestones.find((item) => item.id === milestone.id)
-      if (!nextMilestone) {
-        continue
-      }
-      if (milestone.subtasks.length > nextMilestone.subtasks.length) {
-        const nextSubtaskIds = new Set(nextMilestone.subtasks.map((subtask) => subtask.id))
-        if (milestone.subtasks.some((subtask) => !nextSubtaskIds.has(subtask.id))) {
-          return 'Delete subtask'
-        }
-      }
-    }
-  }
-
-  if (previous.calendarTasks.length > next.calendarTasks.length) {
+  if (previous.calendarTasks.length > next.calendarTasks.length || next.tasks?.length !== previous.tasks?.length) {
     return 'Delete task'
   }
 

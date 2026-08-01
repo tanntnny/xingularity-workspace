@@ -59,7 +59,7 @@ class NoteCodeBlockView implements NodeView {
     private readonly view: EditorView
   ) {
     this.dom = document.createElement('div')
-    this.dom.className = 'milkdown-code-block'
+    this.dom.className = 'milkdown-code-block note-fenced-code-block'
 
     this.toolsElement = document.createElement('div')
     this.toolsElement.className = 'tools'

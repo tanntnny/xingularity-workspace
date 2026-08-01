@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import {
+  AppSettingsUpdate,
   CALENDAR_TASK_TYPE_VALUES,
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES
@@ -142,6 +143,8 @@ const taskReminderSchema = z.object({
 const calendarTaskSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  projectId: z.string().min(1).max(120).optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -151,6 +154,7 @@ const calendarTaskSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   completed: z.boolean(),
+  status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
   createdAt: z.string().min(1).max(64),
   priority: z.enum(['low', 'medium', 'high']),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
@@ -227,42 +231,11 @@ const nativeMenuRequestSchema = z.object({
   })
 })
 
-const projectSubtaskSchema = z.object({
-  id: z.string().min(1).max(120),
-  title: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
-  completed: z.boolean(),
-  priority: z.enum(['low', 'medium', 'high']).optional(),
-  createdAt: z.string().min(1).max(64),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-})
-
-const projectMilestoneSchema = z.object({
-  id: z.string().min(1).max(120),
-  title: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
-  collapsed: z.boolean().optional(),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  priority: z.enum(['low', 'medium', 'high']).optional(),
-  status: z.enum(['pending', 'in-progress', 'completed', 'blocked']),
-  subtasks: z.array(projectSubtaskSchema).max(100)
-})
-
 const projectSchema = z.object({
   id: z.string().min(1).max(120),
   name: z.string().min(1).max(200),
-  summary: z.string().max(2000),
-  folderPath: z.string().min(1).max(1024).optional(),
-  status: z.enum(['on-track', 'at-risk', 'blocked', 'completed']),
+  description: z.string().max(2000).default(''),
   updatedAt: z.string().min(1).max(64),
-  progress: z.number().min(0).max(100),
-  milestones: z.array(projectMilestoneSchema).max(50),
   icon: projectIconSchema
 })
 
@@ -332,7 +305,8 @@ const settingsUpdateSchema = z.object({
   fontFamily: z.string().min(1).max(200).optional(),
   editorVimModeEnabled: z.boolean().optional(),
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
-  calendarTasks: z.array(calendarTaskSchema).max(1000).optional(),
+  calendarTasks: z.array(calendarTaskSchema).max(5000).optional(),
+  tasks: z.array(calendarTaskSchema).max(5000).optional(),
   projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
   projects: z.array(projectSchema).max(100).optional(),
   gridBoard: gridBoardStateSchema.optional(),
@@ -612,10 +586,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
       {
         ...parsedNext,
         projects: parsedNext.projects
-          ? parsedNext.projects.map((project) => ({
+          ? (parsedNext.projects.map((project) => ({
               ...project,
               icon: normalizeProjectIcon(project.icon, project.id)
-            }))
+            })) as unknown as AppSettingsUpdate['projects'])
           : undefined,
         projectIcons: parsedNext.projectIcons
           ? Object.fromEntries(
