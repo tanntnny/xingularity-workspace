@@ -97,8 +97,6 @@ export function UnscheduledTaskList({
     >
       <div className="shrink-0 p-3 pb-4">
         <WorkspacePanelSectionHeader
-          icon={<CalendarPlus size={16} aria-hidden="true" />}
-          iconContainerClassName="bg-accent text-muted-foreground"
           heading="Unscheduled"
           description={`${pendingCount} pending${completedCount > 0 ? ` · ${completedCount} done` : ''}`}
         />

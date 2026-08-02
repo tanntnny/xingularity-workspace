@@ -10,7 +10,6 @@ export interface WorkspaceShellShortcutBindings {
   onToggleFocusMode: () => void
   onRunUndo: () => void
   onRunRedo: () => void
-  onToggleProjectsView: () => void
   onToggleCalendarView: () => void
   onCreateWorkspaceTab: () => void
   onCloseActiveWorkspaceTab: () => void
@@ -37,7 +36,6 @@ export function dispatchWorkspaceShellShortcut(
     onToggleFocusMode,
     onRunUndo,
     onRunRedo,
-    onToggleProjectsView,
     onToggleCalendarView,
     onCreateWorkspaceTab,
     onCloseActiveWorkspaceTab,
@@ -103,12 +101,6 @@ export function dispatchWorkspaceShellShortcut(
   if (isViewToggleShortcut) {
     if (typingTarget) {
       return false
-    }
-
-    if (activePage === 'projects') {
-      event.preventDefault()
-      onToggleProjectsView()
-      return true
     }
 
     if (activePage === 'calendar') {
@@ -178,7 +170,6 @@ export function useWorkspaceShellShortcuts({
   onToggleFocusMode,
   onRunUndo,
   onRunRedo,
-  onToggleProjectsView,
   onToggleCalendarView,
   onCreateWorkspaceTab,
   onCloseActiveWorkspaceTab,
@@ -199,7 +190,6 @@ export function useWorkspaceShellShortcuts({
         onToggleFocusMode,
         onRunUndo,
         onRunRedo,
-        onToggleProjectsView,
         onToggleCalendarView,
         onCreateWorkspaceTab,
         onCloseActiveWorkspaceTab,
@@ -227,7 +217,6 @@ export function useWorkspaceShellShortcuts({
     onCloseActiveWorkspaceTab,
     onCreateWorkspaceTab,
     onToggleFocusMode,
-    onToggleProjectsView,
     onToggleRightPanel,
     onSelectWorkspaceTab
   ])

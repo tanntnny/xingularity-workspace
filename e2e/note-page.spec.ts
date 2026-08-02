@@ -463,6 +463,54 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('keeps independent notebook sessions in separate workspace tabs', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await replaceEditorContent(page, ['Tab one draft'])
+
+      await page.getByTestId('workspace-tab-add').click()
+      await expect(page.getByTestId('workspace-tab:workspace-tab-2')).toBeVisible()
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).path).toBeNull()
+
+      await openNote(page, 'beta.md')
+      await replaceEditorContent(page, ['Tab two draft'])
+
+      await page.getByTestId('workspace-tab:workspace-tab-1').click()
+      await expect
+        .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
+        .toMatchObject({ path: 'alpha.md', content: expect.stringContaining('Tab one draft') })
+      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toContainText('alpha')
+
+      await page.getByTestId('workspace-tab:workspace-tab-2').click()
+      await expect
+        .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
+        .toMatchObject({ path: 'beta.md', content: expect.stringContaining('Tab two draft') })
+      await expect(page.getByTestId('workspace-tab:workspace-tab-2')).toContainText('beta')
+
+      await openNote(page, 'alpha.md')
+      await replaceEditorContent(page, ['Duplicate note draft'])
+
+      await page.getByTestId('workspace-tab:workspace-tab-1').click()
+      await expect
+        .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
+        .toMatchObject({ path: 'alpha.md', content: expect.stringContaining('Tab one draft') })
+
+      await page.getByTestId('workspace-tab:workspace-tab-2').click()
+      await expect
+        .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
+        .toMatchObject({
+          path: 'alpha.md',
+          content: expect.stringContaining('Duplicate note draft')
+        })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('converts typed ASCII arrows into connected arrow characters', async () => {
     const vaultRoot = await createFixtureVault('')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -940,6 +988,9 @@ test.describe('note page block editor switching', () => {
         `[data-testid="note-block-editor"] .note-inline-latex-preview[data-latex="${inlineLatex}"]`
       )
       await expect(mathPreview.locator('.katex')).toBeVisible({ timeout: 15_000 })
+      await expect(
+        page.locator('[data-testid="note-block-editor"] .note-inline-latex-source-hidden')
+      ).toBeHidden()
 
       const editorText = await page
         .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
@@ -959,9 +1010,60 @@ test.describe('note page block editor switching', () => {
       await openNote(page, 'alpha.md')
 
       await expect(mathPreview.locator('.katex')).toBeVisible({ timeout: 15_000 })
+      await expect(
+        page.locator('[data-testid="note-block-editor"] .note-inline-latex-source-hidden')
+      ).toBeHidden()
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
         .toContain(markdown.trim())
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('renders LaTeX only on logical lines outside the cursor line', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+      await editor.click()
+      await page.keyboard.type('First line $x^2$')
+      await page.keyboard.press('Shift+Enter')
+      await page.keyboard.type('Second line $y^2$')
+
+      const firstPreview = page.locator(
+        '[data-testid="note-block-editor"] .note-inline-latex-preview[data-latex="x^2"]'
+      )
+      const secondPreview = page.locator(
+        '[data-testid="note-block-editor"] .note-inline-latex-preview[data-latex="y^2"]'
+      )
+      const firstSource = page.locator(
+        '[data-testid="note-block-editor"] .note-inline-latex-source[data-latex-source="true"]'
+      )
+
+      await expect(firstPreview.locator('.katex')).toBeVisible({ timeout: 15_000 })
+      await expect(secondPreview).toHaveCount(0)
+      await expect(firstSource).toBeHidden()
+      await expect(
+        page.locator('[data-testid="note-block-editor"] .note-inline-latex-source')
+      ).toContainText('$y^2$')
+
+      await editor.press('ArrowUp')
+
+      await expect(firstPreview).toHaveCount(0)
+      await expect(
+        page.locator('[data-testid="note-block-editor"] .note-inline-latex-source')
+      ).toContainText('$x^2$')
+      await expect(secondPreview.locator('.katex')).toBeVisible({ timeout: 15_000 })
+      await expect(
+        page.locator(
+          '[data-testid="note-block-editor"] .note-inline-latex-source-hidden[data-latex-source="true"]'
+        )
+      ).toBeHidden()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -1108,6 +1210,12 @@ test.describe('note page block editor switching', () => {
         .toContain('Broken inline $2^{')
       await expect(page.locator('.milkdown-latex-inline-edit')).toBeHidden()
 
+      await editor.press('Enter')
+      await editor.pressSequentially('Away from the error')
+      await expect(invalidSource).toBeVisible()
+
+      await editor.press('ArrowUp')
+      await editor.press('End')
       await editor.pressSequentially('x}$')
 
       const completedSource = page.locator(

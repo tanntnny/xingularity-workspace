@@ -16,6 +16,7 @@ import {
   getVaultCalendarDir,
   getVaultConfigPath,
   getVaultExcalidrawDir,
+  getVaultFleetingDir,
   getVaultFileMapPath,
   getVaultIndexPath,
   getVaultNotebooksDir,
@@ -215,6 +216,7 @@ async function ensureJsonFile(filePath: string, defaultValue: object): Promise<v
 async function ensureVaultPageDirectories(paths: VaultPaths): Promise<void> {
   await Promise.all([
     fs.mkdir(paths.notebooksPath, { recursive: true }),
+    fs.mkdir(getVaultFleetingDir(paths.rootPath), { recursive: true }),
     fs.mkdir(paths.attachmentsPath, { recursive: true }),
     fs.mkdir(getVaultProjectsDir(paths.rootPath), { recursive: true }),
     fs.mkdir(getVaultCalendarDir(paths.rootPath), { recursive: true }),

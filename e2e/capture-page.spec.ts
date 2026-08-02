@@ -1,0 +1,103 @@
+import { test, expect, Page } from '@playwright/test'
+import { _electron as electron, ElectronApplication } from 'playwright'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+
+async function createFixtureVault(): Promise<string> {
+  const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-capture-e2e-vault-'))
+  await fs.mkdir(path.join(rootPath, 'notebooks'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
+  return rootPath
+}
+
+async function launchWithFixture(vaultRoot: string): Promise<{
+  electronApp: ElectronApplication
+  page: Page
+}> {
+  const electronApp = await electron.launch({
+    args: ['.'],
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      CI: '1'
+    }
+  })
+
+  const userDataPath = await electronApp.evaluate(({ app }) => app.getPath('userData'))
+  await fs.mkdir(userDataPath, { recursive: true })
+  await fs.writeFile(
+    path.join(userDataPath, 'settings.json'),
+    JSON.stringify({ lastVaultPath: vaultRoot }, null, 2),
+    'utf-8'
+  )
+
+  const page = await electronApp.firstWindow()
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForFunction(() => typeof window.vaultApi?.vault?.restoreLast === 'function')
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          try {
+            await window.vaultApi.vault.restoreLast()
+          } catch {
+            // Retry until the temporary fixture vault is fully restorable.
+          }
+
+          return document
+            .querySelector('[data-testid="sidebar-page:capture"]')
+            ?.getAttribute('disabled')
+        }),
+      { timeout: 20_000 }
+    )
+    .toBeNull()
+
+  return { electronApp, page }
+}
+
+test.describe('capture page', () => {
+  test('captures thoughts and converts them into a note or task', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:capture').click()
+      await expect(page.getByTestId('capture-page')).toBeVisible()
+
+      const input = page.getByTestId('capture-input')
+      await input.fill('New note idea\nKeep the details intact')
+      await input.press('Control+Enter')
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
+
+      const noteCard = page.locator('[data-testid^="fleeting-note:"]').first()
+      await noteCard.getByRole('button', { name: 'Convert to note' }).click()
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(0)
+      await expect(fs.readdir(path.join(vaultRoot, 'notebooks'))).resolves.toEqual([
+        'new-note-idea.md'
+      ])
+      await expect(
+        fs.readFile(path.join(vaultRoot, 'notebooks', 'new-note-idea.md'), 'utf-8')
+      ).resolves.toContain('Keep the details intact')
+
+      await input.fill('Follow up with the team\nAsk for a status update')
+      await input.press('Control+Enter')
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
+      await page
+        .locator('[data-testid^="fleeting-note:"]')
+        .first()
+        .getByRole('button', { name: 'Convert to task' })
+        .click()
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(0)
+
+      const taskFiles = await fs.readdir(path.join(vaultRoot, 'tasks'))
+      expect(taskFiles.length).toBe(1)
+      await expect(
+        fs.readFile(path.join(vaultRoot, 'tasks', taskFiles[0]), 'utf-8')
+      ).resolves.toContain('Follow up with the team')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+})

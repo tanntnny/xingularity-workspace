@@ -198,6 +198,23 @@ export class FileService {
     return relPath
   }
 
+  async createNoteWithMarkdown(nameInput: string, markdown: string): Promise<string> {
+    const sanitizedName = sanitizeNoteName(nameInput.slice(0, 120)) || 'captured-thought'
+    const relPath = await findAvailableNoteRelPath(
+      this.notesRoot,
+      `${sanitizedName}${NOTE_FILE_EXTENSION}`
+    )
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    await fs.writeFile(
+      absolutePath,
+      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(markdown)),
+      { flag: 'wx' }
+    )
+    this.onInternalWrite(relPath)
+    return relPath
+  }
+
   async createFolder(relPathInput: string): Promise<string> {
     const relPath = sanitizeEntryPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)

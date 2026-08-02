@@ -6,16 +6,15 @@ import type {
   TaskPriority
 } from '../../../shared/types'
 
-export type ProjectsWorkspaceFilterMode = 'all' | 'favorites' | 'active' | 'completed'
+export type ProjectsWorkspaceFilterMode = 'all' | 'favorites' | 'archived'
 
 export const PROJECTS_WORKSPACE_FILTER_OPTIONS: Array<{
   value: ProjectsWorkspaceFilterMode
   label: string
 }> = [
   { value: 'all', label: 'All' },
-  { value: 'favorites', label: 'Favorites' },
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Completed' }
+  { value: 'favorites', label: 'Favorite' },
+  { value: 'archived', label: 'Archive' }
 ]
 
 export interface ProjectTaskRow {
@@ -55,20 +54,18 @@ export function filterProjectsForWorkspace(
   favoriteProjectIds: string[],
   filterMode: ProjectsWorkspaceFilterMode
 ): Project[] {
+  const activeProjects = projects.filter((project) => project.state !== 'archived')
+
   if (filterMode === 'favorites') {
     const favoriteIds = new Set(favoriteProjectIds)
-    return projects.filter((project) => favoriteIds.has(project.id))
+    return activeProjects.filter((project) => favoriteIds.has(project.id))
   }
 
-  if (filterMode === 'active') {
-    return projects.filter((project) => project.status !== 'completed')
+  if (filterMode === 'archived') {
+    return projects.filter((project) => project.state === 'archived')
   }
 
-  if (filterMode === 'completed') {
-    return projects.filter((project) => project.status === 'completed')
-  }
-
-  return projects
+  return activeProjects
 }
 
 export function buildProjectTaskRows(projects: Project[]): ProjectTaskRow[] {

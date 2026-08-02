@@ -127,6 +127,8 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
+export { WorkspaceListRail, WorkspaceListRailItem } from './workspace-list-rail'
+export type { WorkspaceListRailItemProps, WorkspaceListRailProps } from './workspace-list-rail'
 export {
   Select,
   SelectGroup,
@@ -204,6 +206,7 @@ export {
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,

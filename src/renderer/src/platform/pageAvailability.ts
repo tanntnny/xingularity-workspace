@@ -1,11 +1,12 @@
 import type { AppPage } from '../navigation'
 import type { AppPlatform } from './index'
 
-const CORE_MOBILE_PAGES: AppPage[] = ['notes', 'projects', 'calendar', 'settings']
+const CORE_MOBILE_PAGES: AppPage[] = ['capture', 'notes', 'projects', 'calendar', 'settings']
 
 export function getAvailablePages(platform: AppPlatform): AppPage[] {
   if (platform.kind === 'desktop') {
     return [
+      'capture',
       'knowledge',
       'notes',
       'projects',

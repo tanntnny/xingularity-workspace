@@ -16,7 +16,7 @@ async function createFixtureVault(): Promise<string> {
     path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(
       createStoredNoteDocumentFromText(
-        '```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n'
+        'Inline `const value = 42` code\n\n```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n\n---\n\n> A consistent quote\n'
       )
     ),
     'utf-8'
@@ -24,7 +24,7 @@ async function createFixtureVault(): Promise<string> {
   return rootPath
 }
 
-test('renders fenced code blocks with a transparent background and visible border', async () => {
+test('renders major markdown blocks with a shared border color', async () => {
   const vaultRoot = await createFixtureVault()
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-code-style-user-'))
   await fs.writeFile(
@@ -116,6 +116,30 @@ test('renders fenced code blocks with a transparent background and visible borde
     expect(styles.borderTopColor).not.toBe('rgba(0, 0, 0, 0)')
     expect(styles.codeFontFamily).toContain('JetBrains Mono')
 
+    const inlineCode = page.getByTestId('note-block-editor').locator('.ProseMirror p code').first()
+    await expect(inlineCode).toBeVisible({ timeout: 20_000 })
+
+    const inlineCodeStyles = await inlineCode.evaluate((element) => {
+      const computed = getComputedStyle(element)
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderTopColor: computed.borderTopColor,
+        borderTopStyle: computed.borderTopStyle,
+        borderTopWidth: computed.borderTopWidth,
+        color: computed.color,
+        fontFamily: computed.fontFamily
+      }
+    })
+
+    expect(inlineCodeStyles).toMatchObject({
+      backgroundColor: 'rgb(34, 34, 34)',
+      borderTopColor: 'rgb(74, 74, 74)',
+      borderTopStyle: 'solid',
+      borderTopWidth: '1px',
+      color: 'rgb(238, 238, 238)'
+    })
+    expect(inlineCodeStyles.fontFamily).toContain('JetBrains Mono')
+
     const tableBlock = page
       .getByTestId('note-block-editor')
       .locator('.ProseMirror .milkdown-table-block')
@@ -153,6 +177,31 @@ test('renders fenced code blocks with a transparent background and visible borde
 
     expect(tableStyles.borderTopColor).toBe(styles.borderTopColor)
     expect(tableStyles.borderTopLeftRadius).toBe(styles.borderTopLeftRadius)
+
+    const tableCellStyles = await tableBlock.evaluate((element) => {
+      const cell = element.querySelector<HTMLElement>('th, td')
+      if (!cell) {
+        throw new Error(`Expected a rendered table cell. HTML: ${element.outerHTML.slice(0, 2000)}`)
+      }
+
+      return {
+        borderTopColor: getComputedStyle(cell).borderTopColor
+      }
+    })
+    expect(tableCellStyles.borderTopColor).toBe(styles.borderTopColor)
+
+    const separator = page.getByTestId('note-block-editor').locator('.ProseMirror hr').first()
+    await expect(separator).toHaveCount(1, { timeout: 20_000 })
+    await expect(separator).toHaveCSS('border-top-color', styles.borderTopColor)
+    await expect(separator).toHaveCSS('border-top-style', 'solid')
+    await expect(separator).toHaveCSS('border-top-width', '1px')
+
+    const quote = page.getByTestId('note-block-editor').locator('.ProseMirror blockquote').first()
+    await expect(quote).toHaveCount(1, { timeout: 20_000 })
+    const quoteAccentColor = await quote.evaluate(
+      (element) => getComputedStyle(element, '::before').backgroundColor
+    )
+    expect(quoteAccentColor).toBe(styles.borderTopColor)
   } finally {
     await electronApp.close()
     await fs.rm(vaultRoot, { recursive: true, force: true })

@@ -22,6 +22,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     id: 'project-1',
     name: 'Project',
     summary: '',
+    state: 'active',
     status: 'on-track',
     updatedAt: '2026-07-06T00:00:00.000Z',
     progress: 0,
@@ -56,6 +57,20 @@ describe('CalendarWeekView', () => {
 
     expect(markup.match(/data-testid="calendar-week-current-time-line"/g)?.length ?? 0).toBe(1)
     expect(markup.match(/data-testid="calendar-week-current-time-label"/g)?.length ?? 0).toBe(1)
+  })
+
+  it('clips the weekly grid to the rounded view frame', () => {
+    const markup = renderToStaticMarkup(
+      createElement(CalendarWeekView, {
+        selectedDate: '2026-07-06',
+        tasks: [],
+        onSelectDate: () => undefined
+      })
+    )
+
+    expect(markup).toMatch(
+      /data-testid="calendar-week-view"[^>]+class="[^"]*overflow-hidden[^"]*rounded-2xl/
+    )
   })
 
   it('renders a multi-day all-day task as one spanning block', () => {

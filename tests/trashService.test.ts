@@ -139,6 +139,7 @@ function makeProject(): Project {
     id: 'project-1',
     name: 'Project',
     summary: '',
+    state: 'active',
     status: 'on-track',
     updatedAt: '2026-04-19T00:00:00.000Z',
     progress: 0,

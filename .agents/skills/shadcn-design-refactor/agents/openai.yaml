@@ -1,0 +1,4 @@
+interface:
+  display_name: "Shadcn Design Refactor"
+  short_description: "Refactor product UIs with shadcn-first semantics"
+  default_prompt: "Audit and refactor the requested interface using the $shadcn-design-refactor skill. Preserve behavior, use current project-aware shadcn components aggressively, and verify semantics, responsiveness, accessibility, and code quality."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meta Skills Finder"
+  short_description: "Find and copy only relevant project skills"
+  default_prompt: "Use $meta-skills-finder to find and copy the skills relevant to this project."

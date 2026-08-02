@@ -406,7 +406,7 @@ export function NotesTreeView({
   return (
     <div
       ref={setTreeContainer}
-      className="h-full min-h-0"
+      className="h-full min-h-0 p-2"
       data-testid="notes-tree-view"
       onKeyDownCapture={(event) => {
         if (isDeleteShortcut(event) && !isEditingTextInput(event.target)) {

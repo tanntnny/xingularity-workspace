@@ -748,6 +748,7 @@ export function CalendarWeekView({
         draggable
         tabIndex={0}
         data-calendar-week-task="true"
+        data-calendar-interacting={isInteracting ? 'true' : 'false'}
         data-testid={`calendar-week-task:${task.id}`}
         style={blockStyle}
         onDragStart={(event) => handleTaskDragStart(event, task, 'timed')}
@@ -777,7 +778,7 @@ export function CalendarWeekView({
           event.preventDefault()
           safeDeleteTask(task.id)
         }}
-        className={`group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
+        className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
         } ${task.completed ? 'line-through opacity-60' : ''} cursor-grab active:cursor-grabbing`}
       >
@@ -820,7 +821,7 @@ export function CalendarWeekView({
   return (
     <section
       data-testid="calendar-week-view"
-      className="flex min-h-full flex-1 flex-col rounded-b-2xl"
+      className="flex min-h-full flex-1 flex-col overflow-hidden rounded-2xl border border-border"
     >
       <div
         data-testid="calendar-week-weekday-header"

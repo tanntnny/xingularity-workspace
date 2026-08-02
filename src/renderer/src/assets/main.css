@@ -70,6 +70,12 @@
     --calendar-task-other-border: #a3a3a8;
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
+    --motion-duration-fast: 140ms;
+    --motion-duration-content: 180ms;
+    --motion-duration-panel: 240ms;
+    --motion-duration-calendar: 180ms;
+    --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-linear: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -186,6 +192,141 @@
     }
   }
 
+  .motion-staggered-reveal {
+    --motion-reveal-delay: 0ms;
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+    transition:
+      opacity var(--motion-duration-content) var(--motion-ease-standard),
+      transform var(--motion-duration-content) var(--motion-ease-standard);
+    transition-delay: var(--motion-reveal-delay);
+    will-change: opacity, transform;
+  }
+
+  .motion-staggered-reveal[data-motion-reveal='revealed'] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .motion-workspace-content {
+    animation: workspace-content-enter var(--motion-duration-content) var(--motion-ease-standard)
+      both;
+    will-change: opacity, transform;
+  }
+
+  @keyframes workspace-content-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(5px, 0, 0);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  .motion-workspace-panel {
+    transition:
+      transform var(--motion-duration-panel) var(--motion-ease-standard),
+      opacity var(--motion-duration-panel) var(--motion-ease-standard),
+      width var(--motion-duration-panel) var(--motion-ease-standard),
+      flex-basis var(--motion-duration-panel) var(--motion-ease-standard);
+    will-change: transform, opacity, width, flex-basis;
+  }
+
+  .motion-editor-surface {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+    transition:
+      opacity var(--motion-duration-content) var(--motion-ease-standard),
+      transform var(--motion-duration-content) var(--motion-ease-standard);
+  }
+
+  .motion-editor-surface[data-editor-ready='true'] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .motion-editor-popover {
+    animation: editor-popover-enter var(--motion-duration-fast) var(--motion-ease-standard) both;
+    transform-origin: top left;
+  }
+
+  @keyframes editor-popover-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 4px, 0) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  .motion-calendar-event {
+    animation: calendar-event-enter var(--motion-duration-calendar) var(--motion-ease-standard) both;
+    transition:
+      top var(--motion-duration-calendar) var(--motion-ease-standard),
+      left var(--motion-duration-calendar) var(--motion-ease-standard),
+      width var(--motion-duration-calendar) var(--motion-ease-standard),
+      height var(--motion-duration-calendar) var(--motion-ease-standard),
+      opacity var(--motion-duration-calendar) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
+    will-change: opacity, transform;
+  }
+
+  .motion-calendar-event[data-calendar-interacting='true'] {
+    animation: none;
+    transition: none;
+  }
+
+  @keyframes calendar-event-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .motion-workspace-panel[data-panel-state='open'] {
+      position: absolute;
+      inset: 0.5rem 0.5rem 0.5rem auto;
+      z-index: 20;
+      width: min(var(--workspace-pane-width), calc(100% - 1rem));
+      flex-basis: min(var(--workspace-pane-width), calc(100% - 1rem));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-staggered-reveal,
+    .motion-workspace-content,
+    .motion-workspace-panel,
+    .motion-editor-surface,
+    .motion-editor-popover,
+    .motion-calendar-event {
+      animation: none;
+      transition: none;
+      transform: none;
+      will-change: auto;
+    }
+
+    .motion-staggered-reveal,
+    .motion-editor-surface {
+      opacity: 1;
+    }
+  }
+
   .ui-control {
     height: var(--control-height);
     font-size: var(--control-font-size);
@@ -274,6 +415,22 @@
     color: var(--workspace-background);
   }
 
+  .note-editor-surface .milkdown .ProseMirror .note-inline-latex-source-hidden {
+    display: none;
+  }
+
+  .note-editor-surface .milkdown .ProseMirror :not(pre) > code {
+    display: inline-block;
+    padding: 0 0.25rem;
+    border: 1px solid var(--note-block-border) !important;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--muted) !important;
+    color: var(--foreground) !important;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+    font-size: 0.875em;
+    line-height: 1.4;
+  }
+
   .app-drag-region {
     -webkit-app-region: drag;
   }
@@ -298,6 +455,10 @@
   box-shadow: none;
 }
 
+.note-editor-surface .milkdown .ProseMirror blockquote::before {
+  background: var(--note-block-border) !important;
+}
+
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block {
   border: 1px solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
@@ -314,6 +475,15 @@
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block th,
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block td {
   border-color: var(--note-block-border) !important;
+}
+
+.note-editor-surface .milkdown .ProseMirror hr {
+  height: 1px;
+  margin: 16px 0;
+  padding: 0;
+  border: 0 !important;
+  border-top: 1px solid var(--note-block-border) !important;
+  background: transparent !important;
 }
 
 .note-editor-surface .milkdown-code-block .note-code-block-body,

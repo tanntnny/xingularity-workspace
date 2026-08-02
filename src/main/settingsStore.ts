@@ -411,6 +411,7 @@ function normalizeProject(input: unknown): Project[] {
         typeof candidate.folderPath === 'string' && candidate.folderPath.trim()
           ? candidate.folderPath
           : undefined,
+      state: candidate.state === 'archived' ? 'archived' : 'active',
       status:
         candidate.status === 'on-track' ||
         candidate.status === 'at-risk' ||
@@ -825,6 +826,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
         coreParsed,
         legacyCoreParsed,
         projectStorage,
+        hasCanonicalTaskStorage,
         taskFiles,
         tasksData,
         legacyRootTasksData,
@@ -833,6 +835,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
         this.readJsonFile<VaultCoreSettings>(settingsPath),
         this.readJsonFile<VaultCoreSettings>(legacySettingsPath),
         projectStore.read(),
+        taskStore.hasCanonicalStorage(),
         taskStore.read(),
         this.readJsonFile<CalendarTask[]>(tasksPath),
         this.readJsonFile<CalendarTask[]>(legacyRootTasksPath),
@@ -863,20 +866,19 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
           resolvedCore?.calendarTasks,
         hasMaterialTasksData
       )
-      const resolvedTasks = taskFiles.length > 0 ? taskFiles : legacyTasks
+      const resolvedTasks = hasCanonicalTaskStorage ? taskFiles : legacyTasks
       const migratedProjectWork = migrateProjectWork(resolvedProjects ?? [], resolvedTasks ?? [])
       const needsSplitMigration =
         coreParsed === null ||
-        taskFiles.length === 0 ||
-        tasksData === null ||
         legacyCoreParsed !== null ||
         !projectStorage.canonicalFiles ||
+        !hasCanonicalTaskStorage ||
+        tasksData !== null ||
         legacyRootTasksData !== null ||
         legacySystemTasksData !== null ||
         hasLegacyCalendarTaskTypes(resolvedTasks) ||
         hasLegacyAppearanceSettings(resolvedCore) ||
         resolvedCore !== coreParsed ||
-        resolvedTasks !== tasksData ||
         migratedProjectWork.migrated ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
@@ -931,7 +933,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
       ai: next.ai ? { ...current.ai, ...next.ai } : current.ai,
       lastVaultPath: vaultRoot
     })
-    await this.persistVaultFiles(vaultRoot, merged)
+    await this.persistVaultUpdate(vaultRoot, merged, next)
     return merged
   }
 
@@ -954,9 +956,43 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
   }
 
   private async persistVaultFiles(vaultRoot: string, settings: AppSettings): Promise<void> {
-    const corePath = getVaultSettingsPath(vaultRoot)
-    const projectStore = new ProjectStore(vaultRoot)
+    await Promise.all([
+      this.persistVaultCore(vaultRoot, settings),
+      new ProjectStore(vaultRoot).writeAll(settings.projects),
+      new TaskStore(vaultRoot).writeAll(settings.tasks ?? settings.calendarTasks)
+    ])
+  }
 
+  private async persistVaultUpdate(
+    vaultRoot: string,
+    settings: AppSettings,
+    next: AppSettingsUpdate
+  ): Promise<void> {
+    const updates: Array<Promise<void>> = []
+    const writesProjects = next.projects !== undefined || next.projectIcons !== undefined
+    const writesTasks = next.tasks !== undefined || next.calendarTasks !== undefined
+    const writesCore = Object.keys(next).some(
+      (key) =>
+        key !== 'projects' &&
+        key !== 'projectIcons' &&
+        key !== 'tasks' &&
+        key !== 'calendarTasks'
+    )
+
+    if (writesCore) {
+      updates.push(this.persistVaultCore(vaultRoot, settings))
+    }
+    if (writesProjects) {
+      updates.push(new ProjectStore(vaultRoot).writeAll(settings.projects))
+    }
+    if (writesTasks) {
+      updates.push(new TaskStore(vaultRoot).writeAll(settings.tasks ?? settings.calendarTasks))
+    }
+
+    await Promise.all(updates)
+  }
+
+  private async persistVaultCore(vaultRoot: string, settings: AppSettings): Promise<void> {
     const coreSettings: VaultCoreSettings = {
       isSidebarCollapsed: settings.isSidebarCollapsed,
       lastVaultPath: settings.lastVaultPath,
@@ -971,12 +1007,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
       editorVimKeyMappings: settings.editorVimKeyMappings,
       gridBoard: settings.gridBoard
     }
-
-    await Promise.all([
-      this.writeJsonFile(corePath, coreSettings),
-      projectStore.writeAll(settings.projects),
-      new TaskStore(vaultRoot).writeAll(settings.tasks ?? settings.calendarTasks)
-    ])
+    await this.writeJsonFile(getVaultSettingsPath(vaultRoot), coreSettings)
   }
 
   private async cleanupLegacyVaultFiles(

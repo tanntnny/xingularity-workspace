@@ -1,5 +1,5 @@
 import { ReactElement, useMemo } from 'react'
-import { Copy, FileText, FolderInput, Heart, Link, Pencil, Trash2 } from './ui/icons'
+import { Copy, FileText, FolderInput, Link, Pencil, Trash2 } from './ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
@@ -126,7 +126,6 @@ export function NotePreviewList({
         <>
           <NoteSection
             title="Favorites"
-            icon={<Heart size={16} aria-hidden="true" />}
             description={`${favoriteNotes.length} starred notes in the current filter`}
             emptyLabel="No favorite notes yet"
             notes={favoriteNotes}
@@ -144,7 +143,6 @@ export function NotePreviewList({
           />
           <NoteSection
             title="All Notes"
-            icon={<FileText size={16} aria-hidden="true" />}
             description={`${allNotes.length} notes available`}
             emptyLabel="No other notes found"
             notes={allNotes}
@@ -168,7 +166,6 @@ export function NotePreviewList({
 
 function NoteSection({
   title,
-  icon,
   description,
   emptyLabel,
   notes,
@@ -185,7 +182,6 @@ function NoteSection({
   revealKeyPrefix
 }: {
   title: string
-  icon: ReactElement
   description: string
   emptyLabel: string
   notes: NoteListItem[]
@@ -207,7 +203,7 @@ function NoteSection({
 }): ReactElement {
   return (
     <WorkspacePanelSection>
-      <WorkspacePanelSectionHeader icon={icon} heading={title} description={description} />
+      <WorkspacePanelSectionHeader heading={title} description={description} />
       {notes.length === 0 ? (
         <div className="p-3 text-sm text-muted-foreground">{emptyLabel}</div>
       ) : (

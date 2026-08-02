@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { app, BrowserWindow, dialog, shell } from 'electron'
@@ -17,6 +18,7 @@ import {
   sanitizeEntryPath,
   sanitizeNotePath
 } from './fileService'
+import { FleetingNoteService } from './fleetingNoteService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import {
   createEmptyExcalidrawFileDocument,
@@ -31,6 +33,7 @@ import {
   validateVault,
   VaultPaths
 } from './vaultManager'
+import { getVaultFleetingDir } from './vaultData'
 import { VaultWatcher } from './watcher'
 import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
@@ -38,6 +41,7 @@ import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
 import { createWarpNewTabUri } from './warp'
 import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
+import { normalizeProjectIcon } from '../shared/projectIcons'
 import {
   AppSettings,
   AgentChatEvent,
@@ -52,13 +56,20 @@ import {
   AgentRunRecord,
   AppSettingsUpdate,
   AppSettingsUpdateOptions,
+  CalendarTask,
+  CreateProjectInput,
+  CreateTaskInput,
+  DeleteProjectInput,
+  DeleteProjectResult,
   CompleteNoteWithAiInput,
   BlockNoteMigrationResult,
   NoteImportResult,
   Project,
+  ProjectState,
   SavedVaultState,
   SearchResult,
   StoredNoteDocument,
+  UpdateProjectInput,
   VaultRemoveResult,
   VaultOpenResult,
   HistoryOperationResult,
@@ -69,12 +80,16 @@ import {
   NotePdfExportInput,
   NotePdfExportResult,
   FolderPdfExportInput,
-  FolderPdfExportResult
+  FolderPdfExportResult,
+  FleetingConversionResult,
+  FleetingConversionTarget,
+  FleetingNote
 } from '../shared/types'
 
 export class VaultRuntime {
   private currentPaths: VaultPaths | null = null
   private fileService: FileService | null = null
+  private fleetingNoteService: FleetingNoteService | null = null
   private watcher: VaultWatcher | null = null
   private indexer: SqliteIndexer | null = null
   private settings = new SettingsStore()
@@ -206,6 +221,64 @@ export class VaultRuntime {
   async listNotes(): ReturnType<FileService['listNotes']> {
     this.assertReady()
     return this.fileService!.listNotes()
+  }
+
+  async listFleetingNotes(): Promise<FleetingNote[]> {
+    this.assertReady()
+    return this.fleetingNoteService!.list()
+  }
+
+  async createFleetingNote(content: string): Promise<FleetingNote> {
+    this.assertReady()
+    return this.fleetingNoteService!.create(content)
+  }
+
+  async convertFleetingNote(
+    relPath: string,
+    target: FleetingConversionTarget
+  ): Promise<FleetingConversionResult> {
+    this.assertReady()
+    const fleetingNote = await this.fleetingNoteService!.read(relPath)
+
+    if (target === 'note') {
+      const notePath = await this.fileService!.createNoteWithMarkdown(
+        getFleetingTitle(fleetingNote.content),
+        fleetingNote.content
+      )
+      const document = serializeStoredNoteDocument(
+        await this.fileService!.readNoteDocument(notePath)
+      )
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(notePath),
+        relPath: notePath,
+        content: document,
+        updatedAt: new Date().toISOString()
+      })
+      await this.fleetingNoteService!.delete(fleetingNote.relPath)
+      return {
+        sourceRelPath: fleetingNote.relPath,
+        target,
+        noteRelPath: notePath
+      }
+    }
+
+    const task = createTaskFromFleetingNote(fleetingNote.content)
+    await this.mutateSettings((settings) => {
+      const nextTasks = [...settings.calendarTasks, task]
+      return {
+        next: {
+          calendarTasks: nextTasks,
+          tasks: nextTasks
+        },
+        result: task
+      }
+    })
+    await this.fleetingNoteService!.delete(fleetingNote.relPath)
+    return {
+      sourceRelPath: fleetingNote.relPath,
+      target,
+      task
+    }
   }
 
   async listNoteTree(): ReturnType<FileService['listTree']> {
@@ -1025,6 +1098,185 @@ export class VaultRuntime {
     })
   }
 
+  async createProject(input: CreateProjectInput): Promise<Project> {
+    return this.mutateSettings((settings) => {
+      const name = buildProjectName(settings.projects, input.name)
+      const description = input.description?.trim() || 'Add project details here.'
+      const project: Project = {
+        id: `project-${randomUUID()}`,
+        name,
+        summary: description,
+        description,
+        state: 'active',
+        status: 'on-track',
+        icon: normalizeProjectIcon(input.icon, name),
+        updatedAt: new Date().toISOString(),
+        progress: 0,
+        milestones: []
+      }
+
+      return {
+        next: {
+          projects: [project, ...settings.projects],
+          lastOpenedProjectId: project.id
+        },
+        result: project
+      }
+    }, { label: 'Create project' })
+  }
+
+  async selectProject(projectId: string | null): Promise<{ projectId: string | null }> {
+    return this.mutateSettings((settings) => {
+      if (projectId && !settings.projects.some((project) => project.id === projectId)) {
+        throw new Error(`Project not found: ${projectId}`)
+      }
+      return {
+        next: { lastOpenedProjectId: projectId },
+        result: { projectId }
+      }
+    }, { recordHistory: false })
+  }
+
+  async updateProject(input: UpdateProjectInput): Promise<Project> {
+    return this.mutateSettings((settings) => {
+      const existing = resolveProjectById(settings.projects, input.projectId)
+      const name = input.name === undefined ? existing.name : input.name.trim()
+      if (!name) {
+        throw new Error('Project name is required')
+      }
+      const description =
+        input.description === undefined ? existing.description : input.description.trim()
+      const updated: Project = {
+        ...existing,
+        name,
+        summary: description ?? existing.summary,
+        description,
+        icon: input.icon ? normalizeProjectIcon(input.icon, existing.id) : existing.icon,
+        updatedAt: new Date().toISOString()
+      }
+      return {
+        next: {
+          projects: settings.projects.map((project) =>
+            project.id === updated.id ? updated : project
+          )
+        },
+        result: updated
+      }
+    }, { label: 'Update project' })
+  }
+
+  async setProjectState(projectId: string, state: ProjectState): Promise<Project> {
+    return this.mutateSettings((settings) => {
+      const existing = resolveProjectById(settings.projects, projectId)
+      const updated: Project = {
+        ...existing,
+        state,
+        updatedAt: new Date().toISOString()
+      }
+      return {
+        next: {
+          projects: settings.projects.map((project) =>
+            project.id === updated.id ? updated : project
+          )
+        },
+        result: updated
+      }
+    }, { label: state === 'archived' ? 'Archive project' : 'Unarchive project' })
+  }
+
+  async setProjectFavorite(
+    projectId: string,
+    favorite: boolean
+  ): Promise<{ projectId: string; favorite: boolean }> {
+    return this.mutateSettings((settings) => {
+      resolveProjectById(settings.projects, projectId)
+      const favoriteProjectIds = favorite
+        ? [projectId, ...settings.favoriteProjectIds.filter((id) => id !== projectId)]
+        : settings.favoriteProjectIds.filter((id) => id !== projectId)
+      return {
+        next: { favoriteProjectIds },
+        result: { projectId, favorite }
+      }
+    }, { recordHistory: false })
+  }
+
+  async deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult> {
+    return this.mutateSettings((settings) => {
+      resolveProjectById(settings.projects, input.projectId)
+      const nextProjects = settings.projects.filter((project) => project.id !== input.projectId)
+      const linkedTasks = settings.calendarTasks.filter(
+        (task) => task.projectId === input.projectId
+      )
+      const removedTaskIds =
+        input.linkedTasks === 'delete' ? linkedTasks.map((task) => task.id) : []
+      const unassignedTaskIds =
+        input.linkedTasks === 'unassign' ? linkedTasks.map((task) => task.id) : []
+      const nextTasks =
+        input.linkedTasks === 'delete'
+          ? settings.calendarTasks.filter((task) => task.projectId !== input.projectId)
+          : settings.calendarTasks.map((task) =>
+              task.projectId === input.projectId ? { ...task, projectId: undefined } : task
+            )
+      const nextSelectedProjectId =
+        settings.lastOpenedProjectId === input.projectId
+          ? (nextProjects[0]?.id ?? null)
+          : settings.lastOpenedProjectId
+      const nextProjectIcons = { ...settings.projectIcons }
+      delete nextProjectIcons[input.projectId]
+
+      return {
+        next: {
+          projects: nextProjects,
+          projectIcons: nextProjectIcons,
+          tasks: nextTasks,
+          calendarTasks: nextTasks,
+          favoriteProjectIds: settings.favoriteProjectIds.filter(
+            (projectId) => projectId !== input.projectId
+          ),
+          lastOpenedProjectId: nextSelectedProjectId
+        },
+        result: {
+          deletedProjectId: input.projectId,
+          nextSelectedProjectId,
+          removedTaskIds,
+          unassignedTaskIds
+        }
+      }
+    }, { label: 'Delete project' })
+  }
+
+  async createTask(input: CreateTaskInput): Promise<CalendarTask> {
+    return this.mutateSettings((settings) => {
+      if (input.projectId && !settings.projects.some((project) => project.id === input.projectId)) {
+        throw new Error(`Project not found: ${input.projectId}`)
+      }
+
+      const task: CalendarTask = {
+        id: `task-${randomUUID()}`,
+        title: input.title.trim(),
+        projectId: input.projectId,
+        date: input.date,
+        endDate: input.endDate,
+        time: input.time,
+        endTime: input.endTime,
+        completed: false,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        priority: input.priority ?? 'low',
+        taskType: input.taskType ?? 'assignment',
+        reminders: input.reminders ?? []
+      }
+
+      return {
+        next: {
+          calendarTasks: [...settings.calendarTasks, task],
+          tasks: [...settings.calendarTasks, task]
+        },
+        result: task
+      }
+    })
+  }
+
   private async updateSettingsInternal(
     next: AppSettingsUpdate,
     options: {
@@ -1056,7 +1308,8 @@ export class VaultRuntime {
   async mutateSettings<T>(
     updater: (
       settings: AppSettings
-    ) => Promise<{ next: AppSettingsUpdate; result: T }> | { next: AppSettingsUpdate; result: T }
+    ) => Promise<{ next: AppSettingsUpdate; result: T }> | { next: AppSettingsUpdate; result: T },
+    options?: { recordHistory?: boolean; label?: string }
   ): Promise<T> {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
@@ -1067,10 +1320,10 @@ export class VaultRuntime {
         this.reminderService.updateTasks(merged.calendarTasks)
       }
 
-      if (!sameJson(current, merged)) {
+      if (options?.recordHistory !== false && !sameJson(current, merged)) {
         await this.createTrashService().archiveSettingsDeletes(current, merged)
         this.pushSettingsHistory(
-          deriveSettingsHistoryLabel(current, merged, 'Update workspace'),
+          deriveSettingsHistoryLabel(current, merged, options?.label ?? 'Update workspace'),
           current,
           merged
         )
@@ -1140,6 +1393,9 @@ export class VaultRuntime {
       this.currentPaths.attachmentsPath,
       (relPath) => this.watcher?.markInternalWrite(relPath)
     )
+    this.fleetingNoteService = new FleetingNoteService(
+      getVaultFleetingDir(this.currentPaths.rootPath)
+    )
 
     const migratedLegacyPaths = await this.fileService.migrateLegacyMarkdownNotes()
     if (Object.keys(migratedLegacyPaths).length > 0) {
@@ -1175,6 +1431,7 @@ export class VaultRuntime {
     await this.watcher?.stop()
     this.watcher = null
     this.fileService = null
+    this.fleetingNoteService = null
     this.indexer?.close()
     this.indexer = null
     this.currentPaths = null
@@ -1649,6 +1906,38 @@ export class VaultRuntime {
   }
 }
 
+function buildProjectName(projects: Project[], proposedName?: string): string {
+  const normalized = proposedName?.trim()
+  if (normalized) {
+    const existingNames = new Set(projects.map((project) => project.name.toLowerCase()))
+    let nextName = normalized
+    let suffix = 2
+    while (existingNames.has(nextName.toLowerCase())) {
+      nextName = `${normalized} ${suffix}`
+      suffix += 1
+    }
+    return nextName
+  }
+
+  const baseName = 'Untitled Project'
+  const existingNames = new Set(projects.map((project) => project.name.toLowerCase()))
+  let nextName = baseName
+  let suffix = 2
+  while (existingNames.has(nextName.toLowerCase())) {
+    nextName = `${baseName} ${suffix}`
+    suffix += 1
+  }
+  return nextName
+}
+
+function resolveProjectById(projects: Project[], projectId: string): Project {
+  const project = projects.find((item) => item.id === projectId)
+  if (!project) {
+    throw new Error(`Project not found: ${projectId}`)
+  }
+  return project
+}
+
 async function resetIndexArtifacts(indexPath: string, fileMapPath: string): Promise<void> {
   const artifacts = [
     indexPath,
@@ -1700,6 +1989,32 @@ function isSqliteCorruptionError(error: unknown): boolean {
 
 function createStableId(relPath: string): string {
   return `note:${path.normalize(relPath).toLowerCase()}`
+}
+
+function getFleetingTitle(content: string): string {
+  return content.split(/\r?\n/).find((line) => line.trim())?.trim() || 'Captured thought'
+}
+
+function createTaskFromFleetingNote(content: string): CalendarTask {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  const titleIndex = lines.findIndex((line) => line.trim())
+  const title = titleIndex >= 0 ? lines[titleIndex].trim() : 'Captured thought'
+  const description = lines
+    .slice(titleIndex + 1)
+    .join('\n')
+    .trim()
+
+  return {
+    id: `task-${Date.now()}-${randomUUID().slice(0, 8)}`,
+    title: title.slice(0, 200),
+    ...(description ? { description: description.slice(0, 2000) } : {}),
+    completed: false,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    priority: 'low',
+    taskType: 'assignment',
+    reminders: []
+  }
 }
 
 function buildInitialAgentChatMessages(

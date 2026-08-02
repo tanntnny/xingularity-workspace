@@ -239,6 +239,14 @@ function selectionTouchesTextblock(
   return selectionFrom <= blockEnd && selectionTo >= blockStart
 }
 
+function getLogicalLineRange(text: string, from: number, to: number): { from: number; to: number } {
+  const lineStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1
+  const nextLineBreak = text.indexOf('\n', to)
+  const lineEnd = nextLineBreak < 0 ? text.length : nextLineBreak
+
+  return { from: lineStart, to: lineEnd }
+}
+
 const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
 const noteCalloutPluginKey = new PluginKey('note-callout')
 const noteArrowInputPluginKey = new PluginKey('note-arrow-input')
@@ -296,9 +304,6 @@ function inlineLatexPreviewPlugin(): Plugin {
           }
 
           const blockStart = pos + 1
-          const blockEnd = pos + node.content.size + 1
-          const isActiveTextblock =
-            isFocused && selectionTouchesTextblock(selectionFrom, selectionTo, blockStart, blockEnd)
           const blockText = node.textBetween(0, node.content.size, '\n', '\0')
 
           for (const match of findLatexTextMatches(blockText)) {
@@ -310,7 +315,17 @@ function inlineLatexPreviewPlugin(): Plugin {
               continue
             }
 
-            if (isActiveTextblock) {
+            const lineRange = getLogicalLineRange(blockText, match.from, match.to)
+            const isActiveLine =
+              isFocused &&
+              selectionTouchesTextblock(
+                selectionFrom,
+                selectionTo,
+                blockStart + lineRange.from,
+                blockStart + lineRange.to
+              )
+
+            if (isActiveLine) {
               decorations.push(
                 Decoration.inline(from, to, {
                   class: cn(
@@ -1495,7 +1510,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     <div
       data-testid="note-block-editor"
       data-vim-mode={vimModeEnabled ? vimMode : undefined}
-      className="relative h-full min-h-[60vh]"
+      data-editor-ready={isEditorVisible ? 'true' : 'false'}
+      className="motion-editor-surface relative h-full min-h-[60vh]"
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
       onFocusCapture={() => {
         hasFocusIntentRef.current = true
@@ -1507,7 +1523,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
       {slashPicker?.open ? (
         <div
-          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+          className="motion-editor-popover absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
           style={{
             top: slashPicker.top,
             left: slashPicker.left
@@ -1555,7 +1571,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       ) : null}
       {mentionPicker?.open ? (
         <div
-          className="absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+          className="motion-editor-popover absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
           style={{
             top: mentionPicker.top,
             left: mentionPicker.left

@@ -45,6 +45,7 @@ import {
   IconFolderOpenFilled,
   IconHourglassFilled,
   IconHeartFilled,
+  IconInbox,
   IconHomeFilled,
   IconKeyboardFilled,
   IconLayout2Filled,
@@ -134,6 +135,7 @@ export const Globe = IconWorldFilled
 export const HardDrive = IconDeviceDesktopFilled
 export const Heart = IconHeartFilled
 export const Home = IconHomeFilled
+export const Inbox = IconInbox
 export const House = IconHomeFilled
 export const Keyboard = IconKeyboardFilled
 export const Landmark = IconDeviceDesktopFilled

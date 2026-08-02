@@ -6,6 +6,7 @@ import {
   CreditCard,
   FolderKanban,
   HardDrive,
+  Inbox,
   NotebookTabs,
   Search,
   ChevronRight,
@@ -61,12 +62,17 @@ type SidebarPageItem = {
 }
 
 type SidebarSection = {
-  id: 'view' | 'finance'
+  id: 'inbox' | 'view' | 'finance'
   label: string
   items: readonly SidebarPageItem[]
 }
 
 const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
+  {
+    id: 'inbox',
+    label: 'Inbox',
+    items: [{ id: 'capture', label: 'Capture', icon: Inbox }]
+  },
   {
     id: 'view',
     label: 'View',
@@ -89,6 +95,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 ]
 
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
+  inbox: true,
   view: true,
   finance: true
 }

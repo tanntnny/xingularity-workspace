@@ -17,7 +17,6 @@ function createBindings(
     onToggleFocusMode: vi.fn(),
     onRunUndo: vi.fn(),
     onRunRedo: vi.fn(),
-    onToggleProjectsView: vi.fn(),
     onToggleCalendarView: vi.fn(),
     onCreateWorkspaceTab: vi.fn(),
     onCloseActiveWorkspaceTab: vi.fn(),
@@ -99,15 +98,14 @@ describe('dispatchWorkspaceShellShortcut', () => {
     expect(bindings.onCloseActiveWorkspaceTab).toHaveBeenCalledOnce()
   })
 
-  it('toggles the projects view for Option+Tab on the projects page', () => {
+  it('does not consume Option+Tab on the projects page', () => {
     const bindings = createBindings({ activePage: 'projects' })
     const event = createEvent({ key: 'Tab', code: 'Tab', altKey: true })
 
     const handled = dispatchWorkspaceShellShortcut(event, bindings)
 
-    expect(handled).toBe(true)
-    expect(event.preventDefault).toHaveBeenCalledOnce()
-    expect(bindings.onToggleProjectsView).toHaveBeenCalledOnce()
+    expect(handled).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
     expect(bindings.onToggleCalendarView).not.toHaveBeenCalled()
   })
 
@@ -120,7 +118,6 @@ describe('dispatchWorkspaceShellShortcut', () => {
     expect(handled).toBe(true)
     expect(event.preventDefault).toHaveBeenCalledOnce()
     expect(bindings.onToggleCalendarView).toHaveBeenCalledOnce()
-    expect(bindings.onToggleProjectsView).not.toHaveBeenCalled()
   })
 
   it('does not consume Option+Tab on unrelated pages', () => {
@@ -131,7 +128,6 @@ describe('dispatchWorkspaceShellShortcut', () => {
 
     expect(handled).toBe(false)
     expect(event.preventDefault).not.toHaveBeenCalled()
-    expect(bindings.onToggleProjectsView).not.toHaveBeenCalled()
     expect(bindings.onToggleCalendarView).not.toHaveBeenCalled()
   })
 

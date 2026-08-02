@@ -310,6 +310,7 @@ export class AgentToolsService {
         icon: normalizeProjectIcon(input.icon, name),
         updatedAt: nowIso,
         summary: input.description?.trim() || '',
+        state: 'active',
         status: 'on-track',
         progress: 0,
         milestones: []

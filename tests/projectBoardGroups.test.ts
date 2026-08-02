@@ -7,6 +7,7 @@ const baseProject: Project = {
   id: 'project-base',
   name: 'Base',
   summary: '',
+  state: 'active',
   status: 'on-track',
   updatedAt: '2026-07-10T12:00:00.000Z',
   progress: 0,

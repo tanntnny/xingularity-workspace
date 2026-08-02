@@ -14,6 +14,7 @@ const project: Project = {
   id: 'project-1',
   name: 'Alpha Project',
   summary: '',
+  state: 'active',
   status: 'on-track',
   updatedAt: '2026-04-02T00:00:00.000Z',
   progress: 0,

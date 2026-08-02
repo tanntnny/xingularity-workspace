@@ -76,6 +76,11 @@ const api: RendererVaultApi = {
     exportProject: (projectName, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
   },
+  fleeting: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.listFleetingNotes),
+    create: (content) => ipcRenderer.invoke(IPC_CHANNELS.createFleetingNote, content),
+    convert: (input) => ipcRenderer.invoke(IPC_CHANNELS.convertFleetingNote, input)
+  },
   search: {
     query: (query) => ipcRenderer.invoke(IPC_CHANNELS.searchQuery, query)
   },
@@ -115,6 +120,17 @@ const api: RendererVaultApi = {
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (next, options) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next, options)
+  },
+  projects: {
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createProject, input),
+    select: (input) => ipcRenderer.invoke(IPC_CHANNELS.selectProject, input),
+    update: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateProject, input),
+    setState: (input) => ipcRenderer.invoke(IPC_CHANNELS.setProjectState, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.setProjectFavorite, input),
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProject, input)
+  },
+  tasks: {
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createTask, input)
   },
   history: {
     undo: () => ipcRenderer.invoke(IPC_CHANNELS.historyUndo),

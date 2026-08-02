@@ -113,6 +113,24 @@ export interface NoteListItem {
   mentionTargets?: string[]
 }
 
+export interface FleetingNote {
+  type: 'fleeting'
+  id: string
+  relPath: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type FleetingConversionTarget = 'note' | 'task'
+
+export interface FleetingConversionResult {
+  sourceRelPath: string
+  target: FleetingConversionTarget
+  noteRelPath?: string
+  task?: CalendarTask
+}
+
 interface NoteTreeEntryBase {
   id: string
   relPath: string
@@ -256,6 +274,18 @@ export interface CalendarTask {
   automationSourceKey?: string
 }
 
+export interface CreateTaskInput {
+  title: string
+  projectId?: string
+  date?: string
+  endDate?: string
+  time?: string
+  endTime?: string
+  priority?: TaskPriority
+  taskType?: CalendarTaskType
+  reminders?: TaskReminder[]
+}
+
 // CalendarTask remains as a compatibility alias while the renderer and persisted data
 // transition to the domain-neutral Task name.
 export type Task = CalendarTask
@@ -278,6 +308,7 @@ export interface CalendarItem {
 }
 
 export type ProjectStatus = 'on-track' | 'at-risk' | 'blocked' | 'completed'
+export type ProjectState = 'active' | 'archived'
 
 export interface ProjectSubtask {
   id: string
@@ -307,6 +338,7 @@ export interface Project {
   description?: string
   summary: string
   folderPath?: string
+  state: ProjectState
   status: ProjectStatus
   updatedAt: string
   progress: number
@@ -315,6 +347,31 @@ export interface Project {
   // used by project-focused renderer projections.
   tasks?: CalendarTask[]
   icon: ProjectIconStyle
+}
+
+export interface CreateProjectInput {
+  name?: string
+  description?: string
+  icon?: ProjectIconInput
+}
+
+export interface UpdateProjectInput {
+  projectId: string
+  name?: string
+  description?: string
+  icon?: ProjectIconInput
+}
+
+export interface DeleteProjectInput {
+  projectId: string
+  linkedTasks: 'delete' | 'unassign'
+}
+
+export interface DeleteProjectResult {
+  deletedProjectId: string
+  nextSelectedProjectId: string | null
+  removedTaskIds: string[]
+  unassignedTaskIds: string[]
 }
 
 export type GridBoardItemKind = 'note' | 'project' | 'text'
@@ -437,6 +494,11 @@ export interface AppSettingsUpdate {
 export interface AppSettingsUpdateOptions {
   history?: boolean
 }
+
+export type RendererSettingsUpdate = Omit<
+  AppSettingsUpdate,
+  'projects' | 'projectIcons' | 'lastOpenedProjectId' | 'favoriteProjectIds'
+>
 
 export interface HistoryAffectedAreas {
   notes?: boolean
@@ -1015,6 +1077,14 @@ export interface RendererVaultApi {
     exportFolderPdf: (input: FolderPdfExportInput) => Promise<FolderPdfExportResult>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }
+  fleeting: {
+    list: () => Promise<FleetingNote[]>
+    create: (content: string) => Promise<FleetingNote>
+    convert: (input: {
+      relPath: string
+      target: FleetingConversionTarget
+    }) => Promise<FleetingConversionResult>
+  }
   search: {
     query: (query: string) => Promise<SearchResult[]>
   }
@@ -1046,7 +1116,21 @@ export interface RendererVaultApi {
   }
   settings: {
     get: () => Promise<AppSettings>
-    update: (next: AppSettingsUpdate, options?: AppSettingsUpdateOptions) => Promise<AppSettings>
+    update: (next: RendererSettingsUpdate, options?: AppSettingsUpdateOptions) => Promise<AppSettings>
+  }
+  projects: {
+    create: (input: CreateProjectInput) => Promise<Project>
+    select: (input: { projectId: string | null }) => Promise<{ projectId: string | null }>
+    update: (input: UpdateProjectInput) => Promise<Project>
+    setState: (input: { projectId: string; state: ProjectState }) => Promise<Project>
+    setFavorite: (input: { projectId: string; favorite: boolean }) => Promise<{
+      projectId: string
+      favorite: boolean
+    }>
+    delete: (input: DeleteProjectInput) => Promise<DeleteProjectResult>
+  }
+  tasks: {
+    create: (input: CreateTaskInput) => Promise<CalendarTask>
   }
   history: {
     undo: () => Promise<HistoryOperationResult>

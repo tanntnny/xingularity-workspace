@@ -11,6 +11,7 @@ const alphaProject: Project = {
   id: 'project-alpha',
   name: 'Alpha',
   summary: 'Alpha summary',
+  state: 'active',
   status: 'on-track',
   updatedAt: '2026-07-05T10:00:00.000Z',
   progress: 50,
@@ -48,9 +49,17 @@ const betaProject: Project = {
   ...alphaProject,
   id: 'project-beta',
   name: 'Beta',
+  state: 'active',
   status: 'completed',
   updatedAt: '2026-07-01T10:00:00.000Z',
   milestones: []
+}
+
+const archivedProject: Project = {
+  ...alphaProject,
+  id: 'project-archived',
+  name: 'Archived',
+  state: 'archived'
 }
 
 describe('project task row helpers', () => {
@@ -82,16 +91,24 @@ describe('project task row helpers', () => {
     })
   })
 
-  it('filters workspace projects by favorites and completion state', () => {
+  it('filters workspace projects by active, favorite, and archived state', () => {
+    expect(
+      filterProjectsForWorkspace(
+        [alphaProject, betaProject, archivedProject],
+        ['project-beta', 'project-archived'],
+        'all'
+      )
+    ).toEqual([alphaProject, betaProject])
     expect(
       filterProjectsForWorkspace([alphaProject, betaProject], ['project-beta'], 'favorites')
     ).toEqual([betaProject])
-    expect(filterProjectsForWorkspace([alphaProject, betaProject], [], 'active')).toEqual([
-      alphaProject
-    ])
-    expect(filterProjectsForWorkspace([alphaProject, betaProject], [], 'completed')).toEqual([
-      betaProject
-    ])
+    expect(
+      filterProjectsForWorkspace(
+        [alphaProject, betaProject, archivedProject],
+        ['project-archived'],
+        'archived'
+      )
+    ).toEqual([archivedProject])
   })
 
   it('sorts rows by due date with empty dates last in ascending order', () => {

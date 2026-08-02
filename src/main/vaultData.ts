@@ -4,6 +4,7 @@ import path from 'node:path'
 export const VAULT_SYSTEM_DIRNAME = '.xingularity'
 export const LEGACY_VAULT_SYSTEM_DIRNAME = '.appmeta'
 export const VAULT_NOTEBOOKS_DIRNAME = 'notebooks'
+export const VAULT_FLEETING_DIRNAME = 'fleeting'
 export const LEGACY_VAULT_NOTES_DIRNAME = 'notes'
 export const VAULT_ATTACHMENTS_DIRNAME = 'attachments'
 export const VAULT_PROJECTS_DIRNAME = 'projects'
@@ -39,6 +40,10 @@ export async function ensureVaultSystemDir(rootPath: string): Promise<string> {
 
 export function getVaultNotebooksDir(rootPath: string): string {
   return path.join(rootPath, VAULT_NOTEBOOKS_DIRNAME)
+}
+
+export function getVaultFleetingDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_FLEETING_DIRNAME)
 }
 
 export function getLegacyVaultNotesDir(rootPath: string): string {

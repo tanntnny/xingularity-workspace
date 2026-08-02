@@ -196,6 +196,7 @@ export {
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,
@@ -206,5 +207,8 @@ export {
   WorkspaceIconButton,
   type WorkspaceTab
 } from './document-workspace'
+
+export { WorkspaceListRail, WorkspaceListRailItem } from './workspace-list-rail'
+export type { WorkspaceListRailProps, WorkspaceListRailItemProps } from './workspace-list-rail'
 
 export { WorkspacePanelSection, WorkspacePanelSectionHeader } from './workspace-panel-section'

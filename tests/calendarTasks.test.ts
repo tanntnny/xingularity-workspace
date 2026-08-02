@@ -25,6 +25,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     id: 'project-1',
     name: 'Project',
     summary: '',
+    state: 'active',
     status: 'on-track',
     updatedAt: '2026-03-17T00:00:00.000Z',
     progress: 0,

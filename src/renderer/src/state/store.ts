@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import { AppSettings, NoteListItem, SearchResult, VaultInfo } from '../../../shared/types'
+import {
+  AppSettings,
+  AppSettingsUpdate,
+  NoteListItem,
+  SearchResult,
+  VaultInfo
+} from '../../../shared/types'
 
 export interface Toast {
   id: string
@@ -27,6 +33,7 @@ interface VaultState {
   setSearchResults: (results: SearchResult[]) => void
   setCommandPaletteOpen: (open: boolean) => void
   setSettings: (settings: AppSettings) => void
+  patchSettings: (patch: AppSettingsUpdate) => void
   pushToast: (kind: Toast['kind'], message: string) => void
   removeToast: (id: string) => void
 }
@@ -82,6 +89,21 @@ export const useVaultStore = create<VaultState>((set) => ({
   setSearchResults: (searchResults) => set({ searchResults }),
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
   setSettings: (settings) => set({ settings }),
+  patchSettings: (patch) =>
+    set((state) => {
+      const nextTasks = patch.tasks ?? patch.calendarTasks
+      return {
+        settings: {
+          ...state.settings,
+          ...patch,
+          ...(nextTasks ? { tasks: nextTasks, calendarTasks: nextTasks } : {}),
+          profile: patch.profile
+            ? { ...state.settings.profile, ...patch.profile }
+            : state.settings.profile,
+          ai: patch.ai ? { ...state.settings.ai, ...patch.ai } : state.settings.ai
+        }
+      }
+    }),
   pushToast: (kind, message) =>
     set((state) => ({
       toasts: [...state.toasts, { id: `${Date.now()}-${Math.random()}`, kind, message }]

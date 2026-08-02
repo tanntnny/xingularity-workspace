@@ -69,7 +69,7 @@ export class ProjectStore {
 
   async cleanupLegacyFiles(): Promise<void> {
     await Promise.all([
-      deleteLegacyVaultPath(getLegacyPageVaultProjectsPath(this.vaultRoot), this.vaultRoot),
+      fs.rm(getLegacyPageVaultProjectsPath(this.vaultRoot), { force: true }),
       deleteLegacyVaultPath(getLegacyVaultProjectsPath(this.vaultRoot), this.vaultRoot),
       deleteLegacyVaultPath(getLegacyVaultProjectIconsPath(this.vaultRoot), this.vaultRoot),
       deleteLegacyVaultPath(getLegacySystemVaultProjectsPath(this.vaultRoot), this.vaultRoot)
@@ -163,12 +163,15 @@ export class ProjectStore {
   }
 }
 
-function serializeProject(project: Project): Pick<Project, 'id' | 'name' | 'description' | 'icon' | 'updatedAt'> {
+function serializeProject(
+  project: Project
+): Pick<Project, 'id' | 'name' | 'description' | 'icon' | 'state' | 'updatedAt'> {
   return {
     id: project.id,
     name: project.name,
     description: project.description ?? project.summary ?? '',
     icon: project.icon,
+    state: project.state,
     updatedAt: project.updatedAt
   }
 }

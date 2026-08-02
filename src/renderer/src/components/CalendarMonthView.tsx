@@ -407,6 +407,7 @@ export function CalendarMonthView({
   const handleEventDidMount = (mountInfo: EventMountArg): void => {
     const source = String(mountInfo.event.extendedProps.source ?? 'task')
     const taskId = mountInfo.event.id
+    mountInfo.el.classList.add('motion-calendar-event')
     const onMouseMove = (event: MouseEvent): void => {
       if (isInteractingRef.current) {
         return

@@ -1,9 +1,7 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
-import { normalizeProjectIcon } from '../shared/projectIcons'
 import {
-  AppSettingsUpdate,
   CALENDAR_TASK_TYPE_VALUES,
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES
@@ -17,6 +15,11 @@ const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
 const projectNameSchema = z.string().min(1).max(200)
 const contentSchema = z.string().max(2_000_000)
+const fleetingContentSchema = z.string().trim().min(1).max(2_000_000)
+const fleetingConversionSchema = z.object({
+  relPath: genericPathSchema,
+  target: z.enum(['note', 'task'])
+})
 const notePdfExportInputSchema = z.object({
   relPath: notePathSchema,
   title: z.string().trim().min(1).max(512),
@@ -170,6 +173,17 @@ const calendarTaskSchema = z.object({
   automationSource: z.string().max(200).optional(),
   automationSourceKey: z.string().max(200).optional()
 })
+const taskCreateInputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  projectId: z.string().min(1).max(120).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
+  reminders: z.array(taskReminderSchema).max(10).optional()
+})
 
 const projectIconSchema = z.object({
   set: z.enum(['tabler', 'shape', 'lucide']).optional(),
@@ -203,6 +217,33 @@ const projectIconSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
 
+const projectCreateInputSchema = z.object({
+  name: z.string().trim().max(200).optional(),
+  description: z.string().max(2000).optional(),
+  icon: projectIconSchema.optional()
+})
+const projectSelectInputSchema = z.object({
+  projectId: z.string().min(1).max(120).nullable()
+})
+const projectUpdateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  name: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(2000).optional(),
+  icon: projectIconSchema.optional()
+})
+const projectStateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  state: z.enum(['active', 'archived'])
+})
+const projectFavoriteInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  favorite: z.boolean()
+})
+const projectDeleteInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  linkedTasks: z.enum(['delete', 'unassign'])
+})
+
 const nativeMenuItemSchema: z.ZodType<{
   id?: string
   type?: 'normal' | 'separator' | 'submenu' | 'checkbox'
@@ -229,14 +270,6 @@ const nativeMenuRequestSchema = z.object({
     x: z.number().int().min(0).max(10000),
     y: z.number().int().min(0).max(10000)
   })
-})
-
-const projectSchema = z.object({
-  id: z.string().min(1).max(120),
-  name: z.string().min(1).max(200),
-  description: z.string().max(2000).default(''),
-  updatedAt: z.string().min(1).max(64),
-  icon: projectIconSchema
 })
 
 const gridBoardViewportSchema = z.object({
@@ -307,13 +340,9 @@ const settingsUpdateSchema = z.object({
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(5000).optional(),
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
-  projectIcons: z.record(z.string().min(1).max(120), projectIconSchema).optional(),
-  projects: z.array(projectSchema).max(100).optional(),
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
-  lastOpenedProjectId: z.string().min(1).max(120).nullable().optional(),
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
-  favoriteProjectIds: z.array(z.string().min(1).max(120)).max(1000).optional()
 })
 
 const settingsUpdateOptionsSchema = z
@@ -408,6 +437,19 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.listNoteTree, async () => {
     return runtime.listNoteTree()
+  })
+
+  handleIpc(IPC_CHANNELS.listFleetingNotes, async () => {
+    return runtime.listFleetingNotes()
+  })
+
+  handleIpc(IPC_CHANNELS.createFleetingNote, async (_event, content: unknown) => {
+    return runtime.createFleetingNote(fleetingContentSchema.parse(content))
+  })
+
+  handleIpc(IPC_CHANNELS.convertFleetingNote, async (_event, input: unknown) => {
+    const parsed = fleetingConversionSchema.parse(input)
+    return runtime.convertFleetingNote(parsed.relPath, parsed.target)
   })
 
   handleIpc(IPC_CHANNELS.readNote, async (_event, relPath: unknown) => {
@@ -582,26 +624,38 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.settingsUpdate, async (_event, next: unknown, options: unknown) => {
     const parsedNext = settingsUpdateSchema.parse(next)
-    return runtime.updateSettings(
-      {
-        ...parsedNext,
-        projects: parsedNext.projects
-          ? (parsedNext.projects.map((project) => ({
-              ...project,
-              icon: normalizeProjectIcon(project.icon, project.id)
-            })) as unknown as AppSettingsUpdate['projects'])
-          : undefined,
-        projectIcons: parsedNext.projectIcons
-          ? Object.fromEntries(
-              Object.entries(parsedNext.projectIcons).map(([projectId, icon]) => [
-                projectId,
-                normalizeProjectIcon(icon, projectId)
-              ])
-            )
-          : undefined
-      },
-      settingsUpdateOptionsSchema.parse(options)
-    )
+    return runtime.updateSettings(parsedNext, settingsUpdateOptionsSchema.parse(options))
+  })
+
+  handleIpc(IPC_CHANNELS.createProject, async (_event, input: unknown) => {
+    return runtime.createProject(projectCreateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.selectProject, async (_event, input: unknown) => {
+    const parsed = projectSelectInputSchema.parse(input)
+    return runtime.selectProject(parsed.projectId)
+  })
+
+  handleIpc(IPC_CHANNELS.updateProject, async (_event, input: unknown) => {
+    return runtime.updateProject(projectUpdateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.setProjectState, async (_event, input: unknown) => {
+    const parsed = projectStateInputSchema.parse(input)
+    return runtime.setProjectState(parsed.projectId, parsed.state)
+  })
+
+  handleIpc(IPC_CHANNELS.setProjectFavorite, async (_event, input: unknown) => {
+    const parsed = projectFavoriteInputSchema.parse(input)
+    return runtime.setProjectFavorite(parsed.projectId, parsed.favorite)
+  })
+
+  handleIpc(IPC_CHANNELS.deleteProject, async (_event, input: unknown) => {
+    return runtime.deleteProject(projectDeleteInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.createTask, async (_event, input: unknown) => {
+    return runtime.createTask(taskCreateInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.historyUndo, async () => {

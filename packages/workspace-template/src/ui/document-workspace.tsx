@@ -236,13 +236,20 @@ const DocumentWorkspacePanel = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden rounded-lg border bg-background p-3',
+      'flex w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden bg-transparent',
       className
     )}
     {...props}
   />
 ))
 DocumentWorkspacePanel.displayName = 'DocumentWorkspacePanel'
+
+const WorkspacePanelStack = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('flex min-h-full flex-col gap-3', className)} {...props} />
+  )
+)
+WorkspacePanelStack.displayName = 'WorkspacePanelStack'
 
 interface DocumentWorkspaceMainHeaderProps extends React.HTMLAttributes<HTMLElement> {
   breadcrumb?: React.ReactNode
@@ -474,7 +481,11 @@ const DocumentWorkspacePanelContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('min-h-0 flex-1 overflow-y-auto', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', className)}
+    {...props}
+  />
 ))
 DocumentWorkspacePanelContent.displayName = 'DocumentWorkspacePanelContent'
 
@@ -503,6 +514,7 @@ export {
   WorkspaceHeaderSecondaryActions,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,

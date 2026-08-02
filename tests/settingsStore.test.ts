@@ -10,6 +10,9 @@ vi.mock('electron', () => ({
 }))
 
 import { SettingsStore } from '../src/main/settingsStore'
+import { ProjectStore } from '../src/main/projectStore'
+import { TaskStore } from '../src/main/taskStore'
+import type { Project } from '../src/shared/types'
 
 const tempRoots: string[] = []
 
@@ -19,6 +22,7 @@ function trackTempRoot(root: string): string {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(
     tempRoots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))
   )
@@ -122,6 +126,7 @@ describe('SettingsStore', () => {
       }
     ])
     expect(settings.projects).toHaveLength(1)
+    expect(settings.projects[0].state).toBe('active')
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0].taskType).toBe('follow-up')
 
@@ -244,6 +249,7 @@ describe('SettingsStore', () => {
     expect(settings.profile.name).toBe('Amy')
     expect(settings.lastOpenedNotePath).toBe('alpha.md')
     expect(settings.projects).toHaveLength(1)
+    expect(settings.projects[0].state).toBe('active')
     expect(settings.calendarTasks).toHaveLength(1)
 
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
@@ -288,5 +294,112 @@ describe('SettingsStore', () => {
       await fs.readFile(path.join(root, 'settings.json'), 'utf-8')
     ) as Record<string, unknown>
     expect(canonicalSettings.profile).toEqual({ name: 'Amy' })
+  })
+
+  it('preserves projects when tasks are persisted in a later update', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const project = {
+      id: 'project-1',
+      name: 'Gamma Project',
+      summary: 'Linked task project',
+      description: 'Linked task project',
+      state: 'active' as const,
+      status: 'on-track' as const,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+      progress: 0,
+      milestones: [],
+      icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
+    }
+    const task = {
+      id: 'task-1',
+      title: 'Prepare launch notes',
+      projectId: project.id,
+      completed: false,
+      status: 'pending' as const,
+      createdAt: '2026-08-02T00:00:00.000Z',
+      priority: 'low' as const,
+      taskType: 'assignment' as const,
+      reminders: []
+    }
+
+    await store.updateVault(root, { projects: [project] })
+    const afterTaskUpdate = await store.updateVault(root, {
+      tasks: [task],
+      calendarTasks: [task]
+    })
+
+    expect(afterTaskUpdate.projects).toEqual([expect.objectContaining({ id: project.id })])
+    expect(afterTaskUpdate.calendarTasks).toEqual([expect.objectContaining({ id: task.id })])
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({
+        projects: [expect.objectContaining({ id: project.id })],
+        calendarTasks: [expect.objectContaining({ projectId: project.id })]
+      })
+    )
+  })
+
+  it('writes only the persistence domain changed by an incremental update', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    await store.readVault(root)
+    const projectStoreWrite = vi.spyOn(ProjectStore.prototype, 'writeAll')
+    const taskStoreWrite = vi.spyOn(TaskStore.prototype, 'writeAll')
+
+    await store.updateVault(root, { lastOpenedProjectId: 'project-1' })
+    expect(projectStoreWrite).not.toHaveBeenCalled()
+    expect(taskStoreWrite).not.toHaveBeenCalled()
+
+    const project = {
+      id: 'project-1',
+      name: 'Project One',
+      summary: '',
+      description: '',
+      state: 'active' as const,
+      status: 'on-track' as const,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+      progress: 0,
+      milestones: [],
+      icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
+    }
+    await store.updateVault(root, { projects: [project] })
+    expect(projectStoreWrite).toHaveBeenCalledTimes(1)
+    expect(taskStoreWrite).not.toHaveBeenCalled()
+
+    projectStoreWrite.mockClear()
+    await store.updateVault(root, { tasks: [], calendarTasks: [] })
+    expect(projectStoreWrite).not.toHaveBeenCalled()
+    expect(taskStoreWrite).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves every canonical project while changing project selection', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const makeProject = (id: string, name: string): Project => ({
+      id,
+      name,
+      summary: '',
+      description: '',
+      state: 'active' as const,
+      status: 'on-track' as const,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+      progress: 0,
+      milestones: [],
+      icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
+    })
+
+    await store.updateVault(root, {
+      projects: [makeProject('project-1', 'Alpha'), makeProject('project-2', 'Beta')]
+    })
+    await store.updateVault(root, { lastOpenedProjectId: 'project-2' })
+    await store.updateVault(root, { lastOpenedProjectId: 'project-1' })
+
+    const settings = await store.readVault(root)
+    expect(settings.projects.map((project) => project.id).sort()).toEqual([
+      'project-1',
+      'project-2'
+    ])
+    await expect(fs.access(path.join(root, 'projects', 'project-1.json'))).resolves.toBeUndefined()
+    await expect(fs.access(path.join(root, 'projects', 'project-2.json'))).resolves.toBeUndefined()
   })
 })

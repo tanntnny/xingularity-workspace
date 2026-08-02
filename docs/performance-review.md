@@ -43,8 +43,7 @@ This is the slowest focused interaction that was measured.
   - `Notes -> Projects` is materially slower than the other page switches.
   - Small interactions inside Projects are much cheaper once the page is mounted.
 - Likely causes:
-  - Milestone tree sorting, filtering, and remapping in [`src/renderer/src/pages/ProjectDetailsPage.tsx`](../src/renderer/src/pages/ProjectDetailsPage.tsx)
-  - Additional sort/filter/split work in [`src/renderer/src/components/ProjectPreviewList.tsx`](../src/renderer/src/components/ProjectPreviewList.tsx)
+  - Project filtering and linked-task detail rendering in [`src/renderer/src/pages/ProjectsWorkspacePage.tsx`](../src/renderer/src/pages/ProjectsWorkspacePage.tsx)
   - Layout/measurement cost in vendor table/grid code during initial view construction
 
 ### 2. Renderer root rerender breadth
@@ -71,9 +70,8 @@ The calendar month view rebuilds every event whenever the derived event list cha
 Several components do multiple filter/sort/map passes over the same arrays in a single render.
 
 - Main examples:
-  - [`src/renderer/src/pages/ProjectDetailsPage.tsx`](../src/renderer/src/pages/ProjectDetailsPage.tsx)
   - [`src/renderer/src/components/CalendarTaskList.tsx`](../src/renderer/src/components/CalendarTaskList.tsx)
-  - [`src/renderer/src/components/ProjectPreviewList.tsx`](../src/renderer/src/components/ProjectPreviewList.tsx)
+  - [`src/renderer/src/pages/ProjectsWorkspacePage.tsx`](../src/renderer/src/pages/ProjectsWorkspacePage.tsx)
   - [`src/renderer/src/components/CommandPalette.tsx`](../src/renderer/src/components/CommandPalette.tsx)
   - [`src/renderer/src/components/Editor.tsx`](../src/renderer/src/components/Editor.tsx)
 
@@ -89,8 +87,8 @@ Several components do multiple filter/sort/map passes over the same arrays in a 
 
 ### Priority 2: Reduce initial Projects page derivation work
 
-- Collapse repeated milestone transforms into one memoized pipeline.
-- Avoid cloning/sorting/filtering the same milestone and subtask trees in separate passes.
+- Collapse repeated project/task transforms into one memoized pipeline.
+- Avoid filtering the same linked-task collection in separate passes.
 - Precompute sidebar project buckets once per project list change instead of re-filtering derived arrays.
 - Expected impact:
   - High on Projects page entry

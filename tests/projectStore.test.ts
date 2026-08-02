@@ -18,6 +18,7 @@ function makeProject(id: string, name: string): Project {
     id,
     name,
     summary: '',
+    state: 'active',
     status: 'on-track',
     updatedAt: '2026-07-29T00:00:00.000Z',
     progress: 0,
@@ -36,7 +37,7 @@ describe('ProjectStore', () => {
     const serializedProject = JSON.parse(
       await fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ) as Record<string, unknown>
-    expect(serializedProject).toMatchObject({ name: 'Alpha', description: '' })
+    expect(serializedProject).toMatchObject({ name: 'Alpha', description: '', state: 'active' })
     expect(serializedProject).not.toHaveProperty('milestones')
 
     await store.writeAll([makeProject('project-2', 'Beta')])
@@ -50,6 +51,7 @@ describe('ProjectStore', () => {
           id: 'project-2',
           name: 'Beta',
           description: '',
+          state: 'active',
           updatedAt: '2026-07-29T00:00:00.000Z'
         })
       ]

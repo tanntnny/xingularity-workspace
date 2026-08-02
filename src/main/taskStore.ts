@@ -10,6 +10,17 @@ export class TaskStore {
     this.tasksDir = getVaultTasksDir(vaultRoot)
   }
 
+  async hasCanonicalStorage(): Promise<boolean> {
+    try {
+      return (await fs.stat(this.tasksDir)).isDirectory()
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('[TaskStore] Failed to inspect task storage', error)
+      }
+      return false
+    }
+  }
+
   async read(): Promise<CalendarTask[]> {
     try {
       const entries = await fs.readdir(this.tasksDir, { withFileTypes: true })

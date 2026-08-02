@@ -11,7 +11,7 @@ import {
   useRef,
   useState
 } from 'react'
-import { PenTool, Plus, Trash2 } from '../components/ui/icons'
+import { Plus, Trash2 } from '../components/ui/icons'
 import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type {
@@ -599,8 +599,6 @@ export function ExcalidrawSidebar(): ReactElement {
         <div>
           <WorkspacePanelSection>
             <WorkspacePanelSectionHeader
-              icon={<PenTool size={16} aria-hidden="true" />}
-              iconContainerClassName="bg-accent text-accent-foreground"
               heading="Saved drawings"
               description={`${sessions.length} saved drawings in this vault`}
             />

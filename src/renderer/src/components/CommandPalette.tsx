@@ -47,6 +47,7 @@ export interface CommandPaletteSearchResult {
 }
 
 type CommandPalettePage =
+  | 'capture'
   | 'knowledge'
   | 'notes'
   | 'projects'
@@ -271,6 +272,13 @@ export function CommandPalette({
 
   const commandItems = useMemo(
     () => [
+      {
+        value: '>go capture',
+        label: 'Go to Capture',
+        onSelect: () => onOpenPage('capture'),
+        keywords: ['inbox', 'fleeting', 'quick capture'],
+        icon: Clock
+      },
       {
         value: '>new note',
         label: 'New Note',

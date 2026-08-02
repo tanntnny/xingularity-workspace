@@ -11,9 +11,7 @@ async function launchWithoutVault(): Promise<{
   return launchWithGlobalSettings({ lastVaultPath: null })
 }
 
-async function launchWithGlobalSettings(settings: {
-  lastVaultPath: string | null
-}): Promise<{
+async function launchWithGlobalSettings(settings: { lastVaultPath: string | null }): Promise<{
   electronApp: ElectronApplication
   page: Page
 }> {
@@ -41,20 +39,20 @@ async function launchWithGlobalSettings(settings: {
 }
 
 test.describe('vault gate', () => {
-  test('locks navigation until a vault is selected', async () => {
+  test('shows standalone vault onboarding until a vault is selected', async () => {
     const { electronApp, page } = await launchWithoutVault()
 
     try {
       await expect(page.getByTestId('vault-required-page')).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Select a vault first' })).toBeVisible()
       await expect(page.getByTestId('vault-required-open')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Manage Vaults' })).toBeVisible()
+      await expect(page.getByTestId('vault-required-create')).toBeVisible()
+      await expect(page.getByTestId('vault-required-manage')).toBeVisible()
 
-      await expect(page.getByRole('button', { name: 'Open command palette' })).toBeDisabled()
-      await expect(page.getByTestId('sidebar-page:knowledge')).toBeDisabled()
-      await expect(page.getByTestId('sidebar-page:notes')).toBeDisabled()
-      await expect(page.getByTestId('sidebar-page:projects')).toBeDisabled()
-      await expect(page.getByTestId('sidebar-page:settings')).toBeDisabled()
+      await expect(page.getByTestId('sidebar-page:notes')).toHaveCount(0)
+      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toHaveCount(0)
+      await page.getByTestId('vault-required-manage').click()
+      await expect(page.getByRole('dialog', { name: 'Manage vaults' })).toBeVisible()
       await expect(page.getByText('No previous vault remembered on this device.')).toBeVisible()
     } finally {
       await electronApp.close()
@@ -72,7 +70,9 @@ test.describe('vault gate', () => {
     try {
       await expect(page.getByTestId('vault-required-page')).toBeVisible()
       await expect(page.getByText('No previous vault remembered on this device.')).toBeVisible()
-      await expect(page.getByText(`Could not restore previous vault at ${staleVaultPath}`)).toHaveCount(0)
+      await expect(
+        page.getByText(`Could not restore previous vault at ${staleVaultPath}`)
+      ).toHaveCount(0)
 
       const userDataPath = await electronApp.evaluate(({ app }) => app.getPath('userData'))
       const raw = await fs.readFile(path.join(userDataPath, 'settings.json'), 'utf-8')
