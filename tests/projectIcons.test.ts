@@ -77,4 +77,24 @@ describe('project icon helpers', () => {
       color: '#0ea5e9'
     })
   })
+
+  it('preserves arbitrary filled Tabler glyph slugs', () => {
+    expect(
+      normalizeProjectIcon(
+        {
+          set: 'tabler',
+          glyph: '3d-cube-sphere',
+          variant: 'filled',
+          color: '#0ea5e9'
+        },
+        'gamma'
+      )
+    ).toEqual({
+      set: 'tabler',
+      glyph: '3d-cube-sphere',
+      shape: undefined,
+      variant: 'filled',
+      color: '#0ea5e9'
+    })
+  })
 })

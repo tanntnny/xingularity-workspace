@@ -1,6 +1,7 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
 import { CalendarTask } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
+import { getTaskStatus } from '../lib/taskStatus'
 
 interface CalendarDayViewProps {
   selectedDate: string
@@ -114,7 +115,7 @@ export function CalendarDayView({
             {allDayTasks.map((task) => (
               <div
                 key={task.id}
-                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${task.completed ? 'line-through opacity-60' : ''}`}
+                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
               >
                 <span className="truncate font-medium text-foreground">{task.title}</span>
               </div>
@@ -168,7 +169,7 @@ export function CalendarDayView({
                   {slotTasks.map((task) => (
                     <div
                       key={task.id}
-                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${task.completed ? 'line-through opacity-60' : ''}`}
+                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
                     >
                       <span className="truncate font-medium text-foreground">{task.title}</span>
                       <span className="text-xs text-muted-foreground">

@@ -14,6 +14,8 @@ const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
 const projectNameSchema = z.string().min(1).max(200)
+const projectDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const projectValuesSchema = z.array(z.string().trim().min(1).max(100)).max(50)
 const contentSchema = z.string().max(2_000_000)
 const fleetingContentSchema = z.string().trim().min(1).max(2_000_000)
 const fleetingConversionSchema = z.object({
@@ -157,7 +159,7 @@ const calendarTaskSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   completed: z.boolean(),
-  status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
+  status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
   createdAt: z.string().min(1).max(64),
   priority: z.enum(['low', 'medium', 'high']),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
@@ -176,10 +178,22 @@ const calendarTaskSchema = z.object({
 const taskCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   projectId: z.string().min(1).max(120).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
+  endTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(taskReminderSchema).max(10).optional()
@@ -188,29 +202,11 @@ const taskCreateInputSchema = z.object({
 const projectIconSchema = z.object({
   set: z.enum(['tabler', 'shape', 'lucide']).optional(),
   glyph: z
-    .enum([
-      'circle',
-      'square',
-      'triangle',
-      'diamond',
-      'hex',
-      'briefcase',
-      'folder-kanban',
-      'rocket',
-      'lightbulb',
-      'target',
-      'book-open',
-      'package',
-      'flask-conical',
-      'sparkles',
-      'pen-tool',
-      'monitor',
-      'megaphone',
-      'globe',
-      'shield',
-      'camera',
-      'calendar'
-    ])
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .optional(),
   shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']).optional(),
   variant: z.enum(['filled', 'outlined']).optional(),
@@ -220,7 +216,11 @@ const projectIconSchema = z.object({
 const projectCreateInputSchema = z.object({
   name: z.string().trim().max(200).optional(),
   description: z.string().max(2000).optional(),
-  icon: projectIconSchema.optional()
+  icon: projectIconSchema.optional(),
+  startDate: projectDateSchema.optional(),
+  endDate: projectDateSchema.optional(),
+  tags: projectValuesSchema.optional(),
+  resources: projectValuesSchema.optional()
 })
 const projectSelectInputSchema = z.object({
   projectId: z.string().min(1).max(120).nullable()
@@ -229,7 +229,11 @@ const projectUpdateInputSchema = z.object({
   projectId: z.string().min(1).max(120),
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  icon: projectIconSchema.optional()
+  icon: projectIconSchema.optional(),
+  startDate: projectDateSchema.nullable().optional(),
+  endDate: projectDateSchema.nullable().optional(),
+  tags: projectValuesSchema.optional(),
+  resources: projectValuesSchema.optional()
 })
 const projectStateInputSchema = z.object({
   projectId: z.string().min(1).max(120),
@@ -342,7 +346,7 @@ const settingsUpdateSchema = z.object({
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
-  favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
+  favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional()
 })
 
 const settingsUpdateOptionsSchema = z

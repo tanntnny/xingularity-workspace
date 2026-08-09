@@ -15,8 +15,12 @@ export type { SwitchProps } from './switch'
 
 export { Badge, badgeVariants } from './badge'
 export type { BadgeProps } from './badge'
+export { SelectiveChip } from './selective-chip'
+export type { SelectiveChipOption, SelectiveChipProps } from './selective-chip'
 export { CalendarTaskTypeBadge } from './calendar-task-type-badge'
 export type { CalendarTaskTypeBadgeProps } from './calendar-task-type-badge'
+export { TaskPriorityBadge } from './task-priority-badge'
+export type { TaskPriorityBadgeProps } from './task-priority-badge'
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
 
@@ -160,6 +164,7 @@ export { Toaster } from './sonner'
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip'
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
+export { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
 
 export {
   Sidebar,
@@ -206,6 +211,7 @@ export {
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspaceResizableLayout,
   WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
@@ -219,4 +225,8 @@ export {
   type WorkspaceTab
 } from './document-workspace'
 
-export { WorkspacePanelSection, WorkspacePanelSectionHeader } from './workspace-panel-section'
+export {
+  CollapsibleWorkspacePanelSection,
+  WorkspacePanelSection,
+  WorkspacePanelSectionHeader
+} from './workspace-panel-section'

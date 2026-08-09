@@ -180,7 +180,11 @@ test.describe('calendar monthly view', () => {
       await openMonthlyCalendar(page)
 
       const workspaceContent = page.locator('.document-workspace-main-content')
-      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+      await expect
+        .poll(() =>
+          workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)
+        )
+        .toBe(true)
 
       const weekdayHeader = page
         .locator('.calendar-full .fc .fc-scrollgrid-section-header > th')
@@ -191,14 +195,45 @@ test.describe('calendar monthly view', () => {
       await workspaceContent.evaluate((element) => {
         element.scrollTop = 240
       })
-      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-      expect(await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(
-        weekdayHeaderTop - 4
-      )
+      await expect
+        .poll(() => workspaceContent.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0)
+      expect(
+        await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)
+      ).toBeGreaterThanOrEqual(weekdayHeaderTop - 4)
 
       const lastTask = page.getByText('Overflow task 18', { exact: true })
       await lastTask.scrollIntoViewIfNeeded()
       await expect(lastTask).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('updates a task status from the calendar card picker', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const statusButton = page.getByRole('button', {
+        name: 'Status for Month view task: Pending'
+      })
+      await statusButton.click()
+      await page
+        .getByRole('dialog', { name: 'Status for Month view task options' })
+        .getByRole('radio', { name: 'Backlog', exact: true })
+        .click()
+
+      const taskCard = page.locator('[data-task-status="backlog"]').filter({
+        hasText: 'Month view task'
+      })
+      await expect(taskCard).toHaveCSS('opacity', '0.6')
+      await expect(
+        taskCard.getByRole('button', { name: 'Status for Month view task: Backlog' })
+      ).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

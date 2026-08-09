@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { ActionButtonGroup } from '../src/renderer/src/components/ui/button-group'
-import { buttonVariants } from '../src/renderer/src/components/ui/button'
+import { ActionButtonGroup, ButtonGroup } from '../src/renderer/src/components/ui/button-group'
+import { Button, buttonVariants } from '../src/renderer/src/components/ui/button'
 import {
   WorkspaceActionButton,
   WorkspaceHeaderActionGroup
@@ -17,6 +17,20 @@ import {
 } from '../src/renderer/src/components/ui/dialog'
 
 describe('ActionButtonGroup', () => {
+  it('adds compact horizontal padding to ButtonGroup child buttons', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        ButtonGroup,
+        { variant: 'outline' },
+        createElement(Button, null, 'Previous'),
+        createElement(Button, null, 'Today')
+      )
+    )
+
+    expect(markup).toContain('[&amp;&gt;button]:px-2')
+    expect(markup).toContain('>Previous</button>')
+  })
+
   it('keeps semantic hover feedback across button variants', () => {
     expect(buttonVariants()).toContain('rounded-[var(--radius-button)]')
     expect(buttonVariants({ variant: 'default' })).toContain('hover:bg-primary/90')

@@ -11,7 +11,6 @@ import { CalendarTask, CalendarTaskType, Project, TaskPriority } from '../../../
 import {
   buildWeeklyCalendarEntries,
   layoutWeeklyAllDayItems,
-  type CalendarEventInput,
   type WeeklyCalendarAllDayLayout,
   normalizeCalendarTasks
 } from '../lib/calendarTasks'
@@ -29,6 +28,7 @@ import {
   WEEKLY_HOUR_HEIGHT_PX,
   WEEKLY_MAX_END_MINUTES,
   WEEKLY_MIN_DURATION_MINUTES,
+  shouldShowWeeklyProject,
   type WeeklyTimedTaskLayout
 } from '../lib/calendarWeekLayout'
 import {
@@ -47,21 +47,13 @@ import {
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
-import {
-  CalendarMilestoneCard,
-  CalendarMilestoneDetails,
-  CalendarMilestoneHoverCard,
-  CalendarMilestoneDialog
-} from './CalendarMilestoneDetails'
-import { TaskEditDialog } from './CalendarMonthView'
+import { TaskEditDialog } from './TaskEditDialog'
 
 interface CalendarWeekViewProps {
   selectedDate: string
   tasks: CalendarTask[]
   projects?: Project[]
-  milestoneEvents?: CalendarEventInput[]
   onSelectDate: (date: string) => void
-  onOpenMilestone?: (projectId: string, milestoneId: string) => void
   onCreateTask?: (schedule: {
     date: string
     endDate: undefined
@@ -69,8 +61,8 @@ interface CalendarWeekViewProps {
     endTime: string
   }) => Promise<CalendarTask>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
-  onToggleTask?: (taskId: string) => void
   onDeleteTask?: (taskId: string) => void
+  onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
   onRenameTask?: (taskId: string, newTitle: string) => void
   onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
@@ -129,13 +121,14 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
   label: formatWeeklyTimeLabel(hour)
 }))
 const WEEKLY_TIME_GUTTER_WIDTH_PX = 72
-const WEEKLY_CELL_PADDING_PX = 8
+const WEEKLY_CELL_PADDING_X_PX = 2
+const WEEKLY_CELL_PADDING_Y_PX = 8
 const WEEKLY_ALL_DAY_ROW_HEIGHT_PX = 44
 const WEEKLY_ALL_DAY_ROW_GAP_PX = 8
-const WEEKLY_ALL_DAY_CELL_PADDING_X_PX = 10
+const WEEKLY_ALL_DAY_CELL_PADDING_X_PX = WEEKLY_CELL_PADDING_X_PX
 const WEEKLY_ALL_DAY_SURFACE_PADDING_PX = 8
 const WEEKLY_ALL_DAY_MIN_HEIGHT_PX = 92
-const WEEKLY_TIMED_SURFACE_HEIGHT_PX = WEEKLY_DAY_HEIGHT_PX + WEEKLY_CELL_PADDING_PX * 2
+const WEEKLY_TIMED_SURFACE_HEIGHT_PX = WEEKLY_DAY_HEIGHT_PX + WEEKLY_CELL_PADDING_Y_PX * 2
 const WEEKLY_TASK_RESIZE_BAND_MAX_PX = 10
 const NOOP_UPDATE_TASK_SCHEDULE: NonNullable<CalendarWeekViewProps['onUpdateTaskSchedule']> = () =>
   undefined
@@ -149,13 +142,11 @@ export function CalendarWeekView({
   selectedDate,
   tasks,
   projects = [],
-  milestoneEvents = [],
   onSelectDate,
-  onOpenMilestone,
   onCreateTask,
   onRescheduleTask,
-  onToggleTask,
   onDeleteTask,
+  onUpdateTask,
   onRenameTask,
   onUpdateTaskPriority,
   onUpdateTaskType,
@@ -164,7 +155,7 @@ export function CalendarWeekView({
 }: CalendarWeekViewProps): ReactElement {
   const [currentDateTime, setCurrentDateTime] = useState(() => new Date())
   const [timeScaleMetrics, setTimeScaleMetrics] = useState<WeeklyTimeScaleMetrics>(() => ({
-    topPx: WEEKLY_CELL_PADDING_PX,
+    topPx: WEEKLY_CELL_PADDING_Y_PX,
     heightPx: WEEKLY_DAY_HEIGHT_PX
   }))
   const selected = useMemo(() => parseIsoDate(selectedDate), [selectedDate])
@@ -182,12 +173,15 @@ export function CalendarWeekView({
   )
   const todayIso = toIsoDate(currentDateTime)
   const normalizedTasks = useMemo(() => normalizeCalendarTasks(tasks), [tasks])
+  const projectsById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project])),
+    [projects]
+  )
   const tasksById = useMemo(
     () => Object.fromEntries(normalizedTasks.map((task) => [task.id, task])),
     [normalizedTasks]
   )
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
-  const [selectedMilestone, setSelectedMilestone] = useState<CalendarMilestoneDetails | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [timedDropIndicator, setTimedDropIndicator] = useState<TimedDropIndicatorState | null>(null)
   const [allDayDropIndicator, setAllDayDropIndicator] = useState<AllDayDropIndicatorState | null>(
@@ -195,11 +189,6 @@ export function CalendarWeekView({
   )
   const [hoveredTaskCard, setHoveredTaskCard] = useState<{
     task: CalendarTask
-    x: number
-    y: number
-  } | null>(null)
-  const [hoveredMilestoneCard, setHoveredMilestoneCard] = useState<{
-    milestone: CalendarMilestoneDetails
     x: number
     y: number
   } | null>(null)
@@ -239,8 +228,8 @@ export function CalendarWeekView({
   }, [normalizedTasks, previewTask])
 
   const { timedTasks, allDayItems } = useMemo(
-    () => buildWeeklyCalendarEntries(effectiveTasks, weekStart, milestoneEvents),
-    [effectiveTasks, weekStart, milestoneEvents]
+    () => buildWeeklyCalendarEntries(effectiveTasks, weekStart),
+    [effectiveTasks, weekStart]
   )
   const timedLayouts = useMemo(
     () =>
@@ -304,11 +293,11 @@ export function CalendarWeekView({
       label: formatCurrentTimeIndicatorLabel(currentDateTime)
     }
   }, [currentDateTime, timeScaleMetrics, todayIso, weekDays])
-  const safeToggleTask = onToggleTask ?? (() => undefined)
   const safeDeleteTask = onDeleteTask ?? (() => undefined)
   const safeRenameTask = onRenameTask ?? (() => undefined)
   const safeUpdateTaskPriority = onUpdateTaskPriority ?? (() => undefined)
   const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
+  const safeUpdateTaskStatus = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? NOOP_UPDATE_TASK_SCHEDULE
 
   useEffect(() => {
@@ -500,7 +489,6 @@ export function CalendarWeekView({
     }
 
     event.preventDefault()
-    setHoveredMilestoneCard(null)
     setHoveredTaskCard(null)
     onSelectDate(date)
 
@@ -631,13 +619,11 @@ export function CalendarWeekView({
       onDragEnd={handleTaskDragEnd}
       onClick={(event) => {
         event.stopPropagation()
-        setHoveredMilestoneCard(null)
         setHoveredTaskCard(null)
         setEditingTaskId(task.id)
       }}
       onMouseMove={(event) => {
         const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
-        setHoveredMilestoneCard(null)
         setHoveredTaskCard((current) => {
           if (!current || current.task.id !== task.id) {
             return { task, x, y }
@@ -653,76 +639,19 @@ export function CalendarWeekView({
         event.preventDefault()
         safeDeleteTask(task.id)
       }}
-      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
+      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
     >
-      <CalendarTaskCard task={task} onToggle={safeToggleTask} />
+      <CalendarTaskCard
+        task={task}
+        compact
+        project={task.projectId ? projectsById.get(task.projectId) : undefined}
+        showProject={shouldShowWeeklyProject(WEEKLY_ALL_DAY_ROW_HEIGHT_PX)}
+        showTime={Boolean(task.time || task.endTime)}
+        onStatusChange={(taskId, status) =>
+          safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+        }
+      />
     </article>
-  )
-
-  const renderMilestoneAllDayItem = (item: WeeklyCalendarAllDayLayout): ReactElement => (
-    <button
-      key={item.id}
-      type="button"
-      data-testid={`calendar-week-milestone:${item.projectId ?? ''}:${item.milestoneId ?? ''}`}
-      style={{
-        gridColumn: `${item.columnStart + 1} / span ${item.columnSpan}`,
-        gridRow: `${item.row + 1}`,
-        marginLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
-        marginRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
-      }}
-      onClick={(event) => {
-        event.stopPropagation()
-        const milestone = getMilestoneDetailsFromWeeklyItem(item)
-        if (milestone) {
-          setHoveredMilestoneCard(null)
-          setSelectedMilestone(milestone)
-        }
-      }}
-      onMouseMove={(event) => {
-        const milestone = getMilestoneDetailsFromWeeklyItem(item)
-        if (!milestone) {
-          return
-        }
-        const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
-        setHoveredTaskCard(null)
-        setHoveredMilestoneCard((current) => {
-          if (
-            !current ||
-            current.milestone.projectId !== milestone.projectId ||
-            current.milestone.milestoneId !== milestone.milestoneId
-          ) {
-            return { milestone, x, y }
-          }
-          return { ...current, x, y }
-        })
-      }}
-      onMouseLeave={() => setHoveredMilestoneCard(null)}
-      className="pointer-events-auto inline-flex h-full self-stretch rounded-md border border-ring bg-accent px-2 py-1 text-left text-xs text-foreground transition-colors hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      title={item.projectName ? `${item.title} · ${item.projectName}` : item.title}
-    >
-      {item.projectId && item.milestoneId ? (
-        <div className="min-w-0 self-center">
-          <CalendarMilestoneCard
-            milestone={{
-              title: item.title,
-              projectId: item.projectId,
-              projectName: item.projectName ?? '',
-              projectIcon: item.projectIcon,
-              milestoneId: item.milestoneId,
-              milestoneDescription: item.milestoneDescription,
-              milestoneDueDate: item.milestoneDueDate,
-              milestoneStatus: item.milestoneStatus,
-              milestoneCompletedSubtaskCount: item.milestoneCompletedSubtaskCount,
-              milestoneSubtaskCount: item.milestoneSubtaskCount,
-              milestoneProgressPercent: item.milestoneProgressPercent,
-              completed: item.completed
-            }}
-          />
-        </div>
-      ) : (
-        <span className="truncate font-medium">{item.title}</span>
-      )}
-    </button>
   )
 
   const renderTimedTask = (layout: WeeklyTimedTaskLayout): ReactElement => {
@@ -736,10 +665,10 @@ export function CalendarWeekView({
     const blockStyle = buildTimedTaskStyle(layout)
     const resizeBandPx = getWeeklyResizeBandPx(layout.heightPx)
     const contentStyle = {
-      top: '1px',
-      right: '1px',
-      bottom: '1px',
-      left: '1px'
+      top: '0px',
+      right: '0px',
+      bottom: '0px',
+      left: '0px'
     }
 
     return (
@@ -757,7 +686,6 @@ export function CalendarWeekView({
           if (timedInteractionRef.current) {
             return
           }
-          setHoveredMilestoneCard(null)
           const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
           setHoveredTaskCard((current) => {
             if (!current || current.task.id !== task.id) {
@@ -780,7 +708,7 @@ export function CalendarWeekView({
         }}
         className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
-        } ${task.completed ? 'line-through opacity-60' : ''} cursor-grab active:cursor-grabbing`}
+        } ${task.completed ? 'line-through' : ''} cursor-grab active:cursor-grabbing`}
       >
         <button
           type="button"
@@ -812,7 +740,17 @@ export function CalendarWeekView({
             setEditingTaskId(task.id)
           }}
         >
-          <CalendarTaskCard task={task} onToggle={safeToggleTask} className="h-full min-h-0" />
+          <CalendarTaskCard
+            task={task}
+            compact
+            project={task.projectId ? projectsById.get(task.projectId) : undefined}
+            showProject={shouldShowWeeklyProject(layout.heightPx)}
+            showTime
+            onStatusChange={(taskId, status) =>
+              safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+            }
+            className="h-full min-h-0"
+          />
         </div>
       </article>
     )
@@ -946,13 +884,7 @@ export function CalendarWeekView({
                 minHeight: `${allDaySurfaceMinHeightPx}px`
               }}
             >
-              {allDayLayouts.map((item) =>
-                item.source === 'milestone'
-                  ? renderMilestoneAllDayItem(item)
-                  : item.task
-                    ? renderAllDayTask(item.task, item)
-                    : null
-              )}
+              {allDayLayouts.map((item) => (item.task ? renderAllDayTask(item.task, item) : null))}
             </div>
           ) : null}
         </div>
@@ -966,7 +898,7 @@ export function CalendarWeekView({
                 ref={timeScaleRef}
                 className="absolute inset-x-0"
                 style={{
-                  top: `${WEEKLY_CELL_PADDING_PX}px`,
+                  top: `${WEEKLY_CELL_PADDING_Y_PX}px`,
                   height: `${WEEKLY_DAY_HEIGHT_PX}px`
                 }}
               >
@@ -1063,10 +995,10 @@ export function CalendarWeekView({
                   }}
                   className="absolute"
                   style={{
-                    top: `${WEEKLY_CELL_PADDING_PX}px`,
-                    right: `${WEEKLY_CELL_PADDING_PX}px`,
-                    bottom: `${WEEKLY_CELL_PADDING_PX}px`,
-                    left: `${WEEKLY_CELL_PADDING_PX}px`
+                    top: `${WEEKLY_CELL_PADDING_Y_PX}px`,
+                    right: `${WEEKLY_CELL_PADDING_X_PX}px`,
+                    bottom: `${WEEKLY_CELL_PADDING_Y_PX}px`,
+                    left: `${WEEKLY_CELL_PADDING_X_PX}px`
                   }}
                 >
                   <div className="absolute inset-0">
@@ -1120,32 +1052,35 @@ export function CalendarWeekView({
         />
       ) : null}
 
-      {hoveredMilestoneCard ? (
-        <CalendarMilestoneHoverCard
-          milestone={hoveredMilestoneCard.milestone}
-          x={hoveredMilestoneCard.x}
-          y={hoveredMilestoneCard.y}
-        />
-      ) : null}
-
-      {selectedMilestone ? (
-        <CalendarMilestoneDialog
-          milestone={selectedMilestone}
-          onClose={() => setSelectedMilestone(null)}
-          onOpenMilestone={onOpenMilestone}
-        />
-      ) : null}
-
       {editingTask ? (
         <TaskEditDialog
           task={editingTask}
           onClose={() => setEditingTaskId(null)}
-          onRename={safeRenameTask}
-          onUpdateTaskPriority={safeUpdateTaskPriority}
-          onUpdateTaskType={safeUpdateTaskType}
-          onUpdateTaskProject={onUpdateTaskProject ?? (() => undefined)}
+          onSave={(taskId, patch) => {
+            if (onUpdateTask) {
+              onUpdateTask(taskId, patch)
+              return
+            }
+            if (patch.title) safeRenameTask(taskId, patch.title)
+            if (patch.priority) safeUpdateTaskPriority(taskId, patch.priority)
+            if (patch.taskType) safeUpdateTaskType(taskId, patch.taskType)
+            if (patch.status) {
+              safeUpdateTaskStatus(taskId, {
+                status: patch.status,
+                completed: patch.status === 'completed'
+              })
+            }
+            if ('projectId' in patch) onUpdateTaskProject?.(taskId, patch.projectId)
+            if ('date' in patch || 'endDate' in patch || 'time' in patch || 'endTime' in patch) {
+              safeUpdateTaskSchedule(taskId, {
+                date: patch.date,
+                endDate: patch.endDate,
+                time: patch.time,
+                endTime: patch.endTime
+              })
+            }
+          }}
           projects={projects}
-          onUpdateTaskSchedule={safeUpdateTaskSchedule}
           onDelete={safeDeleteTask}
         />
       ) : null}
@@ -1169,29 +1104,6 @@ function buildTimedTaskStyle(layout: WeeklyTimedTaskLayout): {
 
 function getWeeklyResizeBandPx(heightPx: number): number {
   return Math.max(4, Math.min(WEEKLY_TASK_RESIZE_BAND_MAX_PX, Math.floor(heightPx / 4)))
-}
-
-function getMilestoneDetailsFromWeeklyItem(
-  item: WeeklyCalendarAllDayLayout
-): CalendarMilestoneDetails | null {
-  if (!item.projectId || !item.milestoneId || !item.projectName) {
-    return null
-  }
-
-  return {
-    title: item.title,
-    projectId: item.projectId,
-    projectName: item.projectName,
-    projectIcon: item.projectIcon,
-    milestoneId: item.milestoneId,
-    milestoneDescription: item.milestoneDescription,
-    milestoneDueDate: item.milestoneDueDate,
-    milestoneStatus: item.milestoneStatus,
-    milestoneCompletedSubtaskCount: item.milestoneCompletedSubtaskCount,
-    milestoneSubtaskCount: item.milestoneSubtaskCount,
-    milestoneProgressPercent: item.milestoneProgressPercent,
-    completed: item.completed
-  }
 }
 
 function getDraggedTaskId(event: DragEvent<HTMLElement>): string | null {

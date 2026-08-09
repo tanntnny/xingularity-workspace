@@ -139,7 +139,5 @@ function hashString(value: string): number {
 }
 
 function normalizeSymbolGlyph(value: string | null): ProjectIconSymbol {
-  return PROJECT_ICON_SYMBOLS.includes(value as ProjectIconSymbol)
-    ? (value as ProjectIconSymbol)
-    : PROJECT_ICON_SYMBOLS[0]
+  return value?.trim() ? value.trim() : PROJECT_ICON_SYMBOLS[0]
 }

@@ -165,13 +165,29 @@ export class ProjectStore {
 
 function serializeProject(
   project: Project
-): Pick<Project, 'id' | 'name' | 'description' | 'icon' | 'state' | 'updatedAt'> {
+): Pick<
+  Project,
+  | 'id'
+  | 'name'
+  | 'description'
+  | 'icon'
+  | 'state'
+  | 'startDate'
+  | 'endDate'
+  | 'tags'
+  | 'resources'
+  | 'updatedAt'
+> {
   return {
     id: project.id,
     name: project.name,
     description: project.description ?? project.summary ?? '',
     icon: project.icon,
     state: project.state,
+    startDate: project.startDate,
+    endDate: project.endDate,
+    tags: project.tags ?? [],
+    resources: project.resources ?? [],
     updatedAt: project.updatedAt
   }
 }

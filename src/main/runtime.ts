@@ -1102,17 +1102,21 @@ export class VaultRuntime {
     return this.mutateSettings((settings) => {
       const name = buildProjectName(settings.projects, input.name)
       const description = input.description?.trim() || 'Add project details here.'
+      const now = new Date()
+      const startDate = input.startDate ?? toLocalIsoDate(now)
+      assertProjectDateRange(startDate, input.endDate)
       const project: Project = {
         id: `project-${randomUUID()}`,
         name,
         summary: description,
         description,
         state: 'active',
-        status: 'on-track',
+        startDate,
+        endDate: input.endDate,
+        tags: normalizeProjectValues(input.tags),
+        resources: normalizeProjectValues(input.resources),
         icon: normalizeProjectIcon(input.icon, name),
-        updatedAt: new Date().toISOString(),
-        progress: 0,
-        milestones: []
+        updatedAt: now.toISOString(),
       }
 
       return {
@@ -1146,12 +1150,32 @@ export class VaultRuntime {
       }
       const description =
         input.description === undefined ? existing.description : input.description.trim()
+      const startDate =
+        input.startDate === null
+          ? undefined
+          : input.startDate === undefined
+            ? existing.startDate
+            : input.startDate
+      const endDate =
+        input.endDate === null
+          ? undefined
+          : input.endDate === undefined
+            ? existing.endDate
+            : input.endDate
+      assertProjectDateRange(startDate, endDate)
       const updated: Project = {
         ...existing,
         name,
         summary: description ?? existing.summary,
         description,
         icon: input.icon ? normalizeProjectIcon(input.icon, existing.id) : existing.icon,
+        startDate,
+        endDate,
+        tags: input.tags === undefined ? existing.tags : normalizeProjectValues(input.tags),
+        resources:
+          input.resources === undefined
+            ? existing.resources
+            : normalizeProjectValues(input.resources),
         updatedAt: new Date().toISOString()
       }
       return {
@@ -1734,7 +1758,7 @@ export class VaultRuntime {
             id: mention.id,
             kind: 'project',
             label: mention.label,
-            detail: project.summary || project.status
+            detail: project.summary
           },
           promptBlock: formatProjectContext(project)
         })
@@ -2364,6 +2388,23 @@ function extractMistralText(response: unknown): string {
 
 function cloneSettings(settings: AppSettings): AppSettings {
   return JSON.parse(JSON.stringify(settings)) as AppSettings
+}
+
+function normalizeProjectValues(values: string[] | undefined): string[] {
+  return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean)))
+}
+
+function assertProjectDateRange(startDate: string | undefined, endDate: string | undefined): void {
+  if (startDate && endDate && endDate < startDate) {
+    throw new Error('Project end date cannot be earlier than the start date')
+  }
+}
+
+function toLocalIsoDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {

@@ -49,7 +49,7 @@ const WorkspaceListRailItem = React.forwardRef<HTMLButtonElement, WorkspaceListR
         aria-current={active ? 'page' : undefined}
         data-active={active}
         className={cn(
-          'h-auto min-h-[var(--control-height)] w-full justify-start gap-2 rounded-[var(--radius-button)] border border-border px-3 py-2 text-left',
+          'h-auto min-h-[var(--control-height)] w-full justify-start gap-2 rounded-[var(--radius-button)] px-3 py-2 text-left',
           className
         )}
         {...props}

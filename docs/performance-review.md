@@ -112,7 +112,7 @@ Several components do multiple filter/sort/map passes over the same arrays in a 
 
 ### Priority 5: Reduce layout-sensitive UI work in Projects
 
-- Audit table and milestone layout wrappers for width-measurement churn.
+- Audit project detail layout wrappers for width-measurement churn.
 - Prefer simpler stable layouts where possible in the Projects detail table.
 - Expected impact:
   - Medium

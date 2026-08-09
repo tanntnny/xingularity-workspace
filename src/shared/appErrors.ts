@@ -6,6 +6,15 @@ const APP_ERROR_SOURCE_LABELS: Record<AppErrorEvent['source'], string> = {
   renderer: 'Renderer'
 }
 
+const NON_FATAL_RENDERER_ERROR_MESSAGES = new Set([
+  'ResizeObserver loop completed with undelivered notifications.',
+  'ResizeObserver loop limit exceeded'
+])
+
+export function isNonFatalRendererErrorMessage(message: string): boolean {
+  return NON_FATAL_RENDERER_ERROR_MESSAGES.has(message.trim())
+}
+
 export function normalizeAppError(error: unknown): { message: string; stack?: string } {
   if (error instanceof Error) {
     return {

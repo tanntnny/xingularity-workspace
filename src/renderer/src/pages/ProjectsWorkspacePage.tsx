@@ -1,55 +1,67 @@
-import { useMemo, useState, type ReactElement } from 'react'
-import type { CalendarTask, Project, ProjectIconStyle, TaskStatus } from '../../../shared/types'
-import { PROJECT_ICON_COLORS, PROJECT_ICON_SYMBOLS } from '../../../shared/projectIcons'
+import { useEffect, useMemo, useRef, useState, type ReactElement, type SyntheticEvent } from 'react'
+import type {
+  CalendarTask,
+  Project,
+  ProjectIconStyle,
+  ProjectPropertiesPatch,
+  TaskStatus
+} from '../../../shared/types'
+import { normalizeTag } from '../../../shared/noteTags'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
+import { ProjectIconPicker } from '../components/ProjectIconPicker'
 import { TaskStatusIcon } from '../components/TaskStatusIcon'
+import { TaskEditDialog } from '../components/TaskEditDialog'
 import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
+import { formatCalendarTaskScheduleLabel } from '../lib/calendarTaskScheduleLabel'
 import { Button } from '../components/ui/button'
+import { DatePickerISO } from '../components/ui/date-picker'
 import { Input } from '../components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '../components/ui/select'
 import { Textarea } from '../components/ui/textarea'
+import { TagChip } from '../components/TagChip'
 import {
   WorkspaceHeaderSecondaryActionsRight,
+  WorkspaceHeaderActionDivider,
   WorkspaceIconButton,
   WorkspacePanelStack
 } from '../components/ui/document-workspace'
-import {
-  WorkspacePanelSection,
-  WorkspacePanelSectionHeader
-} from '../components/ui/workspace-panel-section'
+import { CollapsibleWorkspacePanelSection } from '../components/ui/workspace-panel-section'
 import { WorkspaceListRail, WorkspaceListRailItem } from '../components/ui/workspace-list-rail'
 import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
+import { SelectiveChip, type SelectiveChipOption } from '../components/ui/selective-chip'
 import {
   filterProjectsForWorkspace,
   PROJECTS_WORKSPACE_FILTER_OPTIONS,
   type ProjectsWorkspaceFilterMode
 } from '../lib/projectTaskRows'
-import { Archive, Circle, Plus, Star, Trash2 } from '../components/ui/icons'
+import { Archive, Circle, Plus, Star, Trash2, X } from '../components/ui/icons'
 
 export type { ProjectsWorkspaceFilterMode } from '../lib/projectTaskRows'
+
+const TASK_STATUS_CHIP_OPTIONS: readonly SelectiveChipOption[] = (
+  Object.keys(TASK_STATUS_META) as TaskStatus[]
+).map((value) => {
+  const meta = TASK_STATUS_META[value]
+  return {
+    value,
+    label: meta.label,
+    icon: <TaskStatusIcon status={value} size={14} />,
+    tone: meta.tone
+  }
+})
 
 interface ProjectsWorkspacePageProps {
   projects: Project[]
   tasks: CalendarTask[]
   favoriteProjectIds: string[]
   selectedProjectId: string | null
-  newProjectRequestToken: number
-  onNewProjectRequestHandled: () => void
   filterMode: ProjectsWorkspaceFilterMode
   onFilterModeChange: (mode: ProjectsWorkspaceFilterMode) => void
-  onSelectProject: (projectId: string) => void
-  onCreateProject: (input: {
-    name: string
-    description: string
-    icon: ProjectIconStyle
-  }) => Promise<string>
-  onCreateTask: (projectId: string | undefined, title: string) => Promise<void>
+  onCreateTask: (projectId: string | undefined, title: string) => Promise<CalendarTask>
+  onUpdateProject: (
+    projectId: string,
+    draft: { name: string; description: string; icon: ProjectIconStyle }
+  ) => void
+  onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
 }
@@ -59,22 +71,16 @@ export function ProjectsWorkspacePage({
   tasks,
   favoriteProjectIds,
   selectedProjectId,
-  newProjectRequestToken,
-  onNewProjectRequestHandled,
   filterMode,
   onFilterModeChange,
-  onSelectProject,
-  onCreateProject,
   onCreateTask,
+  onUpdateProject,
+  onUpdateProjectProperties,
   onUpdateTask,
   onDeleteTask
 }: ProjectsWorkspacePageProps): ReactElement {
-  const [newProjectName, setNewProjectName] = useState('')
-  const [newProjectDescription, setNewProjectDescription] = useState('')
-  const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
-  const isProjectFormVisible = newProjectRequestToken > 0
 
   const visibleProjects = useMemo(
     () => filterProjectsForWorkspace(projects, favoriteProjectIds, filterMode),
@@ -89,39 +95,19 @@ export function ProjectsWorkspacePage({
   const projectTasks = selectedProject
     ? tasks.filter((task) => task.projectId === selectedProject.id)
     : []
-
-  const handleCreateProject = async (): Promise<void> => {
-    const name = newProjectName.trim()
-    if (!name || isCreatingProject) return
-
-    setIsCreatingProject(true)
-    try {
-      const id = await onCreateProject({
-        name,
-        description: newProjectDescription.trim(),
-        icon: createProjectIcon(name)
-      })
-      onSelectProject(id)
-      onNewProjectRequestHandled()
-      setNewProjectName('')
-      setNewProjectDescription('')
-    } catch {
-      // The parent reports persistence errors; keep the form values for retry.
-    } finally {
-      setIsCreatingProject(false)
-    }
-  }
+  const editingTask = editingTaskId
+    ? (tasks.find((task) => task.id === editingTaskId) ?? null)
+    : null
 
   const handleCreateTask = async (): Promise<void> => {
-    const title = newTaskTitle.trim()
-    if (!title || isCreatingTask || isCreatingProject) return
+    if (!selectedProject || isCreatingTask) return
 
     setIsCreatingTask(true)
     try {
-      await onCreateTask(selectedProject?.id, title)
-      setNewTaskTitle('')
+      const task = await onCreateTask(selectedProject.id, 'New Task')
+      setEditingTaskId(task.id)
     } catch {
-      // The parent reports persistence errors; keep the title for retry.
+      // The parent reports persistence errors.
     } finally {
       setIsCreatingTask(false)
     }
@@ -153,48 +139,26 @@ export function ProjectsWorkspacePage({
     <div className="flex h-full min-h-0 flex-col bg-transparent">
       <WorkspaceHeaderSecondaryActionsRight>{toolbar}</WorkspaceHeaderSecondaryActionsRight>
       <main className="min-h-0 flex-1 overflow-auto p-2">
-        {isProjectFormVisible ? (
-          <section className="mb-3 rounded-lg border border-border bg-card p-4">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] sm:items-end">
-              <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-                Name
-                <Input
-                  value={newProjectName}
-                  onChange={(event) => setNewProjectName(event.target.value)}
-                  autoFocus
-                  disabled={isCreatingProject}
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-                Description
-                <Input
-                  value={newProjectDescription}
-                  onChange={(event) => setNewProjectDescription(event.target.value)}
-                  disabled={isCreatingProject}
-                />
-              </label>
-              <Button
-                type="button"
-                onClick={() => void handleCreateProject()}
-                disabled={isCreatingProject}
-              >
-                {isCreatingProject ? 'Creating…' : 'Create'}
-              </Button>
-            </div>
-          </section>
-        ) : null}
-
         {selectedProject ? (
-          <ProjectTasks
-            tasks={projectTasks}
-            newTaskTitle={newTaskTitle}
-            onNewTaskTitleChange={setNewTaskTitle}
-            onCreateTask={handleCreateTask}
-            isCreatingTask={isCreatingTask || isCreatingProject}
-            onUpdateTask={onUpdateTask}
-            onDeleteTask={onDeleteTask}
-            projects={projects}
-          />
+          <div className="mx-auto max-w-5xl space-y-3">
+            <ProjectDetails
+              key={selectedProject.id}
+              project={selectedProject}
+              onUpdateProject={onUpdateProject}
+              onUpdateProperties={(patch) => onUpdateProjectProperties(selectedProject.id, patch)}
+              dataTestId="project-main-detail-panel"
+              testIdPrefix="project-main-detail"
+            />
+            <ProjectTasks
+              tasks={projectTasks}
+              onCreateTask={handleCreateTask}
+              isCreatingTask={isCreatingTask}
+              onUpdateTask={onUpdateTask}
+              onDeleteTask={onDeleteTask}
+              onOpenTask={setEditingTaskId}
+              selectedTaskId={editingTaskId}
+            />
+          </div>
         ) : (
           <EmptyState
             title="No project selected"
@@ -202,6 +166,20 @@ export function ProjectsWorkspacePage({
           />
         )}
       </main>
+      {editingTask ? (
+        <TaskEditDialog
+          key={editingTask.id}
+          task={editingTask}
+          projects={projects}
+          description="Update task details without leaving this project."
+          onSave={onUpdateTask}
+          onClose={() => setEditingTaskId(null)}
+          onDelete={(taskId) => {
+            onDeleteTask(taskId)
+            setEditingTaskId(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -214,8 +192,7 @@ export function ProjectsWorkspaceRightPanel({
   onSelectProject,
   onToggleProjectFavorite,
   onToggleProjectArchive,
-  onUpdateProject,
-  onDeleteProject
+  onUpdateProjectProperties
 }: {
   projects: Project[]
   favoriteProjectIds: string[]
@@ -224,11 +201,7 @@ export function ProjectsWorkspaceRightPanel({
   onSelectProject?: (projectId: string) => void
   onToggleProjectFavorite: (projectId: string) => void
   onToggleProjectArchive: (projectId: string) => void
-  onUpdateProject: (
-    projectId: string,
-    draft: { name: string; description: string; icon: ProjectIconStyle }
-  ) => void
-  onDeleteProject: (projectId: string) => Promise<void>
+  onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
 }): ReactElement {
   const visibleProjects = useMemo(
     () => filterProjectsForWorkspace(projects, favoriteProjectIds, filterMode),
@@ -242,15 +215,15 @@ export function ProjectsWorkspaceRightPanel({
 
   return (
     <WorkspacePanelStack>
-      <WorkspacePanelSection data-testid="projects-list-panel" className="shrink-0">
-        <WorkspacePanelSectionHeader
-          heading="Project list"
-          description={`${visibleProjects.length} visible ${visibleProjects.length === 1 ? 'project' : 'projects'}`}
-        />
+      <CollapsibleWorkspacePanelSection
+        data-testid="projects-list-panel"
+        className="shrink-0"
+        heading="Project list"
+      >
         <WorkspaceListRail
           aria-label="Projects"
           data-testid="projects-workspace-sidebar"
-          className="h-auto min-h-0 p-0"
+          className="h-auto min-h-0 p-3"
           emptyState="No projects yet"
         >
           {visibleProjects.map((project) => (
@@ -259,7 +232,7 @@ export function ProjectsWorkspaceRightPanel({
               active={project.id === selectedProject?.id}
               data-testid={`projects-sidebar-item:${project.id}`}
               onClick={() => onSelectProject?.(project.id)}
-              leading={<NoteShapeIcon icon={project.icon} size={30} aria-hidden="true" />}
+              leading={<NoteShapeIcon icon={project.icon} size="1.25em" aria-hidden="true" />}
               trailing={
                 favoriteProjectIds.includes(project.id) ? (
                   <Star size={13} className="text-amber-500" aria-hidden="true" />
@@ -270,62 +243,84 @@ export function ProjectsWorkspaceRightPanel({
             </WorkspaceListRailItem>
           ))}
         </WorkspaceListRail>
-      </WorkspacePanelSection>
+      </CollapsibleWorkspacePanelSection>
       <ProjectPropertiesPanel
         key={selectedProject?.id ?? 'empty-project-properties'}
         project={selectedProject}
         favorite={selectedProject ? favoriteProjectIds.includes(selectedProject.id) : false}
-        onUpdateProject={onUpdateProject}
         onToggleFavorite={() => {
           if (selectedProject) onToggleProjectFavorite(selectedProject.id)
         }}
-        archived={selectedProject?.state === 'archived'}
         onToggleArchive={() => {
           if (selectedProject) onToggleProjectArchive(selectedProject.id)
         }}
-        onDelete={() => {
-          if (selectedProject) void onDeleteProject(selectedProject.id)
+        onUpdateProperties={(patch) => {
+          if (selectedProject) onUpdateProjectProperties(selectedProject.id, patch)
         }}
       />
     </WorkspacePanelStack>
   )
 }
 
-function ProjectPropertiesPanel({
+export function ProjectsWorkspaceHeaderActions({
   project,
-  favorite,
-  onUpdateProject,
-  onToggleFavorite,
-  archived,
-  onToggleArchive,
   onDelete
 }: {
   project: Project | null
-  favorite: boolean
+  onDelete: () => void
+}): ReactElement | null {
+  if (!project) {
+    return null
+  }
+
+  return (
+    <>
+      <WorkspaceHeaderActionDivider />
+      <WorkspaceIconButton
+        type="button"
+        onClick={onDelete}
+        data-testid="project-workspace-header-actions"
+        aria-label="Delete project"
+        title="Delete project"
+        icon={<Trash2 size={18} />}
+      />
+    </>
+  )
+}
+
+function ProjectDetails({
+  project,
+  onUpdateProject,
+  onUpdateProperties,
+  dataTestId,
+  testIdPrefix
+}: {
+  project: Project | null
   onUpdateProject: (
     projectId: string,
     draft: { name: string; description: string; icon: ProjectIconStyle }
   ) => void
-  onToggleFavorite: () => void
-  archived: boolean
-  onToggleArchive: () => void
-  onDelete: () => void
+  onUpdateProperties: (patch: ProjectPropertiesPatch) => void
+  dataTestId: string
+  testIdPrefix: string
 }): ReactElement {
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? project?.summary ?? '')
+  const [tagInput, setTagInput] = useState('')
+  const [resourceInput, setResourceInput] = useState('')
 
   if (!project) {
     return (
-      <WorkspacePanelSection data-testid="project-properties-panel">
-        <WorkspacePanelSectionHeader
-          heading="Project properties"
-          description="Select a project to edit its details."
-        />
+      <CollapsibleWorkspacePanelSection
+        data-testid={dataTestId}
+        heading="Project properties"
+        description="Select a project to edit its details."
+      >
         <EmptyState
           title="No project selected"
           description="Create a project to see its properties."
         />
-      </WorkspacePanelSection>
+      </CollapsibleWorkspacePanelSection>
     )
   }
 
@@ -334,199 +329,454 @@ function ProjectPropertiesPanel({
     description: description.trim(),
     icon: project.icon
   }
+  const tags = project.tags ?? []
+  const resources = project.resources ?? []
+  const addValue = (field: 'tags' | 'resources', rawValue: string): void => {
+    const value = field === 'tags' ? normalizeTag(rawValue) : rawValue.trim()
+    if (!value) return
+
+    const values = field === 'tags' ? tags : resources
+    if (values.includes(value)) return
+
+    onUpdateProperties({ [field]: [...values, value] })
+    if (field === 'tags') setTagInput('')
+    else setResourceInput('')
+  }
 
   return (
-    <WorkspacePanelSection data-testid="project-properties-panel">
-      <WorkspacePanelSectionHeader
-        heading="Project properties"
-        description="Edit the selected project."
-        actions={
-          <div className="flex items-center gap-1.5" data-testid="project-detail-header-actions">
-            <WorkspaceIconButton
-              type="button"
-              active={favorite}
-              onClick={onToggleFavorite}
-              aria-label={favorite ? 'Remove favorite' : 'Add favorite'}
-              title={favorite ? 'Remove favorite' : 'Add favorite'}
-              icon={<Star size={18} className={favorite ? 'fill-current' : ''} />}
-            />
-            <WorkspaceIconButton
-              type="button"
-              onClick={onToggleArchive}
-              aria-label={archived ? 'Unarchive project' : 'Archive project'}
-              title={archived ? 'Unarchive project' : 'Archive project'}
-              icon={<Archive size={18} />}
-            />
-            <WorkspaceIconButton
-              type="button"
-              onClick={onDelete}
-              aria-label="Delete project"
-              title="Delete project"
-              icon={<Trash2 size={18} />}
-            />
-          </div>
-        }
-      />
-      <div className="grid gap-3" data-testid="project-detail-header">
-        <div className="flex items-center" data-testid="project-detail-icon-row">
-          <NoteShapeIcon icon={project.icon} size={30} />
+    <div data-testid={dataTestId}>
+      <div className="space-y-3" data-testid={`${testIdPrefix}-header`}>
+        <div className="flex items-center gap-3" data-testid={`${testIdPrefix}-icon-row`}>
+          <ProjectIconPicker
+            icon={project.icon}
+            onChange={(icon) => onUpdateProject(project.id, { ...projectDraft, icon })}
+            testId={`${testIdPrefix}-icon-trigger`}
+          />
         </div>
         <Input
-          data-testid="project-detail-name-row"
+          data-testid={`${testIdPrefix}-name-row`}
+          id={`${testIdPrefix}-name`}
           value={name}
           onChange={(event) => setName(event.target.value)}
           onBlur={() => onUpdateProject(project.id, projectDraft)}
-          className="h-auto border-0 bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
+          className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold shadow-none focus-visible:ring-0"
           aria-label="Project name"
         />
         <Textarea
-          data-testid="project-detail-description-row"
+          data-testid={`${testIdPrefix}-description-row`}
+          id={`${testIdPrefix}-description`}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           onBlur={() => onUpdateProject(project.id, projectDraft)}
-          className="min-h-20 resize-y border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+          className="min-h-20 resize-y text-base shadow-none focus-visible:ring-0"
           aria-label="Project description"
           placeholder="Describe this project"
         />
+        <div className="grid gap-3" data-testid={`${testIdPrefix}-properties`}>
+          <ProjectPropertyRow label="Tags" testId={`${testIdPrefix}-tags-row`}>
+            <ProjectChipEditor
+              values={tags}
+              inputValue={tagInput}
+              label="Add tag"
+              inputPlaceholder="tag name"
+              onInputChange={setTagInput}
+              onAdd={(value) => addValue('tags', value)}
+              onRemove={(value) =>
+                onUpdateProperties({ tags: tags.filter((tag) => tag !== value) })
+              }
+            />
+          </ProjectPropertyRow>
+          <ProjectPropertyRow label="Resources" testId={`${testIdPrefix}-resources-row`}>
+            <ProjectChipEditor
+              values={resources}
+              inputValue={resourceInput}
+              label="Add resource"
+              inputPlaceholder="resource name"
+              onInputChange={setResourceInput}
+              onAdd={(value) => addValue('resources', value)}
+              onRemove={(value) =>
+                onUpdateProperties({
+                  resources: resources.filter((resource) => resource !== value)
+                })
+              }
+            />
+          </ProjectPropertyRow>
+        </div>
       </div>
-    </WorkspacePanelSection>
+    </div>
+  )
+}
+
+function ProjectPropertiesPanel({
+  project,
+  favorite,
+  onToggleFavorite,
+  onToggleArchive,
+  onUpdateProperties
+}: {
+  project: Project | null
+  favorite: boolean
+  onToggleFavorite: () => void
+  onToggleArchive: () => void
+  onUpdateProperties: (patch: ProjectPropertiesPatch) => void
+}): ReactElement {
+  if (!project) {
+    return (
+      <CollapsibleWorkspacePanelSection
+        data-testid="project-properties-panel"
+        heading="Project properties"
+        description="Select a project to edit its properties."
+      >
+        <EmptyState
+          title="No project selected"
+          description="Create a project to see its properties."
+        />
+      </CollapsibleWorkspacePanelSection>
+    )
+  }
+
+  return (
+    <CollapsibleWorkspacePanelSection
+      data-testid="project-properties-panel"
+      heading="Project properties"
+    >
+      <div data-testid="project-property-rows">
+        <ProjectPropertyRow label="Favorite" testId="project-property-favorite">
+          <Button
+            type="button"
+            variant={favorite ? 'secondary' : 'outline'}
+            size="sm"
+            data-testid="project-favorite-button"
+            className="rounded-[var(--radius-button-pill)]"
+            aria-label={favorite ? 'Remove project favorite' : 'Add project favorite'}
+            aria-pressed={favorite}
+            onClick={onToggleFavorite}
+          >
+            <Star
+              aria-hidden="true"
+              className={favorite ? 'text-amber-500' : 'text-muted-foreground'}
+            />
+            <span>{favorite ? 'Favorite' : 'Not favorite'}</span>
+          </Button>
+        </ProjectPropertyRow>
+        <ProjectPropertyRow label="Archive" testId="project-property-archive">
+          <Button
+            type="button"
+            variant={project.state === 'archived' ? 'secondary' : 'outline'}
+            size="sm"
+            data-testid="project-archive-button"
+            className="rounded-[var(--radius-button-pill)]"
+            aria-label={project.state === 'archived' ? 'Unarchive project' : 'Archive project'}
+            aria-pressed={project.state === 'archived'}
+            onClick={onToggleArchive}
+          >
+            <Archive
+              aria-hidden="true"
+              className={project.state === 'archived' ? 'text-primary' : 'text-muted-foreground'}
+            />
+            <span>{project.state === 'archived' ? 'Archived' : 'Not archived'}</span>
+          </Button>
+        </ProjectPropertyRow>
+        <ProjectPropertyRow label="Start Date" testId="project-property-start-date">
+          <ProjectDateValue
+            value={project.startDate}
+            placeholder="Set start date"
+            ariaLabel="Start date"
+            onChange={(value) => {
+              if (value && project.endDate && value > project.endDate) return
+              onUpdateProperties({ startDate: value || null })
+            }}
+            onClear={() => onUpdateProperties({ startDate: null })}
+          />
+        </ProjectPropertyRow>
+        <ProjectPropertyRow label="End Date" testId="project-property-end-date">
+          <ProjectDateValue
+            value={project.endDate}
+            placeholder="Set end date"
+            ariaLabel="End date"
+            onChange={(value) => {
+              if (value && project.startDate && value < project.startDate) return
+              onUpdateProperties({ endDate: value || null })
+            }}
+            onClear={() => onUpdateProperties({ endDate: null })}
+          />
+        </ProjectPropertyRow>
+      </div>
+    </CollapsibleWorkspacePanelSection>
+  )
+}
+
+function ProjectPropertyRow({
+  label,
+  testId,
+  children
+}: {
+  label: string
+  testId: string
+  children: ReactElement
+}): ReactElement {
+  return (
+    <div
+      className="grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] items-start gap-3 px-4 py-3"
+      data-testid={testId}
+    >
+      <span className="pt-1 text-sm font-medium text-muted-foreground">{label}</span>
+      <div className="flex w-full min-w-0 flex-wrap justify-start gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+function ProjectDateValue({
+  value,
+  placeholder,
+  ariaLabel,
+  onChange,
+  onClear
+}: {
+  value?: string
+  placeholder: string
+  ariaLabel: string
+  onChange: (value: string) => void
+  onClear: () => void
+}): ReactElement {
+  return (
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+      <DatePickerISO
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className="max-w-full border-border"
+      />
+      {value ? (
+        <WorkspaceIconButton
+          aria-label={`Clear ${ariaLabel.toLowerCase()}`}
+          title={`Clear ${ariaLabel.toLowerCase()}`}
+          icon={<X size={14} />}
+          onClick={onClear}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ProjectChipEditor({
+  values,
+  inputValue,
+  label,
+  inputPlaceholder,
+  onInputChange,
+  onAdd,
+  onRemove
+}: {
+  values: string[]
+  inputValue: string
+  label: string
+  inputPlaceholder: string
+  onInputChange: (value: string) => void
+  onAdd: (value: string) => void
+  onRemove: (value: string) => void
+}): ReactElement {
+  const [isAdding, setIsAdding] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!isAdding) return
+
+    const frameId = window.requestAnimationFrame(() => inputRef.current?.focus())
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isAdding])
+
+  const handleAdd = (): void => {
+    const value = inputValue.trim()
+    if (!value) return
+
+    onAdd(value)
+    setIsAdding(true)
+  }
+
+  const closeInput = (): void => {
+    setIsAdding(false)
+    onInputChange('')
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      {values.map((value) => (
+        <TagChip key={value} tag={value} onRemove={() => onRemove(value)} />
+      ))}
+      {isAdding ? (
+        <div className="inline-flex items-center gap-1.5">
+          <Input
+            ref={inputRef}
+            value={inputValue}
+            onChange={(event) => onInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                event.stopPropagation()
+                handleAdd()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                closeInput()
+              }
+            }}
+            onBlur={closeInput}
+            placeholder={inputPlaceholder}
+            aria-label={label}
+            autoFocus
+            className="w-32 rounded-md border border-primary bg-card px-2.5 py-1 text-sm text-foreground caret-primary"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsAdding(true)}
+          className="inline-flex items-center justify-center rounded-md border border-dashed border-border bg-card p-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={label}
+          aria-label={label}
+        >
+          <Plus size={16} aria-hidden="true" />
+        </button>
+      )}
+    </div>
   )
 }
 
 function ProjectTasks({
   tasks,
-  projects,
-  newTaskTitle,
-  onNewTaskTitleChange,
   onCreateTask,
   isCreatingTask,
   onUpdateTask,
-  onDeleteTask
+  onDeleteTask,
+  onOpenTask,
+  selectedTaskId
 }: {
   tasks: CalendarTask[]
-  projects: Project[]
-  newTaskTitle: string
-  onNewTaskTitleChange: (value: string) => void
   onCreateTask: () => void
   isCreatingTask: boolean
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
+  onOpenTask: (taskId: string) => void
+  selectedTaskId: string | null
 }): ReactElement {
   return (
-    <div className="mx-auto max-w-5xl space-y-3">
-      <section className="rounded-lg border border-border bg-card">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">Tasks</h2>
-            <p className="text-xs text-muted-foreground">
-              {tasks.length} linked {tasks.length === 1 ? 'task' : 'tasks'}
-            </p>
-          </div>
-          <Input
-            value={newTaskTitle}
-            onChange={(event) => onNewTaskTitleChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !isCreatingTask) void onCreateTask()
-            }}
-            placeholder="Add a task"
-            className="max-w-xs"
-            aria-label="New task title"
-            disabled={isCreatingTask}
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void onCreateTask()}
-            disabled={isCreatingTask}
-          >
-            <Plus size={14} /> {isCreatingTask ? 'Adding…' : 'Add task'}
-          </Button>
-        </div>
-        {tasks.length === 0 ? (
-          <EmptyState title="No tasks in this project" description="Add the first task above." />
-        ) : (
-          tasks.map((task) => (
+    <section aria-labelledby="project-tasks-heading" className="space-y-3">
+      <div className="border-t border-border pt-3">
+        <h2 id="project-tasks-heading" className="text-sm font-medium text-muted-foreground">
+          Project Tasks
+        </h2>
+      </div>
+      {tasks.length === 0 ? (
+        <EmptyState title="No tasks in this project" description="Add a new task to get started." />
+      ) : (
+        <ul className="list-none">
+          {tasks.map((task) => (
             <TaskDetailRow
               key={task.id}
               task={task}
-              projects={projects}
+              selected={selectedTaskId === task.id}
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
+              onOpenTask={onOpenTask}
             />
-          ))
-        )}
-      </section>
-    </div>
+          ))}
+        </ul>
+      )}
+      <div className="border-y border-border py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start px-2 text-muted-foreground hover:text-foreground"
+          onClick={() => void onCreateTask()}
+          disabled={isCreatingTask}
+        >
+          <Plus size={14} /> {isCreatingTask ? 'Adding…' : 'Add new task'}
+        </Button>
+      </div>
+    </section>
   )
 }
 
 function TaskDetailRow({
   task,
-  projects,
   onUpdateTask,
-  onDeleteTask
+  onDeleteTask,
+  onOpenTask,
+  selected
 }: {
   task: CalendarTask
-  projects: Project[]
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
+  onOpenTask: (taskId: string) => void
+  selected: boolean
 }): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
+  const scheduleLabel = formatCalendarTaskScheduleLabel(task)
+
+  const stopRowInteraction = (event: SyntheticEvent): void => {
+    event.stopPropagation()
+  }
+
   return (
-    <div className="grid gap-2 border-b border-border p-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_10rem_10rem_2rem] sm:items-center">
-      <Input
-        value={task.title}
-        onChange={(event) => onUpdateTask(task.id, { title: event.target.value })}
-        aria-label={`Task title: ${task.title}`}
-      />
-      <Select
-        value={status}
-        onValueChange={(value) =>
-          onUpdateTask(task.id, { status: value as TaskStatus, completed: value === 'completed' })
-        }
-      >
-        <SelectTrigger aria-label={`Status for ${task.title}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(TASK_STATUS_META).map(([value, meta]) => (
-            <SelectItem key={value} value={value}>
-              <span className="flex items-center gap-2">
-                <TaskStatusIcon status={value as TaskStatus} size={14} />
-                {meta.label}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={task.projectId ?? 'none'}
-        onValueChange={(value) =>
-          onUpdateTask(task.id, { projectId: value === 'none' ? undefined : value })
-        }
-      >
-        <SelectTrigger aria-label={`Project for ${task.title}`}>
-          <SelectValue placeholder="No project" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">No project</SelectItem>
-          {projects.map((item) => (
-            <SelectItem key={item.id} value={item.id}>
-              {item.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
+    <li
+      className="group relative rounded-[var(--radius-button)] px-2 py-1"
+      data-selected={selected}
+      data-testid={`project-task-row:${task.id}`}
+    >
+      <button
         type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => onDeleteTask(task.id)}
-        aria-label={`Delete ${task.title}`}
+        className="absolute inset-0 z-0 rounded-[var(--radius-button)] border border-transparent bg-transparent text-left outline-none transition-colors group-hover:border-border group-hover:bg-accent focus-visible:border-border focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring group-data-[selected=true]:border-border group-data-[selected=true]:bg-accent"
+        onClick={() => onOpenTask(task.id)}
+        aria-label={`Open task: ${task.title}`}
+        data-testid={`project-task-open:${task.id}`}
       >
-        <Trash2 size={14} />
-      </Button>
-    </div>
+        <span className="sr-only">{task.title}</span>
+      </button>
+      <div className="pointer-events-none relative z-10 grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_10rem_2rem] sm:items-center">
+        <SelectiveChip
+          className="pointer-events-auto"
+          label={`Status for ${task.title}`}
+          value={status}
+          variant="plain"
+          options={TASK_STATUS_CHIP_OPTIONS}
+          data-testid={`project-task-status-chip:${task.id}`}
+          onPointerDown={stopRowInteraction}
+          onClick={stopRowInteraction}
+          onValueChange={(value) => {
+            const nextStatus = value as TaskStatus
+            onUpdateTask(task.id, {
+              status: nextStatus,
+              completed: nextStatus === 'completed'
+            })
+          }}
+        />
+        <span className="min-w-0 truncate px-1 py-1 text-left text-sm font-medium text-foreground">
+          {task.title}
+        </span>
+        <span
+          className="pointer-events-none min-w-0 truncate text-xs text-muted-foreground"
+          title={scheduleLabel}
+        >
+          {scheduleLabel}
+        </span>
+        <Button
+          className="pointer-events-auto"
+          type="button"
+          variant="ghost"
+          size="icon"
+          onPointerDown={stopRowInteraction}
+          onClick={(event) => {
+            stopRowInteraction(event)
+            onDeleteTask(task.id)
+          }}
+          aria-label={`Delete ${task.title}`}
+        >
+          <Trash2 size={14} />
+        </Button>
+      </div>
+    </li>
   )
 }
 
@@ -538,16 +788,4 @@ function EmptyState({ title, description }: { title: string; description: string
       <div className="text-xs text-muted-foreground">{description}</div>
     </div>
   )
-}
-
-function createProjectIcon(seed: string): ProjectIconStyle {
-  const index =
-    Math.abs(seed.split('').reduce((total, char) => total + char.charCodeAt(0), 0)) %
-    PROJECT_ICON_SYMBOLS.length
-  return {
-    set: 'tabler',
-    glyph: PROJECT_ICON_SYMBOLS[index],
-    variant: 'filled',
-    color: PROJECT_ICON_COLORS[index % PROJECT_ICON_COLORS.length]
-  }
 }

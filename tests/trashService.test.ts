@@ -97,17 +97,6 @@ describe('TrashService', () => {
     }
     const after: AppSettings = {
       ...before,
-      projects: [
-        {
-          ...project,
-          milestones: [
-            {
-              ...project.milestones[0]!,
-              subtasks: []
-            }
-          ]
-        }
-      ],
       calendarTasks: [],
       gridBoard: {
         ...before.gridBoard,
@@ -116,10 +105,6 @@ describe('TrashService', () => {
     }
 
     await trash.archiveSettingsDeletes(before, after)
-    await trash.archiveSettingsDeletes(before, {
-      ...before,
-      projects: [{ ...project, milestones: [] }]
-    })
     await trash.archiveSettingsDeletes(before, {
       ...before,
       projects: [],
@@ -140,29 +125,12 @@ function makeProject(): Project {
     name: 'Project',
     summary: '',
     state: 'active',
-    status: 'on-track',
     updatedAt: '2026-04-19T00:00:00.000Z',
-    progress: 0,
     icon: {
       shape: 'circle',
       variant: 'filled',
       color: '#000000'
-    },
-    milestones: [
-      {
-        id: 'milestone-1',
-        title: 'Milestone',
-        status: 'pending',
-        subtasks: [
-          {
-            id: 'subtask-1',
-            title: 'Subtask',
-            completed: false,
-            createdAt: '2026-04-19T00:00:00.000Z'
-          }
-        ]
-      }
-    ]
+    }
   }
 }
 

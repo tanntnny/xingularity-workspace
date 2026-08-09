@@ -65,23 +65,7 @@ export interface FolderPdfExportResult {
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
 export type ProjectIconSet = 'tabler'
 export type LegacyProjectIconSet = 'shape' | 'lucide'
-export type ProjectIconSymbol =
-  | 'briefcase'
-  | 'folder-kanban'
-  | 'rocket'
-  | 'lightbulb'
-  | 'target'
-  | 'book-open'
-  | 'package'
-  | 'flask-conical'
-  | 'sparkles'
-  | 'pen-tool'
-  | 'monitor'
-  | 'megaphone'
-  | 'globe'
-  | 'shield'
-  | 'camera'
-  | 'calendar'
+export type ProjectIconSymbol = string
 export type ProjectIconVariant = 'filled' | 'outlined'
 export type ProjectIconGlyph = ProjectIconShape | ProjectIconSymbol
 
@@ -203,10 +187,11 @@ export interface AppErrorEvent {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high'
-export type TaskStatus = 'pending' | 'in-progress' | 'blocked' | 'completed'
+export type TaskStatus = 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
 
 export const TASK_STATUS_VALUES: TaskStatus[] = [
   'pending',
+  'backlog',
   'in-progress',
   'blocked',
   'completed'
@@ -214,6 +199,7 @@ export const TASK_STATUS_VALUES: TaskStatus[] = [
 
 export const TASK_STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: 'pending', label: 'Pending' },
+  { value: 'backlog', label: 'Backlog' },
   { value: 'in-progress', label: 'In progress' },
   { value: 'blocked', label: 'Blocked' },
   { value: 'completed', label: 'Completed' }
@@ -290,46 +276,7 @@ export interface CreateTaskInput {
 // transition to the domain-neutral Task name.
 export type Task = CalendarTask
 
-// Unified calendar item for displaying tasks, milestones, and subtasks together
-export type CalendarItemType = 'task' | 'milestone' | 'subtask'
-
-export interface CalendarItem {
-  id: string
-  type: CalendarItemType
-  title: string
-  date: string
-  completed: boolean
-  priority?: TaskPriority
-  // For milestones/subtasks
-  projectId?: string
-  projectName?: string
-  milestoneId?: string
-  milestoneName?: string
-}
-
-export type ProjectStatus = 'on-track' | 'at-risk' | 'blocked' | 'completed'
 export type ProjectState = 'active' | 'archived'
-
-export interface ProjectSubtask {
-  id: string
-  title: string
-  description?: string
-  completed: boolean
-  priority?: TaskPriority
-  createdAt: string
-  dueDate?: string
-}
-
-export interface ProjectMilestone {
-  id: string
-  title: string
-  description?: string
-  collapsed?: boolean
-  dueDate?: string
-  priority?: TaskPriority
-  status: 'pending' | 'in-progress' | 'completed' | 'blocked'
-  subtasks: ProjectSubtask[]
-}
 
 export interface Project {
   id: string
@@ -339,10 +286,11 @@ export interface Project {
   summary: string
   folderPath?: string
   state: ProjectState
-  status: ProjectStatus
+  startDate?: string
+  endDate?: string
+  tags?: string[]
+  resources?: string[]
   updatedAt: string
-  progress: number
-  milestones: ProjectMilestone[]
   // Tasks are resolved from Task.projectId at runtime; this optional field is only
   // used by project-focused renderer projections.
   tasks?: CalendarTask[]
@@ -353,6 +301,10 @@ export interface CreateProjectInput {
   name?: string
   description?: string
   icon?: ProjectIconInput
+  startDate?: string
+  endDate?: string
+  tags?: string[]
+  resources?: string[]
 }
 
 export interface UpdateProjectInput {
@@ -360,6 +312,17 @@ export interface UpdateProjectInput {
   name?: string
   description?: string
   icon?: ProjectIconInput
+  startDate?: string | null
+  endDate?: string | null
+  tags?: string[]
+  resources?: string[]
+}
+
+export interface ProjectPropertiesPatch {
+  startDate?: string | null
+  endDate?: string | null
+  tags?: string[]
+  resources?: string[]
 }
 
 export interface DeleteProjectInput {
@@ -740,6 +703,7 @@ export interface RendererAgentToolsApi {
       priority?: TaskPriority
       taskType?: CalendarTaskType
       reminders?: TaskReminder[]
+      status?: TaskStatus
       completed?: boolean
     }) => Promise<CalendarTask>
     update: (input: {
@@ -753,6 +717,7 @@ export interface RendererAgentToolsApi {
       priority?: TaskPriority
       taskType?: CalendarTaskType | null
       reminders?: TaskReminder[]
+      status?: TaskStatus
       completed?: boolean
     }) => Promise<CalendarTask>
   }
@@ -1116,7 +1081,10 @@ export interface RendererVaultApi {
   }
   settings: {
     get: () => Promise<AppSettings>
-    update: (next: RendererSettingsUpdate, options?: AppSettingsUpdateOptions) => Promise<AppSettings>
+    update: (
+      next: RendererSettingsUpdate,
+      options?: AppSettingsUpdateOptions
+    ) => Promise<AppSettings>
   }
   projects: {
     create: (input: CreateProjectInput) => Promise<Project>

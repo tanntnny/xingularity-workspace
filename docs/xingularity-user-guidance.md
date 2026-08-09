@@ -106,13 +106,6 @@ Available actions:
 - customize the project icon
 - add, edit, assign, and delete tasks
 
-Project status values are:
-
-- `on-track`
-- `at-risk`
-- `blocked`
-- `completed`
-
 Projects remain independent records; notebook files and tags are created and managed by the user. Tasks are shared across Projects, Calendar, automation, and weekly planning through their `projectId`.
 
 ## Subscriptions Workflow

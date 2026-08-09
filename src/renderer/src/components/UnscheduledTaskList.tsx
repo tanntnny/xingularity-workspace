@@ -1,7 +1,14 @@
 import { ReactElement, useMemo, useState, DragEvent } from 'react'
 import { CalendarPlus, Plus } from './ui/icons'
-import { CalendarTask, CalendarTaskType, TaskPriority, TaskReminder } from '../../../shared/types'
-import { TaskEditDialog } from './CalendarMonthView'
+import {
+  CalendarTask,
+  CalendarTaskType,
+  Project,
+  TaskPriority,
+  TaskReminder,
+  TaskStatus
+} from '../../../shared/types'
+import { TaskEditDialog } from './TaskEditDialog'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
@@ -17,6 +24,7 @@ import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
+  projects?: Project[]
   selectedDate: string
   newTaskValue: string
   onNewTaskValueChange: (value: string) => void
@@ -25,6 +33,8 @@ interface UnscheduledTaskListProps {
   onRename: (taskId: string, newTitle: string) => void
   onUpdatePriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
+  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
+  onUpdateStatus?: (taskId: string, status: TaskStatus) => void
   onUpdateTime: (taskId: string, time: string | undefined) => void
   onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
   onScheduleTask: (taskId: string, date: string) => void
@@ -34,6 +44,7 @@ interface UnscheduledTaskListProps {
 
 export function UnscheduledTaskList({
   tasks,
+  projects = [],
   selectedDate,
   newTaskValue,
   onNewTaskValueChange,
@@ -42,6 +53,8 @@ export function UnscheduledTaskList({
   onRename,
   onUpdatePriority,
   onUpdateTaskType,
+  onUpdateTaskProject,
+  onUpdateStatus,
   onUpdateTime,
   onUpdateReminders,
   onScheduleTask,
@@ -58,8 +71,15 @@ export function UnscheduledTaskList({
 
   const pendingCount = tasks.filter((t) => !t.completed).length
   const completedCount = tasks.filter((t) => t.completed).length
+  const projectsById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project])),
+    [projects]
+  )
   const revealItemIds = useMemo(() => tasks.map((task) => task.id), [tasks])
-  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds)
+  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds, {
+    baseDelayMs: 0,
+    maxStaggerSteps: 0
+  })
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) : undefined
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
@@ -204,9 +224,14 @@ export function UnscheduledTaskList({
                       event.preventDefault()
                       onDelete(task.id)
                     }}
-                    className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through opacity-60' : ''}`}
+                    className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
                   >
-                    <CalendarTaskCard task={task} onToggle={onToggle} />
+                    <CalendarTaskCard
+                      task={task}
+                      project={task.projectId ? projectsById.get(task.projectId) : undefined}
+                      showProject={Boolean(task.projectId)}
+                      onStatusChange={(taskId, status) => onUpdateStatus?.(taskId, status)}
+                    />
                   </article>
                 </TaskContextMenu>
               )
@@ -236,17 +261,26 @@ export function UnscheduledTaskList({
       {editingTask ? (
         <TaskEditDialog
           task={editingTask}
+          projects={projects}
           onClose={() => setEditingTaskId(null)}
-          onRename={onRename}
-          onUpdateTaskPriority={onUpdatePriority}
-          onUpdateTaskType={onUpdateTaskType}
-          onUpdateTaskSchedule={(taskId, schedule) => {
-            if (schedule.date) {
-              onScheduleTask(taskId, schedule.date)
+          onSave={(taskId, patch) => {
+            if (patch.title) onRename(taskId, patch.title)
+            if (patch.priority) onUpdatePriority(taskId, patch.priority)
+            if (patch.taskType) onUpdateTaskType(taskId, patch.taskType)
+            if (patch.status) onUpdateStatus?.(taskId, patch.status)
+            if ('projectId' in patch) onUpdateTaskProject?.(taskId, patch.projectId)
+            if ('date' in patch || 'time' in patch) {
+              if (patch.date) {
+                onScheduleTask(taskId, patch.date)
+              } else {
+                onUnscheduleTask?.(taskId)
+              }
+              onUpdateTime(taskId, patch.time)
             } else {
-              onUnscheduleTask?.(taskId)
+              if ('endDate' in patch && patch.endDate) {
+                onScheduleTask(taskId, patch.endDate)
+              }
             }
-            onUpdateTime(taskId, schedule.time)
           }}
           onDelete={onDelete}
         />

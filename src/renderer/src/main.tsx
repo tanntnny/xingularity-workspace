@@ -2,7 +2,7 @@ import './assets/main.css'
 
 import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createAppErrorEvent } from '../../shared/appErrors'
+import { createAppErrorEvent, isNonFatalRendererErrorMessage } from '../../shared/appErrors'
 import type { AppErrorEvent } from '../../shared/types'
 import App from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
@@ -19,6 +19,11 @@ function AppRoot() {
 
   useEffect(() => {
     const removeWindowError = (event: ErrorEvent): void => {
+      if (isNonFatalRendererErrorMessage(event.message)) {
+        event.preventDefault()
+        return
+      }
+
       reportFatalError(createAppErrorEvent('renderer', event.error ?? event.message))
     }
     const removeUnhandledRejection = (event: PromiseRejectionEvent): void => {

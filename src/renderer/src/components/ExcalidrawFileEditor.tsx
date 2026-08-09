@@ -1,8 +1,10 @@
 import {
   type ComponentProps,
   type ReactElement,
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState
@@ -22,6 +24,10 @@ interface ExcalidrawFileEditorProps {
   notePath: string
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: ToastKind, message: string) => void
+}
+
+export interface ExcalidrawFileEditorHandle {
+  prepareForPathMutation: () => Promise<void>
 }
 
 const SAVE_DEBOUNCE_MS = 800
@@ -60,11 +66,10 @@ function serializeScene(
   }
 }
 
-export function ExcalidrawFileEditor({
-  notePath,
-  vaultApi,
-  pushToast
-}: ExcalidrawFileEditorProps): ReactElement {
+export const ExcalidrawFileEditor = forwardRef<
+  ExcalidrawFileEditorHandle,
+  ExcalidrawFileEditorProps
+>(function ExcalidrawFileEditor({ notePath, vaultApi, pushToast }, ref): ReactElement {
   const [theme, setTheme] = useState<ExcalidrawTheme>(getSystemExcalidrawTheme)
   const [isLoading, setIsLoading] = useState(true)
   const [activeToolType, setActiveToolType] = useState('selection')
@@ -75,6 +80,8 @@ export function ExcalidrawFileEditor({
   const saveTimerRef = useRef<number | null>(null)
   const pendingSceneRef = useRef<ExcalidrawSessionScene | null>(null)
   const saveVersionRef = useRef(0)
+  const skipCleanupSaveRef = useRef(false)
+  const loadedNotePathRef = useRef<string | null>(null)
 
   const initialData = useMemo<ExcalidrawInitialData>(
     () =>
@@ -121,6 +128,17 @@ export function ExcalidrawFileEditor({
     }
   }, [notePath, pushToast, vaultApi])
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      prepareForPathMutation: async () => {
+        skipCleanupSaveRef.current = true
+        await flushPendingSave()
+      }
+    }),
+    [flushPendingSave]
+  )
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const syncTheme = (): void => setTheme(getSystemExcalidrawTheme())
@@ -132,6 +150,10 @@ export function ExcalidrawFileEditor({
 
   useEffect(() => {
     let cancelled = false
+    if (loadedNotePathRef.current !== notePath) {
+      loadedNotePathRef.current = notePath
+      skipCleanupSaveRef.current = false
+    }
     void flushPendingSave()
 
     const load = async (): Promise<void> => {
@@ -168,6 +190,9 @@ export function ExcalidrawFileEditor({
 
   useEffect(() => {
     return () => {
+      if (skipCleanupSaveRef.current) {
+        return
+      }
       void flushPendingSave()
     }
   }, [flushPendingSave])
@@ -215,4 +240,6 @@ export function ExcalidrawFileEditor({
       </div>
     </div>
   )
-}
+})
+
+ExcalidrawFileEditor.displayName = 'ExcalidrawFileEditor'

@@ -151,7 +151,6 @@ export const LoaderCircle = IconHourglassFilled
 export const Megaphone = IconDeviceSpeakerFilled
 export const MessageSquare = IconMessageFilled
 export const MessageSquarePlus = IconMessage2Filled
-export const Milestone = IconTrophyFilled
 export const Monitor = IconDeviceDesktopFilled
 export const MoreHorizontal = IconDotsFilled
 export const NotebookPen = IconBookFilled

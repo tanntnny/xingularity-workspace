@@ -30,12 +30,22 @@ export function useStaggeredScrollReveal(
   } = options
   const itemIdsRef = useRef(itemIds)
   const itemNodesRef = useRef(new Map<string, HTMLElement>())
+  const itemRefCallbacksRef = useRef<Map<string, RevealItemProps['ref']>>(new Map())
   const observerRef = useRef<IntersectionObserver | null>(null)
   const containerNodeRef = useRef<HTMLElement | null>(null)
   const revealFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
     itemIdsRef.current = itemIds
+  }, [itemIds])
+
+  useEffect(() => {
+    const activeItemIds = new Set(itemIds)
+    itemRefCallbacksRef.current.forEach((_, itemId) => {
+      if (!activeItemIds.has(itemId)) {
+        itemRefCallbacksRef.current.delete(itemId)
+      }
+    })
   }, [itemIds])
 
   const revealNode = useCallback((node: HTMLElement): void => {
@@ -148,8 +158,14 @@ export function useStaggeredScrollReveal(
     (itemId: string): RevealItemProps => {
       const itemIndex = Math.max(0, itemIdsRef.current.indexOf(itemId))
       const staggerStep = Math.min(itemIndex, maxStaggerSteps)
+      let ref = itemRefCallbacksRef.current.get(itemId)
+      if (!ref) {
+        ref = (node) => setItemRef(itemId, node)
+        itemRefCallbacksRef.current.set(itemId, ref)
+      }
+
       return {
-        ref: (node) => setItemRef(itemId, node),
+        ref,
         className: 'motion-staggered-reveal',
         style: {
           '--motion-reveal-delay': `${staggerStep * baseDelayMs}ms`

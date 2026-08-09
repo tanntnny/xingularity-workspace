@@ -45,29 +45,11 @@ const noteAppendSchema = z.object({
 const projectIconSchema = z.object({
   set: z.enum(['tabler', 'shape', 'lucide']).optional(),
   glyph: z
-    .enum([
-      'circle',
-      'square',
-      'triangle',
-      'diamond',
-      'hex',
-      'briefcase',
-      'folder-kanban',
-      'rocket',
-      'lightbulb',
-      'target',
-      'book-open',
-      'package',
-      'flask-conical',
-      'sparkles',
-      'pen-tool',
-      'monitor',
-      'megaphone',
-      'globe',
-      'shield',
-      'camera',
-      'calendar'
-    ])
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .optional(),
   shape: z.enum(['circle', 'square', 'triangle', 'diamond', 'hex']).optional(),
   variant: z.enum(['filled', 'outlined']).optional(),
@@ -93,9 +75,7 @@ const projectUpdateSchema = z
   })
   .refine(
     (value) =>
-      value.name !== undefined ||
-      value.description !== undefined ||
-      value.icon !== undefined,
+      value.name !== undefined || value.description !== undefined || value.icon !== undefined,
     {
       message: 'Provide at least one project field to update'
     }
@@ -120,7 +100,7 @@ const calendarTaskCreateSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(reminderSchema).max(10).optional(),
-  status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
+  status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
   completed: z.boolean().optional()
 })
 
@@ -138,7 +118,7 @@ const calendarTaskUpdateSchema = z
     priority: z.enum(['low', 'medium', 'high']).optional(),
     taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
-    status: z.enum(['pending', 'in-progress', 'blocked', 'completed']).optional(),
+    status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
     completed: z.boolean().optional()
   })
   .refine((value) => value.taskId || value.titleMatch, {
@@ -310,10 +290,7 @@ export class AgentToolsService {
         icon: normalizeProjectIcon(input.icon, name),
         updatedAt: nowIso,
         summary: input.description?.trim() || '',
-        state: 'active',
-        status: 'on-track',
-        progress: 0,
-        milestones: []
+        state: 'active'
       }
 
       return {
@@ -334,8 +311,7 @@ export class AgentToolsService {
         name: input.name?.trim() || project.name,
         description:
           input.description !== undefined ? input.description.trim() : project.description,
-        summary:
-          input.description !== undefined ? input.description.trim() : project.summary,
+        summary: input.description !== undefined ? input.description.trim() : project.summary,
         icon: input.icon ? normalizeProjectIcon(input.icon, project.id) : project.icon,
         updatedAt: new Date().toISOString()
       }
@@ -357,7 +333,8 @@ export class AgentToolsService {
     input: z.infer<typeof calendarTaskCreateSchema>
   ): Promise<CalendarTask> {
     return this.runtime.mutateSettings(async (settings) => {
-      const projectId = input.projectId ??
+      const projectId =
+        input.projectId ??
         (input.projectName ? resolveProject(settings, undefined, input.projectName).id : undefined)
       const status = input.status ?? (input.completed ? 'completed' : 'pending')
       const task: CalendarTask = {
@@ -403,10 +380,8 @@ export class AgentToolsService {
       const updated: CalendarTask = {
         ...task,
         title: input.title?.trim() || task.title,
-        description:
-          input.description === undefined ? task.description : input.description.trim(),
-        projectId:
-          input.projectId === undefined ? task.projectId : input.projectId ?? undefined,
+        description: input.description === undefined ? task.description : input.description.trim(),
+        projectId: input.projectId === undefined ? task.projectId : (input.projectId ?? undefined),
         date: nextDate,
         endDate: normalizeCalendarEndDate(nextDate, nextEndDate),
         time: input.time === undefined ? task.time : (input.time ?? undefined),
@@ -417,20 +392,22 @@ export class AgentToolsService {
         completed:
           input.status !== undefined
             ? input.status === 'completed'
-            : input.completed ?? task.completed,
+            : (input.completed ?? task.completed),
         status:
           input.status ??
           (input.completed !== undefined
             ? input.completed
               ? 'completed'
               : 'pending'
-            : task.status ?? (task.completed ? 'completed' : 'pending'))
+            : (task.status ?? (task.completed ? 'completed' : 'pending')))
       }
 
       return {
         next: {
-          calendarTasks: settings.calendarTasks.map((item) => item.id === task.id ? updated : item),
-          tasks: settings.calendarTasks.map((item) => item.id === task.id ? updated : item)
+          calendarTasks: settings.calendarTasks.map((item) =>
+            item.id === task.id ? updated : item
+          ),
+          tasks: settings.calendarTasks.map((item) => (item.id === task.id ? updated : item))
         },
         result: updated
       }
@@ -561,9 +538,7 @@ function resolveCalendarTask(
   }
 
   const normalizedTitle = titleMatch!.trim().toLowerCase()
-  const matches = tasks.filter(
-    (item) => item.title.trim().toLowerCase() === normalizedTitle
-  )
+  const matches = tasks.filter((item) => item.title.trim().toLowerCase() === normalizedTitle)
   if (matches.length === 1) {
     return matches[0]
   }

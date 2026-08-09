@@ -3,6 +3,11 @@ export const WEEKLY_MIN_DURATION_MINUTES = 10
 export const WEEKLY_HOUR_HEIGHT_PX = 80
 export const WEEKLY_DAY_HEIGHT_PX = 24 * WEEKLY_HOUR_HEIGHT_PX
 export const WEEKLY_MAX_END_MINUTES = 23 * 60 + 50
+export const WEEKLY_PROJECT_ROW_MIN_HEIGHT_PX = 64
+
+export function shouldShowWeeklyProject(heightPx: number): boolean {
+  return heightPx >= WEEKLY_PROJECT_ROW_MIN_HEIGHT_PX
+}
 
 export interface WeeklyTimedTaskLayoutInput {
   taskId: string

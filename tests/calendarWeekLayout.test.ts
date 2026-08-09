@@ -6,6 +6,7 @@ import {
   layoutWeeklyTimedTasks,
   normalizeTimedRange,
   snapMinutes,
+  shouldShowWeeklyProject,
   WEEKLY_DAY_HEIGHT_PX,
   WEEKLY_HOUR_HEIGHT_PX
 } from '../src/renderer/src/lib/calendarWeekLayout'
@@ -16,6 +17,16 @@ describe('formatWeeklyTimeLabel', () => {
     expect(formatWeeklyTimeLabel(1)).toBe('01:00')
     expect(formatWeeklyTimeLabel(13)).toBe('13:00')
     expect(formatWeeklyTimeLabel(23)).toBe('23:00')
+  })
+})
+
+describe('shouldShowWeeklyProject', () => {
+  it('hides the project row when the task card is too short', () => {
+    expect(shouldShowWeeklyProject(63)).toBe(false)
+  })
+
+  it('shows the project row at the minimum readable card height', () => {
+    expect(shouldShowWeeklyProject(64)).toBe(true)
   })
 })
 

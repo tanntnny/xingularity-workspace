@@ -31,6 +31,8 @@
     --note-block-radius: var(--radius);
     --input: #c7c7c7;
     --ring: #666666;
+    --scrollbar-thumb: #b8b8b8;
+    --scrollbar-thumb-hover: #8a8a8a;
     --radius: 0.5rem;
     --sidebar-background: var(--app-background);
     --sidebar-foreground: #1a1a1a;
@@ -102,6 +104,8 @@
       --note-block-border: #4a4a4a;
       --input: #404040;
       --ring: #a3a3a3;
+      --scrollbar-thumb: #454545;
+      --scrollbar-thumb-hover: #6b6b6b;
       --sidebar-background: #080808;
       --sidebar-foreground: #eeeeee;
       --sidebar-primary: #e5e5e5;
@@ -131,6 +135,31 @@
 
   * {
     @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: var(--scrollbar-thumb);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-button {
+    display: none;
   }
 
   html,
@@ -235,6 +264,13 @@
     will-change: transform, opacity, width, flex-basis;
   }
 
+  @media (min-width: 901px) {
+    .motion-workspace-panel[data-panel-resizable='true'] {
+      transition: none;
+      will-change: auto;
+    }
+  }
+
   .motion-editor-surface {
     opacity: 0;
     transform: translate3d(0, 4px, 0);
@@ -299,8 +335,9 @@
       position: absolute;
       inset: 0.5rem 0.5rem 0.5rem auto;
       z-index: 20;
-      width: min(var(--workspace-pane-width), calc(100% - 1rem));
-      flex-basis: min(var(--workspace-pane-width), calc(100% - 1rem));
+      width: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
+      flex-basis: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
+      flex-shrink: 0;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--card);

@@ -93,13 +93,13 @@ export function NoteOutlineRail({
 
   return (
     <aside
-      className="hidden w-12 shrink-0 lg:flex lg:justify-end"
+      className="hidden h-auto w-full lg:flex lg:justify-end"
       aria-label="Note outline"
       data-testid="note-outline-rail"
     >
       <TooltipProvider delayDuration={120}>
         <div
-          className="sticky top-5 flex max-h-full w-8 flex-col items-stretch justify-start gap-0 py-1"
+          className="flex w-8 flex-col items-stretch justify-start gap-0 py-1"
           onPointerEnter={(event) => {
             setPointerClientY(event.clientY)
           }}

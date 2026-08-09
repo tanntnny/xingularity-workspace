@@ -83,6 +83,7 @@ export function DatePickerISO({
           size="sm"
           className={cn(
             'justify-start text-left font-normal',
+            'rounded-[var(--radius-button-pill)]',
             !date && 'text-muted-foreground',
             className
           )}

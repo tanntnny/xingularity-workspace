@@ -32,10 +32,8 @@ import {
   NoteTreeNode,
   Project,
   ProjectIconStyle,
-  ProjectMilestone,
+  ProjectPropertiesPatch,
   ProjectState,
-  ProjectStatus,
-  ProjectSubtask,
   NativeMenuItemDescriptor,
   RendererVaultApi,
   TaskPriority,
@@ -97,6 +95,7 @@ import {
   DocumentWorkspacePanel,
   DocumentWorkspacePanelContent,
   DocumentWorkspacePanelHeader,
+  WorkspaceResizableLayout,
   WorkspacePanelStack,
   WorkspaceContextProvider,
   WorkspaceFooter,
@@ -114,11 +113,18 @@ import {
 import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { ButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
-import { ProjectsWorkspacePage, ProjectsWorkspaceRightPanel } from './pages/ProjectsWorkspacePage'
+import {
+  ProjectsWorkspaceHeaderActions,
+  ProjectsWorkspacePage,
+  ProjectsWorkspaceRightPanel
+} from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
-import { ExcalidrawFileEditor } from './components/ExcalidrawFileEditor'
+import {
+  ExcalidrawFileEditor,
+  type ExcalidrawFileEditorHandle
+} from './components/ExcalidrawFileEditor'
 import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { DesignAuditPage } from './pages/DesignAuditPage'
@@ -138,14 +144,9 @@ import {
 } from './components/ui/breadcrumb'
 import { Shortcut } from './components/ui/kbd'
 import { normalizeCalendarTasks } from './lib/calendarTasks'
+import { filterProjectsForWorkspace } from './lib/projectTaskRows'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
-import {
-  computeProjectProgress,
-  deriveMilestoneStatus,
-  getProjectHealthSummary,
-  toLocalIsoDate
-} from './lib/projectStatus'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -161,7 +162,6 @@ import {
   remapNotebookWorkspaceSessionPaths,
   removeNotebookWorkspaceSessionPaths
 } from './lib/workspaceTabs'
-
 const PAGE_LABELS: Record<AppPage, string> = {
   capture: 'Capture',
   knowledge: 'Knowledge',
@@ -194,6 +194,31 @@ type WorkspacePageTab = {
 }
 
 const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
+
+const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 300
+const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 220
+const WORKSPACE_RIGHT_PANEL_MAX_WIDTH = 360
+const WORKSPACE_RIGHT_PANEL_STORAGE_KEY = 'workspace_right_panel_width'
+
+function clampWorkspaceRightPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) {
+    return WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH
+  }
+
+  return Math.min(
+    WORKSPACE_RIGHT_PANEL_MAX_WIDTH,
+    Math.max(WORKSPACE_RIGHT_PANEL_MIN_WIDTH, Math.round(width))
+  )
+}
+
+function isStoredWorkspaceRightPanelWidth(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= WORKSPACE_RIGHT_PANEL_MIN_WIDTH &&
+    value <= WORKSPACE_RIGHT_PANEL_MAX_WIDTH
+  )
+}
 
 type PageLeaveSaveDebug = {
   requestedPage: AppPage | null
@@ -427,8 +452,8 @@ function App(): ReactElement {
   useEffect(() => {
     setStoredProjectsWorkspaceView('projectDetail')
   }, [setStoredProjectsWorkspaceView])
-  const [newProjectRequestToken, setNewProjectRequestToken] = useState(0)
-  const todayIso = toLocalIsoDate(new Date())
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const todayIso = toIsoDate(new Date())
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
     []
   )
@@ -440,6 +465,11 @@ function App(): ReactElement {
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
+  const [rightPanelWidth, setRightPanelWidth] = usePersistentState<number>(
+    WORKSPACE_RIGHT_PANEL_STORAGE_KEY,
+    WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
+    { validate: isStoredWorkspaceRightPanelWidth }
+  )
   const commandPaletteSearchRequestRef = useRef(0)
   const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const createNoteRef = useRef<(() => Promise<void>) | null>(null)
@@ -449,6 +479,7 @@ function App(): ReactElement {
   const currentNoteContentRef = useRef(currentNoteContent)
   const currentNoteTagsRef = useRef<string[]>([])
   const currentNoteEditorRef = useRef<NoteEditorHandle | null>(null)
+  const currentExcalidrawEditorRef = useRef<ExcalidrawFileEditorHandle | null>(null)
   const currentNoteEditorDirtyRef = useRef(false)
   const persistedNoteFingerprintsRef = useRef<Record<string, string>>({})
   const pendingNoteSaveRef = useRef<{ relPath: string; content: string } | null>(null)
@@ -928,9 +959,6 @@ function App(): ReactElement {
   const visibleScheduledCalendarTasks = useMemo(() => {
     return scheduledCalendarTasks
   }, [scheduledCalendarTasks])
-  const visibleMilestoneCalendarEvents = useMemo(() => {
-    return []
-  }, [])
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -942,6 +970,19 @@ function App(): ReactElement {
       ),
     [favoriteProjectIdSettings, projects]
   )
+  const selectedProjectForHeader = useMemo(() => {
+    const visibleProjects = filterProjectsForWorkspace(
+      projects,
+      favoriteProjectIds,
+      projectFilterMode
+    )
+
+    return (
+      visibleProjects.find((project) => project.id === selectedProjectId) ??
+      visibleProjects[0] ??
+      null
+    )
+  }, [favoriteProjectIds, projectFilterMode, projects, selectedProjectId])
   const favoriteNotePaths = useMemo(
     () =>
       favoriteNotePathSettings.filter((relPath) => notes.some((note) => note.relPath === relPath)),
@@ -1120,13 +1161,7 @@ function App(): ReactElement {
       selectedProjectIdRef.current = projects[0].id
       setSelectedProjectId(projects[0].id)
     }
-  }, [
-    settingsLoaded,
-    lastOpenedProjectId,
-    projects,
-    selectedProjectId,
-    setSelectedProjectId
-  ])
+  }, [settingsLoaded, lastOpenedProjectId, projects, selectedProjectId, setSelectedProjectId])
 
   const noteSaveCoordinator = useMemo(() => {
     if (!vaultApi) {
@@ -1999,9 +2034,12 @@ function App(): ReactElement {
     return nextTask
   }
 
-  const createProjectTask = async (projectId: string | undefined, title: string): Promise<void> => {
+  const createProjectTask = async (
+    projectId: string | undefined,
+    title: string
+  ): Promise<CalendarTask> => {
     try {
-      await createCalendarTask(title, undefined, undefined, undefined, projectId)
+      return await createCalendarTask(title, undefined, undefined, undefined, projectId)
     } catch (error) {
       pushToast('error', String(error))
       throw error
@@ -2013,10 +2051,20 @@ function App(): ReactElement {
       tasks.map((task) => {
         if (task.id !== taskId) return task
         const next = { ...task, ...patch }
+        if ('date' in patch || 'endDate' in patch) {
+          const nextDate = patch.date
+          const nextEndDate =
+            nextDate && patch.endDate && patch.endDate >= nextDate ? patch.endDate : undefined
+          next.date = nextDate
+          next.endDate = nextEndDate
+        }
         const status = next.status ?? (next.completed ? 'completed' : 'pending')
         return { ...next, status, completed: status === 'completed' }
       })
     )
+    if (patch.date) {
+      setSelectedCalendarDate(patch.date)
+    }
   }
 
   const addUnscheduledFromHeader = async (): Promise<void> => {
@@ -2225,15 +2273,6 @@ function App(): ReactElement {
   const goToToday = (): void => {
     setSelectedCalendarDate(toIsoDate(new Date()))
   }
-
-  const openMilestoneFromCalendar = useCallback(
-    (projectId: string, milestoneId: string): void => {
-      void milestoneId
-      selectProject(projectId)
-      void navigateToPage('projects')
-    },
-    [navigateToPage, selectProject]
-  )
 
   const openVaultSwapper = useCallback((): void => {
     if (!platform.capabilities.supportsVaultPicker || !vaultApi) {
@@ -3391,46 +3430,14 @@ function App(): ReactElement {
     }
 
     try {
-      const milestoneLines =
-        project.milestones.length === 0
-          ? ['- None yet']
-          : project.milestones.flatMap((milestone) => {
-              const lines = [
-                `- ${milestone.title} (${milestone.status})${milestone.dueDate ? ` - due ${milestone.dueDate}` : ''}`
-              ]
-              if (milestone.description?.trim()) {
-                lines.push(`  Description: ${milestone.description.trim()}`)
-              }
-              if (milestone.subtasks.length === 0) {
-                lines.push('  Subtasks: none')
-                return lines
-              }
-              lines.push(
-                ...milestone.subtasks.map((subtask) => {
-                  const detailParts = [
-                    subtask.completed ? 'done' : 'open',
-                    subtask.dueDate ? `due ${subtask.dueDate}` : null
-                  ].filter((part): part is string => Boolean(part))
-                  return `  - ${subtask.title}${detailParts.length > 0 ? ` (${detailParts.join(', ')})` : ''}`
-                })
-              )
-              return lines
-            })
-
       const exportContent = [
         `# ${project.name}`,
         '',
-        `- Status: ${project.status}`,
-        `- Progress: ${project.progress}%`,
         `- Last updated: ${new Date(project.updatedAt).toISOString()}`,
         '',
-        '## Summary',
+        '## Description',
         '',
-        project.summary.trim() || '_No summary provided._',
-        '',
-        '## Milestones',
-        '',
-        ...milestoneLines,
+        project.description?.trim() || project.summary.trim() || '_No description provided._',
         ''
       ].join('\n')
 
@@ -3549,35 +3556,7 @@ function App(): ReactElement {
     void persistFavoriteNotePaths(nextFavoritePaths)
   }
 
-  const withComputedProjectState = (project: Project): Project => {
-    const milestones = project.milestones.map((milestone) => {
-      const normalizedSubtasks = (milestone.subtasks ?? []).map((subtask) => ({
-        ...subtask,
-        description: subtask.description ?? ''
-      }))
-
-      const normalizedMilestone: ProjectMilestone = {
-        ...milestone,
-        description: milestone.description ?? '',
-        collapsed: milestone.collapsed ?? false,
-        subtasks: normalizedSubtasks,
-        status: deriveMilestoneStatus({ ...milestone, subtasks: normalizedSubtasks })
-      }
-
-      return normalizedMilestone
-    })
-
-    const health = getProjectHealthSummary({ milestones }, todayIso)
-    const nextStatus: ProjectStatus =
-      project.status === 'completed' && health.status !== 'completed' ? 'completed' : health.status
-
-    return {
-      ...project,
-      status: nextStatus,
-      milestones,
-      progress: computeProjectProgress(milestones, nextStatus)
-    }
-  }
+  const withComputedProjectState = (project: Project): Project => project
 
   const createProject = async (input?: {
     name?: string
@@ -3610,6 +3589,21 @@ function App(): ReactElement {
     } catch (error) {
       pushToast('error', String(error))
       throw error
+    }
+  }
+
+  const createProjectFromToolbar = async (): Promise<void> => {
+    if (isCreatingProject) {
+      return
+    }
+
+    setIsCreatingProject(true)
+    try {
+      await createProject()
+    } catch {
+      // The parent reports persistence errors through the existing toast flow.
+    } finally {
+      setIsCreatingProject(false)
     }
   }
 
@@ -3712,6 +3706,70 @@ function App(): ReactElement {
       })
   }
 
+  const saveProjectProperties = (projectId: string, patch: ProjectPropertiesPatch): void => {
+    if (!vaultApi) {
+      return
+    }
+
+    const currentSettings = useVaultStore.getState().settings
+    const previousProject = currentSettings.projects.find((project) => project.id === projectId)
+    if (!previousProject) {
+      return
+    }
+
+    const startDate =
+      patch.startDate === null ? undefined : (patch.startDate ?? previousProject.startDate)
+    const endDate = patch.endDate === null ? undefined : (patch.endDate ?? previousProject.endDate)
+    if (startDate && endDate && endDate < startDate) {
+      pushToast('error', 'Project end date cannot be earlier than the start date')
+      return
+    }
+
+    const optimisticProject = withComputedProjectState({
+      ...previousProject,
+      startDate,
+      endDate,
+      tags: patch.tags ?? previousProject.tags,
+      resources: patch.resources ?? previousProject.resources,
+      updatedAt: new Date().toISOString()
+    })
+    const mutationVersion = (projectMutationVersionRef.current.get(projectId) ?? 0) + 1
+    projectMutationVersionRef.current.set(projectId, mutationVersion)
+    setSettings({
+      ...currentSettings,
+      projects: currentSettings.projects.map((project) =>
+        project.id === projectId ? optimisticProject : project
+      )
+    })
+
+    void vaultApi.projects
+      .update({ projectId, ...patch })
+      .then((updatedProject) => {
+        if (projectMutationVersionRef.current.get(projectId) !== mutationVersion) {
+          return
+        }
+        const latestSettings = useVaultStore.getState().settings
+        setSettings({
+          ...latestSettings,
+          projects: latestSettings.projects.map((project) =>
+            project.id === projectId ? withComputedProjectState(updatedProject) : project
+          )
+        })
+      })
+      .catch((error: unknown) => {
+        if (projectMutationVersionRef.current.get(projectId) === mutationVersion) {
+          const latestSettings = useVaultStore.getState().settings
+          setSettings({
+            ...latestSettings,
+            projects: latestSettings.projects.map((project) =>
+              project.id === projectId ? previousProject : project
+            )
+          })
+        }
+        pushToast('error', String(error))
+      })
+  }
+
   const updateProjectSummary = (projectId: string, nextSummary: string): void => {
     const normalizedSummary = nextSummary.trim()
 
@@ -3728,591 +3786,7 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  const toggleProjectDone = (projectId: string): void => {
-    const existing = projects.find((project) => project.id === projectId)
-    if (!existing) {
-      return
-    }
-
-    const derivedStatus = getProjectHealthSummary(
-      { milestones: existing.milestones },
-      todayIso
-    ).status
-    const nextStatus: ProjectStatus =
-      existing.status === 'completed'
-        ? derivedStatus === 'completed'
-          ? 'on-track'
-          : derivedStatus
-        : 'completed'
-
-    const nextProjects = projects.map((project) =>
-      project.id === projectId
-        ? withComputedProjectState({
-            ...project,
-            status: nextStatus,
-            updatedAt: new Date().toISOString()
-          })
-        : project
-    )
-
-    void persistProjects(nextProjects)
-    pushToast('success', nextStatus === 'completed' ? 'Project marked done' : 'Project reopened')
-  }
-
-  const addMilestoneToProject = (
-    projectId: string,
-    input: {
-      title: string
-      description?: string
-      dueDate?: string
-      priority?: TaskPriority
-      status?: ProjectMilestone['status']
-    }
-  ): void => {
-    const normalizedTitle = input.title.trim()
-    const normalizedDueDate = input.dueDate?.trim() || undefined
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestone: ProjectMilestone = {
-        id: `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title: normalizedTitle,
-        description: input.description?.trim() ?? '',
-        collapsed: false,
-        dueDate: normalizedDueDate,
-        priority: input.priority ?? 'medium',
-        status: input.status ?? 'pending',
-        subtasks: []
-      }
-
-      return withComputedProjectState({
-        ...project,
-        milestones: [...project.milestones, nextMilestone],
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const renameProjectMilestone = (
-    projectId: string,
-    milestoneId: string,
-    nextTitle: string
-  ): void => {
-    const normalizedTitle = nextTitle.trim()
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId ? { ...milestone, title: normalizedTitle } : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateProjectMilestoneDueDate = (
-    projectId: string,
-    milestoneId: string,
-    nextDueDate: string | undefined
-  ): void => {
-    const normalizedDueDate = nextDueDate?.trim() || undefined
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId ? { ...milestone, dueDate: normalizedDueDate } : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const rescheduleProjectMilestoneFromCalendar = (
-    projectId: string,
-    milestoneId: string,
-    nextDueDate: string
-  ): void => {
-    updateProjectMilestoneDueDate(projectId, milestoneId, nextDueDate)
-    setSelectedCalendarDate(nextDueDate)
-  }
-
-  const updateProjectMilestoneDescription = (
-    projectId: string,
-    milestoneId: string,
-    nextDescription: string
-  ): void => {
-    const normalizedDescription = nextDescription.trim()
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? { ...milestone, description: normalizedDescription }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const saveProjectMilestone = (
-    projectId: string,
-    milestoneId: string,
-    draft: {
-      title: string
-      description: string
-      dueDate: string
-      status: 'pending' | 'blocked' | 'completed'
-      priority: '' | TaskPriority
-    }
-  ): void => {
-    const normalizedTitle = draft.title.trim()
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              title: normalizedTitle,
-              description: draft.description.trim(),
-              dueDate: draft.dueDate || undefined,
-              status: draft.status,
-              priority: draft.priority || undefined
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateProjectMilestoneStatus = (
-    projectId: string,
-    milestoneId: string,
-    nextStatus: ProjectMilestone['status']
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId ? { ...milestone, status: nextStatus } : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateProjectMilestonePriority = (
-    projectId: string,
-    milestoneId: string,
-    nextPriority: TaskPriority | undefined
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId ? { ...milestone, priority: nextPriority } : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const removeProjectMilestone = (projectId: string, milestoneId: string): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.filter((milestone) => milestone.id !== milestoneId)
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const addSubtaskToMilestone = (
-    projectId: string,
-    milestoneId: string,
-    input: {
-      title: string
-      description?: string
-      dueDate?: string
-      completed?: boolean
-      priority?: TaskPriority
-    }
-  ): void => {
-    const normalizedTitle = input.title.trim()
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: [
-                ...milestone.subtasks,
-                {
-                  id: `subtask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  title: normalizedTitle,
-                  description: input.description?.trim() ?? '',
-                  completed: Boolean(input.completed),
-                  priority: input.priority ?? 'medium',
-                  createdAt: new Date().toISOString(),
-                  dueDate: input.dueDate?.trim() || undefined
-                } satisfies ProjectSubtask
-              ]
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const toggleMilestoneSubtask = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId ? { ...subtask, completed: !subtask.completed } : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const renameMilestoneSubtask = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    nextTitle: string
-  ): void => {
-    const normalizedTitle = nextTitle.trim()
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId ? { ...subtask, title: normalizedTitle } : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateMilestoneSubtaskDescription = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    nextDescription: string
-  ): void => {
-    const normalizedDescription = nextDescription.trim()
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId
-                  ? { ...subtask, description: normalizedDescription }
-                  : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const saveMilestoneSubtask = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    draft: {
-      title: string
-      description: string
-      dueDate: string
-      completed: boolean
-      priority: '' | TaskPriority
-    }
-  ): void => {
-    const normalizedTitle = draft.title.trim()
-    if (!normalizedTitle) {
-      return
-    }
-
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId
-                  ? {
-                      ...subtask,
-                      title: normalizedTitle,
-                      description: draft.description.trim(),
-                      dueDate: draft.dueDate || undefined,
-                      completed: draft.completed,
-                      priority: draft.priority || undefined
-                    }
-                  : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateMilestoneSubtaskDueDate = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    nextDueDate: string | undefined
-  ): void => {
-    const normalizedDueDate = nextDueDate?.trim() || undefined
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId ? { ...subtask, dueDate: normalizedDueDate } : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const updateMilestoneSubtaskPriority = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string,
-    nextPriority: TaskPriority | undefined
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.map((subtask) =>
-                subtask.id === subtaskId ? { ...subtask, priority: nextPriority } : subtask
-              )
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  const removeMilestoneSubtask = (
-    projectId: string,
-    milestoneId: string,
-    subtaskId: string
-  ): void => {
-    const nextProjects = projects.map((project) => {
-      if (project.id !== projectId) {
-        return project
-      }
-
-      const nextMilestones = project.milestones.map((milestone) =>
-        milestone.id === milestoneId
-          ? {
-              ...milestone,
-              subtasks: milestone.subtasks.filter((subtask) => subtask.id !== subtaskId)
-            }
-          : milestone
-      )
-
-      return withComputedProjectState({
-        ...project,
-        milestones: nextMilestones,
-        updatedAt: new Date().toISOString()
-      })
-    })
-    void persistProjects(nextProjects)
-  }
-
-  // Legacy project/milestone handlers remain temporarily for history compatibility while
-  // migrated vaults use the flat task workflow above.
-  void [
-    updateProjectIcon,
-    exportProject,
-    openProjectFolder,
-    renameProject,
-    updateProjectSummary,
-    toggleProjectDone,
-    addMilestoneToProject,
-    renameProjectMilestone,
-    updateProjectMilestoneDescription,
-    saveProjectMilestone,
-    updateProjectMilestoneStatus,
-    updateProjectMilestonePriority,
-    removeProjectMilestone,
-    addSubtaskToMilestone,
-    toggleMilestoneSubtask,
-    renameMilestoneSubtask,
-    updateMilestoneSubtaskDescription,
-    saveMilestoneSubtask,
-    updateMilestoneSubtaskDueDate,
-    updateMilestoneSubtaskPriority,
-    removeMilestoneSubtask
-  ]
+  void [updateProjectIcon, exportProject, openProjectFolder, renameProject, updateProjectSummary]
 
   const removeProjectById = async (projectId: string): Promise<void> => {
     if (!vaultApi) {
@@ -4348,9 +3822,7 @@ function App(): ReactElement {
       const currentSettings = useVaultStore.getState().settings
       const nextTasks = currentSettings.calendarTasks
         .filter((task) => !removedTaskIds.has(task.id))
-        .map((task) =>
-          unassignedTaskIds.has(task.id) ? { ...task, projectId: undefined } : task
-        )
+        .map((task) => (unassignedTaskIds.has(task.id) ? { ...task, projectId: undefined } : task))
       const nextProjectIcons = { ...currentSettings.projectIcons }
       delete nextProjectIcons[result.deletedProjectId]
       calendarTasksRef.current = nextTasks
@@ -4389,8 +3861,7 @@ function App(): ReactElement {
     const nextFavoriteProjectIds = favorite
       ? [projectId, ...previousFavoriteProjectIds.filter((id) => id !== projectId)]
       : previousFavoriteProjectIds.filter((id) => id !== projectId)
-    const mutationVersion =
-      (favoriteProjectMutationVersionRef.current.get(projectId) ?? 0) + 1
+    const mutationVersion = (favoriteProjectMutationVersionRef.current.get(projectId) ?? 0) + 1
     favoriteProjectMutationVersionRef.current.set(projectId, mutationVersion)
     setSettings({ ...currentSettings, favoriteProjectIds: nextFavoriteProjectIds })
 
@@ -4898,7 +4369,14 @@ function App(): ReactElement {
         return
       }
 
+      const isCurrentExcalidraw =
+        kind === 'excalidraw' && currentExcalidrawPathRef.current === relPath
+
       try {
+        if (isCurrentExcalidraw) {
+          await currentExcalidrawEditorRef.current?.prepareForPathMutation()
+        }
+
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
           remapNotebookWorkspaceSessionPaths(session, relPath, nextRelPath)
         })
@@ -4911,6 +4389,12 @@ function App(): ReactElement {
         })
 
         await vaultApi.files.renamePath(relPath, nextRelPath)
+
+        if (isCurrentExcalidraw) {
+          currentExcalidrawPathRef.current = nextRelPath
+          setCurrentExcalidrawPath(nextRelPath)
+        }
+
         await refreshNotesAndTree()
         setSelectedNoteTreeEntries([{ kind, relPath: nextRelPath }])
         const activeSession = getWorkspaceTabSession()
@@ -4983,6 +4467,15 @@ function App(): ReactElement {
       }
 
       try {
+        const isCurrentExcalidraw = normalizedEntries.some(
+          (entry) =>
+            entry.kind === 'excalidraw' &&
+            entry.relPath === currentExcalidrawPathRef.current
+        )
+        if (isCurrentExcalidraw) {
+          await currentExcalidrawEditorRef.current?.prepareForPathMutation()
+        }
+
         await vaultApi.files.deletePaths(normalizedEntries.map((entry) => entry.relPath))
 
         await refreshNotesAndTree()
@@ -5089,6 +4582,15 @@ function App(): ReactElement {
         return
       }
 
+      const currentExcalidrawMove = moveOperations.find(
+        (operation) =>
+          operation.kind === 'excalidraw' &&
+          operation.relPath === currentExcalidrawPathRef.current
+      )
+      if (currentExcalidrawMove) {
+        await currentExcalidrawEditorRef.current?.prepareForPathMutation()
+      }
+
       for (const operation of moveOperations) {
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
           remapNotebookWorkspaceSessionPaths(session, operation.relPath, operation.toRelPath)
@@ -5115,6 +4617,11 @@ function App(): ReactElement {
 
       for (const operation of moveOperations) {
         await vaultApi.files.renamePath(operation.relPath, operation.toRelPath)
+      }
+
+      if (currentExcalidrawMove) {
+        currentExcalidrawPathRef.current = currentExcalidrawMove.toRelPath
+        setCurrentExcalidrawPath(currentExcalidrawMove.toRelPath)
       }
 
       await refreshNotesAndTree()
@@ -5530,15 +5037,23 @@ function App(): ReactElement {
                         <WorkspaceHeaderActions>
                           <WorkspaceHeaderActionGroup>
                             <WorkspaceIconButton
-                              onClick={() => {
-                                setNewProjectRequestToken((token) => token + 1)
-                              }}
+                              onClick={() => void createProjectFromToolbar()}
+                              disabled={isCreatingProject}
+                              data-testid="new-project-button"
                               icon={<Plus size={16} />}
                               label="New Project"
                               aria-label="New Project"
                               title="New Project"
                             />
                           </WorkspaceHeaderActionGroup>
+                          <ProjectsWorkspaceHeaderActions
+                            project={selectedProjectForHeader}
+                            onDelete={() => {
+                              if (selectedProjectForHeader) {
+                                void removeProjectById(selectedProjectForHeader.id)
+                              }
+                            }}
+                          />
                         </WorkspaceHeaderActions>
                       ) : activePage === 'calendar' ? (
                         <WorkspaceHeaderActions>
@@ -5586,457 +5101,107 @@ function App(): ReactElement {
                   />
 
                   <DocumentWorkspaceMain className={paletteSurfaceClass}>
-                    <DocumentWorkspaceMainContent
-                      className={
-                        activePage === 'calendar' ? 'overflow-y-auto overflow-x-hidden' : undefined
-                      }
+                    <WorkspaceResizableLayout
+                      hasPanel={hasRightPanel}
+                      panelWidth={rightPanelWidth}
+                      panelCollapsed={isRightPanelCollapsed}
+                      panelHidden={isFocusMode}
+                      onPanelWidthChange={(width) => {
+                        setRightPanelWidth(clampWorkspaceRightPanelWidth(width))
+                      }}
+                      onPanelCollapsedChange={setIsRightPanelCollapsed}
                     >
-                      <div
-                        key={`${activeWorkspaceTabId}:${activePage}`}
-                        className={`motion-workspace-content w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                      <DocumentWorkspaceMainContent
+                        className={
+                          activePage === 'calendar'
+                            ? 'overflow-y-auto overflow-x-hidden'
+                            : activePage === 'notes' &&
+                                !searchQuery.trim() &&
+                                noteIsOpen &&
+                                !currentExcalidrawPath
+                              ? '!overflow-hidden'
+                              : undefined
+                        }
                       >
-                        {activePage === 'capture' ? (
-                          <CapturePage
-                            notes={fleetingNotes}
-                            isLoading={fleetingNotesLoading}
-                            onCapture={createFleetingNote}
-                            onConvert={convertFleetingNote}
-                          />
-                        ) : activePage === 'notes' ? (
-                          searchQuery.trim() ? (
-                            <SearchPage
-                              results={searchResults}
-                              onOpen={(relPath) => {
-                                void openNotebookPath(relPath)
+                        <div
+                          key={`${activeWorkspaceTabId}:${activePage}`}
+                          className={`motion-workspace-content w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                        >
+                          {activePage === 'capture' ? (
+                            <CapturePage
+                              notes={fleetingNotes}
+                              isLoading={fleetingNotesLoading}
+                              onCapture={createFleetingNote}
+                              onConvert={convertFleetingNote}
+                            />
+                          ) : activePage === 'notes' ? (
+                            searchQuery.trim() ? (
+                              <SearchPage
+                                results={searchResults}
+                                onOpen={(relPath) => {
+                                  void openNotebookPath(relPath)
+                                  setSearchQuery('')
+                                  setSearchResults([])
+                                }}
+                              />
+                            ) : currentExcalidrawPath ? (
+                              <ExcalidrawFileEditor
+                                ref={currentExcalidrawEditorRef}
+                                notePath={currentExcalidrawPath}
+                                vaultApi={vaultApi}
+                                pushToast={pushToast}
+                              />
+                            ) : noteIsOpen && currentNotePath ? (
+                              <EditorPage
+                                editorRef={currentNoteEditorRef}
+                                initialContent={currentNoteEditorDraft}
+                                notePath={currentNotePath}
+                                tags={currentNoteTags}
+                                notes={notes}
+                                onDirty={handleCurrentNoteEditorDirty}
+                                onSnapshotChange={handleCurrentNoteSnapshotChange}
+                                onDropFile={(sourcePath) => importAttachment(sourcePath)}
+                                onPasteImage={importImageFromBlob}
+                                onAddTag={addTagToCurrentNote}
+                                onRemoveTag={removeTagFromCurrentNote}
+                                onFindByTag={findByTag}
+                                onOpenNoteLink={(target) => {
+                                  void openOrCreateNoteMention(target)
+                                }}
+                                onRename={renameCurrentNote}
+                                titleEditToken={
+                                  noteTitleEditTarget?.relPath === currentNotePath
+                                    ? noteTitleEditTarget.token
+                                    : 0
+                                }
+                                vimModeEnabled={editorVimModeEnabled}
+                                vimKeyMappings={editorVimKeyMappings}
+                              />
+                            ) : (
+                              <div className="p-5 text-sm text-muted-foreground">
+                                Pick a note or drawing from the right panel to open it
+                              </div>
+                            )
+                          ) : activePage === 'knowledge' ? (
+                            <KnowledgePage
+                              notes={notes}
+                              orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
+                              onOpenNote={(relPath) => {
+                                void navigateToPage('notes')
                                 setSearchQuery('')
                                 setSearchResults([])
+                                void openNote(relPath)
                               }}
                             />
-                          ) : currentExcalidrawPath ? (
-                            <ExcalidrawFileEditor
-                              notePath={currentExcalidrawPath}
-                              vaultApi={vaultApi}
-                              pushToast={pushToast}
-                            />
-                          ) : noteIsOpen && currentNotePath ? (
-                            <EditorPage
-                              editorRef={currentNoteEditorRef}
-                              initialContent={currentNoteEditorDraft}
-                              notePath={currentNotePath}
-                              tags={currentNoteTags}
-                              notes={notes}
-                              onDirty={handleCurrentNoteEditorDirty}
-                              onSnapshotChange={handleCurrentNoteSnapshotChange}
-                              onDropFile={(sourcePath) => importAttachment(sourcePath)}
-                              onPasteImage={importImageFromBlob}
-                              onAddTag={addTagToCurrentNote}
-                              onRemoveTag={removeTagFromCurrentNote}
-                              onFindByTag={findByTag}
-                              onOpenNoteLink={(target) => {
-                                void openOrCreateNoteMention(target)
-                              }}
-                              onRename={renameCurrentNote}
-                              titleEditToken={
-                                noteTitleEditTarget?.relPath === currentNotePath
-                                  ? noteTitleEditTarget.token
-                                  : 0
-                              }
-                              vimModeEnabled={editorVimModeEnabled}
-                              vimKeyMappings={editorVimKeyMappings}
-                            />
-                          ) : (
-                            <div className="p-5 text-sm text-muted-foreground">
-                              Pick a note or drawing from the right panel to open it
-                            </div>
-                          )
-                        ) : activePage === 'knowledge' ? (
-                          <KnowledgePage
-                            notes={notes}
-                            orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
-                            onOpenNote={(relPath) => {
-                              void navigateToPage('notes')
-                              setSearchQuery('')
-                              setSearchResults([])
-                              void openNote(relPath)
-                            }}
-                          />
-                        ) : activePage === 'projects' ? (
-                          <ProjectsWorkspacePage
-                            projects={projects}
-                            tasks={calendarTasks}
-                            favoriteProjectIds={favoriteProjectIds}
-                            selectedProjectId={selectedProjectId}
-                            newProjectRequestToken={newProjectRequestToken}
-                            onNewProjectRequestHandled={() => setNewProjectRequestToken(0)}
-                            filterMode={projectFilterMode}
-                            onFilterModeChange={setProjectFilterMode}
-                            onSelectProject={selectProject}
-                            onCreateProject={createProject}
-                            onCreateTask={createProjectTask}
-                            onUpdateTask={updateProjectTask}
-                            onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
-                          />
-                        ) : activePage === 'subscriptions' ? (
-                          <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
-                        ) : activePage === 'calendar' ? (
-                          <div className="min-h-full">
-                            <section
-                              data-testid={
-                                calendarViewMode === 'week'
-                                  ? 'calendar-week-shell'
-                                  : 'calendar-month-shell'
-                              }
-                              className="min-h-full rounded-lg"
-                            >
-                              <div>
-                                {calendarViewMode === 'week' ? (
-                                  <CalendarWeekView
-                                    selectedDate={selectedCalendarDate}
-                                    tasks={visibleCalendarTasks}
-                                    projects={projects}
-                                    milestoneEvents={visibleMilestoneCalendarEvents}
-                                    onSelectDate={setSelectedCalendarDate}
-                                    onOpenMilestone={openMilestoneFromCalendar}
-                                    onCreateTask={createTaskForWeeklyTime}
-                                    onRescheduleTask={(taskId, newDate) => {
-                                      void rescheduleCalendarTask(taskId, newDate)
-                                    }}
-                                    onToggleTask={(taskId) => {
-                                      void toggleCalendarTask(taskId)
-                                    }}
-                                    onDeleteTask={(taskId) => {
-                                      void removeCalendarTask(taskId)
-                                    }}
-                                    onRenameTask={(taskId, newTitle) => {
-                                      void renameCalendarTask(taskId, newTitle)
-                                    }}
-                                    onUpdateTaskPriority={(taskId, priority) => {
-                                      void updateCalendarTaskPriority(taskId, priority)
-                                    }}
-                                    onUpdateTaskType={(taskId, taskType) => {
-                                      void updateCalendarTaskType(taskId, taskType)
-                                    }}
-                                    onUpdateTaskProject={(taskId, projectId) => {
-                                      void updateProjectTask(taskId, { projectId })
-                                    }}
-                                    onUpdateTaskSchedule={(taskId, schedule) => {
-                                      void updateCalendarTaskSchedule(taskId, schedule)
-                                    }}
-                                  />
-                                ) : (
-                                  <CalendarMonthView
-                                    selectedDate={selectedCalendarDate}
-                                    tasks={visibleScheduledCalendarTasks}
-                                    projects={projects}
-                                    milestoneEvents={visibleMilestoneCalendarEvents}
-                                    onSelectDate={setSelectedCalendarDate}
-                                    onCreateTask={createTaskForDate}
-                                    onOpenMilestone={openMilestoneFromCalendar}
-                                    onRescheduleMilestone={rescheduleProjectMilestoneFromCalendar}
-                                    onRescheduleTask={(taskId, newDate) => {
-                                      void rescheduleCalendarTask(taskId, newDate)
-                                    }}
-                                    onResizeTaskStart={(taskId, newStartDate) => {
-                                      void resizeCalendarTaskStart(taskId, newStartDate)
-                                    }}
-                                    onResizeTaskEnd={(taskId, newEndDate) => {
-                                      void resizeCalendarTaskEnd(taskId, newEndDate)
-                                    }}
-                                    onToggleTask={(taskId) => {
-                                      void toggleCalendarTask(taskId)
-                                    }}
-                                    onDeleteTask={(taskId) => {
-                                      void removeCalendarTask(taskId)
-                                    }}
-                                    onRenameTask={(taskId, newTitle) => {
-                                      void renameCalendarTask(taskId, newTitle)
-                                    }}
-                                    onUpdateTaskPriority={(taskId, priority) => {
-                                      void updateCalendarTaskPriority(taskId, priority)
-                                    }}
-                                    onUpdateTaskType={(taskId, taskType) => {
-                                      void updateCalendarTaskType(taskId, taskType)
-                                    }}
-                                    onUpdateTaskProject={(taskId, projectId) => {
-                                      void updateProjectTask(taskId, { projectId })
-                                    }}
-                                    onUpdateTaskTime={(taskId, time) => {
-                                      void updateCalendarTaskTime(taskId, time)
-                                    }}
-                                    onUpdateTaskSchedule={(taskId, schedule) => {
-                                      void updateCalendarTaskSchedule(taskId, schedule)
-                                    }}
-                                    onUpdateTaskReminders={(taskId, reminders) => {
-                                      void updateCalendarTaskReminders(taskId, reminders)
-                                    }}
-                                  />
-                                )}
-                              </div>
-                            </section>
-                          </div>
-                        ) : activePage === 'designAudit' ? (
-                          <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
-                        ) : activePage === 'settings' ? (
-                          <SettingsPage
-                            profileName={profileName}
-                            mistralApiKey={mistralApiKey}
-                            editorVimModeEnabled={editorVimModeEnabled}
-                            editorVimKeyMappings={editorVimKeyMappings}
-                            vaultLocation={vault?.rootPath ?? lastVaultPath}
-                            savedVaultCount={savedVaultCount}
-                            onSaveProfile={(name) => {
-                              void updateProfileName(name)
-                            }}
-                            onSaveMistralApiKey={(apiKey) => {
-                              void updateMistralApiKey(apiKey)
-                            }}
-                            onToggleEditorVimMode={(enabled) => {
-                              void updateEditorVimMode(enabled)
-                            }}
-                            onUpdateEditorVimKeyMappings={(mappings) => {
-                              void updateEditorVimKeyMappings(mappings)
-                            }}
-                            onManageVaults={openVaultSwapper}
-                            onMigrateBlockNoteNotes={() => {
-                              void migrateBlockNoteNotes()
-                            }}
-                            onMigrateTaggedNoteBodyFrontmatter={() => {
-                              void migrateTaggedNoteBodyFrontmatter()
-                            }}
-                            onImportLegacyExcalidrawSessions={() => {
-                              void importLegacyExcalidrawSessions()
-                            }}
-                            onOpenDesignAudit={() => {
-                              void navigateToPage('designAudit')
-                            }}
-                          />
-                        ) : (
-                          <div className="p-5 text-sm text-muted-foreground">
-                            {activePage} workspace ready. Notes remain fully functional.
-                          </div>
-                        )}
-                      </div>
-                    </DocumentWorkspaceMainContent>
-                    <DocumentWorkspacePanel
-                      data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
-                      className={`${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden ${
-                        shouldSlideWorkspacePanelOut
-                          ? 'pointer-events-none translate-x-full opacity-0'
-                          : 'translate-x-0 opacity-100'
-                      } ${paletteSurfaceClass}`}
-                      style={
-                        shouldSlideWorkspacePanelOut
-                          ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
-                          : undefined
-                      }
-                    >
-                      <div
-                        key={`${activeWorkspaceTabId}:${activePage}`}
-                        className="flex h-full flex-col"
-                      >
-                        <DocumentWorkspacePanelHeader
-                          actions={
-                            hasVault && activePage === 'notes' ? (
-                              <WorkspaceHeaderActions>
-                                <WorkspaceIconButton
-                                  aria-label={
-                                    areAllNoteFoldersCollapsed
-                                      ? 'Expand all folders'
-                                      : 'Collapse all folders'
-                                  }
-                                  title={
-                                    areAllNoteFoldersCollapsed
-                                      ? 'Expand all folders'
-                                      : 'Collapse all folders'
-                                  }
-                                  icon={
-                                    areAllNoteFoldersCollapsed ? (
-                                      <ChevronDown size={18} aria-hidden="true" />
-                                    ) : (
-                                      <ChevronUp size={18} aria-hidden="true" />
-                                    )
-                                  }
-                                  onClick={() => {
-                                    setAreAllNoteFoldersCollapsed((current) => !current)
-                                    setCollapseAllNotesTreeToken((current) => current + 1)
-                                  }}
-                                />
-                                {useNativeMenus ? (
-                                  <WorkspaceIconButton
-                                    ref={noteActionsButtonRef}
-                                    onClick={() => {
-                                      void openNativeNoteActionsMenu()
-                                    }}
-                                    aria-label="Notebook actions"
-                                    title="Notebook actions"
-                                    icon={<Plus size={18} aria-hidden="true" />}
-                                  />
-                                ) : (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <WorkspaceIconButton
-                                        aria-label="Notebook actions"
-                                        title="Notebook actions"
-                                        icon={<Plus size={18} aria-hidden="true" />}
-                                      />
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                      <DropdownMenuItem
-                                        onClick={() => {
-                                          void createNoteFromTree()
-                                        }}
-                                      >
-                                        New note
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => {
-                                          void createExcalidrawFromTree()
-                                        }}
-                                      >
-                                        New drawing
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => {
-                                          void createFolderFromTree()
-                                        }}
-                                      >
-                                        New folder
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => {
-                                          void importNotes()
-                                        }}
-                                      >
-                                        Import markdown
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                )}
-                              </WorkspaceHeaderActions>
-                            ) : null
-                          }
-                        />
-
-                        <DocumentWorkspacePanelContent>
-                          {!hasVault ? (
-                            <WorkspacePanelStack className="h-full">
-                              <WorkspacePanelSection>
-                                <WorkspaceContextEmptyState
-                                  className="m-0 border-0 bg-transparent p-0"
-                                  description="Select a vault to see workspace properties and secondary tools."
-                                />
-                              </WorkspacePanelSection>
-                            </WorkspacePanelStack>
-                          ) : activePage === 'notes' ? (
-                            <WorkspacePanelStack className="h-full">
-                              <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
-                                <NotesTreeView
-                                  tree={visibleNoteTree}
-                                  searchTerm={searchQuery}
-                                  activeNotePath={currentNotePath ?? currentExcalidrawPath}
-                                  selectedEntries={selectedNoteTreeEntries}
-                                  collapseAllToken={collapseAllNotesTreeToken}
-                                  shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
-                                  pendingEditId={pendingNoteTreeEditId}
-                                  onPendingEditHandled={handlePendingNoteTreeEditHandled}
-                                  onSelectionChange={setSelectedNoteTreeEntries}
-                                  onOpenNote={(relPath) => {
-                                    setSearchQuery('')
-                                    setSearchResults([])
-                                    void openNotebookPath(relPath)
-                                  }}
-                                  onCreateNote={(parentDir) => {
-                                    setSelectedNoteTreeEntries(
-                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                    )
-                                    void createNoteFromTree(parentDir)
-                                  }}
-                                  onCreateExcalidraw={(parentDir) => {
-                                    setSelectedNoteTreeEntries(
-                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                    )
-                                    void createExcalidrawFromTree(parentDir)
-                                  }}
-                                  onCreateFolder={(parentDir) => {
-                                    setSelectedNoteTreeEntries(
-                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                    )
-                                    void createFolderFromTree(parentDir)
-                                  }}
-                                  onExportFolderPdf={(folderPath) => {
-                                    void exportFolderPdf(folderPath)
-                                  }}
-                                  onRenamePath={(relPath, nextName, kind) => {
-                                    void renameTreePath(relPath, nextName, kind)
-                                  }}
-                                  onDeleteEntries={(entries) => {
-                                    void deleteTreeEntries(entries)
-                                  }}
-                                  onMoveEntries={moveTreeEntries}
-                                />
-                              </WorkspacePanelSection>
-                            </WorkspacePanelStack>
-                          ) : activePage === 'knowledge' ? (
-                            <WorkspacePanelStack>
-                              <WorkspacePanelSection data-testid="knowledge-graph-editor">
-                                <WorkspacePanelSectionHeader
-                                  heading="Graph view"
-                                  description="Configure how disconnected notes are arranged."
-                                />
-                                <div className="space-y-2">
-                                  <label
-                                    htmlFor="knowledge-orphan-radius-input"
-                                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                                  >
-                                    Orphan ring radius
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      id="knowledge-orphan-radius-input"
-                                      data-testid="knowledge-orphan-radius-input"
-                                      type="number"
-                                      min={72}
-                                      step={1}
-                                      value={knowledgeOrphanRingRadiusInput}
-                                      onChange={(event) => {
-                                        setKnowledgeOrphanRingRadiusInput(event.target.value)
-                                      }}
-                                      placeholder="Auto"
-                                      className="min-w-0 flex-1"
-                                      aria-label="Orphan ring radius in pixels"
-                                    />
-                                    <span className="text-xs text-muted-foreground">px</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-                                  <p className="text-xs text-muted-foreground">
-                                    Applied radius:{' '}
-                                    {knowledgeOrphanRingRadiusPx == null
-                                      ? 'Auto'
-                                      : `${knowledgeOrphanRingRadiusPx}px`}
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setKnowledgeOrphanRingRadiusInput('')
-                                    }}
-                                  >
-                                    Reset
-                                  </Button>
-                                </div>
-                              </WorkspacePanelSection>
-                            </WorkspacePanelStack>
                           ) : activePage === 'projects' ? (
-                            <ProjectsWorkspaceRightPanel
+                            <ProjectsWorkspacePage
                               projects={projects}
+                              tasks={calendarTasks}
                               favoriteProjectIds={favoriteProjectIds}
                               selectedProjectId={selectedProjectId}
                               filterMode={projectFilterMode}
-                              onSelectProject={selectProject}
-                              onToggleProjectFavorite={toggleProjectFavoriteById}
-                              onToggleProjectArchive={toggleProjectArchiveById}
+                              onFilterModeChange={setProjectFilterMode}
+                              onCreateTask={createProjectTask}
                               onUpdateProject={(projectId, draft) =>
                                 saveProject(projectId, {
                                   name: draft.name,
@@ -6044,64 +5209,435 @@ function App(): ReactElement {
                                   icon: draft.icon
                                 })
                               }
-                              onDeleteProject={removeProjectById}
+                              onUpdateProjectProperties={saveProjectProperties}
+                              onUpdateTask={updateProjectTask}
+                              onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
                             />
+                          ) : activePage === 'subscriptions' ? (
+                            <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
                           ) : activePage === 'calendar' ? (
-                            <WorkspacePanelStack className="h-full">
-                              <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
-                                <UnscheduledTaskList
-                                  tasks={unscheduledTasks}
-                                  selectedDate={selectedCalendarDate}
-                                  newTaskValue={calendarHeaderNewTask}
-                                  onNewTaskValueChange={setCalendarHeaderNewTask}
-                                  onToggle={(taskId) => {
-                                    void toggleCalendarTask(taskId)
-                                  }}
-                                  onDelete={(taskId) => {
-                                    void removeCalendarTask(taskId)
-                                  }}
-                                  onRename={(taskId, newTitle) => {
-                                    void renameCalendarTask(taskId, newTitle)
-                                  }}
-                                  onUpdatePriority={(taskId, priority) => {
-                                    void updateCalendarTaskPriority(taskId, priority)
-                                  }}
-                                  onUpdateTaskType={(taskId, taskType) => {
-                                    void updateCalendarTaskType(taskId, taskType)
-                                  }}
-                                  onUpdateTime={(taskId, time) => {
-                                    void updateCalendarTaskTime(taskId, time)
-                                  }}
-                                  onUpdateReminders={(taskId, reminders) => {
-                                    void updateCalendarTaskReminders(taskId, reminders)
-                                  }}
-                                  onScheduleTask={(taskId, date) => {
-                                    void rescheduleCalendarTask(taskId, date)
-                                  }}
-                                  onUnscheduleTask={(taskId) => {
-                                    void rescheduleCalendarTask(taskId, undefined)
-                                  }}
-                                  onInsertTask={() => {
-                                    void addUnscheduledFromHeader()
-                                  }}
-                                />
-                              </WorkspacePanelSection>
-                            </WorkspacePanelStack>
+                            <div className="min-h-full">
+                              <section
+                                data-testid={
+                                  calendarViewMode === 'week'
+                                    ? 'calendar-week-shell'
+                                    : 'calendar-month-shell'
+                                }
+                                className="min-h-full rounded-lg"
+                              >
+                                <div>
+                                  {calendarViewMode === 'week' ? (
+                                    <CalendarWeekView
+                                      selectedDate={selectedCalendarDate}
+                                      tasks={visibleCalendarTasks}
+                                      projects={projects}
+                                      onSelectDate={setSelectedCalendarDate}
+                                      onCreateTask={createTaskForWeeklyTime}
+                                      onRescheduleTask={(taskId, newDate) => {
+                                        void rescheduleCalendarTask(taskId, newDate)
+                                      }}
+                                      onDeleteTask={(taskId) => {
+                                        void removeCalendarTask(taskId)
+                                      }}
+                                      onUpdateTask={updateProjectTask}
+                                      onRenameTask={(taskId, newTitle) => {
+                                        void renameCalendarTask(taskId, newTitle)
+                                      }}
+                                      onUpdateTaskPriority={(taskId, priority) => {
+                                        void updateCalendarTaskPriority(taskId, priority)
+                                      }}
+                                      onUpdateTaskType={(taskId, taskType) => {
+                                        void updateCalendarTaskType(taskId, taskType)
+                                      }}
+                                      onUpdateTaskProject={(taskId, projectId) => {
+                                        void updateProjectTask(taskId, { projectId })
+                                      }}
+                                      onUpdateTaskSchedule={(taskId, schedule) => {
+                                        void updateCalendarTaskSchedule(taskId, schedule)
+                                      }}
+                                    />
+                                  ) : (
+                                    <CalendarMonthView
+                                      selectedDate={selectedCalendarDate}
+                                      tasks={visibleScheduledCalendarTasks}
+                                      projects={projects}
+                                      onSelectDate={setSelectedCalendarDate}
+                                      onCreateTask={createTaskForDate}
+                                      onRescheduleTask={(taskId, newDate) => {
+                                        void rescheduleCalendarTask(taskId, newDate)
+                                      }}
+                                      onResizeTaskStart={(taskId, newStartDate) => {
+                                        void resizeCalendarTaskStart(taskId, newStartDate)
+                                      }}
+                                      onResizeTaskEnd={(taskId, newEndDate) => {
+                                        void resizeCalendarTaskEnd(taskId, newEndDate)
+                                      }}
+                                      onToggleTask={(taskId) => {
+                                        void toggleCalendarTask(taskId)
+                                      }}
+                                      onDeleteTask={(taskId) => {
+                                        void removeCalendarTask(taskId)
+                                      }}
+                                      onUpdateTask={updateProjectTask}
+                                      onRenameTask={(taskId, newTitle) => {
+                                        void renameCalendarTask(taskId, newTitle)
+                                      }}
+                                      onUpdateTaskPriority={(taskId, priority) => {
+                                        void updateCalendarTaskPriority(taskId, priority)
+                                      }}
+                                      onUpdateTaskType={(taskId, taskType) => {
+                                        void updateCalendarTaskType(taskId, taskType)
+                                      }}
+                                      onUpdateTaskProject={(taskId, projectId) => {
+                                        void updateProjectTask(taskId, { projectId })
+                                      }}
+                                      onUpdateTaskTime={(taskId, time) => {
+                                        void updateCalendarTaskTime(taskId, time)
+                                      }}
+                                      onUpdateTaskSchedule={(taskId, schedule) => {
+                                        void updateCalendarTaskSchedule(taskId, schedule)
+                                      }}
+                                      onUpdateTaskReminders={(taskId, reminders) => {
+                                        void updateCalendarTaskReminders(taskId, reminders)
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </section>
+                            </div>
+                          ) : activePage === 'designAudit' ? (
+                            <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
                           ) : activePage === 'settings' ? (
-                            <SettingsRightPanelSections />
+                            <SettingsPage
+                              profileName={profileName}
+                              mistralApiKey={mistralApiKey}
+                              editorVimModeEnabled={editorVimModeEnabled}
+                              editorVimKeyMappings={editorVimKeyMappings}
+                              vaultLocation={vault?.rootPath ?? lastVaultPath}
+                              savedVaultCount={savedVaultCount}
+                              onSaveProfile={(name) => {
+                                void updateProfileName(name)
+                              }}
+                              onSaveMistralApiKey={(apiKey) => {
+                                void updateMistralApiKey(apiKey)
+                              }}
+                              onToggleEditorVimMode={(enabled) => {
+                                void updateEditorVimMode(enabled)
+                              }}
+                              onUpdateEditorVimKeyMappings={(mappings) => {
+                                void updateEditorVimKeyMappings(mappings)
+                              }}
+                              onManageVaults={openVaultSwapper}
+                              onMigrateBlockNoteNotes={() => {
+                                void migrateBlockNoteNotes()
+                              }}
+                              onMigrateTaggedNoteBodyFrontmatter={() => {
+                                void migrateTaggedNoteBodyFrontmatter()
+                              }}
+                              onImportLegacyExcalidrawSessions={() => {
+                                void importLegacyExcalidrawSessions()
+                              }}
+                              onOpenDesignAudit={() => {
+                                void navigateToPage('designAudit')
+                              }}
+                            />
                           ) : (
-                            <WorkspacePanelStack className="h-full">
-                              <WorkspacePanelSection>
-                                <WorkspaceContextEmptyState
-                                  className="m-0 border-0 bg-transparent p-0"
-                                  description="Properties, activity, and secondary tools for this workspace will appear here."
-                                />
-                              </WorkspacePanelSection>
-                            </WorkspacePanelStack>
+                            <div className="p-5 text-sm text-muted-foreground">
+                              {activePage} workspace ready. Notes remain fully functional.
+                            </div>
                           )}
-                        </DocumentWorkspacePanelContent>
-                      </div>
-                    </DocumentWorkspacePanel>
+                        </div>
+                      </DocumentWorkspaceMainContent>
+                      <DocumentWorkspacePanel
+                        data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
+                        className={`h-full w-full basis-auto ${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden ${
+                          shouldSlideWorkspacePanelOut
+                            ? 'pointer-events-none translate-x-full opacity-0'
+                            : 'translate-x-0 opacity-100'
+                        } ${paletteSurfaceClass}`}
+                        data-panel-resizable={hasRightPanel ? 'true' : undefined}
+                        style={
+                          shouldSlideWorkspacePanelOut
+                            ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
+                            : undefined
+                        }
+                      >
+                        <div
+                          key={`${activeWorkspaceTabId}:${activePage}`}
+                          className="flex h-full flex-col"
+                        >
+                          <DocumentWorkspacePanelHeader
+                            actions={
+                              hasVault && activePage === 'notes' ? (
+                                <WorkspaceHeaderActions>
+                                  <WorkspaceIconButton
+                                    aria-label={
+                                      areAllNoteFoldersCollapsed
+                                        ? 'Expand all folders'
+                                        : 'Collapse all folders'
+                                    }
+                                    title={
+                                      areAllNoteFoldersCollapsed
+                                        ? 'Expand all folders'
+                                        : 'Collapse all folders'
+                                    }
+                                    icon={
+                                      areAllNoteFoldersCollapsed ? (
+                                        <ChevronDown size={18} aria-hidden="true" />
+                                      ) : (
+                                        <ChevronUp size={18} aria-hidden="true" />
+                                      )
+                                    }
+                                    onClick={() => {
+                                      setAreAllNoteFoldersCollapsed((current) => !current)
+                                      setCollapseAllNotesTreeToken((current) => current + 1)
+                                    }}
+                                  />
+                                  {useNativeMenus ? (
+                                    <WorkspaceIconButton
+                                      ref={noteActionsButtonRef}
+                                      onClick={() => {
+                                        void openNativeNoteActionsMenu()
+                                      }}
+                                      aria-label="Notebook actions"
+                                      title="Notebook actions"
+                                      icon={<Plus size={18} aria-hidden="true" />}
+                                    />
+                                  ) : (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <WorkspaceIconButton
+                                          aria-label="Notebook actions"
+                                          title="Notebook actions"
+                                          icon={<Plus size={18} aria-hidden="true" />}
+                                        />
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="start">
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            void createNoteFromTree()
+                                          }}
+                                        >
+                                          New note
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            void createExcalidrawFromTree()
+                                          }}
+                                        >
+                                          New drawing
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            void createFolderFromTree()
+                                          }}
+                                        >
+                                          New folder
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            void importNotes()
+                                          }}
+                                        >
+                                          Import markdown
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  )}
+                                </WorkspaceHeaderActions>
+                              ) : null
+                            }
+                          />
+
+                          <DocumentWorkspacePanelContent>
+                            {!hasVault ? (
+                              <WorkspacePanelStack className="h-full">
+                                <WorkspacePanelSection>
+                                  <WorkspaceContextEmptyState
+                                    className="m-0 border-0 bg-transparent p-0"
+                                    description="Select a vault to see workspace properties and secondary tools."
+                                  />
+                                </WorkspacePanelSection>
+                              </WorkspacePanelStack>
+                            ) : activePage === 'notes' ? (
+                              <WorkspacePanelStack className="h-full">
+                                <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
+                                  <NotesTreeView
+                                    tree={visibleNoteTree}
+                                    searchTerm={searchQuery}
+                                    activeNotePath={currentNotePath ?? currentExcalidrawPath}
+                                    selectedEntries={selectedNoteTreeEntries}
+                                    collapseAllToken={collapseAllNotesTreeToken}
+                                    shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
+                                    pendingEditId={pendingNoteTreeEditId}
+                                    onPendingEditHandled={handlePendingNoteTreeEditHandled}
+                                    onSelectionChange={setSelectedNoteTreeEntries}
+                                    onOpenNote={(relPath) => {
+                                      setSearchQuery('')
+                                      setSearchResults([])
+                                      void openNotebookPath(relPath)
+                                    }}
+                                    onCreateNote={(parentDir) => {
+                                      setSelectedNoteTreeEntries(
+                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                      )
+                                      void createNoteFromTree(parentDir)
+                                    }}
+                                    onCreateExcalidraw={(parentDir) => {
+                                      setSelectedNoteTreeEntries(
+                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                      )
+                                      void createExcalidrawFromTree(parentDir)
+                                    }}
+                                    onCreateFolder={(parentDir) => {
+                                      setSelectedNoteTreeEntries(
+                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                      )
+                                      void createFolderFromTree(parentDir)
+                                    }}
+                                    onExportFolderPdf={(folderPath) => {
+                                      void exportFolderPdf(folderPath)
+                                    }}
+                                    onRenamePath={(relPath, nextName, kind) => {
+                                      void renameTreePath(relPath, nextName, kind)
+                                    }}
+                                    onDeleteEntries={(entries) => {
+                                      void deleteTreeEntries(entries)
+                                    }}
+                                    onMoveEntries={moveTreeEntries}
+                                  />
+                                </WorkspacePanelSection>
+                              </WorkspacePanelStack>
+                            ) : activePage === 'knowledge' ? (
+                              <WorkspacePanelStack>
+                                <WorkspacePanelSection data-testid="knowledge-graph-editor">
+                                  <WorkspacePanelSectionHeader
+                                    heading="Graph view"
+                                    description="Configure how disconnected notes are arranged."
+                                  />
+                                  <div className="space-y-2">
+                                    <label
+                                      htmlFor="knowledge-orphan-radius-input"
+                                      className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                                    >
+                                      Orphan ring radius
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        id="knowledge-orphan-radius-input"
+                                        data-testid="knowledge-orphan-radius-input"
+                                        type="number"
+                                        min={72}
+                                        step={1}
+                                        value={knowledgeOrphanRingRadiusInput}
+                                        onChange={(event) => {
+                                          setKnowledgeOrphanRingRadiusInput(event.target.value)
+                                        }}
+                                        placeholder="Auto"
+                                        className="min-w-0 flex-1"
+                                        aria-label="Orphan ring radius in pixels"
+                                      />
+                                      <span className="text-xs text-muted-foreground">px</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                                    <p className="text-xs text-muted-foreground">
+                                      Applied radius:{' '}
+                                      {knowledgeOrphanRingRadiusPx == null
+                                        ? 'Auto'
+                                        : `${knowledgeOrphanRingRadiusPx}px`}
+                                    </p>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setKnowledgeOrphanRingRadiusInput('')
+                                      }}
+                                    >
+                                      Reset
+                                    </Button>
+                                  </div>
+                                </WorkspacePanelSection>
+                              </WorkspacePanelStack>
+                            ) : activePage === 'projects' ? (
+                              <ProjectsWorkspaceRightPanel
+                                projects={projects}
+                                favoriteProjectIds={favoriteProjectIds}
+                                selectedProjectId={selectedProjectId}
+                                filterMode={projectFilterMode}
+                                onSelectProject={selectProject}
+                                onToggleProjectFavorite={toggleProjectFavoriteById}
+                                onToggleProjectArchive={toggleProjectArchiveById}
+                                onUpdateProjectProperties={saveProjectProperties}
+                              />
+                            ) : activePage === 'calendar' ? (
+                              <WorkspacePanelStack className="h-full">
+                                <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
+                                  <UnscheduledTaskList
+                                    tasks={unscheduledTasks}
+                                    projects={projects}
+                                    selectedDate={selectedCalendarDate}
+                                    newTaskValue={calendarHeaderNewTask}
+                                    onNewTaskValueChange={setCalendarHeaderNewTask}
+                                    onToggle={(taskId) => {
+                                      void toggleCalendarTask(taskId)
+                                    }}
+                                    onDelete={(taskId) => {
+                                      void removeCalendarTask(taskId)
+                                    }}
+                                    onRename={(taskId, newTitle) => {
+                                      void renameCalendarTask(taskId, newTitle)
+                                    }}
+                                    onUpdatePriority={(taskId, priority) => {
+                                      void updateCalendarTaskPriority(taskId, priority)
+                                    }}
+                                    onUpdateTaskType={(taskId, taskType) => {
+                                      void updateCalendarTaskType(taskId, taskType)
+                                    }}
+                                    onUpdateStatus={(taskId, status) => {
+                                      void updateProjectTask(taskId, {
+                                        status,
+                                        completed: status === 'completed'
+                                      })
+                                    }}
+                                    onUpdateTaskProject={(taskId, projectId) => {
+                                      void updateProjectTask(taskId, { projectId })
+                                    }}
+                                    onUpdateTime={(taskId, time) => {
+                                      void updateCalendarTaskTime(taskId, time)
+                                    }}
+                                    onUpdateReminders={(taskId, reminders) => {
+                                      void updateCalendarTaskReminders(taskId, reminders)
+                                    }}
+                                    onScheduleTask={(taskId, date) => {
+                                      void rescheduleCalendarTask(taskId, date)
+                                    }}
+                                    onUnscheduleTask={(taskId) => {
+                                      void rescheduleCalendarTask(taskId, undefined)
+                                    }}
+                                    onInsertTask={() => {
+                                      void addUnscheduledFromHeader()
+                                    }}
+                                  />
+                                </WorkspacePanelSection>
+                              </WorkspacePanelStack>
+                            ) : activePage === 'settings' ? (
+                              <SettingsRightPanelSections />
+                            ) : (
+                              <WorkspacePanelStack className="h-full">
+                                <WorkspacePanelSection>
+                                  <WorkspaceContextEmptyState
+                                    className="m-0 border-0 bg-transparent p-0"
+                                    description="Properties, activity, and secondary tools for this workspace will appear here."
+                                  />
+                                </WorkspacePanelSection>
+                              </WorkspacePanelStack>
+                            )}
+                          </DocumentWorkspacePanelContent>
+                        </div>
+                      </DocumentWorkspacePanel>
+                    </WorkspaceResizableLayout>
                   </DocumentWorkspaceMain>
                 </DocumentWorkspace>
                 <WorkspaceFooter />

@@ -1,11 +1,13 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import type { PanelImperativeHandle } from 'react-resizable-panels'
 import { type FilledIcon, PanelRightClose, PanelRightOpen, Plus, X } from './icons'
 
 import { cn } from '../../lib/utils'
 import { ActionButtonGroup } from './button-group'
 import { Button } from './button'
 import { Shortcut, type ShortcutKey } from './kbd'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
 import { ToggleGroup, ToggleGroupItem } from './toggle-group'
 
 type WorkspaceTab = {
@@ -116,7 +118,8 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                 <div
                   key={tab.id}
                   data-active={tab.id === activeTabId ? 'true' : 'false'}
-                  className="group app-no-drag flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-card data-[active=true]:bg-accent"
+                  data-toggle-group-indicator-target="true"
+                  className="group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-card data-[active=true]:bg-transparent"
                 >
                   <ToggleGroupItem
                     value={tab.id}
@@ -330,6 +333,170 @@ const DocumentWorkspacePanel = React.forwardRef<
   />
 ))
 DocumentWorkspacePanel.displayName = 'DocumentWorkspacePanel'
+
+function useIsNarrowWorkspace(): boolean {
+  const [isNarrow, setIsNarrow] = React.useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    return window.matchMedia('(max-width: 900px)').matches
+  })
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 900px)')
+    const handleChange = (): void => setIsNarrow(mediaQuery.matches)
+
+    handleChange()
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
+
+  return isNarrow
+}
+
+interface WorkspaceResizableLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
+  hasPanel?: boolean
+  panelWidth: number
+  panelCollapsed?: boolean
+  panelHidden?: boolean
+  onPanelWidthChange?: (width: number) => void
+  onPanelCollapsedChange?: (collapsed: boolean) => void
+}
+
+const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResizableLayoutProps>(
+  (
+    {
+      children,
+      className,
+      hasPanel = true,
+      panelWidth,
+      panelCollapsed = false,
+      panelHidden = false,
+      onPanelWidthChange,
+      onPanelCollapsedChange,
+      ...props
+    },
+    ref
+  ) => {
+    const isNarrow = useIsNarrowWorkspace()
+    const panelRef = React.useRef<PanelImperativeHandle | null>(null)
+    const panelElementRef = React.useRef<HTMLDivElement | null>(null)
+    const latestPanelWidthRef = React.useRef(panelWidth)
+    const persistLayoutFrameRef = React.useRef<number | null>(null)
+    const [initialPanelWidth] = React.useState(panelWidth)
+    const [mainContent, panelContent] = React.Children.toArray(children)
+
+    React.useEffect(() => {
+      return () => {
+        if (persistLayoutFrameRef.current !== null) {
+          window.cancelAnimationFrame(persistLayoutFrameRef.current)
+        }
+      }
+    }, [])
+
+    React.useEffect(() => {
+      if (isNarrow) {
+        return
+      }
+
+      const panel = panelRef.current
+      if (!panel) {
+        return
+      }
+
+      const shouldCollapse = panelCollapsed || panelHidden
+      if (shouldCollapse && !panel.isCollapsed()) {
+        panel.collapse()
+      } else if (!shouldCollapse && panel.isCollapsed()) {
+        panel.expand()
+      }
+    }, [isNarrow, panelCollapsed, panelHidden])
+
+    if (!hasPanel || !panelContent) {
+      return <>{mainContent}</>
+    }
+
+    if (isNarrow) {
+      return (
+        <>
+          {mainContent}
+          {panelContent}
+        </>
+      )
+    }
+
+    return (
+      <ResizablePanelGroup
+        ref={ref}
+        className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', className)}
+        orientation="horizontal"
+        {...props}
+        onLayoutChanged={() => {
+          if (persistLayoutFrameRef.current !== null) {
+            window.cancelAnimationFrame(persistLayoutFrameRef.current)
+          }
+
+          persistLayoutFrameRef.current = window.requestAnimationFrame(() => {
+            persistLayoutFrameRef.current = null
+            if (panelHidden || panelRef.current?.isCollapsed()) {
+              return
+            }
+
+            const width =
+              panelElementRef.current?.getBoundingClientRect().width ?? latestPanelWidthRef.current
+            if (!width || width <= 0) {
+              return
+            }
+
+            onPanelWidthChange?.(width)
+            if (panelCollapsed) {
+              onPanelCollapsedChange?.(false)
+            }
+          })
+        }}
+      >
+        <ResizablePanel
+          className="min-w-0"
+          minSize={320}
+          groupResizeBehavior="preserve-relative-size"
+        >
+          {mainContent}
+        </ResizablePanel>
+        <ResizableHandle
+          id="workspace-right-panel-resize"
+          data-testid="workspace-right-panel-resize"
+          aria-label="Resize right sidebar"
+          disableDoubleClick
+        />
+        <ResizablePanel
+          id="workspace-right-panel"
+          className="min-w-0"
+          defaultSize={initialPanelWidth}
+          minSize={220}
+          maxSize={360}
+          collapsedSize={0}
+          collapsible
+          groupResizeBehavior="preserve-pixel-size"
+          ref={panelElementRef}
+          panelRef={panelRef}
+          onResize={(size) => {
+            latestPanelWidthRef.current = size.inPixels
+            if (size.inPixels <= 0) {
+              if (!panelHidden) {
+                onPanelCollapsedChange?.(true)
+              }
+              return
+            }
+          }}
+        >
+          {panelContent}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    )
+  }
+)
+WorkspaceResizableLayout.displayName = 'WorkspaceResizableLayout'
 
 const WorkspacePanelStack = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -558,7 +725,7 @@ const DocumentWorkspaceMainContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <main
     ref={ref}
-    className={cn('min-h-0 min-w-0 flex-1 overflow-auto p-2', className)}
+    className={cn('h-full min-h-0 min-w-0 flex-1 overflow-auto p-2', className)}
     {...props}
   />
 ))
@@ -603,6 +770,7 @@ export {
   WorkspaceHeaderSecondaryActionsRight,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspaceResizableLayout,
   WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,

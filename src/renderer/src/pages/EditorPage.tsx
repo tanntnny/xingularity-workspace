@@ -1,4 +1,13 @@
-import { ReactElement, RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  ReactElement,
+  RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState
+} from 'react'
 import { Plus } from '../components/ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
@@ -38,6 +47,12 @@ const VIM_MODE_BADGE_LABELS: Record<NoteVimMode, string> = {
   visualLine: 'visual'
 }
 
+interface OutlinePanelBounds {
+  top: number
+  left: number
+  width: number
+}
+
 export function EditorPage({
   editorRef,
   initialContent,
@@ -68,10 +83,52 @@ export function EditorPage({
     items: []
   })
   const tagInputRef = useRef<HTMLInputElement | null>(null)
+  const noteBodyRef = useRef<HTMLDivElement | null>(null)
   const isSubmittingTagRef = useRef(false)
+  const [outlinePanelBounds, setOutlinePanelBounds] = useState<OutlinePanelBounds | null>(null)
 
   const currentName = stripNoteExtension(notePath).split('/').pop() || ''
   const outlineItems = outlineState.notePath === notePath ? outlineState.items : []
+
+  useLayoutEffect(() => {
+    if (outlineItems.length === 0 || !noteBodyRef.current) {
+      return
+    }
+
+    const updateOutlinePanelBounds = (): void => {
+      const rect = noteBodyRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const nextBounds: OutlinePanelBounds = {
+        top: rect.top + 20,
+        left: Math.max(rect.left, rect.right - 56),
+        width: 48
+      }
+
+      setOutlinePanelBounds((current) => {
+        if (
+          current &&
+          current.top === nextBounds.top &&
+          current.left === nextBounds.left &&
+          current.width === nextBounds.width
+        ) {
+          return current
+        }
+
+        return nextBounds
+      })
+    }
+
+    updateOutlinePanelBounds()
+    const resizeObserver = new ResizeObserver(updateOutlinePanelBounds)
+    resizeObserver.observe(noteBodyRef.current)
+    window.addEventListener('resize', updateOutlinePanelBounds)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateOutlinePanelBounds)
+    }
+  }, [notePath, outlineItems.length])
 
   useEffect(() => {
     if (!isAddingTag) {
@@ -105,7 +162,7 @@ export function EditorPage({
   }
 
   return (
-    <div className="note-editor-surface flex h-full min-h-0 flex-col">
+    <div className="note-editor-surface flex h-full min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 px-8 py-5">
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 items-center">
@@ -179,9 +236,9 @@ export function EditorPage({
           </div>
         </div>
       </div>
-      <div className="relative flex-1 min-h-0 px-8 pb-8">
-        <div className="flex h-full min-h-0 gap-4 pt-5 xl:gap-6">
-          <div className="min-w-0 flex-1 overflow-auto pr-1">
+      <div ref={noteBodyRef} className="relative min-h-0 flex-1 overflow-hidden px-8 pb-8">
+        <div className="h-full min-h-0 overflow-hidden pt-5">
+          <div className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1">
             <div className="h-full">
               <Editor
                 ref={editorRef}
@@ -205,9 +262,25 @@ export function EditorPage({
               />
             </div>
           </div>
-          <NoteOutlineRail items={outlineItems} onJumpToIndex={handleJumpToOutlineIndex} />
         </div>
       </div>
+      {outlineItems.length > 0 && outlinePanelBounds
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-50"
+              style={{
+                top: outlinePanelBounds.top,
+                left: outlinePanelBounds.left,
+                width: outlinePanelBounds.width
+              }}
+            >
+              <div className="pointer-events-auto w-full">
+                <NoteOutlineRail items={outlineItems} onJumpToIndex={handleJumpToOutlineIndex} />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
       {vimModeEnabled ? (
         <DocumentWorkspaceFooterStatus>
           <span data-testid="note-vim-mode-badge">{VIM_MODE_BADGE_LABELS[vimMode]}</span>

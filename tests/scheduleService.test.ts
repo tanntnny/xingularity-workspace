@@ -143,7 +143,9 @@ describe('ScheduleService action application', () => {
           source: 'task',
           taskId: settings.calendarTasks[0].id,
           taskType: 'assignment',
-          priority: 'high'
+          priority: 'high',
+          status: 'pending',
+          completed: false
         }
       }
     ])

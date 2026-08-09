@@ -10,9 +10,7 @@ import {
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES,
   NoteVimKeyMapping,
-  Project,
-  ProjectMilestone,
-  ProjectSubtask
+  Project
 } from '../shared/types'
 import {
   deleteLegacyVaultPath,
@@ -287,88 +285,6 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   }
 }
 
-function normalizeProjectSubtask(input: unknown): ProjectSubtask | null {
-  if (typeof input !== 'object' || input === null) {
-    return null
-  }
-
-  const candidate = input as Partial<ProjectSubtask>
-  const title =
-    typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
-  const createdAt =
-    typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
-      ? candidate.createdAt
-      : new Date().toISOString()
-
-  if (!title || typeof candidate.id !== 'string' || !candidate.id.trim()) {
-    return null
-  }
-
-  return {
-    id: candidate.id,
-    title,
-    description:
-      typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
-    completed: Boolean(candidate.completed),
-    priority:
-      candidate.priority === 'low' ||
-      candidate.priority === 'medium' ||
-      candidate.priority === 'high'
-        ? candidate.priority
-        : undefined,
-    createdAt,
-    dueDate:
-      typeof candidate.dueDate === 'string' && candidate.dueDate.trim()
-        ? candidate.dueDate
-        : undefined
-  }
-}
-
-function normalizeProjectMilestone(input: unknown): ProjectMilestone | null {
-  if (typeof input !== 'object' || input === null) {
-    return null
-  }
-
-  const candidate = input as Partial<ProjectMilestone>
-  const title =
-    typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
-  const dueDate =
-    typeof candidate.dueDate === 'string' && candidate.dueDate.trim()
-      ? candidate.dueDate
-      : undefined
-
-  if (!title || typeof candidate.id !== 'string' || !candidate.id.trim()) {
-    return null
-  }
-
-  return {
-    id: candidate.id,
-    title,
-    description:
-      typeof candidate.description === 'string' ? candidate.description.trim() : undefined,
-    collapsed: typeof candidate.collapsed === 'boolean' ? candidate.collapsed : undefined,
-    dueDate,
-    priority:
-      candidate.priority === 'low' ||
-      candidate.priority === 'medium' ||
-      candidate.priority === 'high'
-        ? candidate.priority
-        : undefined,
-    status:
-      candidate.status === 'pending' ||
-      candidate.status === 'in-progress' ||
-      candidate.status === 'completed' ||
-      candidate.status === 'blocked'
-        ? candidate.status
-        : 'pending',
-    subtasks: Array.isArray(candidate.subtasks)
-      ? candidate.subtasks
-          .map((subtask) => normalizeProjectSubtask(subtask))
-          .filter((subtask): subtask is ProjectSubtask => subtask !== null)
-      : []
-  }
-}
-
 function normalizeProject(input: unknown): Project[] {
   if (typeof input !== 'object' || input === null) {
     return []
@@ -380,21 +296,6 @@ function normalizeProject(input: unknown): Project[] {
   if (!name || typeof candidate.id !== 'string' || !candidate.id.trim()) {
     return []
   }
-
-  const milestones = Array.isArray(candidate.milestones)
-    ? candidate.milestones
-        .map((milestone) => normalizeProjectMilestone(milestone))
-        .filter((milestone): milestone is ProjectMilestone => milestone !== null)
-    : []
-  const completedMilestones = milestones.filter(
-    (milestone) => milestone.status === 'completed'
-  ).length
-  const progress =
-    typeof candidate.progress === 'number' && Number.isFinite(candidate.progress)
-      ? Math.max(0, Math.min(100, candidate.progress))
-      : milestones.length > 0
-        ? Math.round((completedMilestones / milestones.length) * 100)
-        : 0
 
   return [
     {
@@ -412,19 +313,14 @@ function normalizeProject(input: unknown): Project[] {
           ? candidate.folderPath
           : undefined,
       state: candidate.state === 'archived' ? 'archived' : 'active',
-      status:
-        candidate.status === 'on-track' ||
-        candidate.status === 'at-risk' ||
-        candidate.status === 'blocked' ||
-        candidate.status === 'completed'
-          ? candidate.status
-          : 'on-track',
+      startDate: normalizeProjectDate(candidate.startDate),
+      endDate: normalizeProjectDate(candidate.endDate),
+      tags: normalizeProjectValues(candidate.tags),
+      resources: normalizeProjectValues(candidate.resources),
       updatedAt:
         typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
           ? candidate.updatedAt
           : new Date().toISOString(),
-      progress,
-      milestones,
       icon: normalizeProjectIcon(
         candidate.icon && typeof candidate.icon === 'object'
           ? (candidate.icon as Partial<Project['icon']>)
@@ -435,84 +331,24 @@ function normalizeProject(input: unknown): Project[] {
   ]
 }
 
-function migrateProjectWork(
-  projects: Project[],
-  tasks: CalendarTask[]
-): { projects: Project[]; tasks: CalendarTask[]; migrated: boolean } {
-  const usedTaskIds = new Set(tasks.map((task) => task.id))
-  const migratedTasks = [...tasks]
-  let migrated = false
+function normalizeProjectDate(value: unknown): string | undefined {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined
+}
 
-  const reserveTaskId = (candidate: string, kind: string, projectId: string): string => {
-    if (!usedTaskIds.has(candidate)) {
-      usedTaskIds.add(candidate)
-      return candidate
-    }
-
-    let index = 1
-    let next = `task-${projectId}-${kind}-${candidate}`
-    while (usedTaskIds.has(next)) {
-      index += 1
-      next = `task-${projectId}-${kind}-${candidate}-${index}`
-    }
-    usedTaskIds.add(next)
-    return next
+function normalizeProjectValues(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
   }
 
-  const nextProjects = projects.map((project) => {
-    const milestones = Array.isArray(project.milestones) ? project.milestones : []
-    if (milestones.length === 0) {
-      return {
-        ...project,
-        description: project.description ?? project.summary
-      }
-    }
-
-    migrated = true
-    for (const milestone of milestones) {
-      const milestoneStatus = milestone.status ?? 'pending'
-      migratedTasks.push({
-        id: reserveTaskId(milestone.id, 'milestone', project.id),
-        title: milestone.title,
-        description: milestone.description,
-        projectId: project.id,
-        date: milestone.dueDate,
-        completed: milestoneStatus === 'completed',
-        status: milestoneStatus,
-        createdAt: project.updatedAt,
-        priority: milestone.priority ?? 'medium',
-        reminders: []
-      })
-
-      for (const subtask of milestone.subtasks ?? []) {
-        const status = subtask.completed ? 'completed' : 'pending'
-        migratedTasks.push({
-          id: reserveTaskId(subtask.id, 'subtask', project.id),
-          title: subtask.title,
-          description: subtask.description,
-          projectId: project.id,
-          date: subtask.dueDate,
-          completed: subtask.completed,
-          status,
-          createdAt: subtask.createdAt,
-          priority: subtask.priority ?? 'medium',
-          reminders: []
-        })
-      }
-    }
-
-    return {
-      ...project,
-      description: project.description ?? project.summary,
-      milestones: []
-    }
-  })
-
-  return {
-    projects: nextProjects,
-    tasks: normalizeCalendarTasks(migratedTasks),
-    migrated
-  }
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 50)
+    )
+  )
 }
 
 function normalizeProjectIcons(
@@ -867,7 +703,6 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
         hasMaterialTasksData
       )
       const resolvedTasks = hasCanonicalTaskStorage ? taskFiles : legacyTasks
-      const migratedProjectWork = migrateProjectWork(resolvedProjects ?? [], resolvedTasks ?? [])
       const needsSplitMigration =
         coreParsed === null ||
         legacyCoreParsed !== null ||
@@ -879,17 +714,16 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
         hasLegacyCalendarTaskTypes(resolvedTasks) ||
         hasLegacyAppearanceSettings(resolvedCore) ||
         resolvedCore !== coreParsed ||
-        migratedProjectWork.migrated ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
         Boolean(resolvedCore?.calendarTasks)
 
       const normalized = normalizeSettings({
         ...(resolvedCore ?? {}),
-        projects: migratedProjectWork.projects,
+        projects: resolvedProjects ?? [],
         projectIcons: resolvedProjectIcons,
-        calendarTasks: migratedProjectWork.tasks,
-        tasks: migratedProjectWork.tasks,
+        calendarTasks: resolvedTasks ?? [],
+        tasks: resolvedTasks ?? [],
         lastVaultPath: vaultRoot
       })
       const merged = applyProjectIconCompatibility(normalized, resolvedProjectIcons)

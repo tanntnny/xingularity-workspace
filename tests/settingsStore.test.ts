@@ -70,10 +70,7 @@ describe('SettingsStore', () => {
               id: 'project-1',
               name: 'Migration',
               summary: 'Legacy project',
-              status: 'on-track',
               updatedAt: '2026-05-01T00:00:00.000Z',
-              progress: 0,
-              milestones: [],
               icon: { shape: 'circle', variant: 'filled', color: '#000000' }
             }
           ],
@@ -127,8 +124,13 @@ describe('SettingsStore', () => {
     ])
     expect(settings.projects).toHaveLength(1)
     expect(settings.projects[0].state).toBe('active')
+    expect(settings.projects[0].tags).toEqual([])
+    expect(settings.projects[0].resources).toEqual([])
+    expect(settings.projects[0].startDate).toBeUndefined()
+    expect(settings.projects[0].endDate).toBeUndefined()
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0].taskType).toBe('follow-up')
+    expect(settings.calendarTasks[0].status).toBe('pending')
 
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
@@ -208,10 +210,7 @@ describe('SettingsStore', () => {
               id: 'project-1',
               name: 'Migration',
               summary: 'Legacy project',
-              status: 'on-track',
               updatedAt: '2026-05-01T00:00:00.000Z',
-              progress: 0,
-              milestones: [],
               icon: { shape: 'circle', variant: 'filled', color: '#000000' }
             }
           ],
@@ -258,9 +257,9 @@ describe('SettingsStore', () => {
     await expect(
       fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ).resolves.toContain('"name": "Migration"')
-    await expect(
-      fs.readFile(path.join(root, 'tasks', 'task-1.json'), 'utf-8')
-    ).resolves.toContain('"title": "Legacy task"')
+    await expect(fs.readFile(path.join(root, 'tasks', 'task-1.json'), 'utf-8')).resolves.toContain(
+      '"title": "Legacy task"'
+    )
   })
 
   it('removes legacy profile colors from canonical settings', async () => {
@@ -305,10 +304,7 @@ describe('SettingsStore', () => {
       summary: 'Linked task project',
       description: 'Linked task project',
       state: 'active' as const,
-      status: 'on-track' as const,
       updatedAt: '2026-08-02T00:00:00.000Z',
-      progress: 0,
-      milestones: [],
       icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
     }
     const task = {
@@ -356,10 +352,7 @@ describe('SettingsStore', () => {
       summary: '',
       description: '',
       state: 'active' as const,
-      status: 'on-track' as const,
       updatedAt: '2026-08-02T00:00:00.000Z',
-      progress: 0,
-      milestones: [],
       icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
     }
     await store.updateVault(root, { projects: [project] })
@@ -381,10 +374,7 @@ describe('SettingsStore', () => {
       summary: '',
       description: '',
       state: 'active' as const,
-      status: 'on-track' as const,
       updatedAt: '2026-08-02T00:00:00.000Z',
-      progress: 0,
-      milestones: [],
       icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
     })
 

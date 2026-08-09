@@ -3,6 +3,7 @@ import {
   createAppErrorEvent,
   formatAppErrorDetails,
   formatAppErrorSource,
+  isNonFatalRendererErrorMessage,
   mergeAppErrorStacks,
   normalizeAppError
 } from '../src/shared/appErrors'
@@ -28,6 +29,16 @@ describe('app error helpers', () => {
       stack: undefined,
       channel: undefined
     })
+  })
+
+  it('recognizes browser resize observer diagnostics as non-fatal', () => {
+    expect(
+      isNonFatalRendererErrorMessage(
+        'ResizeObserver loop completed with undelivered notifications.'
+      )
+    ).toBe(true)
+    expect(isNonFatalRendererErrorMessage('ResizeObserver loop limit exceeded')).toBe(true)
+    expect(isNonFatalRendererErrorMessage('Unexpected renderer failure')).toBe(false)
   })
 
   it('merges stack sections and formats details for display', () => {

@@ -19,10 +19,7 @@ function makeProject(id: string, name: string): Project {
     name,
     summary: '',
     state: 'active',
-    status: 'on-track',
     updatedAt: '2026-07-29T00:00:00.000Z',
-    progress: 0,
-    milestones: [],
     icon: { shape: 'circle', variant: 'filled', color: '#000000' }
   }
 }
@@ -33,12 +30,29 @@ describe('ProjectStore', () => {
     tempRoots.push(root)
     const store = new ProjectStore(root)
 
-    await store.writeAll([makeProject('project-1', 'Alpha'), makeProject('project-2', 'Beta')])
+    await store.writeAll([
+      {
+        ...makeProject('project-1', 'Alpha'),
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        tags: ['launch', 'priority'],
+        resources: ['GitHub', 'Figma']
+      },
+      makeProject('project-2', 'Beta')
+    ])
     const serializedProject = JSON.parse(
       await fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ) as Record<string, unknown>
-    expect(serializedProject).toMatchObject({ name: 'Alpha', description: '', state: 'active' })
-    expect(serializedProject).not.toHaveProperty('milestones')
+    expect(serializedProject).toMatchObject({
+      name: 'Alpha',
+      description: '',
+      state: 'active',
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+      tags: ['launch', 'priority'],
+      resources: ['GitHub', 'Figma']
+    })
+    expect(serializedProject).not.toHaveProperty('status')
 
     await store.writeAll([makeProject('project-2', 'Beta')])
 

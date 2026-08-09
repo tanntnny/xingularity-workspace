@@ -32,7 +32,6 @@ import {
   CommandShortcut
 } from './ui/command'
 import { Pallete, PalleteSearchBar } from './ui/pallete'
-import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 import { filterCommandPaletteCommands } from '../lib/commandPaletteCommands'
 
 export interface CommandPaletteSearchResult {
@@ -368,47 +367,6 @@ export function CommandPalette({
     [commandItems, searchQuery]
   )
 
-  const revealItemIds = useMemo(() => {
-    if (isCommandMode) {
-      return filteredCommandItems.map((item) => `command:${item.value}`)
-    }
-
-    if (isAiMode) {
-      return ['ai-action']
-    }
-
-    const ids = ['quick:new-note']
-
-    if (recentNotes.length > 0 && !trimmedQuery) {
-      ids.push(...recentNotes.map((note) => `recent:${note.relPath}`))
-    }
-
-    if (searchableQuery) {
-      ids.push(...noteResults.map((result) => `search:${result.id}`))
-      ids.push(...projectResults.map((result) => `search:${result.id}`))
-      ids.push(...fallbackSearchNotes.map((note) => `fallback:${note.relPath}`))
-      return ids
-    }
-
-    ids.push(...filteredNotes.map((note) => `note:${note.relPath}`))
-    return ids
-  }, [
-    filteredNotes,
-    filteredCommandItems,
-    isAiMode,
-    isCommandMode,
-    noteResults,
-    fallbackSearchNotes,
-    projectResults,
-    recentNotes,
-    searchableQuery,
-    trimmedQuery
-  ])
-
-  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds, {
-    resetKey: open
-  })
-
   const allSelectableResults = useMemo(() => {
     const noteItems = filteredNotes.map((note) => ({
       id: `note:${note.relPath}`,
@@ -510,7 +468,7 @@ export function CommandPalette({
               onValueChange={setQuery}
             />
           </PalleteSearchBar>
-          <CommandList ref={containerRef} className="max-h-[360px]">
+          <CommandList className="max-h-[360px]">
             <CommandEmpty>
               {isCommandMode
                 ? 'No commands found.'
@@ -529,13 +487,10 @@ export function CommandPalette({
               <CommandGroup heading="Commands">
                 {filteredCommandItems.map((item) => {
                   const Icon = item.icon
-                  const revealProps = getRevealItemProps(`command:${item.value}`)
                   return (
                     <CommandItem
                       key={item.value}
-                      ref={revealProps.ref}
-                      className={`group ${revealProps.className ?? ''}`}
-                      style={revealProps.style}
+                      className="group"
                       value={item.value}
                       keywords={item.keywords}
                       disabled={item.disabled}
@@ -557,12 +512,9 @@ export function CommandPalette({
             ) : isAiMode ? (
               <CommandGroup heading="AI Note Completion">
                 {(() => {
-                  const revealProps = getRevealItemProps('ai-action')
                   return (
                     <CommandItem
-                      ref={revealProps.ref}
-                      className={`group ${revealProps.className ?? ''}`}
-                      style={revealProps.style}
+                      className="group"
                       value={aiActionValue}
                       onSelect={handleSelect}
                       disabled={!activeNotePath || !searchQuery || aiLoading}
@@ -592,15 +544,8 @@ export function CommandPalette({
             ) : (
               <CommandGroup heading="Quick Actions">
                 {(() => {
-                  const revealProps = getRevealItemProps('quick:new-note')
                   return (
-                    <CommandItem
-                      ref={revealProps.ref}
-                      className={`group ${revealProps.className ?? ''}`}
-                      style={revealProps.style}
-                      value="new-note"
-                      onSelect={handleSelect}
-                    >
+                    <CommandItem className="group" value="new-note" onSelect={handleSelect}>
                       <div className={paletteItemIconClass}>
                         <Plus className="h-4 w-4" />
                       </div>
@@ -617,13 +562,10 @@ export function CommandPalette({
                 <CommandSeparator />
                 <CommandGroup heading="Recent Notes">
                   {recentNotes.map((note) => {
-                    const revealProps = getRevealItemProps(`recent:${note.relPath}`)
                     return (
                       <CommandItem
                         key={`recent:${note.relPath}`}
-                        ref={revealProps.ref}
-                        className={`group ${revealProps.className ?? ''}`}
-                        style={revealProps.style}
+                        className="group"
                         value={`recent:${note.relPath}`}
                         keywords={[note.name, note.relPath, ...note.tags]}
                         onSelect={handleSelect}
@@ -646,13 +588,10 @@ export function CommandPalette({
                   <>
                     <CommandGroup heading="Notes">
                       {noteResults.map((result) => {
-                        const revealProps = getRevealItemProps(`search:${result.id}`)
                         return (
                           <CommandItem
                             key={result.id}
-                            ref={revealProps.ref}
-                            className={`group ${revealProps.className ?? ''}`}
-                            style={revealProps.style}
+                            className="group"
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
@@ -670,13 +609,10 @@ export function CommandPalette({
                         )
                       })}
                       {fallbackSearchNotes.map((note) => {
-                        const revealProps = getRevealItemProps(`fallback:${note.relPath}`)
                         return (
                           <CommandItem
                             key={`fallback:${note.relPath}`}
-                            ref={revealProps.ref}
-                            className={`group ${revealProps.className ?? ''}`}
-                            style={revealProps.style}
+                            className="group"
                             value={`note:${note.relPath}`}
                             keywords={[
                               note.name,
@@ -702,13 +638,10 @@ export function CommandPalette({
 
                     <CommandGroup heading="Projects">
                       {projectResults.map((result) => {
-                        const revealProps = getRevealItemProps(`search:${result.id}`)
                         return (
                           <CommandItem
                             key={result.id}
-                            ref={revealProps.ref}
-                            className={`group ${revealProps.className ?? ''}`}
-                            style={revealProps.style}
+                            className="group"
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
@@ -732,13 +665,10 @@ export function CommandPalette({
             ) : !isCommandMode && !isAiMode && !searchQuery ? (
               <CommandGroup heading="All Notes">
                 {filteredNotes.map((note) => {
-                  const revealProps = getRevealItemProps(`note:${note.relPath}`)
                   return (
                     <CommandItem
                       key={note.relPath}
-                      ref={revealProps.ref}
-                      className={`group ${revealProps.className ?? ''}`}
-                      style={revealProps.style}
+                      className="group"
                       value={`note:${note.relPath}`}
                       keywords={[note.name, note.relPath, ...note.tags]}
                       onSelect={handleSelect}

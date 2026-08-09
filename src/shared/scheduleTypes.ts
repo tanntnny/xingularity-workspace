@@ -50,7 +50,7 @@ export interface TaskCreateAction {
   time?: string
   priority?: 'low' | 'medium' | 'high'
   taskType?: string
-  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
   automationSource: string
   automationSourceKey: string
 }
@@ -64,7 +64,7 @@ export interface TaskUpdateAction {
   projectId?: string | null
   date?: string
   completed?: boolean
-  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
 }
 
 export interface NoteCreateAction {
@@ -91,7 +91,7 @@ export interface CalendarEventCreateAction {
   time?: string
   taskType?: string
   projectId?: string
-  status?: 'pending' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
   automationSource: string
   automationSourceKey: string
 }
