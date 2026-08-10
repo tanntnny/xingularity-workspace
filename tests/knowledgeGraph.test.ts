@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildKnowledgeGraph } from '../src/renderer/src/lib/knowledgeGraph'
+import { buildKnowledgeGraph, filterKnowledgeGraph } from '../src/renderer/src/lib/knowledgeGraph'
 import type { NoteListItem } from '../src/shared/types'
 
 function createNote(
@@ -163,5 +163,32 @@ describe('buildKnowledgeGraph', () => {
       { relPath: 'beta.md', degree: 1, isOrphan: false },
       { relPath: 'orphan.md', degree: 0, isOrphan: true }
     ])
+  })
+
+  it('filters orphan nodes while preserving connected links', () => {
+    const graph = buildKnowledgeGraph([
+      createNote({
+        relPath: 'alpha.md',
+        name: 'alpha.md',
+        mentionTargets: ['beta']
+      }),
+      createNote({
+        relPath: 'beta.md',
+        name: 'beta.md'
+      }),
+      createNote({
+        relPath: 'orphan.md',
+        name: 'orphan.md'
+      })
+    ])
+
+    expect(filterKnowledgeGraph(graph, false)).toEqual({
+      nodes: [
+        { id: 'alpha.md', relPath: 'alpha.md', label: 'alpha', degree: 1, isOrphan: false },
+        { id: 'beta.md', relPath: 'beta.md', label: 'beta', degree: 1, isOrphan: false }
+      ],
+      links: [{ source: 'alpha.md', target: 'beta.md' }]
+    })
+    expect(filterKnowledgeGraph(graph, true)).toBe(graph)
   })
 })

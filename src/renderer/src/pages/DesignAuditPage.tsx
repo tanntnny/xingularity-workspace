@@ -209,12 +209,10 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
   )
 
   return (
-    <WorkspacePage width="full" data-testid="design-audit-page">
+    <WorkspacePage data-testid="design-audit-page">
       <WorkspacePageHeader
-        eyebrow="Workspace design system"
         heading="Design Audit"
         icon={<Palette size={30} className="text-primary" aria-hidden="true" />}
-        description="Review the live visual foundations and reusable primitives that define Xingularity. Specimens use the active theme and profile accent."
       />
 
       <ToggleGroup

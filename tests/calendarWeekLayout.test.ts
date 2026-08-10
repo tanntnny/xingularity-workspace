@@ -108,4 +108,19 @@ describe('layoutWeeklyTimedTasks', () => {
 
     expect(layout.topPx + layout.heightPx).toBeLessThanOrEqual(WEEKLY_DAY_HEIGHT_PX)
   })
+
+  it('preserves content height mode while retaining the virtual duration', () => {
+    const [layout] = layoutWeeklyTimedTasks([
+      {
+        taskId: 'content-fit',
+        date: '2026-04-14',
+        startMinutes: 600,
+        endMinutes: 660,
+        heightMode: 'content'
+      }
+    ])
+
+    expect(layout.heightMode).toBe('content')
+    expect(layout.heightPx).toBe(WEEKLY_HOUR_HEIGHT_PX)
+  })
 })

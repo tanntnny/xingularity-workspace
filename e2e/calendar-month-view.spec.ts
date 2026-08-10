@@ -27,13 +27,21 @@ function getMonthDayCellCount(date: Date): number {
   return Math.ceil((monthStart.getDay() + daysInMonth) / 7) * 7
 }
 
-async function createFixtureVault(taskCount = 1): Promise<{ rootPath: string; todayIso: string }> {
+async function createFixtureVault(
+  taskCount = 1,
+  includeUnscheduled = false
+): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-month-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
   const calendarTasks = Array.from({ length: taskCount }, (_, index) => ({
     id: `task-month-visible-${index}`,
-    title: taskCount === 1 ? 'Month view task' : `Overflow task ${index + 1}`,
-    date: todayIso,
+    title:
+      includeUnscheduled && index === taskCount - 1
+        ? 'Unscheduled view task'
+        : taskCount === 1
+          ? 'Month view task'
+          : `Overflow task ${index + 1}`,
+    date: includeUnscheduled && index === taskCount - 1 ? undefined : todayIso,
     completed: false,
     createdAt: new Date().toISOString(),
     priority: 'medium',
@@ -162,6 +170,17 @@ test.describe('calendar monthly view', () => {
         }
       })
 
+      const firstCellBorder = await dayCells.first().evaluate((cell) => {
+        const styles = getComputedStyle(cell)
+        return {
+          borderRightColor: styles.borderRightColor,
+          borderRightStyle: styles.borderRightStyle
+        }
+      })
+
+      expect(firstCellBorder.borderRightStyle).toBe('solid')
+      expect(firstCellBorder.borderRightColor).not.toBe('rgba(0, 0, 0, 0)')
+
       expect(metrics.rowCount).toBeGreaterThanOrEqual(5)
       expect(metrics.firstCellHeight).toBeGreaterThanOrEqual(132)
       expect(metrics.shellHeight).toBeGreaterThan(500)
@@ -239,4 +258,125 @@ test.describe('calendar monthly view', () => {
       await fs.rm(rootPath, { recursive: true, force: true })
     }
   })
+
+  test('rotates only the task mirror while dragging a monthly task', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const source = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      await expect(source).toBeVisible()
+
+      const sourceBox = await source.boundingBox()
+      if (!sourceBox) {
+        throw new Error('Monthly calendar task bounds are unavailable')
+      }
+
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(
+        sourceBox.x + sourceBox.width / 2 + 24,
+        sourceBox.y + sourceBox.height / 2 + 24,
+        { steps: 3 }
+      )
+
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const mirrors = Array.from(
+                document.querySelectorAll<HTMLElement>(
+                  '.fc-event-dragging, .fc-event-mirror, .calendar-task-drag-preview'
+                )
+              )
+              return mirrors.some((mirror) => {
+                const transform = getComputedStyle(mirror).transform
+                if (transform === 'none') {
+                  return false
+                }
+                const matrix = new DOMMatrixReadOnly(transform)
+                return Math.abs(matrix.b) > 0.01 || Math.abs(matrix.c) > 0.01
+              })
+            }),
+          { timeout: 5_000 }
+        )
+        .toBe(true)
+
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const mirror = document.querySelector<HTMLElement>(
+              '.fc-event-dragging.calendar-task-event'
+            )
+            const taskCard = mirror?.querySelector<HTMLElement>('[data-task-status]')
+            if (!mirror || !taskCard) {
+              return false
+            }
+
+            const mirrorStyles = getComputedStyle(mirror)
+            const taskCardStyles = getComputedStyle(taskCard)
+            return (
+              mirrorStyles.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+              mirrorStyles.borderTopColor === 'rgba(0, 0, 0, 0)' &&
+              taskCardStyles.backgroundColor !== 'rgba(0, 0, 0, 0)'
+            )
+          })
+        )
+        .toBe(true)
+
+      await expect
+        .poll(() =>
+          source.evaluate((element) => {
+            const transform = getComputedStyle(element).transform
+            return transform === 'none' || transform === 'matrix(1, 0, 0, 1, 0, 0)'
+          })
+        )
+        .toBe(true)
+    } finally {
+      await page.mouse.up()
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('shows the shared unschedule drop message while dragging a monthly task', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const source = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      await expect(source).toBeVisible()
+      const dropZone = page.locator('[data-unscheduled-drop-zone="true"]')
+      await expect(dropZone).toBeVisible()
+
+      const sourceBox = await source.boundingBox()
+      const dropZoneBox = await dropZone.boundingBox()
+      if (!sourceBox || !dropZoneBox) {
+        throw new Error('Monthly unschedule drag bounds are unavailable')
+      }
+
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(
+        dropZoneBox.x + dropZoneBox.width / 2,
+        dropZoneBox.y + dropZoneBox.height / 2,
+        { steps: 5 }
+      )
+
+      await expect(page.getByText('Drop here to unschedule', { exact: true })).toBeVisible()
+    } finally {
+      await page.mouse.up()
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
 })

@@ -1,5 +1,5 @@
 import { ReactElement, ReactNode, useMemo } from 'react'
-import { Copy, FolderInput, Link, Pencil, Trash2 } from './ui/icons'
+import { Copy, FileText, Folder, FolderInput, Link, Pencil, Tag, Trash2 } from './ui/icons'
 import { isNotePath, stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import {
@@ -18,6 +18,7 @@ import { Shortcut } from './ui/kbd'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
+import { EmptyState } from './ui/empty-state'
 
 interface FileTreeProps {
   notes: NoteListItem[]
@@ -114,7 +115,12 @@ export function FileTree({
             </Button>
           ))
         ) : (
-          <p className="px-2 text-sm text-muted-foreground">No tags yet</p>
+          <EmptyState
+            className="border-0 bg-transparent px-2 py-3"
+            icon={Tag}
+            title="No tags yet"
+            description="Tags will appear when you add them to notes."
+          />
         )}
       </Section>
 
@@ -132,13 +138,23 @@ export function FileTree({
             </Button>
           ))
         ) : (
-          <p className="px-2 text-sm text-muted-foreground">No folders yet</p>
+          <EmptyState
+            className="border-0 bg-transparent px-2 py-3"
+            icon={Folder}
+            title="No folders yet"
+            description="Create a folder to organize your notes."
+          />
         )}
       </Section>
 
       <Section title="Notes">
         {sorted.length === 0 ? (
-          <p className="px-2 text-sm text-muted-foreground">No notes yet</p>
+          <EmptyState
+            className="border-0 bg-transparent px-2 py-3"
+            icon={FileText}
+            title="No notes yet"
+            description="Create a note to begin writing."
+          />
         ) : (
           sorted.map((note) => {
             const menuItems = buildNoteMenuItems({

@@ -3,15 +3,16 @@ import { ReactFlow, ReactFlowProvider, useViewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import * as d3 from 'd3'
 import { Sparkles } from '../components/ui/icons'
+import { EmptyState } from '../components/ui/empty-state'
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3'
 import type { NoteListItem } from '../../../shared/types'
-import { WorkspaceEmptyState } from '../components/workspace'
-import { buildKnowledgeGraph } from '../lib/knowledgeGraph'
+import { buildKnowledgeGraph, filterKnowledgeGraph } from '../lib/knowledgeGraph'
 
 interface KnowledgePageProps {
   notes: NoteListItem[]
   onOpenNote: (relPath: string) => void
   orphanRingRadiusPx?: number | null
+  showOrphans?: boolean
 }
 
 interface GraphNodeDatum extends SimulationNodeDatum {
@@ -36,7 +37,8 @@ interface GraphLinkDatum extends SimulationLinkDatum<GraphNodeDatum> {
 export function KnowledgePage({
   notes,
   onOpenNote,
-  orphanRingRadiusPx = null
+  orphanRingRadiusPx = null,
+  showOrphans = true
 }: KnowledgePageProps): ReactElement {
   return (
     <ReactFlowProvider>
@@ -44,6 +46,7 @@ export function KnowledgePage({
         notes={notes}
         onOpenNote={onOpenNote}
         orphanRingRadiusPx={orphanRingRadiusPx}
+        showOrphans={showOrphans}
       />
     </ReactFlowProvider>
   )
@@ -52,12 +55,14 @@ export function KnowledgePage({
 function KnowledgeCanvas({
   notes,
   onOpenNote,
-  orphanRingRadiusPx = null
+  orphanRingRadiusPx = null,
+  showOrphans = true
 }: KnowledgePageProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const graph = useMemo(() => buildKnowledgeGraph(notes), [notes])
+  const visibleGraph = useMemo(() => filterKnowledgeGraph(graph, showOrphans), [graph, showOrphans])
   const viewport = useViewport()
 
   useEffect(() => {
@@ -90,7 +95,7 @@ function KnowledgeCanvas({
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    if (size.width === 0 || size.height === 0 || graph.nodes.length === 0) {
+    if (size.width === 0 || size.height === 0 || visibleGraph.nodes.length === 0) {
       return
     }
 
@@ -102,10 +107,10 @@ function KnowledgeCanvas({
       orphanRingRadiusPx == null
         ? maxOuterRadius
         : Math.min(maxOuterRadius, Math.max(72, orphanRingRadiusPx))
-    const orphanNodes = graph.nodes.filter((node) => node.isOrphan)
+    const orphanNodes = visibleGraph.nodes.filter((node) => node.isOrphan)
 
-    const simulationNodes: GraphNodeDatum[] = graph.nodes.map((node, index) => {
-      const angle = (index / Math.max(graph.nodes.length, 1)) * Math.PI * 2
+    const simulationNodes: GraphNodeDatum[] = visibleGraph.nodes.map((node, index) => {
+      const angle = (index / Math.max(visibleGraph.nodes.length, 1)) * Math.PI * 2
       const orphanIndex = orphanNodes.findIndex((orphanNode) => orphanNode.id === node.id)
       const isOrphan = orphanIndex >= 0
       const radius = isOrphan ? outerRadius : 48 + (index % 7) * 18
@@ -123,7 +128,7 @@ function KnowledgeCanvas({
       }
     })
 
-    const simulationLinks: GraphLinkDatum[] = graph.links.map((link) => ({
+    const simulationLinks: GraphLinkDatum[] = visibleGraph.links.map((link) => ({
       source: link.source,
       target: link.target
     }))
@@ -239,7 +244,7 @@ function KnowledgeCanvas({
     return () => {
       simulation.stop()
     }
-  }, [graph, onOpenNote, orphanRingRadiusPx, size.height, size.width])
+  }, [onOpenNote, orphanRingRadiusPx, size.height, size.width, visibleGraph])
 
   useEffect(() => {
     if (!svgRef.current) {
@@ -251,7 +256,7 @@ function KnowledgeCanvas({
       .attr('transform', `translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`)
   }, [viewport.x, viewport.y, viewport.zoom])
 
-  const hasGraphNodes = graph.nodes.length > 0
+  const hasGraphNodes = visibleGraph.nodes.length > 0
 
   return (
     <div
@@ -285,15 +290,15 @@ function KnowledgeCanvas({
           data-testid="knowledge-empty-state"
           className="absolute inset-0 flex items-center justify-center p-10"
         >
-          <WorkspaceEmptyState
-            className="max-w-xl px-8 py-10 text-center shadow-sm"
-            icon={
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-ring bg-accent text-primary">
-                <Sparkles size={20} />
-              </div>
+          <EmptyState
+            className="max-w-xl"
+            icon={Sparkles}
+            title="No note connections yet"
+            description={
+              showOrphans
+                ? 'Link notes together with note mentions to populate the knowledge graph.'
+                : 'Show orphan notes to include disconnected notes in the knowledge graph.'
             }
-            heading="No note connections yet"
-            description="Link notes together with note mentions to populate the knowledge graph."
           />
         </div>
       )}

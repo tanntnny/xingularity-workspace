@@ -1,6 +1,8 @@
 import { ReactElement } from 'react'
 import { SearchResult } from '../../../shared/types'
+import { Search } from './ui/icons'
 import { Button } from './ui/button'
+import { EmptyState } from './ui/empty-state'
 
 interface SearchResultsProps {
   results: SearchResult[]
@@ -9,11 +11,18 @@ interface SearchResultsProps {
 
 export function SearchResults({ results, onOpen }: SearchResultsProps): ReactElement {
   if (results.length === 0) {
-    return <div className="p-5 text-sm text-muted-foreground">No search results</div>
+    return (
+      <EmptyState
+        className="h-full"
+        icon={Search}
+        title="No search results"
+        description="Try a different search term."
+      />
+    )
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-auto p-3.5">
+    <div className="flex min-h-full w-full flex-col gap-2 p-3.5">
       {results.map((result) => (
         <Button
           key={`${result.id}-${result.relPath}`}

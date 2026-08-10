@@ -49,7 +49,7 @@ interface CollapsibleWorkspacePanelSectionProps extends Omit<
   heading: React.ReactNode
   description?: React.ReactNode
   defaultOpen?: boolean
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 const CollapsibleWorkspacePanelSection = React.forwardRef<

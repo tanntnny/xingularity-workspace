@@ -137,7 +137,6 @@ test.describe('right workspace panel resizing', () => {
       if (!initialHandleBox) {
         throw new Error('Right workspace panel resize handle bounding box is not available')
       }
-
       await page.mouse.move(
         initialHandleBox.x + initialHandleBox.width / 2,
         initialHandleBox.y + 120

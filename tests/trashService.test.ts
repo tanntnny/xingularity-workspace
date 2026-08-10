@@ -139,6 +139,7 @@ function makeSettings(): AppSettings {
     isSidebarCollapsed: false,
     lastVaultPath: null,
     lastOpenedNotePath: null,
+    recentNotebookPaths: [],
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],

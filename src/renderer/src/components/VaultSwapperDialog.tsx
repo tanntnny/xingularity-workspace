@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FolderOpen, HardDrive, Plus, Star, X } from './ui/icons'
+import { FolderOpen, HardDrive, Plus, Search, Star, X } from './ui/icons'
 import {
   type RendererVaultApi,
   type SavedVaultState,
@@ -7,6 +7,7 @@ import {
 } from '../../../shared/types'
 import { Pallete, PalleteInput, PalleteSearchBar } from './ui/pallete'
 import { Button } from './ui/button'
+import { EmptyState } from './ui/empty-state'
 import { cn } from '../lib/utils'
 
 interface VaultSwapperDialogProps {
@@ -368,9 +369,12 @@ export function VaultSwapperDialog({
           ) : null}
 
           {showNoSavedVaultsHint ? (
-            <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
-              No saved vaults yet. Add an existing vault or create a new one to start switching.
-            </div>
+            <EmptyState
+              className="border-0 bg-transparent px-3 py-6"
+              icon={FolderOpen}
+              title="No saved vaults yet"
+              description="Add an existing vault or create a new one to start switching."
+            />
           ) : null}
 
           {filteredVaults.map((vault) => {
@@ -515,9 +519,12 @@ export function VaultSwapperDialog({
           })}
 
           {showEmptyState ? (
-            <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
-              No vaults or actions match your search.
-            </div>
+            <EmptyState
+              className="border-0 bg-transparent px-3 py-6"
+              icon={Search}
+              title="No matching vaults"
+              description="No vaults or actions match your search."
+            />
           ) : null}
         </div>
       </div>

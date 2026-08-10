@@ -1,6 +1,15 @@
 import { ReactElement, useEffect, useMemo, useState } from 'react'
 import * as d3 from 'd3'
-import { Archive, CalendarClock, Landmark, Pencil, Plus, Trash2, WalletCards } from '../components/ui/icons'
+import {
+  Archive,
+  CalendarClock,
+  CreditCard,
+  Landmark,
+  Pencil,
+  Plus,
+  Trash2,
+  WalletCards
+} from '../components/ui/icons'
 import {
   deriveSubscriptionAnalytics,
   getBillingIntervalMonths,
@@ -46,6 +55,7 @@ import {
   TableRow
 } from '../components/ui/table'
 import { Textarea } from '../components/ui/textarea'
+import { EmptyState } from '../components/ui/empty-state'
 import { usePersistentState } from '../hooks/usePersistentState'
 
 interface SubscriptionsPageProps {
@@ -490,9 +500,12 @@ function TreemapCard({
           </div>
         </div>
         <div className="p-8">
-          <p className="text-sm text-muted-foreground">
-            The treemap will appear once you add active subscriptions.
-          </p>
+          <EmptyState
+            className="border-0 bg-transparent px-0 py-4"
+            icon={CreditCard}
+            title="No active subscriptions yet"
+            description="The treemap will appear once you add active subscriptions."
+          />
         </div>
       </div>
     )
@@ -985,9 +998,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
   ]
 
   return (
-    <div className="h-full overflow-y-auto bg-transparent">
+    <div className="min-h-full w-full bg-transparent">
       <div
-        className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-5 py-5 md:px-6"
+        className="flex w-full flex-col gap-6 px-5 py-5 md:px-6"
         data-testid="subscriptions-page"
       >
         <section>
@@ -1089,101 +1102,122 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRecords.map((record) => (
-                        <TableRow
-                          key={record.id}
-                          data-state={selectedId === record.id ? 'selected' : undefined}
-                          className="cursor-pointer"
-                          title={buildSubscriptionTooltip(record)}
-                          onClick={() => setSelectedId(record.id)}
-                        >
-                          <TableCell>
-                            <div className="font-medium text-foreground">{record.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {record.provider ?? 'No provider'}
-                            </div>
+                      {filteredRecords.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="p-0">
+                            <EmptyState
+                              className="border-0 bg-transparent px-6 py-10"
+                              icon={CreditCard}
+                              title={
+                                records.length === 0
+                                  ? 'No subscriptions yet'
+                                  : 'No subscriptions match these filters'
+                              }
+                              description={
+                                records.length === 0
+                                  ? 'Add a subscription to start tracking recurring spend.'
+                                  : 'Try clearing a filter or changing the selected category.'
+                              }
+                            />
                           </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <span>{record.category}</span>
-                              {(record.tags ?? []).length ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {(record.tags ?? []).slice(0, 3).map((tag) => (
-                                    <Badge key={tag} variant="neutral" tone="subtle">
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium text-foreground">
-                              {formatCurrency(record.normalizedMonthlyAmount)}
-                            </div>
-                            <div className="text-xs capitalize text-muted-foreground">
-                              {formatCurrency(record.amount)} / {record.billingCycle}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium text-foreground">
-                              {formatRenewalLabel(record.nextRenewalAt)}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {formatRelativeRenewal(record.nextRenewalAt)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-2">
-                              <Badge tone={statusTone(record.status)}>{record.status}</Badge>
-                              {(record.reviewFlag ?? 'none') !== 'none' ? (
-                                <Badge tone={reviewTone(record.reviewFlag ?? 'none')}>
-                                  {record.reviewFlag}
-                                </Badge>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Edit ${record.name}`}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  openEditModal(record)
-                                }}
-                              >
-                                <Pencil size={14} />
-                              </Button>
-                              {record.status !== 'archived' ? (
+                        </TableRow>
+                      ) : (
+                        filteredRecords.map((record) => (
+                          <TableRow
+                            key={record.id}
+                            data-state={selectedId === record.id ? 'selected' : undefined}
+                            className="cursor-pointer"
+                            title={buildSubscriptionTooltip(record)}
+                            onClick={() => setSelectedId(record.id)}
+                          >
+                            <TableCell>
+                              <div className="font-medium text-foreground">{record.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {record.provider ?? 'No provider'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <span>{record.category}</span>
+                                {(record.tags ?? []).length ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {(record.tags ?? []).slice(0, 3).map((tag) => (
+                                      <Badge key={tag} variant="neutral" tone="subtle">
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium text-foreground">
+                                {formatCurrency(record.normalizedMonthlyAmount)}
+                              </div>
+                              <div className="text-xs capitalize text-muted-foreground">
+                                {formatCurrency(record.amount)} / {record.billingCycle}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium text-foreground">
+                                {formatRenewalLabel(record.nextRenewalAt)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatRelativeRenewal(record.nextRenewalAt)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge tone={statusTone(record.status)}>{record.status}</Badge>
+                                {(record.reviewFlag ?? 'none') !== 'none' ? (
+                                  <Badge tone={reviewTone(record.reviewFlag ?? 'none')}>
+                                    {record.reviewFlag}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label={`Archive ${record.name}`}
+                                  aria-label={`Edit ${record.name}`}
                                   onClick={(event) => {
                                     event.stopPropagation()
-                                    void handleArchive(record)
+                                    openEditModal(record)
                                   }}
                                 >
-                                  <Archive size={14} />
+                                  <Pencil size={14} />
                                 </Button>
-                              ) : null}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Delete ${record.name}`}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  void handleDelete(record)
-                                }}
-                              >
-                                <Trash2 size={14} />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                {record.status !== 'archived' ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Archive ${record.name}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void handleArchive(record)
+                                    }}
+                                  >
+                                    <Archive size={14} />
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Delete ${record.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleDelete(record)
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>

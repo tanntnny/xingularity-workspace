@@ -64,3 +64,20 @@ export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
 
   return { nodes, links }
 }
+
+export function filterKnowledgeGraph(
+  graph: KnowledgeGraphData,
+  showOrphans: boolean
+): KnowledgeGraphData {
+  if (showOrphans) {
+    return graph
+  }
+
+  const nodes = graph.nodes.filter((node) => !node.isOrphan)
+  const visibleNodeIds = new Set(nodes.map((node) => node.id))
+  const links = graph.links.filter(
+    (link) => visibleNodeIds.has(link.source) && visibleNodeIds.has(link.target)
+  )
+
+  return { nodes, links }
+}

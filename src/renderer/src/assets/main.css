@@ -31,6 +31,18 @@
     --note-block-radius: var(--radius);
     --input: #c7c7c7;
     --ring: #666666;
+    --drag-preview-bg: var(--card);
+    --drag-preview-border: var(--ring);
+    --drag-preview-rotation: -2deg;
+    --drop-zone-bg: transparent;
+    --drop-zone-border: transparent;
+    --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
+    --drop-zone-active-border: var(--ring);
+    --calendar-drop-zone-active-bg: linear-gradient(
+      135deg,
+      rgb(14 165 233 / 0.24),
+      rgb(20 184 166 / 0.24)
+    );
     --scrollbar-thumb: #b8b8b8;
     --scrollbar-thumb-hover: #8a8a8a;
     --radius: 0.5rem;
@@ -104,6 +116,11 @@
       --note-block-border: #4a4a4a;
       --input: #404040;
       --ring: #a3a3a3;
+      --calendar-drop-zone-active-bg: linear-gradient(
+        135deg,
+        rgb(14 165 233 / 0.34),
+        rgb(20 184 166 / 0.34)
+      );
       --scrollbar-thumb: #454545;
       --scrollbar-thumb-hover: #6b6b6b;
       --sidebar-background: #080808;
@@ -162,6 +179,14 @@
     display: none;
   }
 
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   html,
   body,
   #root {
@@ -182,6 +207,12 @@
 }
 
 @layer components {
+  .calendar-date-highlight,
+  .calendar-date-highlight-hover:hover {
+    background-color: var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
   .sidebar-brand-shimmer {
     background: linear-gradient(
       110deg,
@@ -415,13 +446,40 @@
     margin-top: var(--calendar-task-stack-gap-y);
   }
 
-  .calendar-full .fc-daygrid-day:not(.bg-accent):not(.fc-day-today):hover {
-    background-color: var(--accent);
+  .calendar-full .fc-daygrid-day[data-calendar-drop-zone='true'] {
+    border-color: var(--border);
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
-  .calendar-full .fc-daygrid-day.bg-accent,
+  .calendar-full .fc-daygrid-day[data-calendar-drop-over='true'],
+  .calendar-full .fc-daygrid-day[data-calendar-drop-over='true'] .fc-daygrid-day-frame {
+    background: var(--calendar-drop-zone-active-bg);
+  }
+
+  .calendar-full .fc-event.calendar-task-drag-preview:not(.fc-event-resizing),
+  .fc-event-mirror.calendar-task-event:not(.fc-event-resizing),
+  .fc-event-dragging.calendar-task-event:not(.fc-event-resizing),
+  [data-drag-preview-variant='content'].fc-event-dragging:not(.fc-event-resizing) {
+    border-color: transparent;
+    background-color: transparent;
+    box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+    opacity: 1;
+    animation: none;
+    transition: none;
+    transform: rotate(var(--drag-preview-rotation));
+  }
+
+  .calendar-full .fc-daygrid-day:not(.calendar-date-highlight):not(.fc-day-today):hover {
+    background-color: var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
+  .calendar-full .fc-daygrid-day.calendar-date-highlight,
   .calendar-full .fc-daygrid-day.fc-day-today {
     background-color: var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
   }
 
   .calendar-full .fc-col-header-cell-cushion {

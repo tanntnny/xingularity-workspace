@@ -22,6 +22,7 @@ import {
 } from './vaultData'
 import { ProjectStore } from './projectStore'
 import { TaskStore } from './taskStore'
+import { normalizeRecentNotebookPaths } from '../shared/recentNotebookFiles'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -140,6 +141,7 @@ export function createDefaultAppSettings(): AppSettings {
     isSidebarCollapsed: false,
     lastVaultPath: null,
     lastOpenedNotePath: null,
+    recentNotebookPaths: [],
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],
@@ -275,6 +277,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
         : defaults.gridBoard,
     lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath,
     lastOpenedNotePath: parsed.lastOpenedNotePath ?? defaults.lastOpenedNotePath,
+    recentNotebookPaths: normalizeRecentNotebookPaths(parsed.recentNotebookPaths),
     lastOpenedProjectId: parsed.lastOpenedProjectId ?? defaults.lastOpenedProjectId,
     favoriteNotePaths: Array.isArray(parsed.favoriteNotePaths)
       ? parsed.favoriteNotePaths.filter((item): item is string => typeof item === 'string')
@@ -526,6 +529,10 @@ function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolea
     return true
   }
 
+  if (Array.isArray(settings.recentNotebookPaths) && settings.recentNotebookPaths.length > 0) {
+    return true
+  }
+
   if (typeof settings.lastOpenedProjectId === 'string' && settings.lastOpenedProjectId.trim()) {
     return true
   }
@@ -648,7 +655,7 @@ export class SettingsStore {
 
   // ── Vault-specific settings ───────────────────────────────────────────────
 
-async readVault(vaultRoot: string): Promise<AppSettings> {
+  async readVault(vaultRoot: string): Promise<AppSettings> {
     const settingsPath = getVaultSettingsPath(vaultRoot)
     const legacySettingsPath = getLegacyVaultSettingsPath(vaultRoot)
     const tasksPath = getVaultCalendarTasksPath(vaultRoot)
@@ -807,10 +814,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
     const writesTasks = next.tasks !== undefined || next.calendarTasks !== undefined
     const writesCore = Object.keys(next).some(
       (key) =>
-        key !== 'projects' &&
-        key !== 'projectIcons' &&
-        key !== 'tasks' &&
-        key !== 'calendarTasks'
+        key !== 'projects' && key !== 'projectIcons' && key !== 'tasks' && key !== 'calendarTasks'
     )
 
     if (writesCore) {
@@ -831,6 +835,7 @@ async readVault(vaultRoot: string): Promise<AppSettings> {
       isSidebarCollapsed: settings.isSidebarCollapsed,
       lastVaultPath: settings.lastVaultPath,
       lastOpenedNotePath: settings.lastOpenedNotePath,
+      recentNotebookPaths: settings.recentNotebookPaths,
       lastOpenedProjectId: settings.lastOpenedProjectId,
       favoriteNotePaths: settings.favoriteNotePaths,
       favoriteProjectIds: settings.favoriteProjectIds,

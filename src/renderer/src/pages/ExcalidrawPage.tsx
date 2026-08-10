@@ -11,7 +11,7 @@ import {
   useRef,
   useState
 } from 'react'
-import { Plus, Trash2 } from '../components/ui/icons'
+import { PenTool, Plus, Trash2 } from '../components/ui/icons'
 import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type {
@@ -31,6 +31,7 @@ import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
+import { EmptyState } from '../components/ui/empty-state'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 type ExcalidrawTheme = typeof THEME.LIGHT | typeof THEME.DARK
@@ -603,76 +604,85 @@ export function ExcalidrawSidebar(): ReactElement {
               description={`${sessions.length} saved drawings in this vault`}
             />
             <div className="space-y-2">
-              {sessions.map((session) => {
-                const isActive = session.id === selectedSessionId
-                const isEditing = session.id === editingSessionId
+              {sessions.length === 0 ? (
+                <EmptyState
+                  className="border-0 bg-transparent px-3 py-6"
+                  icon={PenTool}
+                  title="No saved drawings yet"
+                  description="Create a drawing to get started."
+                />
+              ) : (
+                sessions.map((session) => {
+                  const isActive = session.id === selectedSessionId
+                  const isEditing = session.id === editingSessionId
 
-                return (
-                  <div
-                    key={session.id}
-                    data-active={isActive}
-                    className="rounded-lg border bg-card text-card-foreground flex-col px-3 py-2.5"
-                  >
-                    {isEditing ? (
-                      <div className="min-w-0">
-                        <input
-                          ref={renameInputRef}
-                          value={renameDraft}
-                          onChange={(event) => setRenameDraft(event.currentTarget.value)}
-                          onBlur={() => {
-                            void handleCommitRenameSession(session.id)
+                  return (
+                    <div
+                      key={session.id}
+                      data-active={isActive}
+                      className="rounded-lg border bg-card text-card-foreground flex-col px-3 py-2.5"
+                    >
+                      {isEditing ? (
+                        <div className="min-w-0">
+                          <input
+                            ref={renameInputRef}
+                            value={renameDraft}
+                            onChange={(event) => setRenameDraft(event.currentTarget.value)}
+                            onBlur={() => {
+                              void handleCommitRenameSession(session.id)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                void handleCommitRenameSession(session.id)
+                                return
+                              }
+                              if (event.key === 'Escape') {
+                                event.preventDefault()
+                                handleCancelRenameSession()
+                              }
+                            }}
+                            className="border border-input bg-card text-foreground w-full rounded-md border border-primary px-2.5 py-1.5 text-sm font-semibold text-foreground outline-none"
+                          />
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Updated {formatUpdatedAt(session.updatedAt)}
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleSelectSession(session.id)
+                          }}
+                          onDoubleClick={() => {
+                            handleStartRenameSession(session.id)
                           }}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
+                            if (event.key === 'Enter' && event.metaKey) {
                               event.preventDefault()
-                              void handleCommitRenameSession(session.id)
+                              handleStartRenameSession(session.id)
                               return
                             }
-                            if (event.key === 'Escape') {
-                              event.preventDefault()
-                              handleCancelRenameSession()
+                            if (!isDeleteShortcut(event)) {
+                              return
                             }
-                          }}
-                          className="border border-input bg-card text-foreground w-full rounded-md border border-primary px-2.5 py-1.5 text-sm font-semibold text-foreground outline-none"
-                        />
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          Updated {formatUpdatedAt(session.updatedAt)}
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleSelectSession(session.id)
-                        }}
-                        onDoubleClick={() => {
-                          handleStartRenameSession(session.id)
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' && event.metaKey) {
                             event.preventDefault()
-                            handleStartRenameSession(session.id)
-                            return
-                          }
-                          if (!isDeleteShortcut(event)) {
-                            return
-                          }
-                          event.preventDefault()
-                          void handleDeleteSession(session.id)
-                        }}
-                        className="w-full rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <div className="truncate text-sm font-semibold text-foreground">
-                          {session.title}
-                        </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          Updated {formatUpdatedAt(session.updatedAt)}
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
+                            void handleDeleteSession(session.id)
+                          }}
+                          className="w-full rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <div className="truncate text-sm font-semibold text-foreground">
+                            {session.title}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Updated {formatUpdatedAt(session.updatedAt)}
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
           </WorkspacePanelSection>
         </div>

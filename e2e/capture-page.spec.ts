@@ -64,6 +64,9 @@ test.describe('capture page', () => {
     try {
       await page.getByTestId('sidebar-page:capture').click()
       await expect(page.getByTestId('capture-page')).toBeVisible()
+      await expect(
+        page.getByTestId('capture-empty-state').getByRole('heading', { name: 'Nothing to review' })
+      ).toBeVisible()
 
       const input = page.getByTestId('capture-input')
       await input.fill('New note idea\nKeep the details intact')

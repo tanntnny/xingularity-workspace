@@ -172,6 +172,7 @@ const calendarTaskSchema = z.object({
     .string()
     .regex(/^\d{2}:\d{2}$/)
     .optional(),
+  weeklyHeightMode: z.enum(['duration', 'content']).optional(),
   automationSource: z.string().max(200).optional(),
   automationSourceKey: z.string().max(200).optional()
 })
@@ -346,6 +347,7 @@ const settingsUpdateSchema = z.object({
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
+  recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional()
 })
 

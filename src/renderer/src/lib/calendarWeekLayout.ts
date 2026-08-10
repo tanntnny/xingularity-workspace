@@ -1,3 +1,5 @@
+import type { WeeklyHeightMode } from '../../../shared/types'
+
 export const WEEKLY_SNAP_MINUTES = 10
 export const WEEKLY_MIN_DURATION_MINUTES = 10
 export const WEEKLY_HOUR_HEIGHT_PX = 80
@@ -14,6 +16,7 @@ export interface WeeklyTimedTaskLayoutInput {
   date: string
   startMinutes: number
   endMinutes: number
+  heightMode?: WeeklyHeightMode
 }
 
 export interface WeeklyTimedTaskLayout extends WeeklyTimedTaskLayoutInput {
@@ -21,6 +24,7 @@ export interface WeeklyTimedTaskLayout extends WeeklyTimedTaskLayoutInput {
   laneCount: number
   topPx: number
   heightPx: number
+  heightMode: WeeklyHeightMode
   leftPercent: number
   widthPercent: number
 }
@@ -141,7 +145,7 @@ export function layoutWeeklyTimedTasks(
 
   for (const entry of entries) {
     const normalized = normalizeTimedRange(entry.startMinutes, entry.endMinutes)
-    const nextEntry = { ...entry, ...normalized }
+    const nextEntry = { ...entry, ...normalized, heightMode: entry.heightMode ?? 'duration' }
     const current = byDate.get(entry.date)
     if (current) {
       current.push(nextEntry)
@@ -199,6 +203,7 @@ export function layoutWeeklyTimedTasks(
             minutesToPixels(entry.endMinutes - entry.startMinutes),
             minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
           ),
+          heightMode: entry.heightMode ?? 'duration',
           leftPercent: (lane / laneCount) * 100,
           widthPercent: 100 / laneCount
         })

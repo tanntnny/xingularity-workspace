@@ -3,6 +3,7 @@ import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import type { CalendarTask } from '../src/shared/types'
 
 declare global {
   interface Window {
@@ -21,9 +22,83 @@ function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-async function createFixtureVault(): Promise<{ rootPath: string; todayIso: string }> {
+function addIsoDays(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return toIsoDate(date)
+}
+
+function getAdjacentWeekDate(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`)
+  return addIsoDays(iso, date.getDay() === 6 ? -1 : 1)
+}
+
+async function createFixtureVault(
+  options: {
+    includeUnscheduled?: boolean
+    includeAllDay?: boolean
+    includeOverlap?: boolean
+  } = {}
+): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-week-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
+  const adjacentWeekDate = getAdjacentWeekDate(todayIso)
+  const calendarTasks: CalendarTask[] = [
+    {
+      id: 'task-weekly-preview',
+      title: 'Timed drag preview task',
+      date: todayIso,
+      time: '09:00',
+      endTime: '09:40',
+      completed: false,
+      createdAt: new Date().toISOString(),
+      priority: 'medium',
+      taskType: 'assignment',
+      reminders: []
+    }
+  ]
+
+  if (options.includeUnscheduled) {
+    calendarTasks.push({
+      id: 'task-weekly-unscheduled',
+      title: 'Unscheduled timed drag task',
+      date: undefined,
+      completed: false,
+      createdAt: new Date().toISOString(),
+      priority: 'medium',
+      taskType: 'assignment',
+      reminders: []
+    })
+  }
+
+  if (options.includeAllDay) {
+    calendarTasks.push({
+      id: 'task-weekly-all-day',
+      title: 'All-day task for timed conversion',
+      date: todayIso,
+      endDate: addIsoDays(todayIso, 1),
+      completed: false,
+      createdAt: new Date().toISOString(),
+      priority: 'medium',
+      taskType: 'assignment',
+      reminders: []
+    })
+  }
+
+  if (options.includeOverlap) {
+    calendarTasks.push({
+      id: 'task-weekly-overlap',
+      title: 'Existing overlapping task',
+      date: adjacentWeekDate,
+      time: '01:00',
+      endTime: '01:30',
+      completed: false,
+      createdAt: new Date().toISOString(),
+      priority: 'medium',
+      taskType: 'assignment',
+      reminders: []
+    })
+  }
 
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
@@ -31,20 +106,7 @@ async function createFixtureVault(): Promise<{ rootPath: string; todayIso: strin
     path.join(rootPath, 'settings.json'),
     JSON.stringify(
       {
-        calendarTasks: [
-          {
-            id: 'task-weekly-preview',
-            title: 'Timed drag preview task',
-            date: todayIso,
-            time: '09:00',
-            endTime: '09:40',
-            completed: false,
-            createdAt: new Date().toISOString(),
-            priority: 'medium',
-            taskType: 'assignment',
-            reminders: []
-          }
-        ]
+        calendarTasks
       },
       null,
       2
@@ -53,6 +115,85 @@ async function createFixtureVault(): Promise<{ rootPath: string; todayIso: strin
   )
 
   return { rootPath, todayIso }
+}
+
+async function readPersistedTask(rootPath: string, taskId: string): Promise<CalendarTask> {
+  return JSON.parse(
+    await fs.readFile(path.join(rootPath, 'tasks', `${taskId}.json`), 'utf8')
+  ) as CalendarTask
+}
+
+async function dragTaskToTimedColumn(
+  page: Page,
+  sourceSelector: string,
+  targetDate: string,
+  sourceOffsetY: number,
+  dropOffsetY: number
+): Promise<void> {
+  await page.evaluate(
+    ({
+      sourceSelector: selector,
+      targetDate: date,
+      sourceOffsetY: sourceY,
+      dropOffsetY: dropY
+    }) => {
+      const source = document.querySelector<HTMLElement>(selector)
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="calendar-week-timed-column:${date}"]`
+      )
+      if (!source || !target) {
+        throw new Error('Weekly timed drag fixtures are missing')
+      }
+
+      const sourceRect = source.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const dataTransfer = new DataTransfer()
+      const clientX = targetRect.left + targetRect.width / 2
+      const sourceClientY = sourceRect.top + sourceY
+      const dropClientY = targetRect.top + dropY
+
+      source.dispatchEvent(
+        new DragEvent('dragstart', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX: sourceRect.left + sourceRect.width / 2,
+          clientY: sourceClientY
+        })
+      )
+
+      target.dispatchEvent(
+        new DragEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX,
+          clientY: dropClientY
+        })
+      )
+
+      target.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX,
+          clientY: dropClientY
+        })
+      )
+
+      source.dispatchEvent(
+        new DragEvent('dragend', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX,
+          clientY: dropClientY
+        })
+      )
+    },
+    { sourceSelector, targetDate, sourceOffsetY, dropOffsetY }
+  )
 }
 
 async function launchWithFixture(vaultRoot: string): Promise<{
@@ -140,14 +281,20 @@ test.describe('calendar weekly drag preview', () => {
       )
 
       const workspaceContent = page.locator('.document-workspace-main-content')
-      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+      await expect
+        .poll(() =>
+          workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)
+        )
+        .toBe(true)
       await workspaceContent.evaluate((element) => {
         element.scrollTop = 240
       })
-      await expect.poll(() => workspaceContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-      expect(await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(
-        weekdayHeaderTop - 4
-      )
+      await expect
+        .poll(() => workspaceContent.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0)
+      expect(
+        await weekdayHeader.evaluate((element) => element.getBoundingClientRect().top)
+      ).toBeGreaterThanOrEqual(weekdayHeaderTop - 4)
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -198,7 +345,9 @@ test.describe('calendar weekly drag preview', () => {
 
     try {
       await openWeeklyCalendar(page)
-      await expect(page.getByTestId('calendar-week-task:task-weekly-preview')).toBeVisible()
+      const task = page.getByTestId('calendar-week-task:task-weekly-preview')
+      await expect(task).toBeVisible()
+      await expect(task.getByText('Pending', { exact: true })).toBeVisible()
 
       await page.evaluate((dateIso) => {
         const source = document.querySelector<HTMLElement>(
@@ -231,7 +380,7 @@ test.describe('calendar weekly drag preview', () => {
             cancelable: true,
             dataTransfer,
             clientX: targetRect.left + targetRect.width / 2,
-            clientY: targetRect.top + 520
+            clientY: targetRect.top + 200
           })
         )
       }, todayIso)
@@ -254,6 +403,220 @@ test.describe('calendar weekly drag preview', () => {
           return
         }
         source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+      })
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('persists a scheduled task move into an occupied timed cell', async () => {
+    const { rootPath, todayIso } = await createFixtureVault({ includeOverlap: true })
+    const targetDate = getAdjacentWeekDate(todayIso)
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+      const source = page.getByTestId('calendar-week-task:task-weekly-preview')
+      const target = page.getByTestId(`calendar-week-timed-column:${targetDate}`)
+      await expect(source).toBeVisible()
+      await expect(target).toHaveAttribute('data-drop-zone-variant', 'timed')
+
+      await dragTaskToTimedColumn(
+        page,
+        '[data-testid="calendar-week-task:task-weekly-preview"]',
+        targetDate,
+        12,
+        100
+      )
+
+      await expect
+        .poll(async () => {
+          const task = await readPersistedTask(rootPath, 'task-weekly-preview')
+          return {
+            date: task.date,
+            endDate: task.endDate,
+            time: task.time,
+            endTime: task.endTime,
+            weeklyHeightMode: task.weeklyHeightMode
+          }
+        })
+        .toEqual({
+          date: targetDate,
+          endDate: undefined,
+          time: '01:00',
+          endTime: '01:40',
+          weeklyHeightMode: 'duration'
+        })
+
+      await expect(page.getByTestId('calendar-week-task:task-weekly-preview')).toBeVisible()
+      await expect(page.getByTestId('calendar-week-task:task-weekly-overlap')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('converts an all-day task when dropped into a timed cell', async () => {
+    const { rootPath, todayIso } = await createFixtureVault({ includeAllDay: true })
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+      const source = page.getByTestId('calendar-week-all-day-task:task-weekly-all-day')
+      await expect(source).toBeVisible()
+
+      await dragTaskToTimedColumn(
+        page,
+        '[data-testid="calendar-week-all-day-task:task-weekly-all-day"]',
+        todayIso,
+        20,
+        88
+      )
+
+      await expect
+        .poll(async () => {
+          const task = await readPersistedTask(rootPath, 'task-weekly-all-day')
+          return {
+            date: task.date,
+            endDate: task.endDate,
+            time: task.time,
+            endTime: task.endTime,
+            weeklyHeightMode: task.weeklyHeightMode
+          }
+        })
+        .toEqual({
+          date: todayIso,
+          endDate: undefined,
+          time: '01:00',
+          endTime: '02:00',
+          weeklyHeightMode: 'content'
+        })
+
+      await expect(page.getByTestId('calendar-week-task:task-weekly-all-day')).toBeVisible()
+      await expect(page.getByTestId('calendar-week-all-day-task:task-weekly-all-day')).toHaveCount(
+        0
+      )
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps an unscheduled task drag preview content-fit in the weekly time grid', async () => {
+    const { rootPath, todayIso } = await createFixtureVault({ includeUnscheduled: true })
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+      const source = page.locator('[data-unscheduled-task-id="task-weekly-unscheduled"]')
+      await expect(source).toBeVisible()
+
+      const dragImage = await page.evaluate((dateIso) => {
+        const source = document.querySelector<HTMLElement>(
+          '[data-unscheduled-task-id="task-weekly-unscheduled"]'
+        )
+        const target = document.querySelector<HTMLElement>(
+          `[data-testid="calendar-week-timed-column:${dateIso}"]`
+        )
+        if (!source || !target) {
+          throw new Error('Unscheduled weekly drag fixtures are missing')
+        }
+
+        const sourceRect = source.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const dataTransfer = new DataTransfer()
+        let previewStyles: { height: string; maxHeight: string } | null = null
+
+        Object.defineProperty(dataTransfer, 'setDragImage', {
+          value: (image: Element) => {
+            if (image instanceof HTMLElement) {
+              previewStyles = {
+                height: image.style.height,
+                maxHeight: image.style.maxHeight
+              }
+            }
+          }
+        })
+
+        source.dispatchEvent(
+          new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: sourceRect.left + sourceRect.width / 2,
+            clientY: sourceRect.top + sourceRect.height / 2
+          })
+        )
+
+        target.dispatchEvent(
+          new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: targetRect.left + targetRect.width / 2,
+            clientY: targetRect.top + 520
+          })
+        )
+
+        return previewStyles
+      }, todayIso)
+
+      expect(dragImage).toEqual({ height: 'fit-content', maxHeight: 'none' })
+
+      const indicator = page.getByTestId('calendar-week-drop-indicator')
+      await expect(indicator).toBeVisible()
+      const indicatorBox = await indicator.boundingBox()
+      expect(indicatorBox).not.toBeNull()
+      if (!indicatorBox) {
+        throw new Error('Unscheduled weekly drop indicator bounds are unavailable')
+      }
+      expect(indicatorBox.height).toBeGreaterThan(0)
+      expect(indicatorBox.height).toBeLessThan(80)
+
+      await page.evaluate((dateIso) => {
+        const target = document.querySelector<HTMLElement>(
+          `[data-testid="calendar-week-timed-column:${dateIso}"]`
+        )
+        if (!target) {
+          throw new Error('Unscheduled weekly drop target is missing')
+        }
+        const dataTransfer = new DataTransfer()
+        dataTransfer.setData('text/plain', 'move:task-weekly-unscheduled')
+        target.dispatchEvent(
+          new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2,
+            clientY: target.getBoundingClientRect().top + 200
+          })
+        )
+      }, todayIso)
+
+      const task = page.getByTestId('calendar-week-task:task-weekly-unscheduled')
+      await expect(task).toBeVisible()
+      const taskBox = await task.boundingBox()
+      expect(taskBox).not.toBeNull()
+      if (!taskBox) {
+        throw new Error('Unscheduled weekly task bounds are unavailable')
+      }
+      expect(taskBox.height).toBeLessThan(80)
+
+      await expect
+        .poll(async () => {
+          const settings = JSON.parse(
+            await fs.readFile(path.join(rootPath, 'tasks', 'task-weekly-unscheduled.json'), 'utf8')
+          ) as { weeklyHeightMode?: string }
+          return settings.weeklyHeightMode
+        })
+        .toBe('content')
+
+      await page.evaluate(() => {
+        const source = document.querySelector<HTMLElement>(
+          '[data-unscheduled-task-id="task-weekly-unscheduled"]'
+        )
+        source?.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
       })
     } finally {
       await electronApp.close()

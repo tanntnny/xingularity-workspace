@@ -23,6 +23,8 @@ export { TaskPriorityBadge } from './task-priority-badge'
 export type { TaskPriorityBadgeProps } from './task-priority-badge'
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
+export { EmptyState } from './empty-state'
+export type { EmptyStateProps } from './empty-state'
 
 export { Label } from './label'
 export { Kbd, Shortcut } from './kbd'
@@ -165,6 +167,10 @@ export { Toaster } from './sonner'
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip'
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
 export { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
+export { DragSource } from './drag-source'
+export type { DragSourceProps } from './drag-source'
+export { DropZone } from './drop-zone'
+export type { DropZoneProps } from './drop-zone'
 
 export {
   Sidebar,
@@ -211,13 +217,13 @@ export {
   DocumentWorkspaceMainHeader,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspaceRightPanel,
   WorkspaceResizableLayout,
   WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,
   WorkspaceFooter,
-  WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,

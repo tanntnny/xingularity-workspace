@@ -109,7 +109,7 @@ test.describe('projects workspace', () => {
       }
       expect(projectPropertiesBox.y).toBeGreaterThan(projectListBox.y + projectListBox.height)
       expect(projectActionsBox.x).toBeGreaterThanOrEqual(newProjectBox.x + newProjectBox.width)
-      await expect(page.getByText('Tasks')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Project Tasks' })).toBeVisible()
       await expect(page.getByText('Project Board')).toHaveCount(0)
       await expect(page.getByText('Task List')).toHaveCount(0)
 
@@ -481,7 +481,7 @@ test.describe('projects workspace', () => {
       await editTaskDialog.getByLabel('Project').click()
       await page.getByRole('option', { name: 'Beta Project', exact: true }).click()
       await editTaskDialog.getByRole('button', { name: 'Done' }).click()
-      await expect(page.getByText('No tasks in this project')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'No tasks in this project' })).toBeVisible()
 
       await page.getByTestId('projects-sidebar-item:project-2').click()
       await expect(page.getByRole('button', { name: 'Open task: Shared task' })).toBeVisible()

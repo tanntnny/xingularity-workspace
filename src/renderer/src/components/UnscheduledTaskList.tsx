@@ -1,4 +1,4 @@
-import { ReactElement, useMemo, useState, DragEvent } from 'react'
+import { DragEvent, ReactElement, useEffect, useMemo, useState } from 'react'
 import { CalendarPlus, Plus } from './ui/icons'
 import {
   CalendarTask,
@@ -12,17 +12,20 @@ import { TaskEditDialog } from './TaskEditDialog'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
+import { DragSource } from './ui/drag-source'
+import { DropZone } from './ui/drop-zone'
 import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
-import { setCalendarTaskDragPreview } from '../lib/calendarTaskDragPreview'
 import {
   clearCalendarTaskDragSession,
-  setCalendarTaskDragSession
+  setCalendarTaskDragSession,
+  setCalendarTaskUnscheduledDragOver,
+  subscribeCalendarTaskUnscheduledDragOver
 } from '../lib/calendarTaskDragSession'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
-interface UnscheduledTaskListProps {
+export interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
   projects?: Project[]
   selectedDate: string
@@ -82,21 +85,23 @@ export function UnscheduledTaskList({
   })
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) : undefined
 
+  useEffect(() => subscribeCalendarTaskUnscheduledDragOver(setIsDragOver), [])
+
   const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    setIsDragOver(true)
+    setCalendarTaskUnscheduledDragOver(true)
   }
 
   const handleDragLeave = (e: DragEvent<HTMLDivElement>): void => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false)
+      setCalendarTaskUnscheduledDragOver(false)
     }
   }
 
   const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
-    setIsDragOver(false)
+    setCalendarTaskUnscheduledDragOver(false)
     const payload = e.dataTransfer.getData('text/plain')
     const taskId = payload.startsWith('move:') ? payload.slice(5) : payload
     if (taskId && onUnscheduleTask) {
@@ -108,9 +113,7 @@ export function UnscheduledTaskList({
     <div
       data-unscheduled-task-list="true"
       data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
-      className={`flex h-full flex-col overflow-hidden transition-colors ${
-        isDragOver ? 'bg-accent' : 'bg-transparent'
-      }`}
+      className="flex h-full flex-col overflow-hidden bg-transparent"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -152,12 +155,14 @@ export function UnscheduledTaskList({
       <div className="mx-4 border-t border-border" />
 
       <div ref={containerRef} className="flex-1 overflow-auto px-2 pt-4">
-        <div
+        <DropZone
+          as="div"
           data-unscheduled-drop-zone="true"
           data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
-          className={`flex min-h-full flex-col border p-3 transition-all ${
-            isDragOver ? 'border-dashed border-ring bg-accent' : 'border-transparent'
-          }`}
+          active={isDragOver}
+          variant="surface"
+          aria-label="Unscheduled task drop zone"
+          className="flex min-h-full flex-col p-3"
         >
           {isDragOver ? (
             <div className="border bg-card text-card-foreground mb-2 rounded-none px-2 py-1 text-center text-xs text-primary">
@@ -183,9 +188,12 @@ export function UnscheduledTaskList({
                   onScheduleTask={onScheduleTask}
                   onUnscheduleTask={(taskId) => onUnscheduleTask?.(taskId)}
                 >
-                  <article
+                  <DragSource
+                    as="article"
+                    rotation={-2}
+                    previewVariant="content"
+                    previewSizing="fit-content"
                     ref={revealProps.ref}
-                    draggable
                     tabIndex={0}
                     data-unscheduled-task-id={task.id}
                     data-unscheduled-task-title={task.title}
@@ -198,7 +206,6 @@ export function UnscheduledTaskList({
                         taskId: task.id,
                         pointerOffsetMinutes: 0
                       })
-                      setCalendarTaskDragPreview(e)
                     }}
                     onDragEnd={() => {
                       clearCalendarTaskDragSession()
@@ -232,7 +239,7 @@ export function UnscheduledTaskList({
                       showProject={Boolean(task.projectId)}
                       onStatusChange={(taskId, status) => onUpdateStatus?.(taskId, status)}
                     />
-                  </article>
+                  </DragSource>
                 </TaskContextMenu>
               )
             })}
@@ -249,7 +256,7 @@ export function UnscheduledTaskList({
               </div>
             )}
           </div>
-        </div>
+        </DropZone>
       </div>
       {hoveredTaskCard ? (
         <CalendarTaskHoverCard

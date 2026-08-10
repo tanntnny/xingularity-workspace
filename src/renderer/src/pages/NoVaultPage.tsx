@@ -1,14 +1,6 @@
 import { useState, type ReactElement } from 'react'
 import type { AppPlatformKind } from '../platform'
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  FolderOpen
-} from '../components/ui'
-import appLogo from '../../../../assets/logo.png'
+import { Button, Card, CardContent, CardHeader, FolderOpen } from '../components/ui'
 
 type VaultAction = 'open' | 'create'
 
@@ -50,20 +42,6 @@ export function NoVaultPage({
       data-testid="vault-required-page"
       className="flex min-h-full flex-1 flex-col overflow-y-auto bg-background p-2 text-foreground antialiased"
     >
-      <header className="flex shrink-0 items-center gap-3 px-3 py-2">
-        <img
-          src={appLogo}
-          alt="Xingularity logo"
-          className="size-9 rounded-lg border border-border object-cover shadow-sm"
-        />
-        <div>
-          <p className="text-sm font-semibold tracking-tight">Xingularity</p>
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Workspace
-          </p>
-        </div>
-      </header>
-
       <div className="flex flex-1 items-center justify-center px-3 py-12 sm:px-8">
         <Card className="w-full max-w-2xl">
           <CardHeader className="items-center text-center">
@@ -73,11 +51,6 @@ export function NoVaultPage({
             <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight">
               {supportsVaultPicker ? 'Select a vault first' : 'Workspace connection required'}
             </h1>
-            <CardDescription className="max-w-xl text-sm leading-6">
-              {supportsVaultPicker
-                ? 'Open an existing vault or create a new one before accessing notes, projects, calendar, and automation pages.'
-                : 'This shell now runs outside Electron, but on-device workspace storage still needs a mobile implementation before notes and projects can open here.'}
-            </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-5">

@@ -5,6 +5,7 @@ export {
   DocumentWorkspaceMainHeader as WorkspaceMainHeader,
   DocumentWorkspaceMainContent as WorkspaceMainContent,
   DocumentWorkspacePanel as WorkspaceSidePanel,
+  WorkspaceRightPanel,
   DocumentWorkspacePanelHeader as WorkspaceSidePanelHeader,
   DocumentWorkspacePanelContent as WorkspaceSidePanelContent,
   WorkspaceHeaderActions as WorkspaceToolbar,

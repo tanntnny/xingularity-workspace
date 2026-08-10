@@ -85,10 +85,22 @@ test.describe('knowledge page', () => {
       await expect(knowledgePage).toBeVisible()
       await expect(page.getByLabel('Knowledge graph')).toBeVisible()
       await expect(page.getByTestId('knowledge-empty-state')).toHaveCount(0)
+      await expect(page.getByTestId('knowledge-graph-editor')).toBeVisible()
+      await expect(page.getByTestId('knowledge-orphan-visibility-panel')).toBeVisible()
 
       const graphNodes = page.locator('svg[aria-label="Knowledge graph"] circle')
       const nodeCount = await graphNodes.count()
       expect(nodeCount).toBe(3)
+
+      const orphanToggle = page.getByTestId('knowledge-show-orphans')
+      await expect(orphanToggle).toBeChecked()
+      await orphanToggle.click()
+      await expect(graphNodes).toHaveCount(2)
+      await expect(orphanToggle).not.toBeChecked()
+
+      await orphanToggle.click()
+      await expect(graphNodes).toHaveCount(3)
+      await expect(orphanToggle).toBeChecked()
 
       await graphNodes.first().click()
       await expect(page.getByTestId('note-block-editor')).toBeVisible()
@@ -107,7 +119,23 @@ test.describe('knowledge page', () => {
 
       await expect(page.getByLabel('Knowledge graph')).toBeVisible()
       await expect(page.getByTestId('knowledge-empty-state')).toHaveCount(0)
-      await expect(page.locator('svg[aria-label="Knowledge graph"] circle')).toHaveCount(1)
+      const graphNodes = page.locator('svg[aria-label="Knowledge graph"] circle')
+      await expect(graphNodes).toHaveCount(1)
+
+      const orphanToggle = page.getByTestId('knowledge-show-orphans')
+      await orphanToggle.click()
+      await expect(orphanToggle).not.toBeChecked()
+      await expect(graphNodes).toHaveCount(0)
+      const emptyState = page.getByTestId('knowledge-empty-state')
+      await expect(emptyState).toBeVisible()
+      await expect(
+        emptyState.getByRole('heading', { name: 'No note connections yet' })
+      ).toBeVisible()
+
+      await orphanToggle.click()
+      await expect(orphanToggle).toBeChecked()
+      await expect(graphNodes).toHaveCount(1)
+      await expect(page.getByTestId('knowledge-empty-state')).toHaveCount(0)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

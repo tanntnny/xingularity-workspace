@@ -7,7 +7,13 @@ import {
   useRef,
   useState
 } from 'react'
-import { CalendarTask, CalendarTaskType, Project, TaskPriority } from '../../../shared/types'
+import {
+  CalendarTask,
+  CalendarTaskType,
+  Project,
+  TaskPriority,
+  WeeklyHeightMode
+} from '../../../shared/types'
 import {
   buildWeeklyCalendarEntries,
   layoutWeeklyAllDayItems,
@@ -33,12 +39,11 @@ import {
 } from '../lib/calendarWeekLayout'
 import {
   buildWeeklyAllDayDropIndicator,
-  buildWeeklyTimedDropRange,
   buildWeeklyAllDayDropSchedule,
   buildWeeklyTimedCreateSchedule,
+  buildWeeklyTimedDropPreview,
   buildWeeklyTimedDropSchedule
 } from '../lib/calendarWeekDrag'
-import { setCalendarTaskDragPreview } from '../lib/calendarTaskDragPreview'
 import {
   clearCalendarTaskDragSession,
   getCalendarTaskDragSession,
@@ -48,6 +53,8 @@ import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskEditDialog } from './TaskEditDialog'
+import { DragSource } from './ui/drag-source'
+import { DropZone } from './ui/drop-zone'
 
 interface CalendarWeekViewProps {
   selectedDate: string
@@ -74,6 +81,7 @@ interface CalendarWeekViewProps {
       endDate: string | undefined
       time: string | undefined
       endTime: string | undefined
+      weeklyHeightMode?: WeeklyHeightMode
     }
   ) => void
 }
@@ -107,6 +115,8 @@ type TimedDropIndicatorState = {
   date: string
   topPx: number
   heightPx: number
+  heightMode: WeeklyHeightMode
+  task?: CalendarTask
 }
 
 type AllDayDropIndicatorState = {
@@ -182,7 +192,6 @@ export function CalendarWeekView({
     [normalizedTasks]
   )
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
-  const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [timedDropIndicator, setTimedDropIndicator] = useState<TimedDropIndicatorState | null>(null)
   const [allDayDropIndicator, setAllDayDropIndicator] = useState<AllDayDropIndicatorState | null>(
     null
@@ -238,7 +247,8 @@ export function CalendarWeekView({
           taskId: entry.task.id,
           date: entry.date,
           startMinutes: entry.startMinutes,
-          endMinutes: entry.startMinutes + entry.durationMinutes
+          endMinutes: entry.startMinutes + entry.durationMinutes,
+          heightMode: entry.task.weeklyHeightMode
         }))
       ),
     [timedTasks]
@@ -365,7 +375,8 @@ export function CalendarWeekView({
       date: current.previewDate,
       endDate: undefined,
       time: nextTime,
-      endTime: nextEndTime
+      endTime: nextEndTime,
+      weeklyHeightMode: 'duration' as const
     }
 
     if (hasTimedTaskScheduleChanged(task, nextSchedule)) {
@@ -445,7 +456,6 @@ export function CalendarWeekView({
 
   const handleTimedDrop = (event: DragEvent<HTMLDivElement>, date: string): void => {
     event.preventDefault()
-    setDragOverKey(null)
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
     const taskId = getDraggedTaskId(event)
@@ -506,7 +516,6 @@ export function CalendarWeekView({
   const handleAllDayDrop = (event: DragEvent<HTMLElement>, date: string): void => {
     event.preventDefault()
     const taskId = getDraggedTaskId(event)
-    setDragOverKey(null)
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
     if (!taskId) {
@@ -538,7 +547,6 @@ export function CalendarWeekView({
 
     event.dataTransfer.setData('text/plain', `move:${task.id}`)
     event.dataTransfer.effectAllowed = 'move'
-    setCalendarTaskDragPreview(event)
     setHoveredTaskCard(null)
     setTimedDropIndicator(null)
     const dragState = {
@@ -591,7 +599,6 @@ export function CalendarWeekView({
 
   const handleTaskDragEnd = (): void => {
     dragStateRef.current = null
-    setDragOverKey(null)
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
     clearCalendarTaskDragSession()
@@ -601,9 +608,12 @@ export function CalendarWeekView({
     task: CalendarTask,
     layout: WeeklyCalendarAllDayLayout
   ): ReactElement => (
-    <article
+    <DragSource
+      as="article"
       key={layout.id}
-      draggable
+      rotation={-2}
+      previewVariant="content"
+      previewSizing="fit-content"
       tabIndex={0}
       data-testid={`calendar-week-all-day-task:${task.id}`}
       data-span-days={layout.columnSpan}
@@ -639,19 +649,22 @@ export function CalendarWeekView({
         event.preventDefault()
         safeDeleteTask(task.id)
       }}
-      className={`pointer-events-auto h-full cursor-grab self-stretch rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
+      className={`pointer-events-auto h-fit cursor-grab self-start rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
     >
       <CalendarTaskCard
         task={task}
         compact
+        showStatusValue
+        heightMode="content"
         project={task.projectId ? projectsById.get(task.projectId) : undefined}
         showProject={shouldShowWeeklyProject(WEEKLY_ALL_DAY_ROW_HEIGHT_PX)}
         showTime={Boolean(task.time || task.endTime)}
         onStatusChange={(taskId, status) =>
           safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
         }
+        className="min-h-0"
       />
-    </article>
+    </DragSource>
   )
 
   const renderTimedTask = (layout: WeeklyTimedTaskLayout): ReactElement => {
@@ -664,17 +677,22 @@ export function CalendarWeekView({
       timedInteraction?.taskId === task.id && timedInteraction.previewDate === layout.date
     const blockStyle = buildTimedTaskStyle(layout)
     const resizeBandPx = getWeeklyResizeBandPx(layout.heightPx)
-    const contentStyle = {
-      top: '0px',
-      right: '0px',
-      bottom: '0px',
-      left: '0px'
-    }
+    const contentStyle =
+      layout.heightMode === 'content'
+        ? undefined
+        : {
+            top: '0px',
+            right: '0px',
+            bottom: '0px',
+            left: '0px'
+          }
 
     return (
-      <article
+      <DragSource
+        as="article"
         key={task.id}
-        draggable
+        rotation={-2}
+        previewVariant="content"
         tabIndex={0}
         data-calendar-week-task="true"
         data-calendar-interacting={isInteracting ? 'true' : 'false'}
@@ -729,7 +747,7 @@ export function CalendarWeekView({
           style={{ height: `${resizeBandPx}px` }}
         />
         <div
-          className="absolute z-10 overflow-hidden rounded-sm"
+          className={`${layout.heightMode === 'content' ? '' : 'absolute'} z-10 overflow-hidden rounded-sm`}
           style={contentStyle}
           onClick={() => {
             if (suppressTaskOpenRef.current === task.id) {
@@ -743,16 +761,18 @@ export function CalendarWeekView({
           <CalendarTaskCard
             task={task}
             compact
+            showStatusValue
             project={task.projectId ? projectsById.get(task.projectId) : undefined}
             showProject={shouldShowWeeklyProject(layout.heightPx)}
-            showTime
+            showTime={false}
+            heightMode={layout.heightMode === 'content' ? 'content' : 'fill'}
             onStatusChange={(taskId, status) =>
               safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
             }
-            className="h-full min-h-0"
+            className="min-h-0"
           />
         </div>
-      </article>
+      </DragSource>
     )
   }
 
@@ -777,7 +797,7 @@ export function CalendarWeekView({
               type="button"
               onClick={() => onSelectDate(date)}
               className={`border-r border-border px-3 py-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring last:border-r-0 ${
-                isHighlighted ? 'bg-accent' : 'hover:bg-accent'
+                isHighlighted ? 'calendar-date-highlight' : 'calendar-date-highlight-hover'
               }`}
             >
               <div
@@ -797,7 +817,7 @@ export function CalendarWeekView({
         })}
       </div>
 
-      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border">
+      <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))]">
         <div className="border-r border-border bg-muted px-3 py-3" />
         <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceMinHeightPx}px` }}>
           <div className="absolute inset-0 grid grid-cols-7">
@@ -805,16 +825,16 @@ export function CalendarWeekView({
               const isSelected = date === selectedDate
               const isToday = date === todayIso
               const isHighlighted = isSelected || isToday
-              const dragKey = `all-day:${date}`
 
               return (
-                <div
+                <DropZone
+                  as="div"
                   key={date}
+                  variant="row"
                   onClick={() => onSelectDate(date)}
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
-                    setDragOverKey(dragKey)
                     setTimedDropIndicator(null)
                     const dragState = getCalendarTaskDragSession()
                     const taskId = dragState?.taskId ?? getDraggedTaskId(event)
@@ -834,39 +854,28 @@ export function CalendarWeekView({
                     ) {
                       return
                     }
-                    if (dragOverKey === dragKey) {
-                      setDragOverKey(null)
-                    }
                     setAllDayDropIndicator(null)
                   }}
                   onDrop={(event) => handleAllDayDrop(event, date)}
-                  className={`h-full border-r border-border px-2 py-2 transition-colors last:border-r-0 ${
-                    dragOverKey === dragKey && !allDayDropIndicator
-                      ? 'bg-accent'
-                      : isHighlighted
-                        ? 'bg-accent'
-                        : 'bg-transparent'
-                  }`}
+                  className={`h-full rounded-none border-r border-border px-2 py-2 transition-colors last:border-r-0 ${isHighlighted ? 'calendar-date-highlight' : 'bg-transparent'}`}
                   style={{
                     paddingLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
                     paddingRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
                   }}
-                >
-                  {allDayLayouts.length === 0 ? (
-                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-transparent text-xs text-muted-foreground">
-                      No all-day items
-                    </div>
-                  ) : null}
-                </div>
+                />
               )
             })}
           </div>
 
           {allDayDropIndicator ? (
             <div className="pointer-events-none absolute inset-0 z-[1] grid grid-cols-7">
-              <div
+              <DropZone
+                as="div"
                 data-testid="calendar-week-all-day-drop-indicator"
-                className="bg-accent"
+                active
+                tone="calendar"
+                variant="row"
+                className="rounded-none"
                 style={{
                   gridColumn: `${allDayDropIndicator.columnStart + 1} / span ${allDayDropIndicator.columnSpan}`,
                   gridRow: '1 / 2'
@@ -922,8 +931,10 @@ export function CalendarWeekView({
                 >
                   <div className="relative -translate-y-1/2">
                     <div className="absolute right-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-primary" />
-                    <div className="pr-4 text-right text-xs font-semibold leading-none text-primary">
-                      {currentTimeIndicator.label}
+                    <div className="flex justify-end pr-4">
+                      <span className="rounded-sm bg-foreground px-1.5 py-0.5 text-right text-xs font-semibold leading-none text-background shadow-sm">
+                        {currentTimeIndicator.label}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -937,8 +948,10 @@ export function CalendarWeekView({
             const dayLayouts = timedLayoutsByDate[date] ?? []
 
             return (
-              <div
+              <DropZone
+                as="div"
                 key={date}
+                variant="timed"
                 data-testid={`calendar-week-timed-column:${date}`}
                 onClick={() => onSelectDate(date)}
                 onDoubleClick={(event) => handleTimedCellDoubleClick(event, date)}
@@ -959,11 +972,21 @@ export function CalendarWeekView({
                   const sourceTask = tasksById[taskId]
                   const pointerOffsetMinutes =
                     dragState && dragState.taskId === taskId ? dragState.pointerOffsetMinutes : 0
-                  const nextRange = buildWeeklyTimedDropRange(
+                  const nextRange = buildWeeklyTimedDropPreview(
                     sourceTask,
                     pointerMinutes,
                     pointerOffsetMinutes
                   )
+                  const previewTask = sourceTask
+                    ? {
+                        ...sourceTask,
+                        date,
+                        endDate: undefined,
+                        time: minutesToTime(nextRange.startMinutes),
+                        endTime: minutesToTime(nextRange.endMinutes),
+                        weeklyHeightMode: nextRange.heightMode
+                      }
+                    : undefined
 
                   setTimedDropIndicator({
                     date,
@@ -971,7 +994,9 @@ export function CalendarWeekView({
                     heightPx: Math.max(
                       minutesToPixels(nextRange.endMinutes - nextRange.startMinutes),
                       minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
-                    )
+                    ),
+                    heightMode: nextRange.heightMode,
+                    task: previewTask
                   })
                 }}
                 onDragLeave={(event) => {
@@ -984,16 +1009,20 @@ export function CalendarWeekView({
                   setTimedDropIndicator((current) => (current?.date === date ? null : current))
                 }}
                 onDrop={(event) => handleTimedDrop(event, date)}
-                className={`relative border-r border-border last:border-r-0 ${
-                  isHighlighted ? 'bg-accent' : 'bg-transparent'
-                }`}
+                className="relative border-r border-border bg-transparent last:border-r-0"
                 style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}
               >
+                {isHighlighted ? (
+                  <div
+                    aria-hidden="true"
+                    className="calendar-date-highlight pointer-events-none absolute inset-0 z-0"
+                  />
+                ) : null}
                 <div
                   ref={(node) => {
                     daySurfaceRefs.current[date] = node
                   }}
-                  className="absolute"
+                  className="absolute z-[1]"
                   style={{
                     top: `${WEEKLY_CELL_PADDING_Y_PX}px`,
                     right: `${WEEKLY_CELL_PADDING_X_PX}px`,
@@ -1012,21 +1041,39 @@ export function CalendarWeekView({
                   </div>
                   {timedDropIndicator?.date === date ? (
                     <div className="pointer-events-none absolute inset-0 z-[1]">
-                      <div
+                      <DropZone
+                        as="div"
                         data-testid="calendar-week-drop-indicator"
-                        className="absolute inset-x-0 bg-accent"
+                        active
+                        tone="calendar"
+                        variant="indicator"
+                        className="absolute inset-x-0"
                         style={{
                           top: `${timedDropIndicator.topPx}px`,
-                          height: `${timedDropIndicator.heightPx}px`
+                          ...(timedDropIndicator.heightMode === 'duration'
+                            ? { height: `${timedDropIndicator.heightPx}px` }
+                            : {})
                         }}
-                      />
+                      >
+                        {timedDropIndicator.heightMode === 'content' && timedDropIndicator.task ? (
+                          <CalendarTaskCard
+                            task={timedDropIndicator.task}
+                            compact
+                            showStatusValue
+                            showProject={Boolean(timedDropIndicator.task.projectId)}
+                            showTime={false}
+                            heightMode="content"
+                            className="invisible min-h-0"
+                          />
+                        ) : null}
+                      </DropZone>
                     </div>
                   ) : null}
                   <div className="absolute inset-0">
                     {dayLayouts.map((layout) => renderTimedTask(layout))}
                   </div>
                 </div>
-              </div>
+              </DropZone>
             )
           })}
           {currentTimeIndicator ? (
@@ -1057,8 +1104,15 @@ export function CalendarWeekView({
           task={editingTask}
           onClose={() => setEditingTaskId(null)}
           onSave={(taskId, patch) => {
+            const scheduleMode =
+              'time' in patch || 'endTime' in patch
+                ? getWeeklyHeightModeForSchedule(patch.time, patch.endTime)
+                : undefined
             if (onUpdateTask) {
-              onUpdateTask(taskId, patch)
+              onUpdateTask(
+                taskId,
+                scheduleMode ? { ...patch, weeklyHeightMode: scheduleMode } : patch
+              )
               return
             }
             if (patch.title) safeRenameTask(taskId, patch.title)
@@ -1076,7 +1130,8 @@ export function CalendarWeekView({
                 date: patch.date,
                 endDate: patch.endDate,
                 time: patch.time,
-                endTime: patch.endTime
+                endTime: patch.endTime,
+                weeklyHeightMode: scheduleMode
               })
             }
           }}
@@ -1096,10 +1151,20 @@ function buildTimedTaskStyle(layout: WeeklyTimedTaskLayout): {
 } {
   return {
     top: `${layout.topPx}px`,
-    height: `${Math.max(layout.heightPx, minutesToPixels(WEEKLY_MIN_DURATION_MINUTES))}px`,
+    height:
+      layout.heightMode === 'content'
+        ? 'fit-content'
+        : `${Math.max(layout.heightPx, minutesToPixels(WEEKLY_MIN_DURATION_MINUTES))}px`,
     left: `calc(${layout.leftPercent}% + 1px)`,
     width: `calc(${layout.widthPercent}% - 2px)`
   }
+}
+
+function getWeeklyHeightModeForSchedule(
+  time: string | undefined,
+  endTime: string | undefined
+): WeeklyHeightMode {
+  return !time && !endTime ? 'content' : 'duration'
 }
 
 function getWeeklyResizeBandPx(heightPx: number): number {

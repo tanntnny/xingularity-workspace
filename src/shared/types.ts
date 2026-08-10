@@ -217,6 +217,8 @@ export const CALENDAR_TASK_TYPE_VALUES = [
 
 export type CalendarTaskType = (typeof CALENDAR_TASK_TYPE_VALUES)[number]
 
+export type WeeklyHeightMode = 'duration' | 'content'
+
 export const CALENDAR_TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'assignment', label: 'Assignment' },
@@ -255,6 +257,7 @@ export interface CalendarTask {
   reminders: TaskReminder[]
   time?: string // Optional time in HH:mm format
   endTime?: string // Optional end time in HH:mm format
+  weeklyHeightMode?: WeeklyHeightMode
   // Automation deduplication fields (set by schedule runner)
   automationSource?: string
   automationSourceKey?: string
@@ -411,6 +414,7 @@ export interface AppSettings {
   isSidebarCollapsed: boolean // Tracks if the calendar sidebar is collapsed
   lastVaultPath: Maybe<string>
   lastOpenedNotePath: Maybe<string>
+  recentNotebookPaths: string[]
   lastOpenedProjectId: Maybe<string>
   favoriteNotePaths: string[]
   favoriteProjectIds: string[]
@@ -449,6 +453,7 @@ export interface AppSettingsUpdate {
   projects?: Project[]
   gridBoard?: GridBoardState
   lastOpenedNotePath?: Maybe<string>
+  recentNotebookPaths?: string[]
   lastOpenedProjectId?: Maybe<string>
   favoriteNotePaths?: string[]
   favoriteProjectIds?: string[]

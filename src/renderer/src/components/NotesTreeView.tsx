@@ -40,6 +40,9 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from './ui/context-menu'
+import { DragSource } from './ui/drag-source'
+import { DropZone } from './ui/drop-zone'
+import { EmptyState } from './ui/empty-state'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,7 +67,6 @@ const TREE_ROW_HEIGHT = 28
 const AUTO_EXPAND_DELAY_MS = 400
 const TREE_AUTO_SCROLL_EDGE_PX = 48
 const TREE_AUTO_SCROLL_MAX_STEP = 18
-const TREE_DROP_TARGET_ROW_CLASS = 'bg-accent text-accent-foreground shadow-sm'
 
 function renderTreeNodeLabel(label: string): ReactElement | string {
   const match = label.match(/^(\d+\+?)(\s+.*)$/)
@@ -144,7 +146,6 @@ export function NotesTreeView({
     })
 
     resizeObserver.observe(treeContainer)
-    setTreeContainerHeight(treeContainer.getBoundingClientRect().height)
 
     return () => resizeObserver.disconnect()
   }, [treeContainer])
@@ -345,8 +346,11 @@ export function NotesTreeView({
 
     return createPortal(
       <div className="pointer-events-none fixed inset-0 z-[200]">
-        <div
-          className="absolute min-w-[180px] max-w-[280px] rounded-md border border-ring bg-card px-3 py-2 opacity-80 shadow-sm"
+        <DragSource
+          as="div"
+          visual="preview"
+          preview="none"
+          className="absolute min-w-[180px] max-w-[280px] rounded-md px-3 py-2"
           style={{
             left: position.x + 14,
             top: position.y + 10
@@ -365,7 +369,7 @@ export function NotesTreeView({
           {props.dragIds.length > 1 ? (
             <div className="mt-1 text-xs text-muted-foreground">{props.dragIds.length} items</div>
           ) : null}
-        </div>
+        </DragSource>
       </div>,
       document.body
     )
@@ -373,9 +377,13 @@ export function NotesTreeView({
 
   if (tree.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
-        No notebooks or folders yet
-      </div>
+      <EmptyState
+        data-testid="notes-tree-empty-state"
+        className="h-full border-0 bg-transparent px-3 py-6"
+        icon={FolderOpen}
+        title="No notebooks or folders yet"
+        description="Create a notebook or folder to get started."
+      />
     )
   }
 
@@ -748,26 +756,27 @@ function TreeNode({
   }
 
   const treeNodeRow = (
-    <div
+    <DropZone
+      as="div"
+      active={isDropTarget}
+      variant="row"
       style={fullWidthRowStyle}
       className="group h-full w-full cursor-default"
       onClick={handleRowClick}
     >
-      <div
+      <DragSource
+        as="div"
+        dragging={node.isDragging}
+        preview="none"
         data-testid={`note-tree-row:${node.data.relPath}`}
         className={cn(
           'relative flex h-full w-full min-w-0 items-center rounded-md text-sm transition-[background-color,color,box-shadow] duration-150 ease-out',
-          node.isDragging && 'opacity-30',
-          isDropTarget
-            ? TREE_DROP_TARGET_ROW_CLASS
-            : node.isSelected
-              ? 'bg-accent text-foreground'
-              : 'text-foreground hover:bg-muted'
+          node.isSelected ? 'bg-accent text-foreground' : 'text-foreground hover:bg-muted'
         )}
         onContextMenu={
           useNativeMenus && !isEditing ? (event) => void handleNativeContextMenu(event) : undefined
         }
-        ref={handleRowDragRef}
+        ref={(element) => handleRowDragRef(element as HTMLDivElement | null)}
       >
         <div
           className="relative z-10 flex h-full w-full min-w-0 items-center gap-2 px-2"
@@ -957,8 +966,8 @@ function TreeNode({
             )
           ) : null}
         </div>
-      </div>
-    </div>
+      </DragSource>
+    </DropZone>
   )
 
   if (useNativeMenus) {

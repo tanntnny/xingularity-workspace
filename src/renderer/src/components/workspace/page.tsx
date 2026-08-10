@@ -1,24 +1,14 @@
 import * as React from 'react'
-import { ArrowRight } from '../ui/icons'
 
 import { cn } from '../../lib/utils'
-import { Button } from '../ui/button'
 
-interface WorkspacePageProps extends React.HTMLAttributes<HTMLElement> {
-  width?: 'default' | 'wide' | 'full'
-}
+type WorkspacePageProps = React.HTMLAttributes<HTMLDivElement>
 
-const pageWidthClass: Record<NonNullable<WorkspacePageProps['width']>, string> = {
-  default: 'max-w-5xl',
-  wide: 'max-w-6xl',
-  full: 'max-w-none'
-}
-
-const WorkspacePage = React.forwardRef<HTMLElement, WorkspacePageProps>(
-  ({ className, width = 'default', children, ...props }, ref) => (
-    <main ref={ref} className={cn('h-full overflow-y-auto p-2', className)} {...props}>
-      <div className={cn('mx-auto flex flex-col gap-6', pageWidthClass[width])}>{children}</div>
-    </main>
+const WorkspacePage = React.forwardRef<HTMLDivElement, WorkspacePageProps>(
+  ({ className, children, ...props }, ref) => (
+    <div ref={ref} className={cn('flex min-h-full w-full flex-col gap-6', className)} {...props}>
+      {children}
+    </div>
   )
 )
 
@@ -62,7 +52,6 @@ interface WorkspacePageLayoutProps extends React.HTMLAttributes<HTMLElement> {
   toolbar?: React.ReactNode
   aside?: React.ReactNode
   asideLabel?: string
-  width?: WorkspacePageProps['width']
 }
 
 const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutProps>(
@@ -74,7 +63,6 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
       toolbar,
       aside,
       asideLabel = 'Context panel',
-      width = 'default',
       children,
       ...props
     },
@@ -83,14 +71,14 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
     <section
       ref={ref}
       className={cn(
-        'grid h-full min-w-0 grid-cols-1 overflow-hidden',
+        'grid min-h-full w-full min-w-0 grid-cols-1',
         aside && 'lg:grid-cols-[minmax(0,1fr)_18rem]',
         className
       )}
       {...props}
     >
-      <div className="min-w-0 overflow-y-auto p-3">
-        <div className={cn('mx-auto flex min-h-full flex-col gap-6', pageWidthClass[width])}>
+      <div className="min-w-0 w-full p-3">
+        <div className="flex min-h-full w-full flex-col gap-6">
           {heading || description || toolbar ? (
             <header className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
@@ -133,50 +121,4 @@ const WorkspaceSectionCard = React.forwardRef<HTMLElement, React.HTMLAttributes<
 
 WorkspaceSectionCard.displayName = 'WorkspaceSectionCard'
 
-interface WorkspaceEmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
-  icon: React.ReactNode
-  heading: React.ReactNode
-  description: React.ReactNode
-  actionLabel?: string
-  onAction?: () => void
-}
-
-const WorkspaceEmptyState = React.forwardRef<HTMLDivElement, WorkspaceEmptyStateProps>(
-  ({ className, icon, heading, description, actionLabel, onAction, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        'rounded-lg border border-dashed bg-card px-4 py-6 text-card-foreground',
-        className
-      )}
-      {...props}
-    >
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="font-medium">{heading}</p>
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-      {actionLabel && onAction ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-4 inline-flex gap-1"
-          onClick={onAction}
-        >
-          <span>{actionLabel}</span>
-          <ArrowRight size={15} />
-        </Button>
-      ) : null}
-    </div>
-  )
-)
-
-WorkspaceEmptyState.displayName = 'WorkspaceEmptyState'
-
-export {
-  WorkspacePage,
-  WorkspacePageHeader,
-  WorkspacePageLayout,
-  WorkspaceSectionCard,
-  WorkspaceEmptyState
-}
+export { WorkspacePage, WorkspacePageHeader, WorkspacePageLayout, WorkspaceSectionCard }

@@ -236,12 +236,7 @@ export function SettingsPage({
   }
 
   return (
-    <WorkspacePageLayout
-      heading="Settings"
-      description="Manage your identity, workspace storage, editor behavior, appearance, and AI connection settings."
-      width="wide"
-      aria-label="App settings"
-    >
+    <WorkspacePageLayout heading="Settings" aria-label="App settings">
       <ToggleGroup
         type="single"
         className="w-full"

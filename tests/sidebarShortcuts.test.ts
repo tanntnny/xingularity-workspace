@@ -212,6 +212,8 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('app-drag-region min-w-0 flex-1 overflow-x-auto')
     expect(markup).toContain('app-no-drag flex w-max items-center gap-1.5')
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
+    expect(markup).toContain('data-toggle-group-indicator="true"')
+    expect(markup).toContain('transition-none')
     expect(markup).toContain('aria-label="Command"')
     expect(markup).toContain('aria-label="1"')
     expect(markup).toContain('data-active="true"')

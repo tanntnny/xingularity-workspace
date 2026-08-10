@@ -1,6 +1,15 @@
 import { FormEvent, ReactElement, useState } from 'react'
 import { CheckCircle2, Clock, FileText, ListTodo, Rocket } from '../components/ui/icons'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '../components/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Textarea
+} from '../components/ui'
 import { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard } from '../components/workspace'
 import type {
   FleetingConversionResult,
@@ -65,11 +74,9 @@ export function CapturePage({
   }
 
   return (
-    <WorkspacePage width="wide" data-testid="capture-page">
+    <WorkspacePage data-testid="capture-page">
       <WorkspacePageHeader
-        eyebrow="Inbox"
         heading="Capture"
-        description="Get the thought out of your head first. Review and route it when you are ready."
         icon={<Rocket size={24} aria-hidden="true" className="text-primary" />}
       />
 
@@ -133,15 +140,12 @@ export function CapturePage({
             </CardContent>
           </Card>
         ) : notes.length === 0 ? (
-          <Card data-testid="capture-empty-state">
-            <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-              <CheckCircle2 size={28} aria-hidden="true" className="text-muted-foreground" />
-              <p className="font-medium text-foreground">Nothing to review</p>
-              <p className="max-w-md text-sm text-muted-foreground">
-                New captures will wait here until you turn them into a note or task.
-              </p>
-            </CardContent>
-          </Card>
+          <EmptyState
+            data-testid="capture-empty-state"
+            icon={CheckCircle2}
+            title="Nothing to review"
+            description="New captures will wait here until you turn them into a note or task."
+          />
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {notes.map((note) => {

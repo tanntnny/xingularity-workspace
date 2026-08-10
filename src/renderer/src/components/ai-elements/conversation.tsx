@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { MessageSquare, type FilledIcon } from '../ui/icons'
+import { EmptyState } from '../ui/empty-state'
 import { ArrowDown } from '../ui/icons'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
@@ -83,25 +85,20 @@ export function ConversationEmptyState({
   children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
-  icon?: React.ReactNode
+  icon?: FilledIcon
   title?: string
   description?: string
 }): React.ReactElement {
   return (
-    <div
-      className={cn(
-        'border bg-card text-card-foreground flex h-full flex-col items-center justify-center gap-3 rounded-lg border-dashed px-6 py-10 text-center',
-        className
-      )}
+    <EmptyState
+      className={cn('h-full', className)}
+      icon={icon ?? MessageSquare}
+      title={title}
+      description={description}
       {...props}
     >
-      {icon ? <div className="text-muted-foreground">{icon}</div> : null}
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
-      </div>
       {children}
-    </div>
+    </EmptyState>
   )
 }
 

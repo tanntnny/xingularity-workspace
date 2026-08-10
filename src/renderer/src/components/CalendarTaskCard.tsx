@@ -14,8 +14,10 @@ interface CalendarTaskCardProps {
   task: CalendarTask
   project?: Pick<Project, 'name' | 'icon'>
   compact?: boolean
+  showStatusValue?: boolean
   showProject?: boolean
   showTime?: boolean
+  heightMode?: 'fill' | 'content'
   onStatusChange?: (taskId: string, status: TaskStatus) => void
   onMouseMove?: MouseEventHandler<HTMLDivElement>
   className?: string
@@ -29,8 +31,10 @@ export const CalendarTaskCard = forwardRef<
     task,
     project,
     compact = false,
+    showStatusValue,
     showProject = true,
     showTime = true,
+    heightMode = 'fill',
     onStatusChange,
     onMouseMove,
     className,
@@ -57,13 +61,13 @@ export const CalendarTaskCard = forwardRef<
   return (
     <div
       ref={ref}
-      className={`group flex h-full w-full flex-col justify-start overflow-hidden rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${status !== 'pending' ? 'opacity-60' : ''} ${className ?? ''}`}
+      className={`group flex ${heightMode === 'content' ? 'h-fit' : 'h-full'} w-full flex-col justify-start overflow-hidden rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${status !== 'pending' ? 'opacity-60' : ''} ${className ?? ''}`}
       onMouseMove={onMouseMove}
       style={{ ...taskTypeStyle, ...style }}
       data-task-status={status}
       {...rest}
     >
-      <div className="flex h-fit min-h-0 min-w-0 shrink-0 items-center justify-between gap-1.5 py-1">
+      <div className="flex h-fit min-h-0 min-w-0 shrink-0 items-start justify-between gap-1.5">
         <div
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
@@ -73,7 +77,7 @@ export const CalendarTaskCard = forwardRef<
             label={`Status for ${task.title}`}
             value={status}
             variant="plain"
-            showValue={!compact}
+            showValue={showStatusValue ?? !compact}
             options={statusOptions}
             onValueChange={(value) => onStatusChange?.(task.id, value as TaskStatus)}
           />
@@ -84,7 +88,7 @@ export const CalendarTaskCard = forwardRef<
           </span>
         ) : null}
       </div>
-      <div className="mt-0.5 flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
         {priorityMarker && priorityMarkerColor ? (
           <span
             className="pointer-events-none shrink-0 text-xs font-semibold leading-none"
@@ -105,7 +109,7 @@ export const CalendarTaskCard = forwardRef<
       </div>
       {project && showProject ? (
         <div
-          className="mt-auto flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden border-t border-current/10 pt-1 text-[10px] text-muted-foreground"
+          className="mt-auto flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden pt-1 text-[10px] text-muted-foreground"
           title={project.name}
           data-testid="calendar-task-project"
         >

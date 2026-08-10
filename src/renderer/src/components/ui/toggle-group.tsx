@@ -95,11 +95,13 @@ function getToggleGroupIndicatorTarget(root: HTMLElement): HTMLElement | null {
 interface ToggleGroupSelectionIndicatorProps {
   rootRef: React.RefObject<ToggleGroupRootElement | null>
   variant: VariantProps<typeof toggleGroupVariants>['variant']
+  animated: boolean
 }
 
 function ToggleGroupSelectionIndicator({
   rootRef,
-  variant
+  variant,
+  animated
 }: ToggleGroupSelectionIndicatorProps): React.ReactElement {
   const [bounds, setBounds] = React.useState<ToggleGroupIndicatorBounds | null>(null)
 
@@ -183,6 +185,7 @@ function ToggleGroupSelectionIndicator({
       data-toggle-group-indicator="true"
       className={cn(
         toggleGroupIndicatorVariants({ variant }),
+        !animated && 'transition-none',
         bounds && 'opacity-100'
       )}
       style={{
@@ -198,8 +201,10 @@ const ToggleGroup = React.forwardRef<
   React.ComponentRef<typeof ToggleGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root> &
     VariantProps<typeof toggleGroupVariants> &
-    VariantProps<typeof toggleGroupItemVariants>
->(({ className, variant, size, children, ...props }, ref) => {
+    VariantProps<typeof toggleGroupItemVariants> & {
+      selectionIndicatorAnimated?: boolean
+    }
+>(({ className, variant, size, children, selectionIndicatorAnimated = true, ...props }, ref) => {
   const type = props.type
   const rootRef = React.useRef<ToggleGroupRootElement | null>(null)
   const setRootRef = React.useCallback(
@@ -219,7 +224,11 @@ const ToggleGroup = React.forwardRef<
       <ToggleGroupContext.Provider value={{ variant, size, type }}>
         {children}
         {type === 'single' ? (
-          <ToggleGroupSelectionIndicator rootRef={rootRef} variant={variant} />
+          <ToggleGroupSelectionIndicator
+            rootRef={rootRef}
+            variant={variant}
+            animated={selectionIndicatorAnimated}
+          />
         ) : null}
       </ToggleGroupContext.Provider>
     </ToggleGroupPrimitive.Root>

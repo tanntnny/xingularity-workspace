@@ -64,9 +64,10 @@ import {
 } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { CalendarWeekView } from './components/CalendarWeekView'
-import { UnscheduledTaskList } from './components/UnscheduledTaskList'
+import { CalendarTaskPanel } from './components/CalendarTaskPanel'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
 import { NotesTreeView } from './components/NotesTreeView'
+import { NotebookEmptyState } from './components/NotebookEmptyState'
 import type { NoteEditorHandle } from './components/Editor'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
@@ -78,9 +79,7 @@ import {
   normalizePageForPlatform
 } from './platform/pageAvailability'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
-import { Button } from './components/ui/button'
 import { Badge } from './components/ui/badge'
-import { Input } from './components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,12 +99,12 @@ import {
   WorkspaceContextProvider,
   WorkspaceFooter,
   WorkspaceTabManager,
-  WorkspaceContextEmptyState,
   WorkspaceIconButton,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionDivider,
   WorkspaceHeaderActionGroup
 } from './components/ui/document-workspace'
+import { EmptyState } from './components/ui/empty-state'
 import {
   WorkspacePanelSection,
   WorkspacePanelSectionHeader
@@ -127,6 +126,10 @@ import {
 } from './components/ExcalidrawFileEditor'
 import { NoteExportDialog, type NoteExportFormat } from './components/NoteExportDialog'
 import { KnowledgePage } from './pages/KnowledgePage'
+import {
+  KnowledgeGraphSettingsPanel,
+  KnowledgeOrphanVisibilityPanel
+} from './components/KnowledgeWorkspaceRightPanels'
 import { DesignAuditPage } from './pages/DesignAuditPage'
 import { NoVaultPage } from './pages/NoVaultPage'
 import { CapturePage } from './pages/CapturePage'
@@ -147,6 +150,7 @@ import { normalizeCalendarTasks } from './lib/calendarTasks'
 import { filterProjectsForWorkspace } from './lib/projectTaskRows'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
+import { flattenRecentNotebookFiles } from './lib/notebookRecentFiles'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -162,6 +166,11 @@ import {
   remapNotebookWorkspaceSessionPaths,
   removeNotebookWorkspaceSessionPaths
 } from './lib/workspaceTabs'
+import {
+  rememberRecentNotebookPath as rememberNotebookPath,
+  remapRecentNotebookPaths,
+  removeRecentNotebookPaths
+} from '../../shared/recentNotebookFiles'
 const PAGE_LABELS: Record<AppPage, string> = {
   capture: 'Capture',
   knowledge: 'Knowledge',
@@ -346,6 +355,7 @@ function App(): ReactElement {
   const settingsProjects = useVaultStore((state) => state.settings.projects)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
+  const recentNotebookPaths = useVaultStore((state) => state.settings.recentNotebookPaths)
   const lastOpenedProjectId = useVaultStore((state) => state.settings.lastOpenedProjectId)
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
@@ -377,6 +387,7 @@ function App(): ReactElement {
     [INITIAL_WORKSPACE_TAB_ID]: createEmptyNotebookWorkspaceSession()
   })
   const [knowledgeOrphanRingRadiusInput, setKnowledgeOrphanRingRadiusInput] = useState('')
+  const [knowledgeShowOrphans, setKnowledgeShowOrphans] = useState(true)
   const availablePages = useMemo(() => getAvailablePages(platform), [platform])
   const useNativeMenus = platform.capabilities.supportsNativeMenus && canUseNativeMenus()
   const [isDarkMode, setIsDarkMode] = useState(
@@ -434,6 +445,10 @@ function App(): ReactElement {
     setPendingNoteTreeEditId(null)
   }, [])
   const visibleNoteTree = noteTree
+  const recentNotebookFiles = useMemo(
+    () => flattenRecentNotebookFiles(visibleNoteTree, recentNotebookPaths),
+    [recentNotebookPaths, visibleNoteTree]
+  )
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
@@ -474,6 +489,8 @@ function App(): ReactElement {
   const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const createNoteRef = useRef<(() => Promise<void>) | null>(null)
   const notesRef = useRef(notes)
+  const recentNotebookPathsRef = useRef(recentNotebookPaths)
+  const recentNotebookWriteVersionRef = useRef(0)
   const currentNotePathRef = useRef(currentNotePath)
   const currentExcalidrawPathRef = useRef(currentExcalidrawPath)
   const currentNoteContentRef = useRef(currentNoteContent)
@@ -582,6 +599,10 @@ function App(): ReactElement {
     notesRef.current = notes
   }, [notes])
 
+  useEffect(() => {
+    recentNotebookPathsRef.current = recentNotebookPaths
+  }, [recentNotebookPaths])
+
   const replaceNotes = useCallback(
     (nextNotes: NoteListItem[]): void => {
       notesRef.current = nextNotes
@@ -687,6 +708,49 @@ function App(): ReactElement {
       }
     },
     [vaultApi, lastOpenedNotePath, patchSettings, pushToast]
+  )
+
+  const persistRecentNotebookPaths = useCallback(
+    async (paths: readonly string[]): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const nextPaths = Array.from(new Set(paths)).slice(0, 5)
+      const currentPaths = recentNotebookPathsRef.current
+      if (
+        nextPaths.length === currentPaths.length &&
+        nextPaths.every((relPath, index) => relPath === currentPaths[index])
+      ) {
+        return
+      }
+
+      recentNotebookPathsRef.current = nextPaths
+      patchSettings({ recentNotebookPaths: nextPaths })
+      const writeVersion = ++recentNotebookWriteVersionRef.current
+
+      try {
+        const nextSettings = await vaultApi.settings.update(
+          { recentNotebookPaths: nextPaths },
+          { history: false }
+        )
+
+        if (writeVersion === recentNotebookWriteVersionRef.current) {
+          recentNotebookPathsRef.current = nextSettings.recentNotebookPaths
+          patchSettings({ recentNotebookPaths: nextSettings.recentNotebookPaths })
+        }
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [patchSettings, pushToast, vaultApi]
+  )
+
+  const rememberRecentNotebookFile = useCallback(
+    (relPath: string): void => {
+      void persistRecentNotebookPaths(rememberNotebookPath(recentNotebookPathsRef.current, relPath))
+    },
+    [persistRecentNotebookPaths]
   )
 
   const persistFavoriteNotePaths = useCallback(
@@ -956,9 +1020,6 @@ function App(): ReactElement {
   const visibleCalendarTasks = useMemo(() => {
     return calendarTasks
   }, [calendarTasks])
-  const visibleScheduledCalendarTasks = useMemo(() => {
-    return scheduledCalendarTasks
-  }, [scheduledCalendarTasks])
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -2143,6 +2204,7 @@ function App(): ReactElement {
       endDate: string | undefined
       time: string | undefined
       endTime: string | undefined
+      weeklyHeightMode?: 'duration' | 'content'
     }
   ): Promise<void> => {
     await updateCalendarTasks((tasks) =>
@@ -2164,7 +2226,8 @@ function App(): ReactElement {
           date: nextDate,
           endDate: nextEndDate,
           time: schedule.time,
-          endTime: schedule.endTime
+          endTime: schedule.endTime,
+          ...(schedule.weeklyHeightMode ? { weeklyHeightMode: schedule.weeklyHeightMode } : {})
         }
       })
     )
@@ -2336,6 +2399,7 @@ function App(): ReactElement {
         })
         currentNoteEditorRef.current?.focus()
         void persistLastOpenedNotePath(relPath)
+        rememberRecentNotebookFile(relPath)
         return
       }
 
@@ -2361,6 +2425,7 @@ function App(): ReactElement {
           }
           applyOpenNoteSession(relPath, cachedSession)
           void persistLastOpenedNotePath(relPath)
+          rememberRecentNotebookFile(relPath)
           return
         }
 
@@ -2382,6 +2447,7 @@ function App(): ReactElement {
         persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(document)
         applyOpenNoteSession(relPath, nextSession)
         void persistLastOpenedNotePath(relPath)
+        rememberRecentNotebookFile(relPath)
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -2392,7 +2458,8 @@ function App(): ReactElement {
       stageCurrentNoteForBackgroundSave,
       vaultApi,
       pushToast,
-      persistLastOpenedNotePath
+      persistLastOpenedNotePath,
+      rememberRecentNotebookFile
     ]
   )
 
@@ -2424,6 +2491,7 @@ function App(): ReactElement {
         setCurrentNoteTagsState([])
         setCurrentNoteContent('')
         setSelectedNoteTreeEntries([{ kind: 'excalidraw', relPath }])
+        rememberRecentNotebookFile(relPath)
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -2436,7 +2504,8 @@ function App(): ReactElement {
       setCurrentExcalidrawPath,
       setCurrentNoteContent,
       setCurrentNotePath,
-      vaultApi
+      vaultApi,
+      rememberRecentNotebookFile
     ]
   )
 
@@ -4396,6 +4465,10 @@ function App(): ReactElement {
         }
 
         await refreshNotesAndTree()
+        const nextRecentPaths = remapRecentNotebookPaths(recentNotebookPaths, relPath, nextRelPath)
+        if (nextRecentPaths.some((path, index) => path !== recentNotebookPaths[index])) {
+          void persistRecentNotebookPaths(nextRecentPaths)
+        }
         setSelectedNoteTreeEntries([{ kind, relPath: nextRelPath }])
         const activeSession = getWorkspaceTabSession()
         const nextCurrentNotePath = activeSession.currentNotePath
@@ -4435,7 +4508,9 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentNotebookPaths,
       pushToast,
+      recentNotebookPaths,
       refreshNotesAndTree,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
@@ -4469,8 +4544,7 @@ function App(): ReactElement {
       try {
         const isCurrentExcalidraw = normalizedEntries.some(
           (entry) =>
-            entry.kind === 'excalidraw' &&
-            entry.relPath === currentExcalidrawPathRef.current
+            entry.kind === 'excalidraw' && entry.relPath === currentExcalidrawPathRef.current
         )
         if (isCurrentExcalidraw) {
           await currentExcalidrawEditorRef.current?.prepareForPathMutation()
@@ -4506,6 +4580,13 @@ function App(): ReactElement {
         const previousActiveNotePath = activeSession.currentNotePath
         const previousActiveExcalidrawPath = activeSession.currentExcalidrawPath
         const removedSessionPaths = normalizedEntries.map((entry) => entry.relPath)
+        const nextRecentPaths = removeRecentNotebookPaths(recentNotebookPaths, removedSessionPaths)
+        if (
+          nextRecentPaths.length !== recentNotebookPaths.length ||
+          nextRecentPaths.some((path, index) => path !== recentNotebookPaths[index])
+        ) {
+          void persistRecentNotebookPaths(nextRecentPaths)
+        }
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
           removeNotebookWorkspaceSessionPaths(session, removedSessionPaths)
         })
@@ -4554,7 +4635,9 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentNotebookPaths,
       pushToast,
+      recentNotebookPaths,
       refreshNotesAndTree,
       resetCurrentNoteEditorSession,
       setCurrentExcalidrawPath,
@@ -4584,8 +4667,7 @@ function App(): ReactElement {
 
       const currentExcalidrawMove = moveOperations.find(
         (operation) =>
-          operation.kind === 'excalidraw' &&
-          operation.relPath === currentExcalidrawPathRef.current
+          operation.kind === 'excalidraw' && operation.relPath === currentExcalidrawPathRef.current
       )
       if (currentExcalidrawMove) {
         await currentExcalidrawEditorRef.current?.prepareForPathMutation()
@@ -4625,6 +4707,17 @@ function App(): ReactElement {
       }
 
       await refreshNotesAndTree()
+      const nextRecentPaths = moveOperations.reduce(
+        (paths, operation) =>
+          remapRecentNotebookPaths(paths, operation.relPath, operation.toRelPath),
+        recentNotebookPaths
+      )
+      if (
+        nextRecentPaths.length !== recentNotebookPaths.length ||
+        nextRecentPaths.some((path, index) => path !== recentNotebookPaths[index])
+      ) {
+        void persistRecentNotebookPaths(nextRecentPaths)
+      }
       setSelectedNoteTreeEntries(
         moveOperations.map((operation) => ({
           kind: operation.kind,
@@ -4663,7 +4756,9 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentNotebookPaths,
       refreshNotesAndTree,
+      recentNotebookPaths,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
       vaultApi
@@ -5178,14 +5273,21 @@ function App(): ReactElement {
                                 vimKeyMappings={editorVimKeyMappings}
                               />
                             ) : (
-                              <div className="p-5 text-sm text-muted-foreground">
-                                Pick a note or drawing from the right panel to open it
-                              </div>
+                              <NotebookEmptyState
+                                recentFiles={recentNotebookFiles}
+                                onOpenFile={(relPath) => {
+                                  void openNotebookPath(relPath)
+                                }}
+                                onCreateNote={() => {
+                                  void createNoteFromTree()
+                                }}
+                              />
                             )
                           ) : activePage === 'knowledge' ? (
                             <KnowledgePage
                               notes={notes}
                               orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
+                              showOrphans={knowledgeShowOrphans}
                               onOpenNote={(relPath) => {
                                 void navigateToPage('notes')
                                 setSearchQuery('')
@@ -5259,7 +5361,7 @@ function App(): ReactElement {
                                   ) : (
                                     <CalendarMonthView
                                       selectedDate={selectedCalendarDate}
-                                      tasks={visibleScheduledCalendarTasks}
+                                      tasks={visibleCalendarTasks}
                                       projects={projects}
                                       onSelectDate={setSelectedCalendarDate}
                                       onCreateTask={createTaskForDate}
@@ -5348,295 +5450,262 @@ function App(): ReactElement {
                           )}
                         </div>
                       </DocumentWorkspaceMainContent>
-                      <DocumentWorkspacePanel
-                        data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
-                        className={`h-full w-full basis-auto ${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden ${
-                          shouldSlideWorkspacePanelOut
-                            ? 'pointer-events-none translate-x-full opacity-0'
-                            : 'translate-x-0 opacity-100'
-                        } ${paletteSurfaceClass}`}
-                        data-panel-resizable={hasRightPanel ? 'true' : undefined}
-                        style={
-                          shouldSlideWorkspacePanelOut
-                            ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
-                            : undefined
-                        }
-                      >
-                        <div
-                          key={`${activeWorkspaceTabId}:${activePage}`}
-                          className="flex h-full flex-col"
-                        >
-                          <DocumentWorkspacePanelHeader
-                            actions={
-                              hasVault && activePage === 'notes' ? (
-                                <WorkspaceHeaderActions>
-                                  <WorkspaceIconButton
-                                    aria-label={
-                                      areAllNoteFoldersCollapsed
-                                        ? 'Expand all folders'
-                                        : 'Collapse all folders'
-                                    }
-                                    title={
-                                      areAllNoteFoldersCollapsed
-                                        ? 'Expand all folders'
-                                        : 'Collapse all folders'
-                                    }
-                                    icon={
-                                      areAllNoteFoldersCollapsed ? (
-                                        <ChevronDown size={18} aria-hidden="true" />
-                                      ) : (
-                                        <ChevronUp size={18} aria-hidden="true" />
-                                      )
-                                    }
-                                    onClick={() => {
-                                      setAreAllNoteFoldersCollapsed((current) => !current)
-                                      setCollapseAllNotesTreeToken((current) => current + 1)
-                                    }}
-                                  />
-                                  {useNativeMenus ? (
-                                    <WorkspaceIconButton
-                                      ref={noteActionsButtonRef}
-                                      onClick={() => {
-                                        void openNativeNoteActionsMenu()
-                                      }}
-                                      aria-label="Notebook actions"
-                                      title="Notebook actions"
-                                      icon={<Plus size={18} aria-hidden="true" />}
-                                    />
-                                  ) : (
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <WorkspaceIconButton
-                                          aria-label="Notebook actions"
-                                          title="Notebook actions"
-                                          icon={<Plus size={18} aria-hidden="true" />}
-                                        />
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="start">
-                                        <DropdownMenuItem
-                                          onClick={() => {
-                                            void createNoteFromTree()
-                                          }}
-                                        >
-                                          New note
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() => {
-                                            void createExcalidrawFromTree()
-                                          }}
-                                        >
-                                          New drawing
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() => {
-                                            void createFolderFromTree()
-                                          }}
-                                        >
-                                          New folder
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() => {
-                                            void importNotes()
-                                          }}
-                                        >
-                                          Import markdown
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  )}
-                                </WorkspaceHeaderActions>
-                              ) : null
-                            }
+                      {activePage === 'knowledge' ? (
+                        [
+                          <KnowledgeGraphSettingsPanel
+                            key="knowledge-graph-settings"
+                            orphanRingRadiusInput={knowledgeOrphanRingRadiusInput}
+                            orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
+                            onOrphanRingRadiusInputChange={setKnowledgeOrphanRingRadiusInput}
+                            onResetOrphanRingRadius={() => {
+                              setKnowledgeOrphanRingRadiusInput('')
+                            }}
+                          />,
+                          <KnowledgeOrphanVisibilityPanel
+                            key="knowledge-orphan-visibility"
+                            showOrphans={knowledgeShowOrphans}
+                            onShowOrphansChange={setKnowledgeShowOrphans}
                           />
-
-                          <DocumentWorkspacePanelContent>
-                            {!hasVault ? (
-                              <WorkspacePanelStack className="h-full">
-                                <WorkspacePanelSection>
-                                  <WorkspaceContextEmptyState
-                                    className="m-0 border-0 bg-transparent p-0"
-                                    description="Select a vault to see workspace properties and secondary tools."
-                                  />
-                                </WorkspacePanelSection>
-                              </WorkspacePanelStack>
-                            ) : activePage === 'notes' ? (
-                              <WorkspacePanelStack className="h-full">
-                                <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
-                                  <NotesTreeView
-                                    tree={visibleNoteTree}
-                                    searchTerm={searchQuery}
-                                    activeNotePath={currentNotePath ?? currentExcalidrawPath}
-                                    selectedEntries={selectedNoteTreeEntries}
-                                    collapseAllToken={collapseAllNotesTreeToken}
-                                    shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
-                                    pendingEditId={pendingNoteTreeEditId}
-                                    onPendingEditHandled={handlePendingNoteTreeEditHandled}
-                                    onSelectionChange={setSelectedNoteTreeEntries}
-                                    onOpenNote={(relPath) => {
-                                      setSearchQuery('')
-                                      setSearchResults([])
-                                      void openNotebookPath(relPath)
-                                    }}
-                                    onCreateNote={(parentDir) => {
-                                      setSelectedNoteTreeEntries(
-                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                      )
-                                      void createNoteFromTree(parentDir)
-                                    }}
-                                    onCreateExcalidraw={(parentDir) => {
-                                      setSelectedNoteTreeEntries(
-                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                      )
-                                      void createExcalidrawFromTree(parentDir)
-                                    }}
-                                    onCreateFolder={(parentDir) => {
-                                      setSelectedNoteTreeEntries(
-                                        parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
-                                      )
-                                      void createFolderFromTree(parentDir)
-                                    }}
-                                    onExportFolderPdf={(folderPath) => {
-                                      void exportFolderPdf(folderPath)
-                                    }}
-                                    onRenamePath={(relPath, nextName, kind) => {
-                                      void renameTreePath(relPath, nextName, kind)
-                                    }}
-                                    onDeleteEntries={(entries) => {
-                                      void deleteTreeEntries(entries)
-                                    }}
-                                    onMoveEntries={moveTreeEntries}
-                                  />
-                                </WorkspacePanelSection>
-                              </WorkspacePanelStack>
-                            ) : activePage === 'knowledge' ? (
-                              <WorkspacePanelStack>
-                                <WorkspacePanelSection data-testid="knowledge-graph-editor">
-                                  <WorkspacePanelSectionHeader
-                                    heading="Graph view"
-                                    description="Configure how disconnected notes are arranged."
-                                  />
-                                  <div className="space-y-2">
-                                    <label
-                                      htmlFor="knowledge-orphan-radius-input"
-                                      className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                                    >
-                                      Orphan ring radius
-                                    </label>
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        id="knowledge-orphan-radius-input"
-                                        data-testid="knowledge-orphan-radius-input"
-                                        type="number"
-                                        min={72}
-                                        step={1}
-                                        value={knowledgeOrphanRingRadiusInput}
-                                        onChange={(event) => {
-                                          setKnowledgeOrphanRingRadiusInput(event.target.value)
-                                        }}
-                                        placeholder="Auto"
-                                        className="min-w-0 flex-1"
-                                        aria-label="Orphan ring radius in pixels"
-                                      />
-                                      <span className="text-xs text-muted-foreground">px</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-                                    <p className="text-xs text-muted-foreground">
-                                      Applied radius:{' '}
-                                      {knowledgeOrphanRingRadiusPx == null
-                                        ? 'Auto'
-                                        : `${knowledgeOrphanRingRadiusPx}px`}
-                                    </p>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
+                        ]
+                      ) : (
+                        <DocumentWorkspacePanel
+                          data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
+                          className={`h-full w-full basis-auto ${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden ${
+                            shouldSlideWorkspacePanelOut
+                              ? 'pointer-events-none translate-x-full opacity-0'
+                              : 'translate-x-0 opacity-100'
+                          } ${paletteSurfaceClass}`}
+                          data-panel-resizable={hasRightPanel ? 'true' : undefined}
+                          style={
+                            shouldSlideWorkspacePanelOut
+                              ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
+                              : undefined
+                          }
+                        >
+                          <div
+                            key={`${activeWorkspaceTabId}:${activePage}`}
+                            className="flex h-full flex-col"
+                          >
+                            <DocumentWorkspacePanelHeader
+                              actions={
+                                hasVault && activePage === 'notes' ? (
+                                  <WorkspaceHeaderActions>
+                                    <WorkspaceIconButton
+                                      aria-label={
+                                        areAllNoteFoldersCollapsed
+                                          ? 'Expand all folders'
+                                          : 'Collapse all folders'
+                                      }
+                                      title={
+                                        areAllNoteFoldersCollapsed
+                                          ? 'Expand all folders'
+                                          : 'Collapse all folders'
+                                      }
+                                      icon={
+                                        areAllNoteFoldersCollapsed ? (
+                                          <ChevronDown size={18} aria-hidden="true" />
+                                        ) : (
+                                          <ChevronUp size={18} aria-hidden="true" />
+                                        )
+                                      }
                                       onClick={() => {
-                                        setKnowledgeOrphanRingRadiusInput('')
+                                        setAreAllNoteFoldersCollapsed((current) => !current)
+                                        setCollapseAllNotesTreeToken((current) => current + 1)
                                       }}
-                                    >
-                                      Reset
-                                    </Button>
-                                  </div>
-                                </WorkspacePanelSection>
-                              </WorkspacePanelStack>
-                            ) : activePage === 'projects' ? (
-                              <ProjectsWorkspaceRightPanel
-                                projects={projects}
-                                favoriteProjectIds={favoriteProjectIds}
-                                selectedProjectId={selectedProjectId}
-                                filterMode={projectFilterMode}
-                                onSelectProject={selectProject}
-                                onToggleProjectFavorite={toggleProjectFavoriteById}
-                                onToggleProjectArchive={toggleProjectArchiveById}
-                                onUpdateProjectProperties={saveProjectProperties}
-                              />
-                            ) : activePage === 'calendar' ? (
-                              <WorkspacePanelStack className="h-full">
-                                <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
-                                  <UnscheduledTaskList
-                                    tasks={unscheduledTasks}
-                                    projects={projects}
-                                    selectedDate={selectedCalendarDate}
-                                    newTaskValue={calendarHeaderNewTask}
-                                    onNewTaskValueChange={setCalendarHeaderNewTask}
-                                    onToggle={(taskId) => {
-                                      void toggleCalendarTask(taskId)
-                                    }}
-                                    onDelete={(taskId) => {
-                                      void removeCalendarTask(taskId)
-                                    }}
-                                    onRename={(taskId, newTitle) => {
-                                      void renameCalendarTask(taskId, newTitle)
-                                    }}
-                                    onUpdatePriority={(taskId, priority) => {
-                                      void updateCalendarTaskPriority(taskId, priority)
-                                    }}
-                                    onUpdateTaskType={(taskId, taskType) => {
-                                      void updateCalendarTaskType(taskId, taskType)
-                                    }}
-                                    onUpdateStatus={(taskId, status) => {
-                                      void updateProjectTask(taskId, {
-                                        status,
-                                        completed: status === 'completed'
-                                      })
-                                    }}
-                                    onUpdateTaskProject={(taskId, projectId) => {
-                                      void updateProjectTask(taskId, { projectId })
-                                    }}
-                                    onUpdateTime={(taskId, time) => {
-                                      void updateCalendarTaskTime(taskId, time)
-                                    }}
-                                    onUpdateReminders={(taskId, reminders) => {
-                                      void updateCalendarTaskReminders(taskId, reminders)
-                                    }}
-                                    onScheduleTask={(taskId, date) => {
-                                      void rescheduleCalendarTask(taskId, date)
-                                    }}
-                                    onUnscheduleTask={(taskId) => {
-                                      void rescheduleCalendarTask(taskId, undefined)
-                                    }}
-                                    onInsertTask={() => {
-                                      void addUnscheduledFromHeader()
-                                    }}
-                                  />
-                                </WorkspacePanelSection>
-                              </WorkspacePanelStack>
-                            ) : activePage === 'settings' ? (
-                              <SettingsRightPanelSections />
-                            ) : (
-                              <WorkspacePanelStack className="h-full">
-                                <WorkspacePanelSection>
-                                  <WorkspaceContextEmptyState
-                                    className="m-0 border-0 bg-transparent p-0"
-                                    description="Properties, activity, and secondary tools for this workspace will appear here."
-                                  />
-                                </WorkspacePanelSection>
-                              </WorkspacePanelStack>
-                            )}
-                          </DocumentWorkspacePanelContent>
-                        </div>
-                      </DocumentWorkspacePanel>
+                                    />
+                                    {useNativeMenus ? (
+                                      <WorkspaceIconButton
+                                        ref={noteActionsButtonRef}
+                                        onClick={() => {
+                                          void openNativeNoteActionsMenu()
+                                        }}
+                                        aria-label="Notebook actions"
+                                        title="Notebook actions"
+                                        icon={<Plus size={18} aria-hidden="true" />}
+                                      />
+                                    ) : (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <WorkspaceIconButton
+                                            aria-label="Notebook actions"
+                                            title="Notebook actions"
+                                            icon={<Plus size={18} aria-hidden="true" />}
+                                          />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start">
+                                          <DropdownMenuItem
+                                            onClick={() => {
+                                              void createNoteFromTree()
+                                            }}
+                                          >
+                                            New note
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => {
+                                              void createExcalidrawFromTree()
+                                            }}
+                                          >
+                                            New drawing
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => {
+                                              void createFolderFromTree()
+                                            }}
+                                          >
+                                            New folder
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => {
+                                              void importNotes()
+                                            }}
+                                          >
+                                            Import markdown
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                  </WorkspaceHeaderActions>
+                                ) : null
+                              }
+                            />
+
+                            <DocumentWorkspacePanelContent>
+                              {!hasVault ? (
+                                <WorkspacePanelStack className="h-full">
+                                  <WorkspacePanelSection>
+                                    <EmptyState
+                                      className="m-0 h-full border-0 bg-transparent p-3"
+                                      icon={LayoutGrid}
+                                      title="Context"
+                                      description="Select a vault to see workspace properties and secondary tools."
+                                    />
+                                  </WorkspacePanelSection>
+                                </WorkspacePanelStack>
+                              ) : activePage === 'notes' ? (
+                                <WorkspacePanelStack className="h-full">
+                                  <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
+                                    <NotesTreeView
+                                      tree={visibleNoteTree}
+                                      searchTerm={searchQuery}
+                                      activeNotePath={currentNotePath ?? currentExcalidrawPath}
+                                      selectedEntries={selectedNoteTreeEntries}
+                                      collapseAllToken={collapseAllNotesTreeToken}
+                                      shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
+                                      pendingEditId={pendingNoteTreeEditId}
+                                      onPendingEditHandled={handlePendingNoteTreeEditHandled}
+                                      onSelectionChange={setSelectedNoteTreeEntries}
+                                      onOpenNote={(relPath) => {
+                                        setSearchQuery('')
+                                        setSearchResults([])
+                                        void openNotebookPath(relPath)
+                                      }}
+                                      onCreateNote={(parentDir) => {
+                                        setSelectedNoteTreeEntries(
+                                          parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                        )
+                                        void createNoteFromTree(parentDir)
+                                      }}
+                                      onCreateExcalidraw={(parentDir) => {
+                                        setSelectedNoteTreeEntries(
+                                          parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                        )
+                                        void createExcalidrawFromTree(parentDir)
+                                      }}
+                                      onCreateFolder={(parentDir) => {
+                                        setSelectedNoteTreeEntries(
+                                          parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                        )
+                                        void createFolderFromTree(parentDir)
+                                      }}
+                                      onExportFolderPdf={(folderPath) => {
+                                        void exportFolderPdf(folderPath)
+                                      }}
+                                      onRenamePath={(relPath, nextName, kind) => {
+                                        void renameTreePath(relPath, nextName, kind)
+                                      }}
+                                      onDeleteEntries={(entries) => {
+                                        void deleteTreeEntries(entries)
+                                      }}
+                                      onMoveEntries={moveTreeEntries}
+                                    />
+                                  </WorkspacePanelSection>
+                                </WorkspacePanelStack>
+                              ) : activePage === 'projects' ? (
+                                <ProjectsWorkspaceRightPanel
+                                  projects={projects}
+                                  favoriteProjectIds={favoriteProjectIds}
+                                  selectedProjectId={selectedProjectId}
+                                  filterMode={projectFilterMode}
+                                  onSelectProject={selectProject}
+                                  onToggleProjectFavorite={toggleProjectFavoriteById}
+                                  onToggleProjectArchive={toggleProjectArchiveById}
+                                  onUpdateProjectProperties={saveProjectProperties}
+                                />
+                              ) : activePage === 'calendar' ? (
+                                <CalendarTaskPanel
+                                  tasks={unscheduledTasks}
+                                  projects={projects}
+                                  selectedDate={selectedCalendarDate}
+                                  newTaskValue={calendarHeaderNewTask}
+                                  onNewTaskValueChange={setCalendarHeaderNewTask}
+                                  onToggle={(taskId) => {
+                                    void toggleCalendarTask(taskId)
+                                  }}
+                                  onDelete={(taskId) => {
+                                    void removeCalendarTask(taskId)
+                                  }}
+                                  onRename={(taskId, newTitle) => {
+                                    void renameCalendarTask(taskId, newTitle)
+                                  }}
+                                  onUpdatePriority={(taskId, priority) => {
+                                    void updateCalendarTaskPriority(taskId, priority)
+                                  }}
+                                  onUpdateTaskType={(taskId, taskType) => {
+                                    void updateCalendarTaskType(taskId, taskType)
+                                  }}
+                                  onUpdateStatus={(taskId, status) => {
+                                    void updateProjectTask(taskId, {
+                                      status,
+                                      completed: status === 'completed'
+                                    })
+                                  }}
+                                  onUpdateTaskProject={(taskId, projectId) => {
+                                    void updateProjectTask(taskId, { projectId })
+                                  }}
+                                  onUpdateTime={(taskId, time) => {
+                                    void updateCalendarTaskTime(taskId, time)
+                                  }}
+                                  onUpdateReminders={(taskId, reminders) => {
+                                    void updateCalendarTaskReminders(taskId, reminders)
+                                  }}
+                                  onScheduleTask={(taskId, date) => {
+                                    void rescheduleCalendarTask(taskId, date)
+                                  }}
+                                  onUnscheduleTask={(taskId) => {
+                                    void rescheduleCalendarTask(taskId, undefined)
+                                  }}
+                                  onInsertTask={() => {
+                                    void addUnscheduledFromHeader()
+                                  }}
+                                />
+                              ) : activePage === 'settings' ? (
+                                <SettingsRightPanelSections />
+                              ) : (
+                                <WorkspacePanelStack className="h-full">
+                                  <WorkspacePanelSection>
+                                    <EmptyState
+                                      className="m-0 h-full border-0 bg-transparent p-3"
+                                      icon={LayoutGrid}
+                                      title="Context"
+                                      description="Properties, activity, and secondary tools for this workspace will appear here."
+                                    />
+                                  </WorkspacePanelSection>
+                                </WorkspacePanelStack>
+                              )}
+                            </DocumentWorkspacePanelContent>
+                          </div>
+                        </DocumentWorkspacePanel>
+                      )}
                     </WorkspaceResizableLayout>
                   </DocumentWorkspaceMain>
                 </DocumentWorkspace>

@@ -20,6 +20,7 @@ import {
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
+import { DragSource } from './ui/drag-source'
 import {
   buildCalendarEvents,
   type CalendarEventInput,
@@ -498,7 +499,7 @@ export function CalendarMonthView({
             return (
               <div
                 className={`flex w-full flex-col items-center bg-card px-3 py-3 text-center transition-colors ${
-                  isHighlighted ? 'bg-accent' : 'hover:bg-accent'
+                  isHighlighted ? 'calendar-date-highlight' : 'calendar-date-highlight-hover'
                 }`}
               >
                 <span
@@ -507,6 +508,23 @@ export function CalendarMonthView({
                   }`}
                 >
                   {formatWeekdayHeaderLabel(arg.date)}
+                </span>
+              </div>
+            )
+          }}
+          dayCellContent={(arg) => {
+            const date = toIsoDate(arg.date)
+            const isToday = date === todayIso
+
+            return (
+              <div className="flex w-full items-center gap-2 px-1 pt-1">
+                {isToday ? (
+                  <span className="rounded-sm bg-destructive px-1.5 py-0.5 text-xs font-semibold text-destructive-foreground">
+                    today
+                  </span>
+                ) : null}
+                <span className="ml-auto text-sm font-medium text-foreground">
+                  {arg.dayNumberText}
                 </span>
               </div>
             )
@@ -542,11 +560,15 @@ export function CalendarMonthView({
             if (!task) {
               return ['rounded-md', 'border', 'bg-card']
             }
-            return ['calendar-task-event', 'rounded-md']
+            return [
+              'calendar-task-event',
+              'rounded-md',
+              ...(arg.isMirror ? ['calendar-task-drag-preview'] : [])
+            ]
           }}
           dayCellClassNames={(arg) => {
             const iso = toIsoDate(arg.date)
-            return iso === selectedDate || iso === todayIso ? ['bg-accent'] : []
+            return iso === selectedDate || iso === todayIso ? ['calendar-date-highlight'] : []
           }}
           eventContent={(arg) => {
             const task = tasksById[arg.event.id]
@@ -555,13 +577,21 @@ export function CalendarMonthView({
             }
 
             return (
-              <CalendarTaskCard
-                task={task}
-                project={task.projectId ? projectsById.get(task.projectId) : undefined}
-                onStatusChange={(taskId, status) =>
-                  safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
-                }
-              />
+              <DragSource
+                as="div"
+                draggable={false}
+                preview="none"
+                previewVariant="content"
+                data-calendar-task-drag-source="true"
+              >
+                <CalendarTaskCard
+                  task={task}
+                  project={task.projectId ? projectsById.get(task.projectId) : undefined}
+                  onStatusChange={(taskId, status) =>
+                    safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+                  }
+                />
+              </DragSource>
             )
           }}
         />

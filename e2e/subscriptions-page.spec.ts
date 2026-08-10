@@ -71,6 +71,9 @@ test.describe('subscriptions page', () => {
 
       await page.getByTestId('sidebar-page:subscriptions').click()
       await expect(page.getByTestId('subscriptions-page')).toBeVisible()
+      await expect(
+        page.getByRole('table').getByRole('heading', { name: 'No subscriptions yet' })
+      ).toBeVisible()
 
       await page.getByRole('button', { name: '+ New subscription' }).click()
       await page.getByLabel('Name').fill('ChatGPT Plus')

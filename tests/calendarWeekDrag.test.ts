@@ -4,6 +4,7 @@ import {
   buildWeeklyAllDayDropIndicator,
   buildWeeklyAllDayDropSchedule,
   buildWeeklyTimedCreateSchedule,
+  buildWeeklyTimedDropPreview,
   buildWeeklyTimedDropRange,
   buildWeeklyTimedDropSchedule
 } from '../src/renderer/src/lib/calendarWeekDrag'
@@ -36,7 +37,8 @@ describe('buildWeeklyTimedDropSchedule', () => {
       date: '2026-04-15',
       endDate: undefined,
       time: '09:50',
-      endTime: '10:30'
+      endTime: '10:30',
+      weeklyHeightMode: 'duration'
     })
   })
 
@@ -45,7 +47,38 @@ describe('buildWeeklyTimedDropSchedule', () => {
       date: '2026-04-15',
       endDate: undefined,
       time: '01:20',
-      endTime: undefined
+      endTime: undefined,
+      weeklyHeightMode: 'duration'
+    })
+  })
+
+  it('marks tasks without start or end times for content-fit weekly rendering', () => {
+    expect(buildWeeklyTimedDropSchedule(makeTask(), '2026-04-15', 605, 0)).toEqual({
+      date: '2026-04-15',
+      endDate: undefined,
+      time: '10:10',
+      endTime: '11:10',
+      weeklyHeightMode: 'content'
+    })
+  })
+})
+
+describe('buildWeeklyTimedDropPreview', () => {
+  it('uses the timed task duration and preserves the grab offset', () => {
+    expect(
+      buildWeeklyTimedDropPreview(makeTask({ time: '09:00', endTime: '09:40' }), 605, 17)
+    ).toEqual({
+      startMinutes: 590,
+      endMinutes: 630,
+      heightMode: 'duration'
+    })
+  })
+
+  it('converts an all-day task into a compact one-hour timed preview', () => {
+    expect(buildWeeklyTimedDropPreview(makeTask({ date: '2026-04-15' }), 60, 0)).toEqual({
+      startMinutes: 60,
+      endMinutes: 120,
+      heightMode: 'content'
     })
   })
 })

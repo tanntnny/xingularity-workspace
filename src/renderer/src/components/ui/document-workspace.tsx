@@ -27,16 +27,18 @@ interface WorkspaceIconButtonProps extends Omit<
   icon: React.ReactNode
   label?: string
   active?: boolean
+  borderless?: boolean
 }
 
 const WorkspaceIconButton = React.forwardRef<
   React.ElementRef<typeof Button>,
   WorkspaceIconButtonProps
 >(({ className, icon, label, active = false, type = 'button', ...props }, ref) => {
+  const { borderless = false, ...buttonProps } = props
   const inferredLabel =
     label ??
-    (typeof props['aria-label'] === 'string' ? props['aria-label'] : undefined) ??
-    (typeof props.title === 'string' ? props.title : undefined)
+    (typeof buttonProps['aria-label'] === 'string' ? buttonProps['aria-label'] : undefined) ??
+    (typeof buttonProps.title === 'string' ? buttonProps.title : undefined)
 
   return (
     <Button
@@ -47,13 +49,13 @@ const WorkspaceIconButton = React.forwardRef<
       data-active={active ? 'true' : 'false'}
       className={cn(
         'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
-        !label ? 'border border-input' : undefined,
+        !label && !borderless ? 'border border-input' : undefined,
         label ? 'gap-1.5' : undefined,
         className
       )}
-      aria-label={props['aria-label'] ?? inferredLabel}
-      title={props.title ?? inferredLabel}
-      {...props}
+      aria-label={buttonProps['aria-label'] ?? inferredLabel}
+      title={buttonProps.title ?? inferredLabel}
+      {...buttonProps}
     >
       {icon}
       {label ? <span>{label}</span> : null}
@@ -110,6 +112,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               'flex min-w-max items-center gap-1.5 border-0 bg-transparent p-0 pr-1',
               workspaceTopbarControlClass
             )}
+            selectionIndicatorAnimated={false}
           >
             {tabs.map((tab) => {
               const TabIcon = tab.icon
@@ -127,7 +130,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     id={`workspace-tab:${tab.id}`}
                     aria-label={tab.label}
                     data-testid={`workspace-tab:${tab.id}`}
-                    className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left hover:bg-accent/60 hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                    className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left transition-none hover:bg-accent/60 hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                   >
                     {TabIcon ? (
                       <TabIcon
@@ -152,6 +155,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     aria-label={`Close ${tab.label} tab`}
                     title={`Close ${tab.label} tab`}
                     data-testid={`workspace-tab-close:${tab.id}`}
+                    borderless
                     className="h-[var(--workspace-tab-control-height)] w-[var(--workspace-tab-control-height)] rounded-[var(--radius-button-pill)]"
                     icon={<X size={16} aria-hidden="true" />}
                     onClick={() => onCloseTab(tab.id)}
@@ -334,6 +338,56 @@ const DocumentWorkspacePanel = React.forwardRef<
 ))
 DocumentWorkspacePanel.displayName = 'DocumentWorkspacePanel'
 
+interface WorkspaceRightPanelProps extends React.HTMLAttributes<HTMLDivElement> {
+  hasPanel?: boolean
+  panelCollapsed?: boolean
+  panelHidden?: boolean
+}
+
+const WorkspaceRightPanel = React.forwardRef<HTMLDivElement, WorkspaceRightPanelProps>(
+  (
+    {
+      children,
+      className,
+      hasPanel = true,
+      panelCollapsed = false,
+      panelHidden = false,
+      style,
+      ...props
+    },
+    ref
+  ) => {
+    const isOpen = hasPanel && !panelCollapsed && !panelHidden
+
+    return (
+      <div
+        ref={ref}
+        data-panel-state={isOpen ? 'open' : 'collapsed'}
+        data-panel-resizable={hasPanel ? 'true' : undefined}
+        className={cn(
+          'motion-workspace-panel flex h-full min-h-0 w-full min-w-0 basis-auto shrink-0 flex-col gap-3 overflow-y-auto',
+          isOpen ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-full opacity-0',
+          className
+        )}
+        style={
+          isOpen
+            ? style
+            : {
+                ...style,
+                width: '0px',
+                flexBasis: '0px',
+                borderWidth: '0px'
+              }
+        }
+        {...props}
+      >
+        {children}
+      </div>
+    )
+  }
+)
+WorkspaceRightPanel.displayName = 'WorkspaceRightPanel'
+
 function useIsNarrowWorkspace(): boolean {
   const [isNarrow, setIsNarrow] = React.useState(() => {
     if (typeof window === 'undefined') {
@@ -385,7 +439,8 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
     const latestPanelWidthRef = React.useRef(panelWidth)
     const persistLayoutFrameRef = React.useRef<number | null>(null)
     const [initialPanelWidth] = React.useState(panelWidth)
-    const [mainContent, panelContent] = React.Children.toArray(children)
+    const [mainContent, ...panelContents] = React.Children.toArray(children)
+    const hasPanelContent = panelContents.length > 0
 
     React.useEffect(() => {
       return () => {
@@ -413,15 +468,28 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
       }
     }, [isNarrow, panelCollapsed, panelHidden])
 
-    if (!hasPanel || !panelContent) {
+    if (!hasPanel || !hasPanelContent) {
       return <>{mainContent}</>
     }
+
+    const rightPanelContent =
+      panelContents.length === 1 ? (
+        panelContents[0]
+      ) : (
+        <WorkspaceRightPanel
+          hasPanel={hasPanel}
+          panelCollapsed={panelCollapsed}
+          panelHidden={panelHidden}
+        >
+          {panelContents}
+        </WorkspaceRightPanel>
+      )
 
     if (isNarrow) {
       return (
         <>
           {mainContent}
-          {panelContent}
+          {rightPanelContent}
         </>
       )
     }
@@ -490,7 +558,7 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
             }
           }}
         >
-          {panelContent}
+          {rightPanelContent}
         </ResizablePanel>
       </ResizablePanelGroup>
     )
@@ -725,7 +793,10 @@ const DocumentWorkspaceMainContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <main
     ref={ref}
-    className={cn('h-full min-h-0 min-w-0 flex-1 overflow-auto p-2', className)}
+    className={cn(
+      'document-workspace-main-content h-full min-h-0 min-w-0 w-full max-w-none flex-1 overflow-auto scrollbar-none p-2',
+      className
+    )}
     {...props}
   />
 ))
@@ -737,27 +808,11 @@ const DocumentWorkspacePanelContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', className)}
+    className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-none', className)}
     {...props}
   />
 ))
 DocumentWorkspacePanelContent.displayName = 'DocumentWorkspacePanelContent'
-
-interface WorkspaceContextEmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
-  title?: string
-  description: string
-}
-
-const WorkspaceContextEmptyState = React.forwardRef<
-  HTMLDivElement,
-  WorkspaceContextEmptyStateProps
->(({ className, title = 'Context', description, ...props }, ref) => (
-  <div ref={ref} className={cn('m-3 rounded-xl border bg-muted p-4', className)} {...props}>
-    <p className="text-sm font-semibold">{title}</p>
-    <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-  </div>
-))
-WorkspaceContextEmptyState.displayName = 'WorkspaceContextEmptyState'
 
 export {
   WorkspaceContextProvider,
@@ -770,13 +825,13 @@ export {
   WorkspaceHeaderSecondaryActionsRight,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
+  WorkspaceRightPanel,
   WorkspaceResizableLayout,
   WorkspacePanelStack,
   DocumentWorkspacePanelHeader,
   DocumentWorkspacePanelContent,
   DocumentWorkspaceFooterStatus,
   WorkspaceFooter,
-  WorkspaceContextEmptyState,
   WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,

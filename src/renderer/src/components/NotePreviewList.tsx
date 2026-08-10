@@ -1,10 +1,11 @@
 import { ReactElement, useMemo } from 'react'
-import { Copy, FileText, FolderInput, Link, Pencil, Trash2 } from './ui/icons'
+import { Copy, FileText, FolderInput, Link, Pencil, Search, Trash2 } from './ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
+import { EmptyState } from './ui/empty-state'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -121,7 +122,12 @@ export function NotePreviewList({
   return (
     <div ref={containerRef} className="flex h-full flex-col gap-2.5 overflow-auto p-3">
       {filtered.length === 0 ? (
-        <div className="p-3 text-sm text-muted-foreground">No notes found</div>
+        <EmptyState
+          className="h-full border-0 bg-transparent px-3 py-6"
+          icon={Search}
+          title="No notes found"
+          description="Try a different filter or search term."
+        />
       ) : (
         <>
           <NoteSection
@@ -205,7 +211,12 @@ function NoteSection({
     <WorkspacePanelSection>
       <WorkspacePanelSectionHeader heading={title} description={description} />
       {notes.length === 0 ? (
-        <div className="p-3 text-sm text-muted-foreground">{emptyLabel}</div>
+        <EmptyState
+          className="border-0 bg-transparent px-3 py-4"
+          icon={FileText}
+          title={emptyLabel}
+          description="Notes that match this section will appear here."
+        />
       ) : (
         notes.map((note) => {
           const revealProps = getRevealItemProps(`${revealKeyPrefix}:${note.relPath}`)

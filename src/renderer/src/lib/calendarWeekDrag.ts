@@ -1,4 +1,4 @@
-import { CalendarTask } from '../../../shared/types'
+import { CalendarTask, WeeklyHeightMode } from '../../../shared/types'
 import {
   buildMovedTimedRange,
   minutesToTime,
@@ -7,8 +7,27 @@ import {
   snapMinutes
 } from './calendarWeekLayout'
 
+export interface WeeklyTimedDropPreview {
+  startMinutes: number
+  endMinutes: number
+  heightMode: WeeklyHeightMode
+}
+
+export function buildWeeklyTimedDropPreview(
+  task: Pick<CalendarTask, 'time' | 'endTime' | 'weeklyHeightMode'> | undefined,
+  pointerMinutes: number,
+  pointerOffsetMinutes: number
+): WeeklyTimedDropPreview {
+  const nextRange = buildWeeklyTimedDropRange(task, pointerMinutes, pointerOffsetMinutes)
+
+  return {
+    ...nextRange,
+    heightMode: getWeeklyHeightModeForTask(task)
+  }
+}
+
 export function buildWeeklyTimedDropSchedule(
-  task: Pick<CalendarTask, 'time' | 'endTime'> | undefined,
+  task: Pick<CalendarTask, 'time' | 'endTime' | 'weeklyHeightMode'> | undefined,
   date: string,
   pointerMinutes: number,
   pointerOffsetMinutes: number
@@ -17,15 +36,17 @@ export function buildWeeklyTimedDropSchedule(
   endDate: undefined
   time: string
   endTime: string | undefined
+  weeklyHeightMode: WeeklyHeightMode
 } {
-  const nextRange = buildWeeklyTimedDropRange(task, pointerMinutes, pointerOffsetMinutes)
+  const nextRange = buildWeeklyTimedDropPreview(task, pointerMinutes, pointerOffsetMinutes)
 
   if (!task) {
     return {
       date,
       endDate: undefined,
       time: minutesToTime(nextRange.startMinutes),
-      endTime: undefined
+      endTime: undefined,
+      weeklyHeightMode: 'duration'
     }
   }
 
@@ -33,7 +54,8 @@ export function buildWeeklyTimedDropSchedule(
     date,
     endDate: undefined,
     time: minutesToTime(nextRange.startMinutes),
-    endTime: minutesToTime(nextRange.endMinutes)
+    endTime: minutesToTime(nextRange.endMinutes),
+    weeklyHeightMode: nextRange.heightMode
   }
 }
 
@@ -78,6 +100,20 @@ export function buildWeeklyTimedDropRange(
     pointerOffsetMinutes,
     durationMinutes: normalizedRange.endMinutes - normalizedRange.startMinutes
   })
+}
+
+export function getWeeklyHeightModeForTask(
+  task: Pick<CalendarTask, 'time' | 'endTime' | 'weeklyHeightMode'> | undefined
+): WeeklyHeightMode {
+  if (!task) {
+    return 'duration'
+  }
+
+  if (task?.weeklyHeightMode === 'content') {
+    return 'content'
+  }
+
+  return !task.time && !task.endTime ? 'content' : 'duration'
 }
 
 export function buildWeeklyAllDayDropSchedule(

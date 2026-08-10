@@ -176,7 +176,12 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 }
 
 function getNotePanelToggle(page: Page): Locator {
-  return page.getByTestId('note-panel-toggle:tree').or(page.getByTestId('note-panel-toggle'))
+  return page
+    .getByTestId('note-panel-toggle:tree')
+    .or(page.getByTestId('note-panel-toggle'))
+    .or(page.getByTestId('notes-tree-view'))
+    .or(page.getByTestId('notebook-empty-state'))
+    .first()
 }
 
 async function expectNotePanelReady(page: Page): Promise<void> {
@@ -410,6 +415,29 @@ async function sampleEditorInstanceCounts(
 }
 
 test.describe('note page block editor switching', () => {
+  test('shows recent files in the empty notebook state', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
+      await openNote(page, 'alpha.md')
+      await openNote(page, 'beta.md')
+
+      page.once('dialog', (dialog) => dialog.accept())
+      await page.getByRole('button', { name: 'Delete Note' }).click()
+
+      await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Pick up where you left off' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Open alpha' })).toBeVisible()
+      await page.getByRole('button', { name: 'Open alpha' }).click()
+      await expect(page.getByTestId('note-block-editor')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('opens the note export dialog and selects PDF', async () => {
     const vaultRoot = await createFixtureVault('Export me\n')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -1346,10 +1374,7 @@ test.describe('note page block editor switching', () => {
       await expect(codeBlock).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
       await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
       await expect(codeBlock).toHaveCSS('border-top-width', '1px')
-      await expect(codeBlock.locator('code')).toHaveCSS(
-        'font-family',
-        /JetBrains Mono/
-      )
+      await expect(codeBlock.locator('code')).toHaveCSS('font-family', /JetBrains Mono/)
 
       await page.keyboard.type('const value = 42')
       await page.keyboard.press('Enter')

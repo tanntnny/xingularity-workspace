@@ -26,6 +26,7 @@ import {
 } from '../components/ui/document-workspace'
 import { CollapsibleWorkspacePanelSection } from '../components/ui/workspace-panel-section'
 import { WorkspaceListRail, WorkspaceListRailItem } from '../components/ui/workspace-list-rail'
+import { EmptyState } from '../components/ui/empty-state'
 import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
 import { SelectiveChip, type SelectiveChipOption } from '../components/ui/selective-chip'
 import {
@@ -33,7 +34,7 @@ import {
   PROJECTS_WORKSPACE_FILTER_OPTIONS,
   type ProjectsWorkspaceFilterMode
 } from '../lib/projectTaskRows'
-import { Archive, Circle, Plus, Star, Trash2, X } from '../components/ui/icons'
+import { Archive, FolderKanban, ListTodo, Plus, Star, Trash2, X } from '../components/ui/icons'
 
 export type { ProjectsWorkspaceFilterMode } from '../lib/projectTaskRows'
 
@@ -136,11 +137,11 @@ export function ProjectsWorkspacePage({
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-transparent">
+    <div className="flex min-h-full min-w-0 flex-col bg-transparent">
       <WorkspaceHeaderSecondaryActionsRight>{toolbar}</WorkspaceHeaderSecondaryActionsRight>
-      <main className="min-h-0 flex-1 overflow-auto p-2">
+      <div className="min-h-full w-full">
         {selectedProject ? (
-          <div className="mx-auto max-w-5xl space-y-3">
+          <div className="w-full space-y-3">
             <ProjectDetails
               key={selectedProject.id}
               project={selectedProject}
@@ -161,11 +162,12 @@ export function ProjectsWorkspacePage({
           </div>
         ) : (
           <EmptyState
+            icon={FolderKanban}
             title="No project selected"
             description="Create a project to start organizing tasks."
           />
         )}
-      </main>
+      </div>
       {editingTask ? (
         <TaskEditDialog
           key={editingTask.id}
@@ -224,7 +226,6 @@ export function ProjectsWorkspaceRightPanel({
           aria-label="Projects"
           data-testid="projects-workspace-sidebar"
           className="h-auto min-h-0 p-3"
-          emptyState="No projects yet"
         >
           {visibleProjects.map((project) => (
             <WorkspaceListRailItem
@@ -317,6 +318,7 @@ function ProjectDetails({
         description="Select a project to edit its details."
       >
         <EmptyState
+          icon={FolderKanban}
           title="No project selected"
           description="Create a project to see its properties."
         />
@@ -425,13 +427,7 @@ function ProjectPropertiesPanel({
       <CollapsibleWorkspacePanelSection
         data-testid="project-properties-panel"
         heading="Project properties"
-        description="Select a project to edit its properties."
-      >
-        <EmptyState
-          title="No project selected"
-          description="Create a project to see its properties."
-        />
-      </CollapsibleWorkspacePanelSection>
+      />
     )
   }
 
@@ -521,7 +517,11 @@ function ProjectPropertyRow({
       data-testid={testId}
     >
       <span className="pt-1 text-sm font-medium text-muted-foreground">{label}</span>
-      <div className="flex w-full min-w-0 flex-wrap justify-start gap-1.5">{children}</div>
+      <div className="min-w-0 max-w-full overflow-x-auto" data-testid={`${testId}-value`}>
+        <div className="flex w-max min-w-full flex-nowrap items-start justify-start gap-1.5">
+          {children}
+        </div>
+      </div>
     </div>
   )
 }
@@ -540,7 +540,7 @@ function ProjectDateValue({
   onClear: () => void
 }): ReactElement {
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+    <div className="flex w-max min-w-full shrink-0 flex-nowrap items-center gap-1.5">
       <DatePickerISO
         value={value ?? ''}
         onChange={onChange}
@@ -601,7 +601,7 @@ function ProjectChipEditor({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex w-max min-w-full shrink-0 flex-nowrap items-center gap-2">
       {values.map((value) => (
         <TagChip key={value} tag={value} onRemove={() => onRemove(value)} />
       ))}
@@ -668,7 +668,11 @@ function ProjectTasks({
         </h2>
       </div>
       {tasks.length === 0 ? (
-        <EmptyState title="No tasks in this project" description="Add a new task to get started." />
+        <EmptyState
+          icon={ListTodo}
+          title="No tasks in this project"
+          description="Add a new task to get started."
+        />
       ) : (
         <ul className="list-none">
           {tasks.map((task) => (
@@ -777,15 +781,5 @@ function TaskDetailRow({
         </Button>
       </div>
     </li>
-  )
-}
-
-function EmptyState({ title, description }: { title: string; description: string }): ReactElement {
-  return (
-    <div className="col-span-full flex min-h-32 flex-col items-center justify-center gap-1 p-6 text-center">
-      <Circle size={18} className="text-muted-foreground" />
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <div className="text-xs text-muted-foreground">{description}</div>
-    </div>
   )
 }

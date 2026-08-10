@@ -31,7 +31,7 @@ const WorkspaceListRail = React.forwardRef<HTMLElement, WorkspaceListRailProps>(
         {hasItems ? (
           <ul className="flex min-w-0 flex-col gap-2">{children}</ul>
         ) : emptyState ? (
-          <p className="p-1 text-sm text-muted-foreground">{emptyState}</p>
+          <div className="p-1 text-sm text-muted-foreground">{emptyState}</div>
         ) : null}
       </nav>
     )

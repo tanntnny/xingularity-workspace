@@ -127,9 +127,7 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
 
     await expect(page.getByTestId(`note-tree-row:${renamedPath}`)).toHaveCount(0)
     await expect(page.locator('.excalidraw')).toHaveCount(0)
-    await expect(
-      page.getByText('Pick a note or drawing from the right panel to open it')
-    ).toBeVisible()
+    await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
     await expect(fs.access(path.join(vaultRoot, 'notebooks', renamedPath))).rejects.toThrow()
     await expect(page.getByText('Drawing deleted', { exact: true })).toBeVisible()
   } finally {
