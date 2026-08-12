@@ -109,9 +109,9 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
 
 WorkspacePageLayout.displayName = 'WorkspacePageLayout'
 
-const WorkspaceSectionCard = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement>>(
+const WorkspaceSectionCard = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <section
+    <div
       ref={ref}
       className={cn('rounded-lg border bg-card p-6 text-card-foreground', className)}
       {...props}

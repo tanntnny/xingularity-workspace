@@ -1013,10 +1013,7 @@ function TreeNode({
               <Pencil className="mr-2 h-4 w-4" />
               Rename
             </ContextMenuItem>
-            <ContextMenuItem
-              className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-              onSelect={() => handleMenuAction('delete')}
-            >
+            <ContextMenuItem destructive onSelect={() => handleMenuAction('delete')}>
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </ContextMenuItem>

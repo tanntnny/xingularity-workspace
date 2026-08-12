@@ -121,7 +121,10 @@ const TOKEN_GROUPS: TokenGroup[] = [
       { name: '--secondary', label: 'Secondary' },
       { name: '--accent', label: 'Accent' },
       { name: '--ring', label: 'Focus ring' },
-      { name: '--destructive', label: 'Destructive' }
+      { name: '--destructive', label: 'Destructive' },
+      { name: '--success', label: 'Success' },
+      { name: '--warning', label: 'Warning' },
+      { name: '--info', label: 'Info' }
     ]
   }
 ]
@@ -156,7 +159,8 @@ function TokenSwatch({ token, value }: { token: TokenDefinition; value: string }
       data-testid={`design-audit-token:${token.name.slice(2)}`}
     >
       <div
-        className="h-10 rounded-md border border-black/10 shadow-sm"
+        role="img"
+        className="h-10 rounded-md border border-border shadow-sm"
         style={{ background: `var(${token.name})` } as CSSProperties}
         aria-label={`${token.label} swatch`}
       />
@@ -385,12 +389,16 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
           <div className="grid gap-4 xl:grid-cols-2">
             <WorkspaceSectionCard>
               <div className="grid gap-4">
-                <Field label="Input" description="Standard text input treatment.">
-                  <Input defaultValue="A design-system value" aria-label="Design audit input" />
+                <Field
+                  label="Input"
+                  htmlFor="design-audit-input"
+                  description="Standard text input treatment."
+                >
+                  <Input id="design-audit-input" defaultValue="A design-system value" />
                 </Field>
-                <Field label="Select">
+                <Field label="Select" htmlFor="design-audit-select">
                   <Select defaultValue="workspace">
-                    <SelectTrigger aria-label="Design audit select">
+                    <SelectTrigger id="design-audit-select">
                       <SelectValue placeholder="Choose a workspace" />
                     </SelectTrigger>
                     <SelectContent>
@@ -400,9 +408,9 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Textarea">
+                <Field label="Textarea" htmlFor="design-audit-textarea">
                   <Textarea
-                    aria-label="Design audit textarea"
+                    id="design-audit-textarea"
                     defaultValue="A reusable multiline field specimen."
                   />
                 </Field>
@@ -411,9 +419,13 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
 
             <WorkspaceSectionCard>
               <div className="grid gap-5">
-                <Field label="Select" description="Standard shadcn single-selection control.">
+                <Field
+                  label="Select"
+                  htmlFor="design-audit-status"
+                  description="Standard shadcn single-selection control."
+                >
                   <Select defaultValue="review">
-                    <SelectTrigger aria-label="Design audit status">
+                    <SelectTrigger id="design-audit-status">
                       <SelectValue placeholder="Choose a status" />
                     </SelectTrigger>
                     <SelectContent>

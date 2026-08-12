@@ -453,6 +453,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.createFleetingNote(fleetingContentSchema.parse(content))
   })
 
+  handleIpc(IPC_CHANNELS.removeFleetingNote, async (_event, relPath: unknown) => {
+    return runtime.removeFleetingNote(genericPathSchema.parse(relPath))
+  })
+
   handleIpc(IPC_CHANNELS.convertFleetingNote, async (_event, input: unknown) => {
     const parsed = fleetingConversionSchema.parse(input)
     return runtime.convertFleetingNote(parsed.relPath, parsed.target)

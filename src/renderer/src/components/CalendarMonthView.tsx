@@ -28,6 +28,7 @@ import {
 } from '../lib/calendarTasks'
 import { toIsoDate } from '../lib/calendarDate'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
+import { setCalendarTaskUnscheduledDragOver } from '../lib/calendarTaskDragSession'
 import { TaskEditDialog } from './TaskEditDialog'
 
 interface CalendarMonthViewProps {
@@ -241,7 +242,57 @@ export function CalendarMonthView({
       }
     })
 
+    let activeSource: HTMLElement | null = null
+    let activeDropCell: HTMLElement | null = null
+
+    const setActiveDropCell = (nextCell: HTMLElement | null): void => {
+      if (activeDropCell === nextCell) {
+        return
+      }
+
+      if (activeDropCell) {
+        activeDropCell.dataset.calendarDropOver = 'false'
+      }
+      if (nextCell) {
+        nextCell.dataset.calendarDropOver = 'true'
+      }
+      activeDropCell = nextCell
+    }
+
+    const handleExternalDragStart = (event: MonthlyExternalDragEvent): void => {
+      activeSource = event.subjectEl
+      activeSource.dataset.dragging = 'true'
+    }
+
+    const handleExternalDragMove = (event: MonthlyExternalDragEvent): void => {
+      const pointerTarget = document.elementFromPoint(
+        event.pageX - window.scrollX,
+        event.pageY - window.scrollY
+      )
+      const dayCell =
+        pointerTarget instanceof Element
+          ? pointerTarget.closest<HTMLElement>('.calendar-full .fc-daygrid-day')
+          : null
+      setActiveDropCell(dayCell)
+    }
+
+    const handleExternalDragEnd = (): void => {
+      if (activeSource) {
+        activeSource.dataset.dragging = 'false'
+        activeSource = null
+      }
+      setActiveDropCell(null)
+    }
+
+    draggable.dragging.emitter.on('dragstart', handleExternalDragStart)
+    draggable.dragging.emitter.on('dragmove', handleExternalDragMove)
+    draggable.dragging.emitter.on('dragend', handleExternalDragEnd)
+
     return () => {
+      draggable.dragging.emitter.off('dragstart', handleExternalDragStart)
+      draggable.dragging.emitter.off('dragmove', handleExternalDragMove)
+      draggable.dragging.emitter.off('dragend', handleExternalDragEnd)
+      handleExternalDragEnd()
       draggable.destroy()
     }
   }, [])
@@ -437,6 +488,8 @@ export function CalendarMonthView({
   }
 
   const handleDayCellDidMount = (info: DayCellMountArg): void => {
+    info.el.dataset.calendarDropZone = 'true'
+
     const onDoubleClick = (event: MouseEvent): void => {
       event.preventDefault()
       const iso = toIsoDate(info.date)
@@ -461,6 +514,9 @@ export function CalendarMonthView({
   }
 
   const handleDayCellWillUnmount = (info: DayCellMountArg): void => {
+    delete info.el.dataset.calendarDropZone
+    delete info.el.dataset.calendarDropOver
+
     const handler = dayCellListenerMapRef.current.get(info.el)
     if (handler) {
       info.el.removeEventListener('dblclick', handler)
@@ -625,6 +681,11 @@ export function CalendarMonthView({
       {hoveredTaskCard ? (
         <CalendarTaskHoverCard
           task={hoveredTaskCard.task}
+          project={
+            hoveredTaskCard.task.projectId
+              ? projectsById.get(hoveredTaskCard.task.projectId)
+              : undefined
+          }
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
         />
@@ -672,6 +733,12 @@ function addIsoDays(date: Date, days: number): Date {
   return next
 }
 
+interface MonthlyExternalDragEvent {
+  subjectEl: HTMLElement
+  pageX: number
+  pageY: number
+}
+
 function formatWeekdayHeaderLabel(date: Date): string {
   return date.toLocaleDateString(undefined, {
     weekday: 'long'
@@ -679,6 +746,8 @@ function formatWeekdayHeaderLabel(date: Date): string {
 }
 
 function setUnscheduledDragState(isActive: boolean): void {
+  setCalendarTaskUnscheduledDragOver(isActive)
+
   const unscheduledContainer = document.querySelector<HTMLElement>(
     '[data-unscheduled-task-list="true"]'
   )

@@ -276,10 +276,12 @@ export function SettingsPage({
 
           <Field
             label="Profile Name"
+            htmlFor="settings-profile-name"
             description="Press Enter or click away to save."
             aria-label="Profile settings"
           >
             <Input
+              id="settings-profile-name"
               type="text"
               maxLength={100}
               value={profileDraft}
@@ -303,7 +305,10 @@ export function SettingsPage({
             </p>
           </div>
 
-          <div className="grid w-full gap-1.5" aria-label="Vault storage">
+          <section className="grid w-full gap-1.5" aria-labelledby="settings-vault-storage-heading">
+            <span id="settings-vault-storage-heading" className="text-sm text-muted-foreground">
+              Vault storage
+            </span>
             <span className="text-sm text-muted-foreground">Active Vault</span>
             <div className="border border-input bg-card text-foreground w-full break-words rounded-lg border border-border p-2.5 text-sm text-foreground">
               {vaultLocation ?? 'No vault selected yet. Open or create a vault to set a location.'}
@@ -315,9 +320,15 @@ export function SettingsPage({
             <Button type="button" variant="outline" onClick={onManageVaults}>
               Manage Vaults
             </Button>
-          </div>
+          </section>
 
-          <div className="grid w-full gap-1.5" aria-label="Note migration">
+          <section
+            className="grid w-full gap-1.5"
+            aria-labelledby="settings-note-migration-heading"
+          >
+            <span id="settings-note-migration-heading" className="text-sm text-muted-foreground">
+              Note migration
+            </span>
             <span className="text-sm text-muted-foreground">Old Note Conversion</span>
             <p className="text-sm leading-6 text-muted-foreground">
               Convert old BlockNote JSON note files into normal markdown in your vault.
@@ -331,7 +342,7 @@ export function SettingsPage({
             <Button type="button" variant="outline" onClick={onImportLegacyExcalidrawSessions}>
               Import legacy Excalidraw drawings
             </Button>
-          </div>
+          </section>
         </div>
       ) : null}
 
@@ -355,9 +366,10 @@ export function SettingsPage({
 
           <Field
             label="App Font"
+            htmlFor="settings-app-font"
             description="The interface uses Inter for consistent readability."
           >
-            <Input value="Inter" readOnly aria-label="App font" />
+            <Input id="settings-app-font" value="Inter" readOnly aria-label="App font" />
           </Field>
         </div>
       ) : null}
@@ -431,14 +443,18 @@ export function SettingsPage({
                       key={mapping.id}
                       className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(11rem,1.4fr)_auto]"
                     >
-                      <Field className="gap-1 text-xs text-muted-foreground" label="Mode">
+                      <Field
+                        className="gap-1 text-xs text-muted-foreground"
+                        label="Mode"
+                        htmlFor={`vim-mode-${mapping.id}`}
+                      >
                         <Select
                           value={mapping.mode}
                           onValueChange={(value) =>
                             updateVimMapping(mapping.id, { mode: value as NoteVimMappingMode })
                           }
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`vim-mode-${mapping.id}`} className="w-full">
                             <SelectValue placeholder="Select mode" />
                           </SelectTrigger>
                           <SelectContent>
@@ -451,8 +467,13 @@ export function SettingsPage({
                         </Select>
                       </Field>
 
-                      <Field className="gap-1 text-xs text-muted-foreground" label="Sequence">
+                      <Field
+                        className="gap-1 text-xs text-muted-foreground"
+                        label="Sequence"
+                        htmlFor={`vim-sequence-${mapping.id}`}
+                      >
                         <Input
+                          id={`vim-sequence-${mapping.id}`}
                           className="rounded-lg border border-border bg-card p-3 font-mono text-sm text-foreground"
                           value={mapping.sequence}
                           maxLength={8}
@@ -464,14 +485,18 @@ export function SettingsPage({
                         />
                       </Field>
 
-                      <Field className="gap-1 text-xs text-muted-foreground" label="Action">
+                      <Field
+                        className="gap-1 text-xs text-muted-foreground"
+                        label="Action"
+                        htmlFor={`vim-action-${mapping.id}`}
+                      >
                         <Select
                           value={mapping.action}
                           onValueChange={(value) =>
                             updateVimMapping(mapping.id, { action: value as NoteVimMappingAction })
                           }
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger id={`vim-action-${mapping.id}`} className="w-full">
                             <SelectValue placeholder="Select action" />
                           </SelectTrigger>
                           <SelectContent>
@@ -528,10 +553,12 @@ export function SettingsPage({
 
           <Field
             label="Mistral API Key"
+            htmlFor="settings-mistral-api-key"
             description="Used for `?` AI note completion in the command palette. Press Enter or click away to save."
             aria-label="Mistral AI settings"
           >
             <Input
+              id="settings-mistral-api-key"
               type="password"
               value={mistralApiKeyDraft}
               placeholder="Paste your Mistral API key"

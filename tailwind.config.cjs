@@ -35,6 +35,35 @@ module.exports = {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)'
         },
+        success: {
+          DEFAULT: 'var(--success)',
+          foreground: 'var(--success-foreground)',
+          border: 'var(--success-border)',
+          muted: 'var(--success-muted)',
+          'muted-foreground': 'var(--success-muted-foreground)'
+        },
+        warning: {
+          DEFAULT: 'var(--warning)',
+          foreground: 'var(--warning-foreground)',
+          border: 'var(--warning-border)',
+          muted: 'var(--warning-muted)',
+          'muted-foreground': 'var(--warning-muted-foreground)'
+        },
+        info: {
+          DEFAULT: 'var(--info)',
+          foreground: 'var(--info-foreground)',
+          border: 'var(--info-border)',
+          muted: 'var(--info-muted)',
+          'muted-foreground': 'var(--info-muted-foreground)'
+        },
+        overlay: {
+          DEFAULT: 'var(--overlay)',
+          muted: 'var(--overlay-muted)'
+        },
+        'destructive-muted': {
+          DEFAULT: 'var(--destructive-muted)',
+          foreground: 'var(--destructive-muted-foreground)'
+        },
         border: 'var(--border)',
         input: 'var(--input)',
         ring: 'var(--ring)',

@@ -219,6 +219,7 @@ export class FileService {
     const relPath = sanitizeEntryPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(absolutePath, { recursive: false })
+    this.onInternalWrite(relPath)
     return relPath
   }
 
@@ -358,6 +359,9 @@ export class FileService {
     const to = joinSafe(this.notesRoot, newRelPath)
     const fromStats = await fs.stat(from)
     assertMoveTargetIsValid(oldRelPath, newRelPath, fromStats.isDirectory())
+    if (await fileExists(to)) {
+      throw new Error(`A file or folder already exists at ${newRelPath}`)
+    }
     await fs.mkdir(path.dirname(to), { recursive: true })
     await fs.rename(from, to)
     await rewriteNoteMentionTargetsForRename(

@@ -48,7 +48,7 @@ Preserve these shell shortcuts in future projects:
 
 - `Cmd/Ctrl + P`: open search palette
 - `Cmd/Ctrl + Shift + P`: open command mode
-- `Alt + B`: toggle right panel
+- `Cmd + B`: toggle right panel when available
 - `Cmd/Ctrl + F`: toggle focus mode
 
 Keep this logic in a shell hook/provider rather than duplicating it per page.

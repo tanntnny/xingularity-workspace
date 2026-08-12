@@ -24,6 +24,14 @@ type WorkspaceShellShortcutEvent = Pick<
   'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'preventDefault' | 'shiftKey' | 'target'
 >
 
+function isWorkspaceShortcutOverlayTarget(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) {
+    return false
+  }
+
+  return Boolean(target.closest('[role="dialog"], [aria-modal="true"]'))
+}
+
 export function dispatchWorkspaceShellShortcut(
   event: WorkspaceShellShortcutEvent,
   {
@@ -80,9 +88,15 @@ export function dispatchWorkspaceShellShortcut(
     return true
   }
 
-  const isRightPanelShortcut = event.altKey && event.key.toLowerCase() === 'b'
+  const typingTarget = isTypingTarget(event.target)
+  const isRightPanelShortcut =
+    event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === 'b'
   if (isRightPanelShortcut) {
-    if (!hasRightPanel) {
+    if (!hasRightPanel || typingTarget || isWorkspaceShortcutOverlayTarget(event.target)) {
       return false
     }
     event.preventDefault()
@@ -90,7 +104,6 @@ export function dispatchWorkspaceShellShortcut(
     return true
   }
 
-  const typingTarget = isTypingTarget(event.target)
   const isViewToggleShortcut =
     event.altKey &&
     !event.metaKey &&

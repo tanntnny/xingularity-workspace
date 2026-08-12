@@ -1020,6 +1020,7 @@ export interface RendererVaultApi {
   files: {
     listNotes: () => Promise<NoteListItem[]>
     listTree: () => Promise<NoteTreeNode[]>
+    onTreeChanged: (listener: () => void) => () => void
     readNote: (relPath: string) => Promise<string>
     readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
     readExcalidrawFileDocument: (relPath: string) => Promise<StoredExcalidrawFileDocument>
@@ -1050,6 +1051,7 @@ export interface RendererVaultApi {
   fleeting: {
     list: () => Promise<FleetingNote[]>
     create: (content: string) => Promise<FleetingNote>
+    remove: (relPath: string) => Promise<void>
     convert: (input: {
       relPath: string
       target: FleetingConversionTarget

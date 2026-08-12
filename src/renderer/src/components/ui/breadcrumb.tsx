@@ -51,12 +51,30 @@ const BreadcrumbLink = React.forwardRef<
 })
 BreadcrumbLink.displayName = 'BreadcrumbLink'
 
+const BreadcrumbButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentPropsWithoutRef<'button'>
+>(({ className, type = 'button', ...props }, ref) => (
+  <button
+    ref={ref}
+    type={type}
+    className={cn('transition-colors hover:text-foreground', className)}
+    {...props}
+  />
+))
+BreadcrumbButton.displayName = 'BreadcrumbButton'
+
+const BreadcrumbLabel = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
+  ({ className, ...props }, ref) => (
+    <span ref={ref} className={cn('font-normal text-muted-foreground', className)} {...props} />
+  )
+)
+BreadcrumbLabel.displayName = 'BreadcrumbLabel'
+
 const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
   ({ className, ...props }, ref) => (
     <span
       ref={ref}
-      role="link"
-      aria-disabled="true"
       aria-current="page"
       className={cn('font-normal text-foreground', className)}
       {...props}
@@ -65,7 +83,11 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
 )
 BreadcrumbPage.displayName = 'BreadcrumbPage'
 
-const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentProps<'li'>) => (
+const BreadcrumbSeparator = ({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<'li'>): React.ReactElement => (
   <li
     role="presentation"
     aria-hidden="true"
@@ -77,7 +99,10 @@ const BreadcrumbSeparator = ({ children, className, ...props }: React.ComponentP
 )
 BreadcrumbSeparator.displayName = 'BreadcrumbSeparator'
 
-const BreadcrumbEllipsis = ({ className, ...props }: React.ComponentProps<'span'>) => (
+const BreadcrumbEllipsis = ({
+  className,
+  ...props
+}: React.ComponentProps<'span'>): React.ReactElement => (
   <span
     role="presentation"
     aria-hidden="true"
@@ -95,6 +120,8 @@ export {
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
+  BreadcrumbButton,
+  BreadcrumbLabel,
   BreadcrumbPage,
   BreadcrumbSeparator,
   BreadcrumbEllipsis

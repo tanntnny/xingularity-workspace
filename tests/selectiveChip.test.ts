@@ -20,7 +20,7 @@ describe('SelectiveChip', () => {
 
     expect(markup).toContain('aria-label="Project favorite: Favorite"')
     expect(markup).toContain('>Favorite</span>')
-    expect(markup).toContain('border-emerald-200')
+    expect(markup).toContain('border-success-border')
     expect(markup).toContain('w-fit')
     expect(markup).toContain('ui-control')
     expect(markup).toContain('font-medium')

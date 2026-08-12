@@ -204,6 +204,8 @@ export {
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
+  BreadcrumbButton,
+  BreadcrumbLabel,
   BreadcrumbPage,
   BreadcrumbSeparator,
   BreadcrumbEllipsis

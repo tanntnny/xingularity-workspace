@@ -15,12 +15,12 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
         outline: 'border-border text-foreground',
-        tag0: 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200 dark:hover:bg-rose-950/60',
-        tag1: 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60',
-        tag2: 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/60',
-        tag3: 'border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60',
-        tag4: 'border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200 dark:hover:bg-orange-950/60',
-        tag5: 'border-pink-200 bg-pink-50 text-pink-800 hover:bg-pink-100 dark:border-pink-800 dark:bg-pink-950/40 dark:text-pink-200 dark:hover:bg-pink-950/60',
+        tag0: 'border-[var(--tag-0-border)] bg-[var(--tag-0-bg)] text-[var(--tag-0-foreground)] hover:bg-[var(--tag-0-hover)]',
+        tag1: 'border-[var(--tag-1-border)] bg-[var(--tag-1-bg)] text-[var(--tag-1-foreground)] hover:bg-[var(--tag-1-hover)]',
+        tag2: 'border-[var(--tag-2-border)] bg-[var(--tag-2-bg)] text-[var(--tag-2-foreground)] hover:bg-[var(--tag-2-hover)]',
+        tag3: 'border-[var(--tag-3-border)] bg-[var(--tag-3-bg)] text-[var(--tag-3-foreground)] hover:bg-[var(--tag-3-hover)]',
+        tag4: 'border-[var(--tag-4-border)] bg-[var(--tag-4-bg)] text-[var(--tag-4-foreground)] hover:bg-[var(--tag-4-hover)]',
+        tag5: 'border-[var(--tag-5-border)] bg-[var(--tag-5-bg)] text-[var(--tag-5-foreground)] hover:bg-[var(--tag-5-hover)]',
         neutral: 'border-border bg-muted text-muted-foreground'
       }
     },
@@ -31,7 +31,7 @@ const badgeVariants = cva(
 )
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({
   className,
@@ -43,16 +43,16 @@ function Badge({
   const toneClassName = {
     subtle: 'border-border bg-secondary text-secondary-foreground',
     neutral: 'border-border bg-muted text-muted-foreground',
-    info: 'border-border bg-secondary text-secondary-foreground',
+    info: 'border-info-border bg-info-muted text-info-muted-foreground',
     accent: 'border-border bg-secondary text-secondary-foreground',
-    attention: 'border-border bg-secondary text-secondary-foreground',
-    success: 'border-border bg-secondary text-secondary-foreground',
-    warning: 'border-border bg-secondary text-secondary-foreground',
+    attention: 'border-warning-border bg-warning-muted text-warning-muted-foreground',
+    success: 'border-success-border bg-success-muted text-success-muted-foreground',
+    warning: 'border-warning-border bg-warning-muted text-warning-muted-foreground',
     danger: 'border-transparent bg-destructive text-destructive-foreground'
   } satisfies Record<UiTone, string>
 
   return (
-    <div
+    <span
       className={cn(badgeVariants({ variant }), tone && toneClassName[tone], className)}
       style={style}
       {...props}

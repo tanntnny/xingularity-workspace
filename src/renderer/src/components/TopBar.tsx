@@ -3,11 +3,12 @@ import { Home } from './ui/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
+  BreadcrumbLabel,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator
 } from './ui/breadcrumb'
+import { WorkspaceIconButton } from './ui/document-workspace'
 import type { AppPage } from '../navigation'
 
 interface TopBarProps {
@@ -25,6 +26,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   projects: 'Projects',
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
+  schedules: 'Scheduling',
   designAudit: 'Design Audit',
   settings: 'Settings'
 }
@@ -66,17 +68,12 @@ export function TopBar({
         <Breadcrumb>
           <BreadcrumbList className="app-no-drag text-muted-foreground">
             <BreadcrumbItem>
-              <BreadcrumbLink
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault()
-                  onNavigateHome()
-                }}
+              <WorkspaceIconButton
+                icon={<Home size={14} aria-hidden="true" />}
+                label="Home"
+                onClick={onNavigateHome}
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-              >
-                <Home size={14} />
-                <span>Home</span>
-              </BreadcrumbLink>
+              />
             </BreadcrumbItem>
 
             <BreadcrumbSeparator className="text-muted-foreground" />
@@ -84,13 +81,7 @@ export function TopBar({
             {activePage === 'calendar' ? (
               <>
                 <BreadcrumbItem>
-                  <BreadcrumbLink
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    {PAGE_LABELS[activePage]}
-                  </BreadcrumbLink>
+                  <BreadcrumbLabel>{PAGE_LABELS[activePage]}</BreadcrumbLabel>
                 </BreadcrumbItem>
 
                 <BreadcrumbSeparator className="text-muted-foreground" />
@@ -105,13 +96,7 @@ export function TopBar({
             ) : itemName ? (
               <>
                 <BreadcrumbItem>
-                  <BreadcrumbLink
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    {PAGE_LABELS[activePage]}
-                  </BreadcrumbLink>
+                  <BreadcrumbLabel>{PAGE_LABELS[activePage]}</BreadcrumbLabel>
                 </BreadcrumbItem>
 
                 <BreadcrumbSeparator className="text-muted-foreground" />
@@ -125,13 +110,7 @@ export function TopBar({
             ) : sectionLabel ? (
               <>
                 <BreadcrumbItem>
-                  <BreadcrumbLink
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    {sectionLabel}
-                  </BreadcrumbLink>
+                  <BreadcrumbLabel>{sectionLabel}</BreadcrumbLabel>
                 </BreadcrumbItem>
 
                 <BreadcrumbSeparator className="text-muted-foreground" />

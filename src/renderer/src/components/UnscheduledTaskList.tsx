@@ -160,16 +160,11 @@ export function UnscheduledTaskList({
           data-unscheduled-drop-zone="true"
           data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
           active={isDragOver}
+          tone="calendar-unscheduled"
           variant="surface"
           aria-label="Unscheduled task drop zone"
           className="flex min-h-full flex-col p-3"
         >
-          {isDragOver ? (
-            <div className="border bg-card text-card-foreground mb-2 rounded-none px-2 py-1 text-center text-xs text-primary">
-              Drop here to unschedule
-            </div>
-          ) : null}
-
           <div className="flex flex-1 flex-col gap-3">
             {tasks.map((task) => {
               const revealProps = getRevealItemProps(task.id)
@@ -190,11 +185,13 @@ export function UnscheduledTaskList({
                 >
                   <DragSource
                     as="article"
-                    rotation={-2}
+                    rotation={0}
                     previewVariant="content"
                     previewSizing="fit-content"
                     ref={revealProps.ref}
                     tabIndex={0}
+                    role="group"
+                    aria-label={`Task ${task.title}`}
                     data-unscheduled-task-id={task.id}
                     data-unscheduled-task-title={task.title}
                     style={revealProps.style}
@@ -225,11 +222,22 @@ export function UnscheduledTaskList({
                     }}
                     onMouseLeave={() => setHoveredTaskCard(null)}
                     onKeyDown={(event) => {
-                      if (!isDeleteShortcut(event)) {
+                      if (isDeleteShortcut(event)) {
+                        event.preventDefault()
+                        onDelete(task.id)
                         return
                       }
+
+                      if (event.key !== 'Enter' && event.key !== ' ') {
+                        return
+                      }
+                      if (event.target instanceof HTMLElement && event.target.closest('button')) {
+                        return
+                      }
+
                       event.preventDefault()
-                      onDelete(task.id)
+                      setHoveredTaskCard(null)
+                      setEditingTaskId(task.id)
                     }}
                     className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
                   >
@@ -261,6 +269,11 @@ export function UnscheduledTaskList({
       {hoveredTaskCard ? (
         <CalendarTaskHoverCard
           task={hoveredTaskCard.task}
+          project={
+            hoveredTaskCard.task.projectId
+              ? projectsById.get(hoveredTaskCard.task.projectId)
+              : undefined
+          }
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
         />

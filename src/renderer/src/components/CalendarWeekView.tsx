@@ -611,10 +611,13 @@ export function CalendarWeekView({
     <DragSource
       as="article"
       key={layout.id}
-      rotation={-2}
+      rotation={0}
+      preview="floating"
       previewVariant="content"
       previewSizing="fit-content"
       tabIndex={0}
+      role="group"
+      aria-label={`Task ${task.title}`}
       data-testid={`calendar-week-all-day-task:${task.id}`}
       data-span-days={layout.columnSpan}
       data-start-date={layout.startDate}
@@ -643,11 +646,22 @@ export function CalendarWeekView({
       }}
       onMouseLeave={() => setHoveredTaskCard(null)}
       onKeyDown={(event) => {
-        if (!isDeleteShortcut(event)) {
+        if (isDeleteShortcut(event)) {
+          event.preventDefault()
+          safeDeleteTask(task.id)
           return
         }
+
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return
+        }
+        if (event.target instanceof HTMLElement && event.target.closest('button')) {
+          return
+        }
+
         event.preventDefault()
-        safeDeleteTask(task.id)
+        setHoveredTaskCard(null)
+        setEditingTaskId(task.id)
       }}
       className={`pointer-events-auto h-fit cursor-grab self-start rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
     >
@@ -691,9 +705,12 @@ export function CalendarWeekView({
       <DragSource
         as="article"
         key={task.id}
-        rotation={-2}
+        rotation={0}
+        preview="floating"
         previewVariant="content"
         tabIndex={0}
+        role="group"
+        aria-label={`Task ${task.title}`}
         data-calendar-week-task="true"
         data-calendar-interacting={isInteracting ? 'true' : 'false'}
         data-testid={`calendar-week-task:${task.id}`}
@@ -718,11 +735,33 @@ export function CalendarWeekView({
           }
         }}
         onKeyDown={(event) => {
-          if (!isDeleteShortcut(event)) {
+          if (isDeleteShortcut(event)) {
+            event.preventDefault()
+            safeDeleteTask(task.id)
             return
           }
+
+          if (event.key !== 'Enter' && event.key !== ' ') {
+            return
+          }
+          if (event.target instanceof HTMLElement && event.target.closest('button')) {
+            return
+          }
+
           event.preventDefault()
-          safeDeleteTask(task.id)
+          setHoveredTaskCard(null)
+          setEditingTaskId(task.id)
+        }}
+        onClick={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest('button')) {
+            return
+          }
+          if (suppressTaskOpenRef.current === task.id) {
+            suppressTaskOpenRef.current = null
+            return
+          }
+          setHoveredTaskCard(null)
+          setEditingTaskId(task.id)
         }}
         className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
@@ -749,14 +788,6 @@ export function CalendarWeekView({
         <div
           className={`${layout.heightMode === 'content' ? '' : 'absolute'} z-10 overflow-hidden rounded-sm`}
           style={contentStyle}
-          onClick={() => {
-            if (suppressTaskOpenRef.current === task.id) {
-              suppressTaskOpenRef.current = null
-              return
-            }
-            setHoveredTaskCard(null)
-            setEditingTaskId(task.id)
-          }}
         >
           <CalendarTaskCard
             task={task}
@@ -800,10 +831,16 @@ export function CalendarWeekView({
                 isHighlighted ? 'calendar-date-highlight' : 'calendar-date-highlight-hover'
               }`}
             >
-              <div
-                className={`text-sm font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}
-              >
-                {formatWeekdayHeaderLabel(value)}
+              <div className="text-sm font-semibold">
+                <span
+                  className={
+                    isToday
+                      ? 'rounded-sm bg-destructive px-1.5 py-0.5 text-destructive-foreground'
+                      : 'text-foreground'
+                  }
+                >
+                  {formatWeekdayHeaderLabel(value)}
+                </span>
               </div>
               <div
                 className={`mt-1 text-xs font-normal ${
@@ -1094,6 +1131,11 @@ export function CalendarWeekView({
       {hoveredTaskCard ? (
         <CalendarTaskHoverCard
           task={hoveredTaskCard.task}
+          project={
+            hoveredTaskCard.task.projectId
+              ? projectsById.get(hoveredTaskCard.task.projectId)
+              : undefined
+          }
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
         />

@@ -12,7 +12,8 @@ import {
   DialogShellFooter,
   DialogTitle
 } from './ui/dialog'
-import { Button } from './ui/button'
+import { buttonVariants } from './ui/button'
+import { cn } from '../lib/utils'
 
 export type NoteExportFormat = 'markdown' | 'pdf'
 
@@ -63,28 +64,35 @@ export function NoteExportDialog({
           </DialogHeader>
 
           <DialogBody>
-            <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Export format">
+            <fieldset className="grid gap-3 sm:grid-cols-2">
+              <legend className="sr-only">Export format</legend>
               {EXPORT_OPTIONS.map(({ format: optionFormat, title, description, Icon }) => {
                 const isSelected = format === optionFormat
 
                 return (
-                  <Button
+                  <label
                     key={optionFormat}
-                    type="button"
-                    variant={isSelected ? 'secondary' : 'outline'}
-                    role="radio"
-                    aria-checked={isSelected}
                     data-testid={`note-export-format:${optionFormat}`}
-                    onClick={() => onFormatChange(optionFormat)}
-                    className="h-auto flex-col items-start whitespace-normal p-4 text-left"
+                    className={cn(
+                      buttonVariants({ variant: isSelected ? 'secondary' : 'outline' }),
+                      'h-auto cursor-pointer flex-col items-start whitespace-normal p-4 text-left focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background'
+                    )}
                   >
+                    <input
+                      type="radio"
+                      name="note-export-format"
+                      value={optionFormat}
+                      checked={isSelected}
+                      onChange={() => onFormatChange(optionFormat)}
+                      className="sr-only"
+                    />
                     <Icon className="mb-3 h-6 w-6 text-primary" aria-hidden="true" />
-                    <div className="font-semibold text-foreground">{title}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">{description}</div>
-                  </Button>
+                    <span className="font-semibold text-foreground">{title}</span>
+                    <span className="mt-1 text-sm text-muted-foreground">{description}</span>
+                  </label>
                 )
               })}
-            </div>
+            </fieldset>
           </DialogBody>
 
           <DialogShellFooter

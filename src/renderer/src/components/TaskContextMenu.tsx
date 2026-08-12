@@ -232,10 +232,7 @@ export function TaskContextMenu({
               Schedule to {selectedDate}
             </ContextMenuItem>
           )}
-          <ContextMenuItem
-            className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-            onClick={() => onDelete(task.id)}
-          >
+          <ContextMenuItem destructive onClick={() => onDelete(task.id)}>
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
             <ContextMenuShortcut>

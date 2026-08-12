@@ -1,8 +1,17 @@
 import chokidar, { FSWatcher } from 'chokidar'
 import path from 'node:path'
+import { isExcalidrawPath } from '../shared/excalidrawFile'
 import { isNotePath } from '../shared/noteDocument'
 
-type VaultEvent = 'add' | 'change' | 'unlink'
+export type VaultEvent = 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+
+export function isWatchedVaultPath(relPath: string, type: VaultEvent): boolean {
+  if (type === 'addDir' || type === 'unlinkDir') {
+    return relPath.length > 0
+  }
+
+  return isNotePath(relPath) || isExcalidrawPath(relPath)
+}
 
 export class VaultWatcher {
   private watcher: FSWatcher | null = null
@@ -27,6 +36,8 @@ export class VaultWatcher {
     this.watcher.on('add', (targetPath) => this.enqueue(targetPath, 'add'))
     this.watcher.on('change', (targetPath) => this.enqueue(targetPath, 'change'))
     this.watcher.on('unlink', (targetPath) => this.enqueue(targetPath, 'unlink'))
+    this.watcher.on('addDir', (targetPath) => this.enqueue(targetPath, 'addDir'))
+    this.watcher.on('unlinkDir', (targetPath) => this.enqueue(targetPath, 'unlinkDir'))
   }
 
   async stop(): Promise<void> {
@@ -44,7 +55,7 @@ export class VaultWatcher {
 
   private enqueue(absPath: string, type: VaultEvent): void {
     const relPath = path.relative(this.notesRoot, absPath).replace(/\\/g, '/')
-    if (!isNotePath(relPath)) {
+    if (!isWatchedVaultPath(relPath, type)) {
       return
     }
 
@@ -58,7 +69,9 @@ export class VaultWatcher {
       if (this.shouldSkip(relPath)) {
         return
       }
-      void this.onFileEvent(relPath, type)
+      void this.onFileEvent(relPath, type).catch((error) => {
+        console.error('[VaultWatcher] failed to process event', { relPath, type, error })
+      })
     }, 180)
 
     this.pendingTimers.set(relPath, timer)
@@ -71,6 +84,7 @@ export class VaultWatcher {
     }
 
     if (Date.now() - ts <= 1200) {
+      this.recentInternalWrites.delete(relPath)
       return true
     }
 

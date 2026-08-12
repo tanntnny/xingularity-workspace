@@ -94,18 +94,35 @@ describe('DropZone', () => {
     expect(timedMarkup).not.toContain('pointer-events-none')
   })
 
-  it('applies the calendar gradient tone only when requested', () => {
+  it('applies the calendar drop background tone only when requested', () => {
     const markup = renderToStaticMarkup(
       React.createElement(DropZone, { active: true, tone: 'calendar', variant: 'indicator' })
     )
 
     expect(markup).toContain('data-drop-zone-tone="calendar"')
     expect(markup).toContain('background:var(--calendar-drop-zone-active-bg)')
+    expect(markup).toContain('border-0')
+    expect(markup).not.toContain('data-[drag-over=true]:border-[var(--drop-zone-active-border)]')
     expect(markup).not.toContain('transform:rotate(var(--drag-preview-rotation))')
 
     const defaultMarkup = renderToStaticMarkup(
       React.createElement(DropZone, { active: true, variant: 'indicator' })
     )
     expect(defaultMarkup).not.toContain('transform:rotate(var(--drag-preview-rotation))')
+  })
+
+  it('uses the borderless calendar drop background for unscheduled drops', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(
+        DropZone,
+        { active: true, tone: 'calendar-unscheduled', variant: 'surface' },
+        'Unscheduled tasks'
+      )
+    )
+
+    expect(markup).toContain('data-drop-zone-tone="calendar-unscheduled"')
+    expect(markup).toContain('background:var(--calendar-drop-zone-active-bg)')
+    expect(markup).toContain('border-0')
+    expect(markup).not.toContain('border-color:transparent')
   })
 })

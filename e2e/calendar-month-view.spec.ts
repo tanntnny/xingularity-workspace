@@ -259,7 +259,7 @@ test.describe('calendar monthly view', () => {
     }
   })
 
-  test('rotates only the task mirror while dragging a monthly task', async () => {
+  test('keeps the task mirror upright while dragging a monthly task', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
 
@@ -304,7 +304,7 @@ test.describe('calendar monthly view', () => {
             }),
           { timeout: 5_000 }
         )
-        .toBe(true)
+        .toBe(false)
 
       await expect
         .poll(() =>
@@ -343,7 +343,47 @@ test.describe('calendar monthly view', () => {
     }
   })
 
-  test('shows the shared unschedule drop message while dragging a monthly task', async () => {
+  test('ghosts an unscheduled source and highlights its monthly drop destination', async () => {
+    const { rootPath, todayIso } = await createFixtureVault(2, true)
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const source = page.locator(
+        '[data-unscheduled-task-list="true"] [data-unscheduled-task-id="task-month-visible-1"]'
+      )
+      const target = page.locator(`.calendar-full .fc-daygrid-day[data-date="${todayIso}"]`)
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      const sourceBox = await source.boundingBox()
+      const targetBox = await target.boundingBox()
+      if (!sourceBox || !targetBox) {
+        throw new Error('Monthly external drag bounds are unavailable')
+      }
+
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+        steps: 5
+      })
+
+      await expect(source).toHaveAttribute('data-dragging', 'true')
+      await expect(source).toHaveCSS('opacity', '0')
+      await expect(target).toHaveAttribute('data-calendar-drop-over', 'true')
+      await expect(target).toHaveCSS('background-color', 'rgba(188, 232, 241, 0.3)')
+      await expect(
+        page.locator('.fc-event-dragging[data-unscheduled-task-id="task-month-visible-1"]')
+      ).toBeVisible()
+    } finally {
+      await page.mouse.up()
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps the unschedule destination free of a callout while dragging a monthly task', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
 
@@ -371,12 +411,11 @@ test.describe('calendar monthly view', () => {
         { steps: 5 }
       )
 
-      await expect(page.getByText('Drop here to unschedule', { exact: true })).toBeVisible()
+      await expect(page.getByText('Drop here to unschedule', { exact: true })).toHaveCount(0)
     } finally {
       await page.mouse.up()
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
     }
   })
-
 })

@@ -215,14 +215,17 @@ export function TaskEditDialog({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <label
+                    htmlFor={`task-type-${task.id}`}
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
                     Type
                   </label>
                   <Select
                     value={taskType}
                     onValueChange={(value) => setTaskType(value as CalendarTaskType)}
                   >
-                    <SelectTrigger className="mt-1 w-full">
+                    <SelectTrigger id={`task-type-${task.id}`} className="mt-1 w-full">
                       <SelectValue asChild>
                         <CalendarTaskTypeBadge taskType={taskType} />
                       </SelectValue>
@@ -237,14 +240,17 @@ export function TaskEditDialog({
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <label
+                    htmlFor={`task-priority-${task.id}`}
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
                     Priority
                   </label>
                   <Select
                     value={priority}
                     onValueChange={(value) => setPriority(value as TaskPriority)}
                   >
-                    <SelectTrigger className="mt-1 w-full">
+                    <SelectTrigger id={`task-priority-${task.id}`} className="mt-1 w-full">
                       <SelectValue asChild>
                         <TaskPriorityBadge priority={priority} />
                       </SelectValue>

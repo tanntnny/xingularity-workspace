@@ -131,7 +131,7 @@ export function PromptInputSubmit({
       size="icon"
       disabled={disabled || busy}
       className={cn(
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50',
         className
       )}
       {...props}

@@ -1,5 +1,13 @@
 import { useEffect } from 'react'
 
+function isWorkspaceShortcutOverlayTarget(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) {
+    return false
+  }
+
+  return Boolean(target.closest('[role="dialog"], [aria-modal="true"]'))
+}
+
 export interface WorkspaceShellShortcutBindings {
   enabled: boolean
   hasRightPanel: boolean
@@ -50,9 +58,15 @@ export function useWorkspaceShellShortcuts({
         return
       }
 
-      const isRightPanelShortcut = event.altKey && event.key.toLowerCase() === 'b'
+      const typingTarget = isTypingTarget(event.target)
+      const isRightPanelShortcut =
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'b'
       if (isRightPanelShortcut) {
-        if (!hasRightPanel) {
+        if (!hasRightPanel || typingTarget || isWorkspaceShortcutOverlayTarget(event.target)) {
           return
         }
         event.preventDefault()
@@ -64,7 +78,6 @@ export function useWorkspaceShellShortcuts({
         return
       }
 
-      const typingTarget = isTypingTarget(event.target)
       const isFocusModeShortcut =
         !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f'
 

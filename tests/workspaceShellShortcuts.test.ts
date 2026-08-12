@@ -98,6 +98,60 @@ describe('dispatchWorkspaceShellShortcut', () => {
     expect(bindings.onCloseActiveWorkspaceTab).toHaveBeenCalledOnce()
   })
 
+  it('toggles the right panel for Cmd+B when a panel is available', () => {
+    const bindings = createBindings()
+    const event = createEvent({ key: 'b', code: 'KeyB', metaKey: true })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(true)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(bindings.onToggleRightPanel).toHaveBeenCalledOnce()
+  })
+
+  it('does not use Ctrl+B or Option+B for the right panel', () => {
+    const bindings = createBindings()
+
+    const controlEvent = createEvent({ key: 'b', code: 'KeyB', ctrlKey: true })
+    const optionEvent = createEvent({ key: 'b', code: 'KeyB', altKey: true })
+
+    expect(dispatchWorkspaceShellShortcut(controlEvent, bindings)).toBe(false)
+    expect(dispatchWorkspaceShellShortcut(optionEvent, bindings)).toBe(false)
+    expect(controlEvent.preventDefault).not.toHaveBeenCalled()
+    expect(optionEvent.preventDefault).not.toHaveBeenCalled()
+    expect(bindings.onToggleRightPanel).not.toHaveBeenCalled()
+  })
+
+  it('does not consume Cmd+B when the active page has no right panel', () => {
+    const bindings = createBindings({ hasRightPanel: false })
+    const event = createEvent({ key: 'b', code: 'KeyB', metaKey: true })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(bindings.onToggleRightPanel).not.toHaveBeenCalled()
+  })
+
+  it('does not consume Cmd+B while typing', () => {
+    const typingTarget = { kind: 'editor' }
+    const bindings = createBindings({
+      isTypingTarget: (target) => target === (typingTarget as unknown as EventTarget)
+    })
+    const event = createEvent({
+      key: 'b',
+      code: 'KeyB',
+      metaKey: true,
+      target: typingTarget as unknown as EventTarget
+    })
+
+    const handled = dispatchWorkspaceShellShortcut(event, bindings)
+
+    expect(handled).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(bindings.onToggleRightPanel).not.toHaveBeenCalled()
+  })
+
   it('does not consume Option+Tab on the projects page', () => {
     const bindings = createBindings({ activePage: 'projects' })
     const event = createEvent({ key: 'Tab', code: 'Tab', altKey: true })

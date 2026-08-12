@@ -26,6 +26,10 @@ const actionButtonGroupVariants = cva(
   'ui-control inline-flex items-center gap-0 overflow-hidden rounded-[var(--radius-button)] border bg-card [&>*]:h-full [&>*:not(:first-child)]:border-l',
   {
     variants: {
+      focusWithin: {
+        none: '',
+        glow: 'transition-[box-shadow,border-color] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background'
+      },
       size: {
         default: '',
         sm: '',
@@ -33,6 +37,7 @@ const actionButtonGroupVariants = cva(
       }
     },
     defaultVariants: {
+      focusWithin: 'none',
       size: 'default'
     }
   }
@@ -59,11 +64,11 @@ export interface ActionButtonGroupProps
   extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof actionButtonGroupVariants> {}
 
 const ActionButtonGroup = React.forwardRef<HTMLDivElement, ActionButtonGroupProps>(
-  ({ className, size, ...props }, ref) => (
+  ({ className, focusWithin, size, ...props }, ref) => (
     <div
       ref={ref}
       role="group"
-      className={cn(actionButtonGroupVariants({ size }), className)}
+      className={cn(actionButtonGroupVariants({ focusWithin, size }), className)}
       {...props}
     />
   )

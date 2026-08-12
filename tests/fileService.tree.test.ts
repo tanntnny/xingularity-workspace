@@ -225,6 +225,27 @@ describe('FileService tree operations', () => {
     await expect(fs.stat(path.join(notesDir, 'archive'))).rejects.toThrow()
   })
 
+  it('does not replace an existing rename target', async () => {
+    const { notesDir, service } = await makeService()
+    const sourcePath = await service.createExcalidrawFileAtPath('source.excalidraw')
+    await service.createExcalidrawFileAtPath('target.excalidraw')
+
+    await expect(service.renamePath(sourcePath, 'target.excalidraw')).rejects.toThrow(
+      'already exists'
+    )
+    await expect(fs.stat(path.join(notesDir, 'source.excalidraw'))).resolves.toBeTruthy()
+    await expect(fs.stat(path.join(notesDir, 'target.excalidraw'))).resolves.toBeTruthy()
+  })
+
+  it('uses exclusive creation for duplicate Excalidraw paths', async () => {
+    const { service } = await makeService()
+    await service.createExcalidrawFileAtPath('duplicate.excalidraw')
+
+    await expect(service.createExcalidrawFileAtPath('duplicate.excalidraw')).rejects.toMatchObject({
+      code: 'EEXIST'
+    })
+  })
+
   it('reads and writes .excalidraw files', async () => {
     const { service } = await makeService()
     const relPath = await service.createExcalidrawFileAtPath('canvas.excalidraw')

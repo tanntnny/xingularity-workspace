@@ -186,4 +186,37 @@ describe('ScheduleService action application', () => {
     const content = await runtime.readNote(notes[0]!.relPath)
     expect(content).toContain('This note was created by a schedule run.')
   })
+
+  it('runs Python jobs and applies their JSON action output', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Python scheduled task',
+      enabled: true,
+      trigger: { type: 'manual' },
+      runtime: 'python',
+      outputMode: 'auto_apply',
+      permissions: ['createTasks'],
+      code: `import json
+print(json.dumps({"actions": [{
+  "type": "task.create",
+  "title": "Python planning task",
+  "date": "2026-04-05",
+  "automationSource": "python-test",
+  "automationSourceKey": "python-task"
+}]}))`
+    })
+
+    const run = await service.runNow(job.id)
+    const settings = await runtime.getSettings()
+
+    expect(run.status).toBe('success')
+    expect(settings.calendarTasks[0]).toMatchObject({
+      title: 'Python planning task',
+      date: '2026-04-05',
+      automationSource: 'python-test'
+    })
+  })
 })

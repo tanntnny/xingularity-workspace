@@ -1,4 +1,4 @@
-import { ReactElement, useEffect, useMemo, useState } from 'react'
+import { KeyboardEvent, ReactElement, useEffect, useMemo, useState } from 'react'
 import * as d3 from 'd3'
 import {
   Archive,
@@ -233,6 +233,15 @@ function getHoverPositionFromMouse(clientX: number, clientY: number): { x: numbe
   )
 
   return { x, y }
+}
+
+function activateSvgButton(event: KeyboardEvent<SVGRectElement>, action: () => void): void {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return
+  }
+
+  event.preventDefault()
+  action()
 }
 
 function draftFromRecord(record: SubscriptionRecord): ModalDraft {
@@ -584,7 +593,7 @@ function TreemapCard({
         <svg
           viewBox={`0 0 ${TREEMAP_WIDTH} ${TREEMAP_HEIGHT}`}
           className=""
-          role="img"
+          role="group"
           aria-label="Subscriptions treemap"
         >
           {categoryNodes.map((node) => {
@@ -607,9 +616,17 @@ function TreemapCard({
                   stroke={activeCategory === node.category ? 'var(--primary)' : 'var(--border)'}
                   strokeWidth={activeCategory === node.category ? 2 : 1}
                   rx={8}
-                  className="cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select category ${node.category}`}
+                  className="cursor-pointer outline-none focus-visible:stroke-[var(--ring)]"
                   onClick={() =>
                     onSelectCategory(activeCategory === node.category ? null : node.category)
+                  }
+                  onKeyDown={(event) =>
+                    activateSvgButton(event, () =>
+                      onSelectCategory(activeCategory === node.category ? null : node.category)
+                    )
                   }
                   onMouseEnter={(event) => {
                     const { x, y } = getHoverPositionFromMouse(event.clientX, event.clientY)
@@ -638,7 +655,7 @@ function TreemapCard({
                 <text
                   x={node.x0 + 12}
                   y={node.y0 + 18}
-                  fill="rgba(255,255,255,0.72)"
+                  fill="var(--chart-category-label)"
                   fontSize="12"
                   fontWeight="600"
                   pointerEvents="none"
@@ -646,7 +663,7 @@ function TreemapCard({
                 >
                   {` ${categoryLabel} `}
                   {showValue ? (
-                    <tspan fill="rgba(255,255,255,0.58)" fontSize="11" fontWeight="500">
+                    <tspan fill="var(--chart-category-label-muted)" fontSize="11" fontWeight="500">
                       {`${formatCurrency(node.value)} /mo`}
                     </tspan>
                   ) : null}
@@ -662,10 +679,10 @@ function TreemapCard({
             const canShowPrice = width > 112 && height > 48
             const fill =
               node.reviewFlag === 'unused' || node.reviewFlag === 'duplicate'
-                ? '#84263b'
+                ? 'var(--chart-review)'
                 : node.renewalBucket === 'soon'
-                  ? '#8c6406'
-                  : '#164f63'
+                  ? 'var(--chart-renewal)'
+                  : 'var(--chart-default)'
             const labelX = node.x0 + 12
             const labelY = node.y0 + 24
             const labelWidth = Math.floor((width - 24) / 7)
@@ -679,10 +696,14 @@ function TreemapCard({
                   height={height}
                   rx={8}
                   fill={fill}
-                  stroke={isSelected ? '#ffffff' : 'rgba(255,255,255,0.12)'}
+                  stroke={isSelected ? 'var(--chart-label)' : 'var(--chart-record-stroke)'}
                   strokeWidth={isSelected ? 2.5 : 1}
-                  className="cursor-pointer transition-opacity hover:opacity-90"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select subscription ${node.name}`}
+                  className="cursor-pointer outline-none transition-opacity hover:opacity-90 focus-visible:stroke-[var(--ring)]"
                   onClick={() => onSelectRecord(node.id)}
+                  onKeyDown={(event) => activateSvgButton(event, () => onSelectRecord(node.id))}
                   onMouseEnter={(event) => {
                     const { x, y } = getHoverPositionFromMouse(event.clientX, event.clientY)
                     setHoverCard({
@@ -711,7 +732,7 @@ function TreemapCard({
                   <text
                     x={labelX}
                     y={labelY}
-                    fill="#f6f8fb"
+                    fill="var(--chart-label)"
                     fontSize="13"
                     fontWeight="700"
                     pointerEvents="none"
@@ -723,7 +744,7 @@ function TreemapCard({
                   <text
                     x={labelX}
                     y={labelY + 18}
-                    fill="rgba(246,248,251,0.82)"
+                    fill="var(--chart-label-muted)"
                     fontSize="11"
                     fontWeight="500"
                     pointerEvents="none"
@@ -1237,8 +1258,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Name" className="text-sm">
+              <Field label="Name" htmlFor="subscription-name" className="text-sm">
                 <Input
+                  id="subscription-name"
                   value={draft.name}
                   onChange={(event) => {
                     const value = event.currentTarget.value
@@ -1246,8 +1268,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
-              <Field label="Provider" className="text-sm">
+              <Field label="Provider" htmlFor="subscription-provider" className="text-sm">
                 <Input
+                  id="subscription-provider"
                   value={draft.provider}
                   onChange={(event) => {
                     const value = event.currentTarget.value
@@ -1255,7 +1278,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
-              <Field label="Category" className="text-sm">
+              <Field label="Category" htmlFor="subscription-category" className="text-sm">
                 <Select
                   value={draft.category || '__none__'}
                   onValueChange={(value) => {
@@ -1265,7 +1288,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     }))
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="subscription-category">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1278,8 +1301,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Amount" className="text-sm">
+              <Field label="Amount" htmlFor="subscription-amount" className="text-sm">
                 <Input
+                  id="subscription-amount"
                   type="number"
                   min="0"
                   step="0.01"
@@ -1290,7 +1314,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
-              <Field label="Billing cycle" className="text-sm">
+              <Field label="Billing cycle" htmlFor="subscription-billing-cycle" className="text-sm">
                 <Select
                   value={draft.billingCycle}
                   onValueChange={(value) => {
@@ -1298,7 +1322,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     setDraft((current) => ({ ...current, billingCycle }))
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="subscription-billing-cycle">
                     <SelectValue placeholder="Billing cycle" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1311,8 +1335,13 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 </Select>
               </Field>
               {draft.billingCycle === 'custom' ? (
-                <Field label="Billing interval months" className="text-sm">
+                <Field
+                  label="Billing interval months"
+                  htmlFor="subscription-billing-interval"
+                  className="text-sm"
+                >
                   <Input
+                    id="subscription-billing-interval"
                     type="number"
                     min="1"
                     step="1"
@@ -1324,8 +1353,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   />
                 </Field>
               ) : null}
-              <Field label="Next renewal" className="text-sm">
+              <Field label="Next renewal" htmlFor="subscription-next-renewal" className="text-sm">
                 <Input
+                  id="subscription-next-renewal"
                   type="date"
                   value={draft.nextRenewalAt}
                   onChange={(event) => {
@@ -1334,14 +1364,14 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
-              <Field label="Status" className="text-sm">
+              <Field label="Status" htmlFor="subscription-status" className="text-sm">
                 <Select
                   value={draft.status}
                   onValueChange={(value) => {
                     setDraft((current) => ({ ...current, status: value as SubscriptionStatus }))
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="subscription-status">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1353,7 +1383,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Review flag" className="text-sm">
+              <Field label="Review flag" htmlFor="subscription-review-flag" className="text-sm">
                 <Select
                   value={draft.reviewFlag}
                   onValueChange={(value) => {
@@ -1363,7 +1393,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     }))
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="subscription-review-flag">
                     <SelectValue placeholder="Review flag" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1375,8 +1405,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Last used" className="text-sm">
+              <Field label="Last used" htmlFor="subscription-last-used" className="text-sm">
                 <Input
+                  id="subscription-last-used"
                   type="date"
                   value={draft.lastUsedAt}
                   onChange={(event) => {
@@ -1385,8 +1416,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
-              <Field label="Tags" className="text-sm md:col-span-2">
+              <Field label="Tags" htmlFor="subscription-tags" className="text-sm md:col-span-2">
                 <Input
+                  id="subscription-tags"
                   value={draft.tags}
                   onChange={(event) => {
                     const value = event.currentTarget.value
@@ -1395,8 +1427,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   placeholder="team, ai, annual"
                 />
               </Field>
-              <Field label="Notes" className="text-sm md:col-span-2">
+              <Field label="Notes" htmlFor="subscription-notes" className="text-sm md:col-span-2">
                 <Textarea
+                  id="subscription-notes"
                   value={draft.notes}
                   onChange={(event) => {
                     const value = event.currentTarget.value

@@ -43,6 +43,11 @@ const api: RendererVaultApi = {
   files: {
     listNotes: () => ipcRenderer.invoke(IPC_CHANNELS.listNotes),
     listTree: () => ipcRenderer.invoke(IPC_CHANNELS.listNoteTree),
+    onTreeChanged: (listener): (() => void) => {
+      const wrapped = (): void => listener()
+      ipcRenderer.on(IPC_CHANNELS.filesTreeChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.filesTreeChanged, wrapped)
+    },
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
     readNoteDocument: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNoteDocument, relPath),
     readExcalidrawFileDocument: (relPath) =>
@@ -79,6 +84,7 @@ const api: RendererVaultApi = {
   fleeting: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.listFleetingNotes),
     create: (content) => ipcRenderer.invoke(IPC_CHANNELS.createFleetingNote, content),
+    remove: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.removeFleetingNote, relPath),
     convert: (input) => ipcRenderer.invoke(IPC_CHANNELS.convertFleetingNote, input)
   },
   search: {

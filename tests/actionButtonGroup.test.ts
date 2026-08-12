@@ -68,6 +68,15 @@ describe('ActionButtonGroup', () => {
     expect(markup).toContain('Current month')
   })
 
+  it('supports an opt-in glow when a grouped control receives focus', () => {
+    const markup = renderToStaticMarkup(
+      createElement(ActionButtonGroup, { focusWithin: 'glow' }, 'Quick capture')
+    )
+
+    expect(markup).toContain('focus-within:ring-2')
+    expect(markup).toContain('focus-within:ring-ring/40')
+  })
+
   it('uses the pill radius for workspace header action groups', () => {
     const markup = renderToStaticMarkup(
       createElement(

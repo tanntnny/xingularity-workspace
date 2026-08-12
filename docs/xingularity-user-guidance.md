@@ -237,6 +237,7 @@ Settings is split into four tabs:
 ## Keyboard Shortcuts
 
 - `Cmd/Ctrl + P`: open the search or command palette
+- `Cmd + B`: toggle the right panel when available
 - `Cmd + 1`: Notes
 - `Cmd + 2`: Projects
 - `Cmd + 3`: Calendar

@@ -29,6 +29,13 @@ runtime.onVaultChange((paths) => {
   weeklyPlanService.handleVaultChange(paths ? paths.rootPath : null)
   subscriptionsService.handleVaultChange(paths ? paths.rootPath : null)
 })
+runtime.onTreeChange(() => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.filesTreeChanged)
+    }
+  }
+})
 runtime.onAgentChatEvent((event) => {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {

@@ -57,40 +57,41 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 }
 
 test.describe('capture page', () => {
-  test('captures thoughts and converts them into a note or task', async () => {
+  test('captures, groups, and finalizes quick captures', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       await page.getByTestId('sidebar-page:capture').click()
       await expect(page.getByTestId('capture-page')).toBeVisible()
-      await expect(
-        page.getByTestId('capture-empty-state').getByRole('heading', { name: 'Nothing to review' })
-      ).toBeVisible()
+      await expect(page.getByTestId('capture-board')).toBeVisible()
+      await expect(page.getByTestId('capture-column:today')).toBeVisible()
+      await expect(page.getByTestId('capture-empty-state')).toHaveCount(0)
 
       const input = page.getByTestId('capture-input')
-      await input.fill('New note idea\nKeep the details intact')
-      await input.press('Control+Enter')
+      await input.fill('New note idea with details intact')
+      await input.press('Enter')
       await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
 
       const noteCard = page.locator('[data-testid^="fleeting-note:"]').first()
-      await noteCard.getByRole('button', { name: 'Convert to note' }).click()
+      await noteCard.click()
+      await page.getByRole('menuitem', { name: 'To Note' }).click()
       await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(0)
-      await expect(fs.readdir(path.join(vaultRoot, 'notebooks'))).resolves.toEqual([
-        'new-note-idea.md'
-      ])
+      const convertedNoteFiles = await fs.readdir(path.join(vaultRoot, 'notebooks'))
+      expect(convertedNoteFiles).toContain('new-note-idea.md')
       await expect(
         fs.readFile(path.join(vaultRoot, 'notebooks', 'new-note-idea.md'), 'utf-8')
-      ).resolves.toContain('Keep the details intact')
+      ).resolves.toContain('New note idea with details intact')
 
-      await input.fill('Follow up with the team\nAsk for a status update')
-      await input.press('Control+Enter')
+      await input.fill('Follow up with the team')
+      await input.press('Enter')
       await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
       await page
         .locator('[data-testid^="fleeting-note:"]')
         .first()
-        .getByRole('button', { name: 'Convert to task' })
+        .locator('[data-testid^="fleeting-menu:"]')
         .click()
+      await page.getByRole('menuitem', { name: 'To Task' }).click()
       await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(0)
 
       const taskFiles = await fs.readdir(path.join(vaultRoot, 'tasks'))
@@ -98,6 +99,16 @@ test.describe('capture page', () => {
       await expect(
         fs.readFile(path.join(vaultRoot, 'tasks', taskFiles[0]), 'utf-8')
       ).resolves.toContain('Follow up with the team')
+
+      const directTaskFiles = await fs.readdir(path.join(vaultRoot, 'tasks'))
+      expect(directTaskFiles).toHaveLength(1)
+
+      await input.fill('Discard this capture')
+      await input.press('Enter')
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
+      await page.locator('[data-testid^="fleeting-note:"]').first().click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Remove' }).click()
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(0)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

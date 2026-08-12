@@ -114,7 +114,7 @@ export function ProjectIconPicker({
                   className="size-6 rounded-full border-2 border-transparent p-0 data-[state=on]:border-foreground data-[state=on]:ring-2 data-[state=on]:ring-ring data-[state=on]:ring-offset-1"
                 >
                   <span
-                    className="size-4 rounded-full border border-black/10"
+                    className="size-4 rounded-full border border-foreground/10"
                     style={{ backgroundColor: color }}
                     aria-hidden="true"
                   />

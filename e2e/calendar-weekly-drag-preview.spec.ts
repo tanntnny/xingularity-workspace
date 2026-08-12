@@ -385,6 +385,17 @@ test.describe('calendar weekly drag preview', () => {
         )
       }, todayIso)
 
+      const floatingPreview = page.locator('[data-floating-drag-preview="true"]')
+      await expect(floatingPreview).toBeVisible()
+      await expect
+        .poll(() =>
+          floatingPreview.evaluate((element) => {
+            const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
+            return Math.abs(matrix.b) > 0.01 || Math.abs(matrix.c) > 0.01
+          })
+        )
+        .toBe(false)
+
       const indicator = page.getByTestId('calendar-week-drop-indicator')
       await expect(indicator).toBeVisible()
       const indicatorBox = await indicator.boundingBox()
@@ -404,6 +415,7 @@ test.describe('calendar weekly drag preview', () => {
         }
         source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
       })
+      await expect(floatingPreview).toHaveCount(0)
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

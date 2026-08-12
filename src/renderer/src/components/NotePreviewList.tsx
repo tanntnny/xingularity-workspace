@@ -284,12 +284,12 @@ function NoteSection({
               }}
             >
               <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
                   {stripNoteExtension(note.name)}
-                </div>
-                <div className="truncate text-xs text-muted-foreground">{note.relPath}</div>
-                <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">{note.relPath}</span>
+                <span className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                   <Badge variant="neutral" tone="subtle">
                     <Pencil size={12} aria-hidden="true" />
                     {updatedLabel}
@@ -304,8 +304,8 @@ function NoteSection({
                       </Badge>
                     ) : null}
                   </span>
-                </div>
-              </div>
+                </span>
+              </span>
             </Button>
           )
 
@@ -352,10 +352,7 @@ function NoteSection({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuItem
-                  className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-                  onClick={() => onDelete(note.relPath)}
-                >
+                <ContextMenuItem destructive onClick={() => onDelete(note.relPath)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                   <ContextMenuShortcut>

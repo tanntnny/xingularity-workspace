@@ -52,18 +52,21 @@ describe('sidebar shortcuts', () => {
     expect(markup.indexOf('>Projects</span>')).toBeGreaterThan(markup.indexOf('>Notebooks</span>'))
     expect(markup.indexOf('>Calendar</span>')).toBeGreaterThan(markup.indexOf('>Projects</span>'))
     expect(markup.indexOf('>Knowledge</span>')).toBeGreaterThan(markup.indexOf('>Calendar</span>'))
+    expect(markup).toContain('>Automation</span>')
+    expect(markup).toContain('>Scheduling</span>')
+    expect(markup).toContain('data-testid="sidebar-page:schedules"')
+    expect(markup.indexOf('>Automation</span>')).toBeGreaterThan(
+      markup.indexOf('>Knowledge</span>')
+    )
+    expect(markup.indexOf('>Finance</span>')).toBeGreaterThan(markup.indexOf('>Automation</span>'))
     expect(markup).toContain(
       'data-sidebar="group" class="relative flex w-full min-w-0 flex-col p-1 mt-2"'
     )
     const firstSeparatorIndex = markup.indexOf('data-sidebar="separator"')
     const lastSeparatorIndex = markup.lastIndexOf('data-sidebar="separator"')
     expect(markup.match(/data-sidebar="separator"/g)).toHaveLength(2)
-    expect(markup).toContain(
-      'data-sidebar="separator" class="h-px w-auto bg-sidebar-border mx-1"'
-    )
-    expect(markup.indexOf('data-testid="sidebar-vault-manager"')).toBeLessThan(
-      firstSeparatorIndex
-    )
+    expect(markup).toContain('data-sidebar="separator" class="h-px w-auto bg-sidebar-border mx-1"')
+    expect(markup.indexOf('data-testid="sidebar-vault-manager"')).toBeLessThan(firstSeparatorIndex)
     expect(firstSeparatorIndex).toBeLessThan(
       markup.indexOf('data-testid="sidebar-command-palette"')
     )

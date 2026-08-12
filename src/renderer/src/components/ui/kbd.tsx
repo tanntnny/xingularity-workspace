@@ -42,7 +42,7 @@ const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
     ariaLabel: 'Option',
     label: '⌥'
   },
-  return: { ariaLabel: 'Enter', label: 'Enter' },
+  return: { ariaLabel: 'Enter', label: '↵' },
   right: { ariaLabel: 'Right Arrow', label: '→' },
   shift: { ariaLabel: 'Shift', label: 'Shift' },
   space: { ariaLabel: 'Space', label: 'Space' },

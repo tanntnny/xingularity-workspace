@@ -52,4 +52,15 @@ describe('fleeting notes', () => {
     await expect(service.read('nested/capture.md')).rejects.toThrow()
     await expect(service.read('capture.txt')).rejects.toThrow()
   })
+
+  it('deletes a fleeting note by its safe relative path', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-fleeting-'))
+    tempRoots.push(root)
+    const service = new FleetingNoteService(root)
+    const created = await service.create('Remove this capture')
+
+    await service.delete(created.relPath)
+
+    await expect(fs.access(path.join(root, created.relPath))).rejects.toThrow()
+  })
 })

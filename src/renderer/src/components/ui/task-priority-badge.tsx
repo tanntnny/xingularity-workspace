@@ -6,15 +6,15 @@ import { cn } from '../../lib/utils'
 const TASK_PRIORITY_META: Record<TaskPriority, { label: string; className: string }> = {
   low: {
     label: 'Low',
-    className: 'border-border bg-muted text-muted-foreground'
+    className: 'border-border bg-secondary text-foreground'
   },
   medium: {
     label: 'Medium',
-    className: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    className: 'border-warning-border bg-warning-muted text-warning-muted-foreground'
   },
   high: {
     label: 'High',
-    className: 'border-destructive/40 bg-destructive/10 text-destructive'
+    className: 'border-destructive bg-destructive text-destructive-foreground'
   }
 }
 

@@ -28,6 +28,7 @@ interface ExcalidrawFileEditorProps {
 
 export interface ExcalidrawFileEditorHandle {
   prepareForPathMutation: () => Promise<void>
+  cancelPathMutation: () => void
 }
 
 const SAVE_DEBOUNCE_MS = 800
@@ -134,6 +135,9 @@ export const ExcalidrawFileEditor = forwardRef<
       prepareForPathMutation: async () => {
         skipCleanupSaveRef.current = true
         await flushPendingSave()
+      },
+      cancelPathMutation: () => {
+        skipCleanupSaveRef.current = false
       }
     }),
     [flushPendingSave]

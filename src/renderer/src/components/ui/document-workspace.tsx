@@ -97,11 +97,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       )}
       {...props}
     >
-      <div
-        className="app-drag-region min-w-0 flex-1 overflow-x-auto"
-        role="tablist"
-        aria-label="Open pages"
-      >
+      <div className="app-drag-region min-w-0 flex-1 overflow-x-auto">
         <div className="app-no-drag flex w-max items-center gap-1.5">
           <ToggleGroup
             type="single"
@@ -112,6 +108,8 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               'flex min-w-max items-center gap-1.5 border-0 bg-transparent p-0 pr-1',
               workspaceTopbarControlClass
             )}
+            role="tablist"
+            aria-label="Open pages"
             selectionIndicatorAnimated={false}
           >
             {tabs.map((tab) => {
@@ -120,6 +118,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               return (
                 <div
                   key={tab.id}
+                  role="presentation"
                   data-active={tab.id === activeTabId ? 'true' : 'false'}
                   data-toggle-group-indicator-target="true"
                   className="group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-card data-[active=true]:bg-transparent"
@@ -129,6 +128,8 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     variant="outline"
                     id={`workspace-tab:${tab.id}`}
                     aria-label={tab.label}
+                    aria-selected={tab.id === activeTabId}
+                    role="tab"
                     data-testid={`workspace-tab:${tab.id}`}
                     className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left transition-none hover:bg-accent/60 hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                   >

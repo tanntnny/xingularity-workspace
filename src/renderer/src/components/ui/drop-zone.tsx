@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../../lib/utils'
 
 const dropZoneVariants = cva(
-  'relative border border-[var(--drop-zone-border)] transition-[background-color,border-color,box-shadow] duration-150 ease-out data-[drag-over=true]:border-[var(--drop-zone-active-border)] data-[drag-over=true]:bg-[var(--drop-zone-active-bg)]',
+  'relative transition-[background-color,border-color,box-shadow] duration-150 ease-out data-[drag-over=true]:bg-[var(--drop-zone-active-bg)]',
   {
     variants: {
       variant: {
@@ -24,7 +24,7 @@ export type DropZoneProps<T extends React.ElementType = 'div'> = VariantProps<
 > & {
   active?: boolean
   disabled?: boolean
-  tone?: 'default' | 'calendar'
+  tone?: 'default' | 'calendar' | 'calendar-unscheduled'
   as?: T
   className?: string
 } & Omit<React.ComponentPropsWithoutRef<T>, 'as' | 'className' | 'aria-disabled'>
@@ -48,6 +48,7 @@ const DropZoneImpl = <T extends React.ElementType = 'div'>(
 ): React.ReactElement => {
   const Component = (as ?? 'div') as React.ElementType
   const isActive = active && !disabled
+  const isCalendarTone = tone === 'calendar' || tone === 'calendar-unscheduled'
 
   return (
     <Component
@@ -56,12 +57,20 @@ const DropZoneImpl = <T extends React.ElementType = 'div'>(
       data-drop-zone-variant={variant ?? 'surface'}
       data-drop-zone-tone={tone}
       aria-disabled={disabled || undefined}
-      className={cn(dropZoneVariants({ variant }), className)}
+      className={cn(
+        dropZoneVariants({ variant }),
+        isCalendarTone
+          ? 'border-0'
+          : 'border border-[var(--drop-zone-border)] data-[drag-over=true]:border-[var(--drop-zone-active-border)]',
+        className
+      )}
       style={{
         ...style,
         ...(isActive && tone === 'calendar'
           ? { background: 'var(--calendar-drop-zone-active-bg)' }
-          : {})
+          : isActive && tone === 'calendar-unscheduled'
+            ? { background: 'var(--calendar-drop-zone-active-bg)' }
+            : {})
       }}
       {...props}
     />

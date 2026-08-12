@@ -1,5 +1,6 @@
 import { KeyboardEvent, ReactElement, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Input } from './ui/input'
+import { cn } from '../lib/utils'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
 
@@ -134,17 +135,38 @@ export function InlineEditableText({
     )
   }
 
-  const DisplayTag = displayAs
-  return (
-    <DisplayTag
-      className={displayClassName ?? defaultDisplayClassName}
-      onClick={() => {
-        setDraftValue(value)
-        setIsEditing(true)
+  const beginEditing = (): void => {
+    setDraftValue(value)
+    setIsEditing(true)
+  }
+
+  const displayButton = (
+    <button
+      type="button"
+      className={cn(
+        'inline max-w-full appearance-none border-0 bg-transparent p-0 text-left font-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        displayClassName ?? defaultDisplayClassName
+      )}
+      onClick={beginEditing}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return
+        }
+
+        event.preventDefault()
+        beginEditing()
       }}
       title={title}
+      aria-label={value || placeholder || title}
     >
       {renderDisplay ? renderDisplay(value) : value || placeholder}
-    </DisplayTag>
+    </button>
   )
+
+  if (displayAs === 'span') {
+    return displayButton
+  }
+
+  const DisplayTag = displayAs
+  return <DisplayTag>{displayButton}</DisplayTag>
 }

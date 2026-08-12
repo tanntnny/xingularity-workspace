@@ -4,6 +4,7 @@ import {
   CalendarDays,
   ChevronDown,
   CreditCard,
+  Clock3,
   FolderKanban,
   HardDrive,
   Inbox,
@@ -62,7 +63,7 @@ type SidebarPageItem = {
 }
 
 type SidebarSection = {
-  id: 'inbox' | 'view' | 'finance'
+  id: 'inbox' | 'view' | 'automation' | 'finance'
   label: string
   items: readonly SidebarPageItem[]
 }
@@ -84,6 +85,11 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
     ]
   },
   {
+    id: 'automation',
+    label: 'Automation',
+    items: [{ id: 'schedules', label: 'Scheduling', icon: Clock3 }]
+  },
+  {
     id: 'finance',
     label: 'Finance',
     items: [{ id: 'subscriptions', label: 'Subscriptions', icon: CreditCard }]
@@ -97,6 +103,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
   inbox: true,
   view: true,
+  automation: true,
   finance: true
 }
 

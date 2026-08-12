@@ -16,11 +16,11 @@ const selectiveChipVariants = cva(
       tone: {
         subtle: 'text-secondary-foreground',
         neutral: 'text-muted-foreground hover:text-accent-foreground',
-        info: 'text-secondary-foreground',
+        info: 'text-info-muted-foreground',
         accent: 'text-secondary-foreground',
-        attention: 'text-secondary-foreground',
-        success: 'text-emerald-800 dark:text-emerald-200',
-        warning: 'text-amber-800 dark:text-amber-200',
+        attention: 'text-warning-muted-foreground',
+        success: 'text-success-muted-foreground',
+        warning: 'text-warning-muted-foreground',
         danger: 'text-destructive-foreground'
       }
     },
@@ -38,7 +38,7 @@ const selectiveChipVariants = cva(
       {
         variant: 'default',
         tone: 'info',
-        className: 'border-border bg-secondary hover:bg-secondary/80'
+        className: 'border-info-border bg-info-muted hover:bg-info-muted/80'
       },
       {
         variant: 'default',
@@ -48,19 +48,17 @@ const selectiveChipVariants = cva(
       {
         variant: 'default',
         tone: 'attention',
-        className: 'border-border bg-secondary hover:bg-secondary/80'
+        className: 'border-warning-border bg-warning-muted hover:bg-warning-muted/80'
       },
       {
         variant: 'default',
         tone: 'success',
-        className:
-          'border-emerald-200 bg-emerald-50 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60'
+        className: 'border-success-border bg-success-muted hover:bg-success-muted/80'
       },
       {
         variant: 'default',
         tone: 'warning',
-        className:
-          'border-amber-200 bg-amber-50 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-950/60'
+        className: 'border-warning-border bg-warning-muted hover:bg-warning-muted/80'
       },
       {
         variant: 'default',
@@ -115,6 +113,7 @@ const SelectiveChip = React.forwardRef<HTMLButtonElement, SelectiveChipProps>(
     ref
   ) => {
     const [open, setOpen] = React.useState(false)
+    const radioGroupName = React.useId()
     const selectedOption =
       options.find((option) => option.value === value) ??
       ({ value, label: value } satisfies SelectiveChipOption)
@@ -139,26 +138,35 @@ const SelectiveChip = React.forwardRef<HTMLButtonElement, SelectiveChipProps>(
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-48 p-1" aria-label={`${label} options`}>
-          <div role="radiogroup" aria-label={`${label} options`} className="grid gap-1">
+          <fieldset className="grid gap-1">
+            <legend className="sr-only">{label} options</legend>
             {options.map((option) => {
               const selected = option.value === value
 
               return (
-                <button
+                <label
                   key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
                   data-selected={selected}
-                  className="flex w-full items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => handleValueChange(option.value)}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-within:ring-2 focus-within:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                 >
-                  {option.icon ? <span className="shrink-0">{option.icon}</span> : null}
+                  <input
+                    type="radio"
+                    name={radioGroupName}
+                    value={option.value}
+                    checked={selected}
+                    onChange={() => handleValueChange(option.value)}
+                    className="sr-only"
+                  />
+                  {option.icon ? (
+                    <span className="shrink-0" aria-hidden="true">
+                      {option.icon}
+                    </span>
+                  ) : null}
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                </button>
+                </label>
               )
             })}
-          </div>
+          </fieldset>
         </PopoverContent>
       </Popover>
     )

@@ -236,7 +236,7 @@ export function ProjectsWorkspaceRightPanel({
               leading={<NoteShapeIcon icon={project.icon} size="1.25em" aria-hidden="true" />}
               trailing={
                 favoriteProjectIds.includes(project.id) ? (
-                  <Star size={13} className="text-amber-500" aria-hidden="true" />
+                  <Star size={13} className="text-warning" aria-hidden="true" />
                 ) : null
               }
             >
@@ -450,7 +450,7 @@ function ProjectPropertiesPanel({
           >
             <Star
               aria-hidden="true"
-              className={favorite ? 'text-amber-500' : 'text-muted-foreground'}
+              className={favorite ? 'text-warning' : 'text-muted-foreground'}
             />
             <span>{favorite ? 'Favorite' : 'Not favorite'}</span>
           </Button>

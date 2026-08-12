@@ -7,7 +7,7 @@ export const TASK_STATUS_META: Record<
   { label: string; className: string; tone: UiTone; Icon: typeof Circle }
 > = {
   pending: { label: 'Pending', className: 'text-muted-foreground', tone: 'neutral', Icon: Circle },
-  backlog: { label: 'Backlog', className: 'text-amber-500', tone: 'warning', Icon: Inbox },
+  backlog: { label: 'Backlog', className: 'text-warning', tone: 'warning', Icon: Inbox },
   'in-progress': {
     label: 'In progress',
     className: 'text-primary',
@@ -17,7 +17,7 @@ export const TASK_STATUS_META: Record<
   blocked: { label: 'Blocked', className: 'text-destructive', tone: 'danger', Icon: CircleAlert },
   completed: {
     label: 'Completed',
-    className: 'text-emerald-500',
+    className: 'text-success',
     tone: 'success',
     Icon: CheckCircle2
   }

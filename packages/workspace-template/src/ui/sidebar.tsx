@@ -19,7 +19,6 @@ const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 360
 const SIDEBAR_WIDTH_STORAGE_KEY = 'sidebar_width'
 const SIDEBAR_RESIZE_STEP = 16
-const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
 
 type SidebarContext = {
   state: 'expanded' | 'collapsed'
@@ -155,23 +154,6 @@ const SidebarProvider = React.forwardRef<
       }
     }, [sidebarWidth])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
-    React.useEffect(() => {
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (
-          event.key.toLowerCase() === SIDEBAR_KEYBOARD_SHORTCUT &&
-          (event.metaKey || event.ctrlKey) &&
-          !isEditableShortcutTarget(event.target)
-        ) {
-          event.preventDefault()
-          toggleSidebar()
-        }
-      }
-
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [toggleSidebar])
-
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
     const state = open ? 'expanded' : 'collapsed'
@@ -233,16 +215,6 @@ const SidebarProvider = React.forwardRef<
   }
 )
 SidebarProvider.displayName = 'SidebarProvider'
-
-function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')
-  )
-}
 
 const Sidebar = React.forwardRef<
   HTMLDivElement,

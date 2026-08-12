@@ -174,4 +174,63 @@ test.describe('right workspace panel resizing', () => {
       await electronApp.close()
     }
   })
+
+  test('toggles the right panel with Cmd+B across panel-bearing pages', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const panelPages = [
+        'notes',
+        'knowledge',
+        'projects',
+        'subscriptions',
+        'calendar',
+        'schedules',
+        'settings'
+      ] as const
+
+      for (const pageId of panelPages) {
+        await page.getByTestId(`sidebar-page:${pageId}`).click()
+        const closePanelButton = page.getByRole('button', { name: 'Close right sidebar' })
+        const openPanelButton = page.getByRole('button', { name: 'Open right sidebar' })
+
+        await expect(closePanelButton).toBeVisible({ timeout: 20_000 })
+        await expect(
+          page.locator('[data-panel-state="open"][data-panel-resizable="true"]').first()
+        ).toHaveCSS('transition-property', /transform/)
+        await page.keyboard.press('Meta+B')
+        await expect(openPanelButton).toBeVisible()
+        await page.keyboard.press('Meta+B')
+        await expect(closePanelButton).toBeVisible()
+      }
+
+      const profileInput = page.getByLabel('Profile Name')
+      await profileInput.focus()
+      await page.keyboard.press('Meta+B')
+      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toBeVisible()
+
+      await page.getByTestId('sidebar-vault-manager').click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.keyboard.press('Meta+B')
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toBeVisible()
+
+      await page.getByTestId('sidebar-page:capture').click()
+      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
+      await page.keyboard.press('Meta+B')
+      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+
+      await page.getByTestId('sidebar-page:settings').click()
+      await page.getByRole('radio', { name: 'Developer', exact: true }).click()
+      await page.getByTestId('settings-open-design-audit').click()
+      await expect(page.getByRole('heading', { name: 'Design Audit' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
+      await page.keyboard.press('Meta+B')
+      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
 })

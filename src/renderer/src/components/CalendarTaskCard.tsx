@@ -45,8 +45,8 @@ export const CalendarTaskCard = forwardRef<
 ): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
   const priorityMarker = task.priority === 'high' ? '!!' : task.priority === 'medium' ? '!' : null
-  const priorityMarkerColor =
-    task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : null
+  const priorityMarkerClass =
+    task.priority === 'high' ? 'text-destructive' : task.priority === 'medium' ? 'text-warning' : null
   const taskTypeStyle = {
     '--calendar-task-bg': getCalendarTaskBackgroundToken(task.taskType),
     '--calendar-task-border': getCalendarTaskBorderToken(task.taskType)
@@ -89,10 +89,9 @@ export const CalendarTaskCard = forwardRef<
         ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
-        {priorityMarker && priorityMarkerColor ? (
+        {priorityMarker && priorityMarkerClass ? (
           <span
-            className="pointer-events-none shrink-0 text-xs font-semibold leading-none"
-            style={{ color: priorityMarkerColor }}
+            className={`pointer-events-none shrink-0 text-xs font-semibold leading-none ${priorityMarkerClass}`}
             aria-hidden="true"
           >
             {priorityMarker}

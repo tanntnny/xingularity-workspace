@@ -26,6 +26,25 @@
     --accent-foreground: #202020;
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
+    --destructive-muted: #fee2e2;
+    --destructive-muted-foreground: #991b1b;
+    --success: #16a34a;
+    --success-foreground: #f0fdf4;
+    --success-muted: #f0fdf4;
+    --success-muted-foreground: #166534;
+    --success-border: #bbf7d0;
+    --warning: #d97706;
+    --warning-foreground: #fffbeb;
+    --warning-muted: #fffbeb;
+    --warning-muted-foreground: #92400e;
+    --warning-border: #fcd34d;
+    --info: #0e7490;
+    --info-foreground: #ecfeff;
+    --info-muted: #ecfeff;
+    --info-muted-foreground: #155e75;
+    --info-border: #a5f3fc;
+    --overlay: rgb(0 0 0 / 0.8);
+    --overlay-muted: rgb(0 0 0 / 0.5);
     --border: #c7c7c7;
     --note-block-border: var(--border);
     --note-block-radius: var(--radius);
@@ -38,11 +57,7 @@
     --drop-zone-border: transparent;
     --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
     --drop-zone-active-border: var(--ring);
-    --calendar-drop-zone-active-bg: linear-gradient(
-      135deg,
-      rgb(14 165 233 / 0.24),
-      rgb(20 184 166 / 0.24)
-    );
+    --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
     --scrollbar-thumb: #b8b8b8;
     --scrollbar-thumb-hover: #8a8a8a;
     --radius: 0.5rem;
@@ -82,6 +97,50 @@
     --calendar-task-follow-up-border: #78b6c3;
     --calendar-task-other-bg: #f3f4f6;
     --calendar-task-other-border: #a3a3a8;
+    --chart-label: #f6f8fb;
+    --chart-label-muted: rgb(246 248 251 / 0.82);
+    --chart-category-label: rgb(255 255 255 / 0.72);
+    --chart-category-label-muted: rgb(255 255 255 / 0.58);
+    --chart-record-stroke: rgb(255 255 255 / 0.12);
+    --chart-review: #84263b;
+    --chart-renewal: #8c6406;
+    --chart-default: #164f63;
+    --icon-on-color: #ffffff;
+    --tag-0-bg: #fff1f2;
+    --tag-0-border: #fecdd3;
+    --tag-0-foreground: #9f1239;
+    --tag-0-hover: #ffe4e6;
+    --tag-1-bg: #fffbeb;
+    --tag-1-border: #fde68a;
+    --tag-1-foreground: #92400e;
+    --tag-1-hover: #fef3c7;
+    --tag-2-bg: #f0fdf4;
+    --tag-2-border: #bbf7d0;
+    --tag-2-foreground: #166534;
+    --tag-2-hover: #dcfce7;
+    --tag-3-bg: #f5f3ff;
+    --tag-3-border: #ddd6fe;
+    --tag-3-foreground: #6d28d9;
+    --tag-3-hover: #ede9fe;
+    --tag-4-bg: #fff7ed;
+    --tag-4-border: #fed7aa;
+    --tag-4-foreground: #c2410c;
+    --tag-4-hover: #ffedd5;
+    --tag-5-bg: #fdf2f8;
+    --tag-5-border: #fbcfe8;
+    --tag-5-foreground: #be185d;
+    --tag-5-hover: #fce7f3;
+    --capture-group-bg: #eeeeee;
+    --capture-card-bg: var(--workspace-background);
+    --capture-card-hover-bg: #ffffff;
+    --capture-group-today-bg: #f5d0fe;
+    --capture-group-today-border: #d946ef;
+    --capture-group-this-week-bg: #bae6fd;
+    --capture-group-this-week-border: #0ea5e9;
+    --capture-group-this-month-bg: #fed7aa;
+    --capture-group-this-month-border: #f97316;
+    --capture-group-before-this-month-bg: #bbf7d0;
+    --capture-group-before-this-month-border: #22c55e;
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
     --motion-duration-fast: 140ms;
@@ -112,15 +171,28 @@
       --accent-foreground: #f2f2f2;
       --destructive: #7f1d1d;
       --destructive-foreground: #fafafa;
+      --destructive-muted: #450a0a;
+      --destructive-muted-foreground: #fecaca;
+      --success: #22c55e;
+      --success-foreground: #052e16;
+      --success-muted: #052e16;
+      --success-muted-foreground: #bbf7d0;
+      --success-border: #166534;
+      --warning: #f59e0b;
+      --warning-foreground: #451a03;
+      --warning-muted: #451a03;
+      --warning-muted-foreground: #fde68a;
+      --warning-border: #92400e;
+      --info: #22d3ee;
+      --info-foreground: #083344;
+      --info-muted: #083344;
+      --info-muted-foreground: #a5f3fc;
+      --info-border: #0e7490;
       --border: #353535;
       --note-block-border: #4a4a4a;
       --input: #404040;
       --ring: #a3a3a3;
-      --calendar-drop-zone-active-bg: linear-gradient(
-        135deg,
-        rgb(14 165 233 / 0.34),
-        rgb(20 184 166 / 0.34)
-      );
+      --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
       --scrollbar-thumb: #454545;
       --scrollbar-thumb-hover: #6b6b6b;
       --sidebar-background: #080808;
@@ -147,6 +219,50 @@
       --calendar-task-follow-up-border: #0e8e9e;
       --calendar-task-other-bg: #1e1e20;
       --calendar-task-other-border: #3f3f46;
+      --chart-label: #f6f8fb;
+      --chart-label-muted: rgb(246 248 251 / 0.82);
+      --chart-category-label: rgb(255 255 255 / 0.72);
+      --chart-category-label-muted: rgb(255 255 255 / 0.58);
+      --chart-record-stroke: rgb(255 255 255 / 0.12);
+      --chart-review: #84263b;
+      --chart-renewal: #8c6406;
+      --chart-default: #164f63;
+      --icon-on-color: #ffffff;
+      --tag-0-bg: #4c0519;
+      --tag-0-border: #9f1239;
+      --tag-0-foreground: #fecdd3;
+      --tag-0-hover: #881337;
+      --tag-1-bg: #451a03;
+      --tag-1-border: #92400e;
+      --tag-1-foreground: #fde68a;
+      --tag-1-hover: #78350f;
+      --tag-2-bg: #052e16;
+      --tag-2-border: #166534;
+      --tag-2-foreground: #bbf7d0;
+      --tag-2-hover: #14532d;
+      --tag-3-bg: #2e1065;
+      --tag-3-border: #6d28d9;
+      --tag-3-foreground: #ddd6fe;
+      --tag-3-hover: #4c1d95;
+      --tag-4-bg: #431407;
+      --tag-4-border: #c2410c;
+      --tag-4-foreground: #fed7aa;
+      --tag-4-hover: #7c2d12;
+      --tag-5-bg: #500724;
+      --tag-5-border: #be185d;
+      --tag-5-foreground: #fbcfe8;
+      --tag-5-hover: #831843;
+      --capture-group-bg: #0c0c0c;
+      --capture-card-bg: var(--workspace-background);
+      --capture-card-hover-bg: #242424;
+      --capture-group-today-bg: #7e22ce;
+      --capture-group-today-border: #e879f9;
+      --capture-group-this-week-bg: #0369a1;
+      --capture-group-this-week-border: #38bdf8;
+      --capture-group-this-month-bg: #c2410c;
+      --capture-group-this-month-border: #fdba74;
+      --capture-group-before-this-month-bg: #15803d;
+      --capture-group-before-this-month-border: #86efac;
     }
   }
 
@@ -207,6 +323,51 @@
 }
 
 @layer components {
+  .capture-dashed-border {
+    --capture-dash-gap: 10px;
+    --capture-dash-length: 18px;
+    position: relative;
+    border-color: transparent !important;
+    border-style: solid !important;
+  }
+
+  .capture-dashed-border::before {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+      repeating-linear-gradient(
+          to right,
+          var(--border) 0 var(--capture-dash-length),
+          transparent var(--capture-dash-length)
+            calc(var(--capture-dash-length) + var(--capture-dash-gap))
+        )
+        top left / 100% 1px no-repeat,
+      repeating-linear-gradient(
+          to bottom,
+          var(--border) 0 var(--capture-dash-length),
+          transparent var(--capture-dash-length)
+            calc(var(--capture-dash-length) + var(--capture-dash-gap))
+        )
+        top right / 1px 100% no-repeat,
+      repeating-linear-gradient(
+          to left,
+          var(--border) 0 var(--capture-dash-length),
+          transparent var(--capture-dash-length)
+            calc(var(--capture-dash-length) + var(--capture-dash-gap))
+        )
+        bottom right / 100% 1px no-repeat,
+      repeating-linear-gradient(
+          to top,
+          var(--border) 0 var(--capture-dash-length),
+          transparent var(--capture-dash-length)
+            calc(var(--capture-dash-length) + var(--capture-dash-gap))
+        )
+        bottom left / 1px 100% no-repeat;
+    content: '';
+    pointer-events: none;
+  }
+
   .calendar-date-highlight,
   .calendar-date-highlight-hover:hover {
     background-color: var(--accent);
@@ -293,13 +454,6 @@
       width var(--motion-duration-panel) var(--motion-ease-standard),
       flex-basis var(--motion-duration-panel) var(--motion-ease-standard);
     will-change: transform, opacity, width, flex-basis;
-  }
-
-  @media (min-width: 901px) {
-    .motion-workspace-panel[data-panel-resizable='true'] {
-      transition: none;
-      will-change: auto;
-    }
   }
 
   .motion-editor-surface {
@@ -453,11 +607,6 @@
       border-color var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
-  .calendar-full .fc-daygrid-day[data-calendar-drop-over='true'],
-  .calendar-full .fc-daygrid-day[data-calendar-drop-over='true'] .fc-daygrid-day-frame {
-    background: var(--calendar-drop-zone-active-bg);
-  }
-
   .calendar-full .fc-event.calendar-task-drag-preview:not(.fc-event-resizing),
   .fc-event-mirror.calendar-task-event:not(.fc-event-resizing),
   .fc-event-dragging.calendar-task-event:not(.fc-event-resizing),
@@ -468,7 +617,6 @@
     opacity: 1;
     animation: none;
     transition: none;
-    transform: rotate(var(--drag-preview-rotation));
   }
 
   .calendar-full .fc-daygrid-day:not(.calendar-date-highlight):not(.fc-day-today):hover {
@@ -480,6 +628,15 @@
   .calendar-full .fc-daygrid-day.fc-day-today {
     background-color: var(--accent);
     background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
+  .calendar-full .fc-daygrid-day[data-calendar-drop-zone='true'][data-calendar-drop-over='true'],
+  .calendar-full
+    .fc-daygrid-day[data-calendar-drop-zone='true'][data-calendar-drop-over='true']:hover,
+  .calendar-full
+    .fc-daygrid-day[data-calendar-drop-zone='true'][data-calendar-drop-over='true']
+    .fc-daygrid-day-frame {
+    background: var(--calendar-drop-zone-active-bg);
   }
 
   .calendar-full .fc-col-header-cell-cushion {

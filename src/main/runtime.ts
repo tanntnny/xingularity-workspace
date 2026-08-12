@@ -22,9 +22,14 @@ import { FleetingNoteService } from './fleetingNoteService'
 import { SqliteIndexer } from './indexer/sqliteIndexer'
 import {
   createEmptyExcalidrawFileDocument,
+  isExcalidrawPath,
   withExcalidrawExtension
 } from '../shared/excalidrawFile'
-import { serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
+import {
+  isNotePath,
+  serializeStoredNoteDocument,
+  stripNoteExtension
+} from '../shared/noteDocument'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -34,7 +39,7 @@ import {
   VaultPaths
 } from './vaultManager'
 import { getVaultFleetingDir } from './vaultData'
-import { VaultWatcher } from './watcher'
+import { VaultWatcher, type VaultEvent } from './watcher'
 import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
@@ -95,8 +100,10 @@ export class VaultRuntime {
   private settings = new SettingsStore()
   private reminderService = new ReminderService()
   private activationQueue: Promise<void> = Promise.resolve()
+  private notebookMutationQueue: Promise<void> = Promise.resolve()
   private settingsQueue: Promise<void> = Promise.resolve()
   private vaultListeners: Array<(paths: VaultPaths | null) => void> = []
+  private treeChangeListeners: Array<() => void> = []
   private agentChatListeners: Array<(event: AgentChatEvent) => void> = []
   private agentToolInvoker: ((name: string, input: unknown) => Promise<unknown>) | null = null
 
@@ -211,6 +218,13 @@ export class VaultRuntime {
     this.vaultListeners.push(listener)
   }
 
+  onTreeChange(listener: () => void): () => void {
+    this.treeChangeListeners.push(listener)
+    return () => {
+      this.treeChangeListeners = this.treeChangeListeners.filter((item) => item !== listener)
+    }
+  }
+
   onAgentChatEvent(listener: (event: AgentChatEvent) => void): () => void {
     this.agentChatListeners.push(listener)
     return () => {
@@ -233,52 +247,60 @@ export class VaultRuntime {
     return this.fleetingNoteService!.create(content)
   }
 
+  async removeFleetingNote(relPath: string): Promise<void> {
+    this.assertReady()
+    await this.fleetingNoteService!.delete(relPath)
+  }
+
   async convertFleetingNote(
     relPath: string,
     target: FleetingConversionTarget
   ): Promise<FleetingConversionResult> {
-    this.assertReady()
-    const fleetingNote = await this.fleetingNoteService!.read(relPath)
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const fleetingNote = await this.fleetingNoteService!.read(relPath)
 
-    if (target === 'note') {
-      const notePath = await this.fileService!.createNoteWithMarkdown(
-        getFleetingTitle(fleetingNote.content),
-        fleetingNote.content
-      )
-      const document = serializeStoredNoteDocument(
-        await this.fileService!.readNoteDocument(notePath)
-      )
-      await this.indexer!.upsertFromRaw({
-        id: createStableId(notePath),
-        relPath: notePath,
-        content: document,
-        updatedAt: new Date().toISOString()
+      if (target === 'note') {
+        const notePath = await this.fileService!.createNoteWithMarkdown(
+          getFleetingTitle(fleetingNote.content),
+          fleetingNote.content
+        )
+        const document = serializeStoredNoteDocument(
+          await this.fileService!.readNoteDocument(notePath)
+        )
+        await this.indexer!.upsertFromRaw({
+          id: createStableId(notePath),
+          relPath: notePath,
+          content: document,
+          updatedAt: new Date().toISOString()
+        })
+        await this.fleetingNoteService!.delete(fleetingNote.relPath)
+        this.notifyTreeChange()
+        return {
+          sourceRelPath: fleetingNote.relPath,
+          target,
+          noteRelPath: notePath
+        }
+      }
+
+      const task = createTaskFromFleetingNote(fleetingNote.content)
+      await this.mutateSettings((settings) => {
+        const nextTasks = [...settings.calendarTasks, task]
+        return {
+          next: {
+            calendarTasks: nextTasks,
+            tasks: nextTasks
+          },
+          result: task
+        }
       })
       await this.fleetingNoteService!.delete(fleetingNote.relPath)
       return {
         sourceRelPath: fleetingNote.relPath,
         target,
-        noteRelPath: notePath
-      }
-    }
-
-    const task = createTaskFromFleetingNote(fleetingNote.content)
-    await this.mutateSettings((settings) => {
-      const nextTasks = [...settings.calendarTasks, task]
-      return {
-        next: {
-          calendarTasks: nextTasks,
-          tasks: nextTasks
-        },
-        result: task
+        task
       }
     })
-    await this.fleetingNoteService!.delete(fleetingNote.relPath)
-    return {
-      sourceRelPath: fleetingNote.relPath,
-      target,
-      task
-    }
   }
 
   async listNoteTree(): ReturnType<FileService['listTree']> {
@@ -302,25 +324,31 @@ export class VaultRuntime {
   }
 
   async writeNote(relPath: string, content: string): Promise<void> {
-    this.assertReady()
-    await this.fileService!.writeNote(relPath, content)
-    const fresh = await this.fileService!.readNoteDocument(relPath)
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(relPath),
-      relPath: sanitizeNotePath(relPath),
-      content: serializeStoredNoteDocument(fresh),
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.fileService!.writeNote(relPath, content)
+      const fresh = await this.fileService!.readNoteDocument(relPath)
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(relPath),
+        relPath: sanitizeNotePath(relPath),
+        content: serializeStoredNoteDocument(fresh),
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
     })
   }
 
   async writeNoteDocument(relPath: string, document: StoredNoteDocument): Promise<void> {
-    this.assertReady()
-    await this.fileService!.writeNoteDocument(relPath, document)
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(relPath),
-      relPath: sanitizeNotePath(relPath),
-      content: serializeStoredNoteDocument(document),
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.fileService!.writeNoteDocument(relPath, document)
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(relPath),
+        relPath: sanitizeNotePath(relPath),
+        content: serializeStoredNoteDocument(document),
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
     })
   }
 
@@ -328,65 +356,103 @@ export class VaultRuntime {
     relPath: string,
     document: StoredExcalidrawFileDocument
   ): Promise<void> {
-    this.assertReady()
-    await this.fileService!.writeExcalidrawFileDocument(relPath, document)
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.fileService!.writeExcalidrawFileDocument(relPath, document)
+    })
   }
 
   async createNote(name: string): Promise<string> {
-    this.assertReady()
-    const relPath = await this.fileService!.createNote(name)
-    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(relPath),
-      relPath,
-      content,
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const relPath = await this.fileService!.createNote(name)
+      const content = serializeStoredNoteDocument(
+        await this.fileService!.readNoteDocument(relPath)
+      )
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(relPath),
+        relPath,
+        content,
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
+      return relPath
     })
-    return relPath
   }
 
   async createNoteAtPath(relPath: string): Promise<string> {
-    this.assertReady()
-    this.assertNoteCreationAllowed(relPath)
-    const nextRelPath = await this.fileService!.createNoteAtPath(relPath)
-    const content = serializeStoredNoteDocument(
-      await this.fileService!.readNoteDocument(nextRelPath)
-    )
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(nextRelPath),
-      relPath: nextRelPath,
-      content,
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      this.assertNoteCreationAllowed(relPath)
+      const nextRelPath = await this.fileService!.createNoteAtPath(relPath)
+      const content = serializeStoredNoteDocument(
+        await this.fileService!.readNoteDocument(nextRelPath)
+      )
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(nextRelPath),
+        relPath: nextRelPath,
+        content,
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
+      return nextRelPath
     })
-    return nextRelPath
   }
 
   async createExcalidrawFileAtPath(relPath: string): Promise<string> {
-    this.assertReady()
-    const normalizedPath = withExcalidrawExtension(relPath)
-    await this.assertFileCreationAllowed(normalizedPath)
-    return this.fileService!.createExcalidrawFileAtPath(normalizedPath)
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const normalizedPath = withExcalidrawExtension(relPath)
+      await this.assertFileCreationAllowed(normalizedPath)
+
+      for (let attempt = 0; attempt < 1000; attempt += 1) {
+        const nextRelPath = await findAvailableExcalidrawRelPath(
+          this.currentPaths!.notebooksPath,
+          normalizedPath
+        )
+
+        try {
+          const createdPath = await this.fileService!.createExcalidrawFileAtPath(nextRelPath)
+          this.notifyTreeChange()
+          return createdPath
+        } catch (error) {
+          if (!isFileExistsError(error)) {
+            throw error
+          }
+        }
+      }
+
+      throw new Error('Could not create a unique drawing name')
+    })
   }
 
   async createNoteWithTags(name: string, tags: string[]): Promise<string> {
-    this.assertReady()
-    const relPath = await this.fileService!.createNoteWithTags(name, tags)
-    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(relPath),
-      relPath,
-      content,
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const relPath = await this.fileService!.createNoteWithTags(name, tags)
+      const content = serializeStoredNoteDocument(
+        await this.fileService!.readNoteDocument(relPath)
+      )
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(relPath),
+        relPath,
+        content,
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
+      return relPath
     })
-    return relPath
   }
 
   async createFolder(relPath: string): Promise<string> {
-    this.assertReady()
-    await this.assertFolderCreationAllowed(relPath)
-    const nextRelPath = await this.fileService!.createFolder(relPath)
-    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-    return nextRelPath
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.assertFolderCreationAllowed(relPath)
+      const nextRelPath = await this.fileService!.createFolder(relPath)
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      this.notifyTreeChange()
+      return nextRelPath
+    })
   }
 
   async importNotes(): Promise<NoteImportResult> {
@@ -401,40 +467,49 @@ export class VaultRuntime {
       return { imported: [], failed: [] }
     }
 
-    const imported: NoteImportResult['imported'] = []
-    const failed: NoteImportResult['failed'] = []
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const imported: NoteImportResult['imported'] = []
+      const failed: NoteImportResult['failed'] = []
 
-    for (const sourcePath of result.filePaths) {
-      try {
-        const [nextImported] = await this.fileService!.importNotes([sourcePath])
-        const content = serializeStoredNoteDocument(
-          await this.fileService!.readNoteDocument(nextImported.relPath)
-        )
-        await this.indexer!.upsertFromRaw({
-          id: createStableId(nextImported.relPath),
-          relPath: nextImported.relPath,
-          content,
-          updatedAt: new Date().toISOString()
-        })
-        imported.push(nextImported)
-      } catch (error) {
-        failed.push({
-          sourceName: path.basename(sourcePath),
-          error: String(error)
-        })
+      for (const sourcePath of result.filePaths) {
+        try {
+          const [nextImported] = await this.fileService!.importNotes([sourcePath])
+          const content = serializeStoredNoteDocument(
+            await this.fileService!.readNoteDocument(nextImported.relPath)
+          )
+          await this.indexer!.upsertFromRaw({
+            id: createStableId(nextImported.relPath),
+            relPath: nextImported.relPath,
+            content,
+            updatedAt: new Date().toISOString()
+          })
+          imported.push(nextImported)
+        } catch (error) {
+          failed.push({
+            sourceName: path.basename(sourcePath),
+            error: String(error)
+          })
+        }
       }
-    }
 
-    return { imported, failed }
+      if (imported.length > 0) {
+        this.notifyTreeChange()
+      }
+      return { imported, failed }
+    })
   }
 
   async migrateBlockNoteNotes(): Promise<BlockNoteMigrationResult> {
-    this.assertReady()
-    const result = await this.fileService!.migrateBlockNoteMarkdownNotes()
-    if (result.converted > 0) {
-      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-    }
-    return result
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const result = await this.fileService!.migrateBlockNoteMarkdownNotes()
+      if (result.converted > 0) {
+        await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+        this.notifyTreeChange()
+      }
+      return result
+    })
   }
 
   async migrateTaggedNoteBodyFrontmatter(): Promise<{
@@ -445,73 +520,93 @@ export class VaultRuntime {
       error: string
     }>
   }> {
-    this.assertReady()
-    const result = await this.fileService!.migrateTaggedNoteBodyFrontmatter()
-    if (result.converted > 0) {
-      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-    }
-    return result
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const result = await this.fileService!.migrateTaggedNoteBodyFrontmatter()
+      if (result.converted > 0) {
+        await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+        this.notifyTreeChange()
+      }
+      return result
+    })
   }
 
   async renameNote(oldPath: string, newPath: string): Promise<void> {
-    this.assertReady()
-    await this.fileService!.rename(oldPath, newPath)
-    await this.indexer!.deleteByRelPath(sanitizeNotePath(oldPath))
-    const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(newPath))
-    await this.indexer!.upsertFromRaw({
-      id: createStableId(newPath),
-      relPath: sanitizeNotePath(newPath),
-      content,
-      updatedAt: new Date().toISOString()
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.fileService!.rename(oldPath, newPath)
+      await this.indexer!.deleteByRelPath(sanitizeNotePath(oldPath))
+      const content = serializeStoredNoteDocument(
+        await this.fileService!.readNoteDocument(newPath)
+      )
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(newPath),
+        relPath: sanitizeNotePath(newPath),
+        content,
+        updatedAt: new Date().toISOString()
+      })
+      this.notifyTreeChange()
     })
   }
 
   async renamePath(oldPath: string, newPath: string): Promise<void> {
-    this.assertReady()
-    await this.assertPathMutationAllowed(oldPath, newPath)
-    await this.fileService!.renamePath(oldPath, newPath)
-    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.assertPathMutationAllowed(oldPath, newPath)
+      await this.fileService!.renamePath(oldPath, newPath)
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      this.notifyTreeChange()
+    })
   }
 
   async deleteNote(relPath: string): Promise<void> {
-    this.assertReady()
-    const safeRelPath = sanitizeNotePath(relPath)
-    const trashed = await this.createTrashService().moveEntryToTrash(safeRelPath)
-    await this.indexer!.deleteByRelPath(safeRelPath)
-    this.pushFileDeleteHistory('Delete note', [trashed])
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const safeRelPath = sanitizeNotePath(relPath)
+      const trashed = await this.createTrashService().moveEntryToTrash(safeRelPath)
+      await this.indexer!.deleteByRelPath(safeRelPath)
+      this.pushFileDeleteHistory('Delete note', [trashed])
+      this.notifyTreeChange()
+    })
   }
 
   async deletePath(relPath: string): Promise<void> {
-    this.assertReady()
-    await this.assertPathDeletionAllowed(relPath)
-    const trashed = await this.createTrashService().moveEntryToTrash(relPath)
-    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-    this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
-      trashed
-    ])
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      await this.assertPathDeletionAllowed(relPath)
+      const trashed = await this.createTrashService().moveEntryToTrash(relPath)
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
+        trashed
+      ])
+      this.notifyTreeChange()
+    })
   }
 
   async deletePaths(relPaths: string[]): Promise<void> {
-    this.assertReady()
-    const uniqueRelPaths = Array.from(new Set(relPaths))
-    if (uniqueRelPaths.length === 0) {
-      return
-    }
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const uniqueRelPaths = Array.from(new Set(relPaths))
+      if (uniqueRelPaths.length === 0) {
+        return
+      }
 
-    for (const relPath of uniqueRelPaths) {
-      await this.assertPathDeletionAllowed(relPath)
-    }
+      for (const relPath of uniqueRelPaths) {
+        await this.assertPathDeletionAllowed(relPath)
+      }
 
-    const trash = this.createTrashService()
-    const trashedEntries: TrashedEntry[] = []
-    for (const relPath of uniqueRelPaths) {
-      trashedEntries.push(await trash.moveEntryToTrash(relPath))
-    }
-    await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-    this.pushFileDeleteHistory(
-      uniqueRelPaths.length === 1 ? 'Delete item' : 'Delete items',
-      trashedEntries
-    )
+      const trash = this.createTrashService()
+      const trashedEntries: TrashedEntry[] = []
+      for (const relPath of uniqueRelPaths) {
+        trashedEntries.push(await trash.moveEntryToTrash(relPath))
+      }
+      await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      this.pushFileDeleteHistory(
+        uniqueRelPaths.length === 1 ? 'Delete item' : 'Delete items',
+        trashedEntries
+      )
+      this.notifyTreeChange()
+    })
   }
 
   async exportNote(relPath: string, content: string): Promise<string | null> {
@@ -918,40 +1013,45 @@ export class VaultRuntime {
   }
 
   async importLegacyExcalidrawSessions(): Promise<LegacyExcalidrawImportResult> {
-    this.assertReady()
-    const sessions = await this.getExcalidrawSessionStore().listSessions()
-    const result: LegacyExcalidrawImportResult = {
-      imported: [],
-      skipped: [],
-      failed: []
-    }
-
-    for (const session of sessions) {
-      try {
-        const preferredRelPath = withExcalidrawExtension(`Imported Drawings/${session.title}`)
-        const relPath = await findAvailableExcalidrawRelPath(
-          this.currentPaths!.notebooksPath,
-          preferredRelPath
-        )
-
-        await this.fileService!.createExcalidrawFileAtPath(relPath)
-        await this.fileService!.writeExcalidrawFileDocument(relPath, {
-          version: 1,
-          scene: session.scene ?? createEmptyExcalidrawFileDocument().scene
-        })
-        result.imported.push({
-          sourceId: session.id,
-          relPath
-        })
-      } catch (error) {
-        result.failed.push({
-          sourceId: session.id,
-          error: String(error)
-        })
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const sessions = await this.getExcalidrawSessionStore().listSessions()
+      const result: LegacyExcalidrawImportResult = {
+        imported: [],
+        skipped: [],
+        failed: []
       }
-    }
 
-    return result
+      for (const session of sessions) {
+        try {
+          const preferredRelPath = withExcalidrawExtension(`Imported Drawings/${session.title}`)
+          const relPath = await findAvailableExcalidrawRelPath(
+            this.currentPaths!.notebooksPath,
+            preferredRelPath
+          )
+
+          await this.fileService!.createExcalidrawFileAtPath(relPath)
+          await this.fileService!.writeExcalidrawFileDocument(relPath, {
+            version: 1,
+            scene: session.scene ?? createEmptyExcalidrawFileDocument().scene
+          })
+          result.imported.push({
+            sourceId: session.id,
+            relPath
+          })
+        } catch (error) {
+          result.failed.push({
+            sourceId: session.id,
+            error: String(error)
+          })
+        }
+      }
+
+      if (result.imported.length > 0) {
+        this.notifyTreeChange()
+      }
+      return result
+    })
   }
 
   async approveAgentChatTool(input: {
@@ -1378,23 +1478,61 @@ export class VaultRuntime {
 
   async handleExternalEvent(
     relPath: string,
-    eventType: 'add' | 'change' | 'unlink'
+    eventType: VaultEvent
   ): Promise<void> {
     if (!this.fileService || !this.indexer || !this.currentPaths) {
       return
     }
 
-    const safeRelPath = sanitizeNotePath(relPath)
-    if (eventType === 'unlink') {
-      await this.indexer.deleteByRelPath(safeRelPath)
+    const safeRelPath = sanitizeEntryPath(relPath)
+    if (eventType === 'addDir' || eventType === 'unlinkDir') {
+      this.notifyTreeChange()
       return
     }
 
-    const absPath = assertPathInVault(this.currentPaths, safeRelPath, 'notes')
-    const content = await fs.readFile(absPath, 'utf-8')
+    if (!isNotePath(safeRelPath) && !isExcalidrawPath(safeRelPath)) {
+      return
+    }
+
+    if (eventType === 'unlink') {
+      if (isNotePath(safeRelPath)) {
+        const absPath = assertPathInVault(this.currentPaths, safeRelPath, 'notes')
+        if (!(await pathExists(absPath))) {
+          await this.indexer.deleteByRelPath(safeRelPath)
+        } else {
+          await this.indexExternalNote(safeRelPath, absPath)
+        }
+      }
+      this.notifyTreeChange()
+      return
+    }
+
+    if (isNotePath(safeRelPath)) {
+      const absPath = assertPathInVault(this.currentPaths, safeRelPath, 'notes')
+      await this.indexExternalNote(safeRelPath, absPath)
+    }
+
+    this.notifyTreeChange()
+  }
+
+  private async indexExternalNote(relPath: string, absPath: string): Promise<void> {
+    if (!this.indexer) {
+      return
+    }
+
+    let content: string
+    try {
+      content = await fs.readFile(absPath, 'utf-8')
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return
+      }
+      throw error
+    }
+
     await this.indexer.upsertFromRaw({
-      id: createStableId(safeRelPath),
-      relPath: safeRelPath,
+      id: createStableId(relPath),
+      relPath,
       content,
       updatedAt: new Date().toISOString()
     })
@@ -1409,7 +1547,7 @@ export class VaultRuntime {
       : await validateVault(folderPath)
 
     this.watcher = new VaultWatcher(this.currentPaths.notebooksPath, async (relPath, eventType) => {
-      await this.handleExternalEvent(relPath, eventType)
+      await this.enqueueNotebookMutation(() => this.handleExternalEvent(relPath, eventType))
     })
 
     this.fileService = new FileService(
@@ -1448,6 +1586,8 @@ export class VaultRuntime {
   }
 
   private async closeCurrentVault(): Promise<void> {
+    await this.notebookMutationQueue
+    this.notebookMutationQueue = Promise.resolve()
     if (this.currentPaths) {
       this.notifyVaultChange(null)
     }
@@ -1470,6 +1610,15 @@ export class VaultRuntime {
     return run
   }
 
+  private enqueueNotebookMutation<T>(action: () => Promise<T>): Promise<T> {
+    const run = this.notebookMutationQueue.then(action, action)
+    this.notebookMutationQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
   private enqueueSettingsUpdate<T>(action: () => Promise<T>): Promise<T> {
     const run = this.settingsQueue.then(action, action)
     this.settingsQueue = run.then(
@@ -1485,6 +1634,16 @@ export class VaultRuntime {
         listener(paths)
       } catch (error) {
         console.error('[VaultRuntime] vault listener failed', error)
+      }
+    }
+  }
+
+  private notifyTreeChange(): void {
+    for (const listener of this.treeChangeListeners) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[VaultRuntime] tree change listener failed', error)
       }
     }
   }
@@ -2013,6 +2172,36 @@ function isSqliteCorruptionError(error: unknown): boolean {
 
 function createStableId(relPath: string): string {
   return `note:${path.normalize(relPath).toLowerCase()}`
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'EEXIST'
+  )
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'ENOENT'
+  )
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath)
+    return true
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return false
+    }
+    throw error
+  }
 }
 
 function getFleetingTitle(content: string): string {

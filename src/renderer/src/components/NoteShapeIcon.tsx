@@ -36,7 +36,7 @@ export function NoteShapeIcon({ icon, size = 16, className }: NoteShapeIconProps
       {createElement(ProjectIcon, {
         size: glyphSize,
         style: { width: glyphSize, height: glyphSize },
-        color: '#ffffff',
+        color: 'var(--icon-on-color)',
         'aria-hidden': true
       })}
     </span>

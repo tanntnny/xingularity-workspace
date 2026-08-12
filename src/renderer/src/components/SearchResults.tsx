@@ -30,12 +30,12 @@ export function SearchResults({ results, onOpen }: SearchResultsProps): ReactEle
           className="h-auto w-full justify-start p-2.5 text-left whitespace-normal"
           onClick={() => onOpen(result.relPath)}
         >
-          <div className="mb-0.5 text-base font-semibold">{result.title}</div>
-          <div className="text-xs text-muted-foreground">{result.relPath}</div>
-          <div className="text-xs text-muted-foreground">{result.snippet}</div>
-          <div className="text-xs text-muted-foreground">
+          <span className="mb-0.5 block text-base font-semibold">{result.title}</span>
+          <span className="block text-xs text-muted-foreground">{result.relPath}</span>
+          <span className="block text-xs text-muted-foreground">{result.snippet}</span>
+          <span className="block text-xs text-muted-foreground">
             {result.tags.map((tag) => `#${tag}`).join(' ')}
-          </div>
+          </span>
         </Button>
       ))}
     </div>
