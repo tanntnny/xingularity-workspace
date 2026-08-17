@@ -9,7 +9,6 @@ import {
   type ReactNode
 } from 'react'
 import {
-  AlertCircle,
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -18,9 +17,19 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  BookOpen,
   Card,
   CardContent,
-  Clock3
+  Play,
+  Plus,
+  Save,
+  WorkspaceHeaderActions,
+  WorkspaceHeaderActionDivider,
+  WorkspaceHeaderActionGroup,
+  WorkspaceHeaderSecondaryActionsRight,
+  WorkspaceIconButton,
+  WorkspacePanelStack,
+  Trash2
 } from '../components/ui'
 import type { RendererVaultApi } from '../../../shared/types'
 import type {
@@ -30,16 +39,18 @@ import type {
   ScheduleRunRecord,
   TriggerConfig
 } from '../../../shared/scheduleTypes'
-import {
-  createPythonTemplate,
-  getTemplatePermission,
-  insertPythonTemplate
-} from '../lib/schedulingTemplates'
+import { createPythonTemplate } from '../lib/schedulingTemplates'
+import { APP_PAGE_ICONS } from '../lib/pageIcons'
 import { ScheduleEditor } from '../components/scheduling/ScheduleEditor'
 import { ScheduleJobList } from '../components/scheduling/ScheduleJobList'
-import { ScheduleRunHistory } from '../components/scheduling/ScheduleRunHistory'
+import { SchedulePropertiesPanel } from '../components/scheduling/SchedulePropertiesPanel'
+import {
+  ScheduleRunHistory,
+  ScheduleRunHistoryList
+} from '../components/scheduling/ScheduleRunHistory'
+import { SchedulingBreadcrumb as SchedulingBreadcrumbView } from '../components/scheduling/SchedulingBreadcrumb'
 import type { ScheduleDraft, SchedulingView } from '../components/scheduling/types'
-import { WorkspaceSectionCard } from '../components/workspace'
+import { WorkspacePage } from '../components/workspace'
 
 type ToastKind = 'info' | 'error' | 'success'
 
@@ -65,6 +76,7 @@ interface SchedulingWorkspaceValue {
   isLoading: boolean
   isSaving: boolean
   isRunning: boolean
+  secretNames: string[]
   actionBusyRunId: string | null
   trustDialogOpen: boolean
   deleteDialogOpen: boolean
@@ -73,7 +85,6 @@ interface SchedulingWorkspaceValue {
   updateDraft: (patch: Partial<ScheduleJobInput>) => void
   updateTrigger: (trigger: TriggerConfig) => void
   togglePermission: (permission: SchedulePermission, enabled: boolean) => void
-  insertTemplate: (kind: 'task' | 'note') => void
   handleSave: () => void
   handleRun: () => void
   handleSelectJob: (jobId: string) => void
@@ -82,6 +93,8 @@ interface SchedulingWorkspaceValue {
   handleRunAction: (runId: string, action: 'apply' | 'dismiss') => Promise<void>
   handleTrustConfirm: () => void
   handleEnabledChange: (enabled: boolean) => void
+  saveSecret: (name: string, value: string) => Promise<void>
+  deleteSecret: (name: string) => Promise<void>
 }
 
 const SchedulingWorkspaceContext = createContext<SchedulingWorkspaceValue | null>(null)
@@ -96,6 +109,7 @@ function createNewDraft(): ScheduleDraft {
     runtime: 'python',
     code: createPythonTemplate('task', 'new-automation'),
     permissions: ['createTasks'],
+    secretRefs: [],
     outputMode: 'review_before_apply'
   }
 }
@@ -109,6 +123,7 @@ function toDraft(job: ScheduleJob): ScheduleDraft {
     runtime: job.runtime,
     code: job.code,
     permissions: [...job.permissions],
+    secretRefs: [...(job.secretRefs ?? [])],
     outputMode: job.outputMode
   }
 }
@@ -159,6 +174,7 @@ export function SchedulingWorkspaceProvider({
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [secretNames, setSecretNames] = useState<string[]>([])
   const [actionBusyRunId, setActionBusyRunId] = useState<string | null>(null)
   const [trustAcknowledged, setTrustAcknowledged] = useState(false)
   const [trustDialogOpen, setTrustDialogOpen] = useState(false)
@@ -222,6 +238,20 @@ export function SchedulingWorkspaceProvider({
     [vaultApi]
   )
 
+  const loadSecrets = useCallback(async (): Promise<void> => {
+    if (!vaultApi) {
+      setSecretNames([])
+      return
+    }
+
+    try {
+      setSecretNames(await vaultApi.schedules.listSecrets())
+    } catch (error) {
+      setSecretNames([])
+      pushToast('error', `Could not load schedule secrets: ${String(error)}`)
+    }
+  }, [pushToast, vaultApi])
+
   useEffect(() => {
     if (!enabled) {
       return
@@ -251,6 +281,12 @@ export function SchedulingWorkspaceProvider({
       window.clearInterval(interval)
     }
   }, [enabled, loadJobs, pushToast])
+
+  useEffect(() => {
+    if (enabled) {
+      void loadSecrets()
+    }
+  }, [enabled, loadSecrets])
 
   useEffect(() => {
     if (!enabled || !selectedJobId) {
@@ -306,27 +342,45 @@ export function SchedulingWorkspaceProvider({
     setIsDirty(true)
   }, [])
 
-  const insertTemplate = useCallback(
-    (kind: 'task' | 'note'): void => {
-      if (draft.runtime !== 'python') {
-        pushToast('info', 'Action templates are available for Python automations.')
-        return
+  const saveSecret = useCallback(
+    async (name: string, value: string): Promise<void> => {
+      if (!vaultApi) {
+        throw new Error('Open a vault before saving a schedule secret')
       }
 
-      const insertion = insertPythonTemplate(draft.code, kind, draft.name)
-      if (insertion.requiresStarter) {
-        pushToast('info', 'Add the Python starter template before inserting an action.')
-        return
+      try {
+        await vaultApi.schedules.saveSecret({ name, value })
+        await loadSecrets()
+        pushToast('success', `Secret ${name} saved.`)
+      } catch (error) {
+        pushToast('error', `Could not save secret ${name}: ${String(error)}`)
+        throw error
       }
-
-      setDraft((current) => ({
-        ...current,
-        code: insertion.code,
-        permissions: Array.from(new Set([...current.permissions, getTemplatePermission(kind)]))
-      }))
-      setIsDirty(true)
     },
-    [draft.code, draft.name, draft.runtime, pushToast]
+    [loadSecrets, pushToast, vaultApi]
+  )
+
+  const deleteSecret = useCallback(
+    async (name: string): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      try {
+        await vaultApi.schedules.deleteSecret(name)
+        await loadSecrets()
+        setDraft((current) => ({
+          ...current,
+          secretRefs: (current.secretRefs ?? []).filter((item) => item !== name)
+        }))
+        setIsDirty(true)
+        pushToast('success', `Secret ${name} deleted.`)
+      } catch (error) {
+        pushToast('error', `Could not delete secret ${name}: ${String(error)}`)
+        throw error
+      }
+    },
+    [loadSecrets, pushToast, vaultApi]
   )
 
   const saveDraft = useCallback(async (): Promise<ScheduleJob | null> => {
@@ -543,6 +597,7 @@ export function SchedulingWorkspaceProvider({
     isLoading,
     isSaving,
     isRunning,
+    secretNames,
     actionBusyRunId,
     trustDialogOpen,
     deleteDialogOpen,
@@ -551,7 +606,6 @@ export function SchedulingWorkspaceProvider({
     updateDraft,
     updateTrigger,
     togglePermission,
-    insertTemplate,
     handleSave,
     handleRun,
     handleSelectJob,
@@ -559,7 +613,9 @@ export function SchedulingWorkspaceProvider({
     handleDelete,
     handleRunAction,
     handleTrustConfirm,
-    handleEnabledChange
+    handleEnabledChange,
+    saveSecret,
+    deleteSecret
   }
 
   return (
@@ -578,17 +634,33 @@ function useSchedulingWorkspace(): SchedulingWorkspaceValue {
   return value
 }
 
-export function SchedulingPage({ activeView }: { activeView: SchedulingView }): ReactElement {
+export function SchedulingWorkspaceBreadcrumb({
+  value,
+  onNavigate
+}: {
+  value: SchedulingView
+  onNavigate: (view: SchedulingView) => void
+}): ReactElement {
+  const { draft } = useSchedulingWorkspace()
+
+  return (
+    <SchedulingBreadcrumbView value={value} automationName={draft.name} onNavigate={onNavigate} />
+  )
+}
+
+export interface SchedulingPageProps {
+  activeView: SchedulingView
+  onViewChange?: (view: SchedulingView) => void
+}
+
+export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps): ReactElement {
   const {
     vaultApi,
+    jobs,
+    selectedJobId,
     draft,
-    isNewDraft,
-    isDirty,
     runs,
     selectedRunId,
-    setSelectedRunId,
-    isSaving,
-    isRunning,
     actionBusyRunId,
     trustDialogOpen,
     deleteDialogOpen,
@@ -596,15 +668,14 @@ export function SchedulingPage({ activeView }: { activeView: SchedulingView }): 
     setDeleteDialogOpen,
     updateDraft,
     updateTrigger,
-    togglePermission,
-    insertTemplate,
-    handleSave,
-    handleRun,
+    isLoading,
+    handleSelectJob,
+    handleCreate,
     handleRunAction,
     handleTrustConfirm,
-    handleEnabledChange,
     handleDelete
   } = useSchedulingWorkspace()
+  const SchedulingIcon = APP_PAGE_ICONS.schedules
 
   if (!vaultApi) {
     return (
@@ -615,7 +686,7 @@ export function SchedulingPage({ activeView }: { activeView: SchedulingView }): 
         <Card>
           <CardContent>
             <div className="flex flex-col items-center gap-3 p-8 text-center">
-              <Clock3 className="text-muted-foreground" aria-hidden="true" />
+              <SchedulingIcon className="text-muted-foreground" aria-hidden="true" />
               <h1 className="text-lg font-semibold">Scheduling needs an open vault</h1>
               <p className="max-w-md text-sm text-muted-foreground">
                 Open a vault to create and run local automations.
@@ -627,66 +698,50 @@ export function SchedulingPage({ activeView }: { activeView: SchedulingView }): 
     )
   }
 
+  const openAutomation = (jobId: string): void => {
+    handleSelectJob(jobId)
+    onViewChange?.('automation')
+  }
+
+  const createAutomation = (): void => {
+    handleCreate()
+    onViewChange?.('automation')
+  }
+
   return (
     <>
-      <WorkspaceSectionCard
-        className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden p-0"
+      <WorkspacePage
+        className="h-full min-h-0 w-full min-w-0 gap-0 overflow-hidden"
         data-testid="scheduling-page"
         aria-label="Scheduling"
       >
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="space-y-3">
-            {activeView === 'automation' ? (
-              <>
-                {draft.runtime === 'python' ? (
-                  <Card className="border-warning-border/60 bg-warning-muted/60">
-                    <CardContent className="flex gap-3 p-4">
-                      <AlertCircle
-                        className="mt-0.5 shrink-0 text-warning-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          Local Python trust boundary
-                        </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Python runs as a local process with the same OS access as the app. Keep
-                          code trusted, request only the permissions it needs, and review proposed
-                          actions.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-                <ScheduleEditor
-                  draft={draft}
-                  isNew={isNewDraft}
-                  isDirty={isDirty}
-                  isSaving={isSaving}
-                  isRunning={isRunning}
-                  onChange={updateDraft}
-                  onEnabledChange={handleEnabledChange}
-                  onTriggerChange={updateTrigger}
-                  onTogglePermission={togglePermission}
-                  onInsertTemplate={insertTemplate}
-                  onSave={handleSave}
-                  onRun={handleRun}
-                  onDelete={() => setDeleteDialogOpen(true)}
-                />
-              </>
-            ) : (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {activeView === 'list' ? (
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+              <ScheduleJobList
+                jobs={jobs}
+                selectedJobId={selectedJobId}
+                loading={isLoading}
+                className="h-full"
+                onSelect={openAutomation}
+                onCreate={createAutomation}
+              />
+            </div>
+          ) : activeView === 'automation' ? (
+            <ScheduleEditor draft={draft} onChange={updateDraft} onTriggerChange={updateTrigger} />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <ScheduleRunHistory
                 runs={runs}
                 selectedRunId={selectedRunId}
                 actionBusyRunId={actionBusyRunId}
-                onSelect={setSelectedRunId}
                 onApply={(runId) => void handleRunAction(runId, 'apply')}
                 onDismiss={(runId) => void handleRunAction(runId, 'dismiss')}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
-      </WorkspaceSectionCard>
+      </WorkspacePage>
 
       <AlertDialog open={trustDialogOpen} onOpenChange={setTrustDialogOpen}>
         <AlertDialogContent>
@@ -727,17 +782,148 @@ export function SchedulingPage({ activeView }: { activeView: SchedulingView }): 
   )
 }
 
-export function SchedulingRightPanel(): ReactElement {
-  const { jobs, selectedJobId, isLoading, handleSelectJob, handleCreate } = useSchedulingWorkspace()
+export interface SchedulingHeaderActionsProps {
+  onOpenApiGuide: () => void
+  activeView?: SchedulingView
+  onViewChange?: (view: SchedulingView) => void
+}
+
+export function SchedulingHeaderActions({
+  onOpenApiGuide,
+  activeView = 'automation',
+  onViewChange
+}: SchedulingHeaderActionsProps): ReactElement {
+  const { isNewDraft, isDirty, isSaving, isRunning, handleSave, handleRun, setDeleteDialogOpen } =
+    useSchedulingWorkspace()
+  const isDetailView = activeView !== 'list'
 
   return (
-    <ScheduleJobList
-      jobs={jobs}
-      selectedJobId={selectedJobId}
-      loading={isLoading}
-      className="h-full"
-      onSelect={handleSelectJob}
-      onCreate={handleCreate}
+    <>
+      <WorkspaceHeaderActions>
+        <WorkspaceIconButton
+          type="button"
+          onClick={onOpenApiGuide}
+          data-testid="scheduling-api-guide"
+          aria-label="Open scheduling API guide"
+          title="Open scheduling API guide"
+          icon={<BookOpen size={16} />}
+          label="API guide"
+          bordered
+        />
+        <WorkspaceHeaderActionDivider />
+        {isDetailView ? (
+          <WorkspaceIconButton
+            type="button"
+            onClick={handleRun}
+            disabled={isRunning || isSaving}
+            data-testid="scheduling-run-now"
+            aria-label="Run automation now"
+            title={isRunning ? 'Automation is running' : 'Run automation now'}
+            icon={<Play size={16} />}
+            label={isRunning ? 'Running…' : 'Run now'}
+            bordered
+          />
+        ) : null}
+        {isDetailView && !isNewDraft ? (
+          <WorkspaceIconButton
+            type="button"
+            onClick={() => setDeleteDialogOpen(true)}
+            data-testid="scheduling-delete"
+            aria-label="Delete automation"
+            title="Delete automation"
+            icon={<Trash2 size={16} />}
+            label="Delete"
+            bordered
+          />
+        ) : null}
+        {isDetailView ? (
+          <WorkspaceIconButton
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            data-testid="scheduling-save-changes"
+            aria-label="Save changes"
+            title={isSaving ? 'Saving changes' : 'Save changes'}
+            icon={<Save size={16} />}
+            label={isSaving ? 'Saving…' : 'Save changes'}
+            bordered
+          />
+        ) : null}
+      </WorkspaceHeaderActions>
+      <WorkspaceHeaderSecondaryActionsRight>
+        <WorkspaceHeaderActionGroup>
+          <SchedulingAddAutomationButton onCreate={() => onViewChange?.('automation')} />
+        </WorkspaceHeaderActionGroup>
+      </WorkspaceHeaderSecondaryActionsRight>
+    </>
+  )
+}
+
+export interface SchedulingAddAutomationButtonProps {
+  onCreate?: () => void
+}
+
+export function SchedulingAddAutomationButton({
+  onCreate
+}: SchedulingAddAutomationButtonProps = {}): ReactElement {
+  const { handleCreate } = useSchedulingWorkspace()
+
+  return (
+    <WorkspaceIconButton
+      type="button"
+      onClick={() => {
+        handleCreate()
+        onCreate?.()
+      }}
+      data-testid="scheduling-add-automation"
+      aria-label="Add automation"
+      title="Add automation"
+      icon={<Plus size={16} />}
+      label="Add automation"
+      bordered
     />
+  )
+}
+
+export interface SchedulingRightPanelProps {
+  activeView?: SchedulingView
+}
+
+export function SchedulingRightPanel({
+  activeView = 'automation'
+}: SchedulingRightPanelProps): ReactElement {
+  const {
+    draft,
+    updateDraft,
+    updateTrigger,
+    togglePermission,
+    handleEnabledChange,
+    runs,
+    selectedRunId,
+    setSelectedRunId
+  } = useSchedulingWorkspace()
+
+  if (activeView === 'list') {
+    return <></>
+  }
+
+  return (
+    <WorkspacePanelStack>
+      {activeView === 'history' ? (
+        <ScheduleRunHistoryList
+          runs={runs}
+          selectedRunId={selectedRunId}
+          onSelect={setSelectedRunId}
+        />
+      ) : (
+        <SchedulePropertiesPanel
+          draft={draft}
+          onChange={updateDraft}
+          onEnabledChange={handleEnabledChange}
+          onTriggerChange={updateTrigger}
+          onTogglePermission={togglePermission}
+        />
+      )}
+    </WorkspacePanelStack>
   )
 }

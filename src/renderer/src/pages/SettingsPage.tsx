@@ -14,6 +14,7 @@ import {
 } from '../components/ui'
 import { WorkspacePageLayout } from '../components/workspace'
 import type {
+  CondaEnvironment,
   NoteVimKeyMapping,
   NoteVimMappingAction,
   NoteVimMappingMode
@@ -115,8 +116,19 @@ interface SettingsPageProps {
   onManageVaults: () => void
   onMigrateBlockNoteNotes: () => void
   onMigrateTaggedNoteBodyFrontmatter: () => void
+  onMigrateNoteImagePaths: () => void
   onImportLegacyExcalidrawSessions: () => void
   onOpenDesignAudit: () => void
+  pythonCondaEnvironmentPath: string | null
+  pythonCondaExecutablePath: string | null
+  detectedCondaExecutablePath: string | null
+  condaEnvironments: CondaEnvironment[]
+  condaEnvironmentsLoading: boolean
+  condaEnvironmentsError: string | null
+  onRefreshCondaEnvironments: () => void
+  onSelectCondaEnvironment: (path: string | null) => void
+  onChooseCondaExecutable: () => void
+  onResetCondaExecutable: () => void
 }
 
 export function SettingsPage({
@@ -133,8 +145,19 @@ export function SettingsPage({
   onManageVaults,
   onMigrateBlockNoteNotes,
   onMigrateTaggedNoteBodyFrontmatter,
+  onMigrateNoteImagePaths,
   onImportLegacyExcalidrawSessions,
-  onOpenDesignAudit
+  onOpenDesignAudit,
+  pythonCondaEnvironmentPath,
+  pythonCondaExecutablePath,
+  detectedCondaExecutablePath,
+  condaEnvironments,
+  condaEnvironmentsLoading,
+  condaEnvironmentsError,
+  onRefreshCondaEnvironments,
+  onSelectCondaEnvironment,
+  onChooseCondaExecutable,
+  onResetCondaExecutable
 }: SettingsPageProps): ReactElement {
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState(mistralApiKey)
@@ -266,7 +289,7 @@ export function SettingsPage({
       </ToggleGroup>
 
       {activeTab === 'profile' ? (
-        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
+        <div className="grid gap-4">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Profile</h3>
             <p className="max-w-[56ch] text-sm text-muted-foreground">
@@ -296,7 +319,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'workspace' ? (
-        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
+        <div className="grid gap-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Workspace</h3>
             <p className="w-full text-sm text-muted-foreground">
@@ -339,6 +362,9 @@ export function SettingsPage({
             <Button type="button" variant="outline" onClick={onMigrateTaggedNoteBodyFrontmatter}>
               Normalize tagged note bodies
             </Button>
+            <Button type="button" variant="outline" onClick={onMigrateNoteImagePaths}>
+              Repair note image paths
+            </Button>
             <Button type="button" variant="outline" onClick={onImportLegacyExcalidrawSessions}>
               Import legacy Excalidraw drawings
             </Button>
@@ -347,7 +373,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'appearance' ? (
-        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
+        <div className="grid gap-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Appearance</h3>
             <p className="max-w-[56ch] text-sm text-muted-foreground">
@@ -375,7 +401,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'editor' ? (
-        <div className="border bg-card text-card-foreground grid gap-5 rounded-lg p-5">
+        <div className="grid gap-5">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Editor</h3>
             <p className="max-w-[56ch] text-sm text-muted-foreground">
@@ -543,7 +569,7 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'agent' ? (
-        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
+        <div className="grid gap-4">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Agent</h3>
             <p className="max-w-[56ch] text-sm text-muted-foreground">
@@ -574,13 +600,142 @@ export function SettingsPage({
       ) : null}
 
       {activeTab === 'developer' ? (
-        <div className="border bg-card text-card-foreground grid gap-4 rounded-lg p-5">
+        <div className="grid gap-4">
           <div className="grid gap-1">
             <h3 className="text-lg font-semibold text-foreground">Developer</h3>
             <p className="max-w-[56ch] text-sm text-muted-foreground">
-              Inspect the app&apos;s design-system primitives, tokens, and component states.
+              Configure developer tools and the runtime used by Python automations.
             </p>
           </div>
+
+          <section
+            className="grid gap-3 rounded-lg border border-border p-4"
+            aria-labelledby="settings-python-runtime-heading"
+          >
+            <div className="grid gap-1">
+              <h4
+                id="settings-python-runtime-heading"
+                className="text-sm font-semibold text-foreground"
+              >
+                Python runtime
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                Choose the Conda environment used by all Python automations. System Python is the
+                default, and Conda can be discovered automatically or selected explicitly.
+              </p>
+            </div>
+
+            <Field
+              label="Conda executable"
+              description="Automatic discovery checks the app PATH and common installation locations."
+            >
+              <div className="grid gap-2">
+                <div
+                  className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground break-all"
+                  role="status"
+                  data-testid="settings-conda-executable-status"
+                >
+                  {pythonCondaExecutablePath
+                    ? `Configured: ${pythonCondaExecutablePath}`
+                    : detectedCondaExecutablePath
+                      ? `Detected automatically: ${detectedCondaExecutablePath}`
+                      : 'Automatic discovery is active'}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onChooseCondaExecutable}
+                    data-testid="settings-choose-conda-executable"
+                  >
+                    Choose executable
+                  </Button>
+                  {pythonCondaExecutablePath ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={onResetCondaExecutable}
+                      data-testid="settings-reset-conda-executable"
+                    >
+                      Use automatic discovery
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </Field>
+
+            <Field
+              label="Python environment"
+              htmlFor="settings-python-conda-environment"
+              description="The selected environment must remain available when an automation runs."
+            >
+              <div className="flex flex-wrap items-start gap-2">
+                <Select
+                  value={pythonCondaEnvironmentPath ?? 'system'}
+                  onValueChange={(value) =>
+                    onSelectCondaEnvironment(value === 'system' ? null : value)
+                  }
+                >
+                  <SelectTrigger
+                    id="settings-python-conda-environment"
+                    data-testid="settings-python-conda-environment"
+                    className="min-w-64 flex-1"
+                  >
+                    <SelectValue placeholder="System Python" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">System Python</SelectItem>
+                    {condaEnvironments.map((environment) => (
+                      <SelectItem key={environment.path} value={environment.path}>
+                        {environment.name}
+                      </SelectItem>
+                    ))}
+                    {pythonCondaEnvironmentPath &&
+                    !condaEnvironments.some(
+                      (environment) => environment.path === pythonCondaEnvironmentPath
+                    ) ? (
+                      <SelectItem value={pythonCondaEnvironmentPath}>
+                        Unavailable: {pythonCondaEnvironmentPath}
+                      </SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRefreshCondaEnvironments}
+                  disabled={condaEnvironmentsLoading}
+                  data-testid="settings-refresh-conda-environments"
+                >
+                  {condaEnvironmentsLoading ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              </div>
+            </Field>
+
+            {condaEnvironmentsLoading ? (
+              <p className="text-xs text-muted-foreground" aria-live="polite">
+                Looking for Conda environments…
+              </p>
+            ) : null}
+            {condaEnvironmentsError ? (
+              <p className="text-xs text-destructive" role="alert">
+                {condaEnvironmentsError}
+              </p>
+            ) : null}
+            {pythonCondaEnvironmentPath &&
+            !condaEnvironmentsLoading &&
+            !condaEnvironments.some(
+              (environment) => environment.path === pythonCondaEnvironmentPath
+            ) ? (
+              <p className="text-xs text-destructive" role="alert">
+                The selected Conda environment is unavailable. Choose another environment or switch
+                back to System Python.
+              </p>
+            ) : null}
+          </section>
 
           <div className="border bg-card text-card-foreground flex flex-wrap items-center justify-between gap-4 rounded-lg p-4">
             <div className="min-w-0">

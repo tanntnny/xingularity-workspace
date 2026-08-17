@@ -45,6 +45,7 @@ User workspace content lives in a selected local vault:
 This layer is responsible for:
 
 - notebook files
+- Excalidraw recovery snapshots (`notebooks/**/*.excalidraw.bak`)
 - folder structure
 - attachments
 - standalone workspace records
@@ -235,6 +236,9 @@ is stored in `tasks/<task-id>.json`:
 - `time`
 - `automationSource`
 - `automationSourceKey`
+
+`endDate` defines the end of a task range when `date` is present. When `date` is absent, it
+represents a deadline and the task appears on that date in the calendar.
 
 ### `TaskReminder`
 

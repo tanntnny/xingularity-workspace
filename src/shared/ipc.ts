@@ -33,6 +33,7 @@ export const IPC_CHANNELS = {
   importNotes: 'files:import-notes',
   migrateBlockNoteNotes: 'files:migrate-blocknote-notes',
   migrateTaggedNoteBodyFrontmatter: 'files:migrate-tagged-note-body-frontmatter',
+  migrateNoteImagePaths: 'files:migrate-note-image-paths',
   renameNote: 'files:rename-note',
   renamePath: 'files:rename-path',
   deleteNote: 'files:delete-note',
@@ -41,6 +42,7 @@ export const IPC_CHANNELS = {
   exportNote: 'files:export-note',
   exportNotePdf: 'files:export-note-pdf',
   exportFolderPdf: 'files:export-folder-pdf',
+  exportFolderMarkdown: 'files:export-folder-markdown',
   exportProject: 'files:export-project',
   searchQuery: 'search:query',
   aiCompleteNote: 'ai:complete-note',
@@ -60,12 +62,17 @@ export const IPC_CHANNELS = {
   importAttachmentFromBuffer: 'attachments:import-from-buffer',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+  pythonListCondaEnvironments: 'python:list-conda-environments',
+  pythonChooseCondaExecutable: 'python:choose-conda-executable',
   createProject: 'projects:create',
   selectProject: 'projects:select',
   updateProject: 'projects:update',
   setProjectState: 'projects:set-state',
   setProjectFavorite: 'projects:set-favorite',
   deleteProject: 'projects:delete',
+  createProjectMilestone: 'projects:milestones:create',
+  updateProjectMilestone: 'projects:milestones:update',
+  deleteProjectMilestone: 'projects:milestones:delete',
   createTask: 'tasks:create',
   historyUndo: 'history:undo',
   historyRedo: 'history:redo',
@@ -79,7 +86,10 @@ export const SCHEDULE_CHANNELS = {
   runNow: 'schedule:run-now',
   listRuns: 'schedule:list-runs',
   applyActions: 'schedule:apply-actions',
-  dismissRun: 'schedule:dismiss-run'
+  dismissRun: 'schedule:dismiss-run',
+  listSecrets: 'schedule:list-secrets',
+  saveSecret: 'schedule:save-secret',
+  deleteSecret: 'schedule:delete-secret'
 } as const
 
 export const WEEKLY_PLAN_CHANNELS = {

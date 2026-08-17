@@ -5,6 +5,7 @@ import type { NoteTreeSelection } from './noteTreeSelection'
 export interface NotebookWorkspaceSession {
   currentNotePath: string | null
   currentExcalidrawPath: string | null
+  browseFolderPath: string | null
   currentNoteContent: string
   currentNoteTags: string[]
   currentNoteEditorDraft: string | null
@@ -18,6 +19,7 @@ export function createEmptyNotebookWorkspaceSession(): NotebookWorkspaceSession 
   return {
     currentNotePath: null,
     currentExcalidrawPath: null,
+    browseFolderPath: null,
     currentNoteContent: '',
     currentNoteTags: [],
     currentNoteEditorDraft: null,
@@ -55,6 +57,7 @@ export function remapNotebookWorkspaceSessionPaths(
 ): void {
   session.currentNotePath = remapPath(session.currentNotePath, sourcePath, targetPath)
   session.currentExcalidrawPath = remapPath(session.currentExcalidrawPath, sourcePath, targetPath)
+  session.browseFolderPath = remapPath(session.browseFolderPath, sourcePath, targetPath)
   session.selectedNoteTreeEntries = session.selectedNoteTreeEntries.map((entry) => ({
     ...entry,
     relPath: remapPath(entry.relPath, sourcePath, targetPath) ?? entry.relPath
@@ -87,6 +90,9 @@ export function removeNotebookWorkspaceSessionPaths(
   }
   if (isRemoved(session.currentExcalidrawPath)) {
     session.currentExcalidrawPath = null
+  }
+  if (isRemoved(session.browseFolderPath)) {
+    session.browseFolderPath = null
   }
 
   session.selectedNoteTreeEntries = session.selectedNoteTreeEntries.filter(

@@ -27,6 +27,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
   schedules: 'Scheduling',
+  schedulingGuide: 'API Guide',
   designAudit: 'Design Audit',
   settings: 'Settings'
 }

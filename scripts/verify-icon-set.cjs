@@ -14,6 +14,9 @@ const registryFiles = new Set([
   path.join(rootDir, 'src', 'renderer', 'src', 'components', 'ui', 'icons.tsx'),
   path.join(rootDir, 'packages', 'workspace-template', 'src', 'ui', 'icons.tsx')
 ])
+const directTablerImportAllowlist = new Set([
+  path.join(rootDir, 'src', 'renderer', 'src', 'lib', 'projectIconCatalog.ts')
+])
 
 const violations = []
 
@@ -34,18 +37,14 @@ function visit(directory) {
       violations.push(`${path.relative(rootDir, filePath)} still references lucide-react`)
     }
 
-    if (!registryFiles.has(filePath) && source.includes("from '@tabler/icons-react'")) {
+    if (
+      !registryFiles.has(filePath) &&
+      !directTablerImportAllowlist.has(filePath) &&
+      source.includes("from '@tabler/icons-react'")
+    ) {
       violations.push(
         `${path.relative(rootDir, filePath)} imports Tabler icons outside the registry`
       )
-    }
-
-    if (registryFiles.has(filePath)) {
-      for (const iconName of source.match(/\bIcon[A-Z][A-Za-z0-9]+\b/g) ?? []) {
-        if (iconName !== 'IconProps' && iconName !== 'IconNode' && !iconName.endsWith('Filled')) {
-          violations.push(`${path.relative(rootDir, filePath)} uses non-filled ${iconName}`)
-        }
-      }
     }
   }
 }
@@ -62,4 +61,4 @@ if (violations.length > 0) {
   process.exit(1)
 }
 
-console.log('All app and template icons use the shared Tabler filled registry.')
+console.log('All app and template icons use the shared Tabler icon registries.')

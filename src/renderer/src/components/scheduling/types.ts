@@ -6,7 +6,7 @@ import type {
   TriggerConfig
 } from '../../../../shared/scheduleTypes'
 
-export type SchedulingView = 'automation' | 'history'
+export type SchedulingView = 'list' | 'automation' | 'history'
 
 export type ScheduleDraft = ScheduleJobInput
 
@@ -21,25 +21,28 @@ export interface ScheduleJobListProps {
 
 export interface ScheduleEditorProps {
   draft: ScheduleDraft
-  isNew: boolean
-  isDirty: boolean
-  isSaving: boolean
-  isRunning: boolean
+  onChange: (patch: Partial<ScheduleDraft>) => void
+  onTriggerChange: (trigger: TriggerConfig) => void
+}
+
+export interface SchedulePropertiesPanelProps {
+  draft: ScheduleDraft
   onChange: (patch: Partial<ScheduleDraft>) => void
   onEnabledChange: (enabled: boolean) => void
   onTriggerChange: (trigger: TriggerConfig) => void
   onTogglePermission: (permission: SchedulePermission, enabled: boolean) => void
-  onInsertTemplate: (kind: 'task' | 'note') => void
-  onSave: () => void
-  onRun: () => void
-  onDelete: () => void
 }
 
 export interface ScheduleRunHistoryProps {
   runs: readonly ScheduleRunRecord[]
   selectedRunId: string | null
   actionBusyRunId: string | null
-  onSelect: (runId: string) => void
   onApply: (runId: string) => void
   onDismiss: (runId: string) => void
+}
+
+export interface ScheduleRunHistoryListProps {
+  runs: readonly ScheduleRunRecord[]
+  selectedRunId: string | null
+  onSelect: (runId: string) => void
 }

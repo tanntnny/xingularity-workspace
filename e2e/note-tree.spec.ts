@@ -201,7 +201,7 @@ test.describe('notes tree view', () => {
   test('opens note and folder action menus and focuses new folder rename input', async () => {
     const vaultRoot = await createFixtureVault()
     await fs.writeFile(
-      path.join(vaultRoot, 'notes', 'archive', 'nested.md'),
+      path.join(vaultRoot, 'notebooks', 'archive', 'nested.md'),
       serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
       'utf-8'
     )
@@ -223,11 +223,26 @@ test.describe('notes tree view', () => {
       await archiveRow.hover()
       await page.getByTestId('note-tree-menu:archive').click()
       await expect(page.getByRole('menuitem', { name: 'New folder' })).toBeVisible()
-      await expect(
-        page.getByRole('menuitem', { name: 'Export nested notes as PDF…' })
-      ).toBeVisible()
+      const dropdownExportNestedNotesMenu = page.getByRole('menuitem', {
+        name: 'Export nested notes'
+      })
+      await expect(dropdownExportNestedNotesMenu).toBeVisible()
+      await dropdownExportNestedNotesMenu.hover()
+      await expect(page.getByRole('menuitem', { name: 'as PDF' })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'as Markdown' })).toBeVisible()
       await expect(nestedRow).toHaveCount(0)
 
+      await page.keyboard.press('Escape')
+      await archiveRow.click({ button: 'right' })
+      const exportNestedNotesMenu = page.getByRole('menuitem', { name: 'Export nested notes' })
+      await expect(exportNestedNotesMenu).toBeVisible()
+      await exportNestedNotesMenu.hover()
+      await expect(page.getByRole('menuitem', { name: 'as PDF' })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'as Markdown' })).toBeVisible()
+      await page.keyboard.press('Escape')
+
+      await archiveRow.hover()
+      await page.getByTestId('note-tree-menu:archive').click()
       await page.getByTestId('note-tree-create-folder:archive').click()
       await expect
         .poll(async () =>
@@ -241,6 +256,22 @@ test.describe('notes tree view', () => {
       const renameInput = page.getByTestId('note-tree-input:archive/untitled-folder')
       await expect(renameInput).toBeVisible({ timeout: 20_000 })
       await expect(renameInput).toBeFocused()
+      await renameInput.fill('renamed-folder')
+      await renameInput.press('Enter')
+
+      const renamedFolderRow = page.getByTestId('note-tree-row:archive/renamed-folder')
+      await expect(renamedFolderRow).toBeVisible({ timeout: 20_000 })
+
+      await page.getByTestId('note-tree-row:alpha.md').click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Rename', exact: true }).click()
+      const contextRenameInput = page.getByTestId('note-tree-input:alpha.md')
+      await expect(contextRenameInput).toBeVisible({ timeout: 20_000 })
+      await expect(contextRenameInput).toBeFocused()
+      await contextRenameInput.fill('alpha-renamed')
+      await renamedFolderRow.click()
+      await expect(page.getByTestId('note-tree-row:alpha-renamed.md')).toBeVisible({
+        timeout: 20_000
+      })
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

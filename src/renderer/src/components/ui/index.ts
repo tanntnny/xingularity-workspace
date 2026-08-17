@@ -217,6 +217,7 @@ export {
   WorkspaceTabManager,
   DocumentWorkspaceMain,
   DocumentWorkspaceMainHeader,
+  WorkspaceHeaderSecondaryActionsRight,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   WorkspaceRightPanel,

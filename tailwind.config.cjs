@@ -65,6 +65,7 @@ module.exports = {
           foreground: 'var(--destructive-muted-foreground)'
         },
         border: 'var(--border)',
+        'panel-border': 'var(--panel-border)',
         input: 'var(--input)',
         ring: 'var(--ring)',
         sidebar: {
@@ -79,6 +80,8 @@ module.exports = {
         }
       },
       borderRadius: {
+        shell: 'var(--radius-shell)',
+        surface: 'var(--radius-surface)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'

@@ -3,13 +3,13 @@ import * as d3 from 'd3'
 import {
   Archive,
   CalendarClock,
-  CreditCard,
   Landmark,
   Pencil,
   Plus,
   Trash2,
   WalletCards
 } from '../components/ui/icons'
+import { APP_PAGE_ICONS } from '../lib/pageIcons'
 import {
   deriveSubscriptionAnalytics,
   getBillingIntervalMonths,
@@ -511,7 +511,7 @@ function TreemapCard({
         <div className="p-8">
           <EmptyState
             className="border-0 bg-transparent px-0 py-4"
-            icon={CreditCard}
+            icon={APP_PAGE_ICONS.subscriptions}
             title="No active subscriptions yet"
             description="The treemap will appear once you add active subscriptions."
           />
@@ -1128,7 +1128,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                           <TableCell colSpan={6} className="p-0">
                             <EmptyState
                               className="border-0 bg-transparent px-6 py-10"
-                              icon={CreditCard}
+                              icon={APP_PAGE_ICONS.subscriptions}
                               title={
                                 records.length === 0
                                   ? 'No subscriptions yet'

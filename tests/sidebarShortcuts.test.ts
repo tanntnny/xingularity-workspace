@@ -30,6 +30,10 @@ describe('sidebar shortcuts', () => {
 
     expect(markup).toContain('data-sidebar="content"')
     expect(markup).toContain('data-sidebar="group-label"')
+    expect(markup).toContain('text-xs font-bold text-muted-foreground')
+    expect(markup).toContain('size-4')
+    expect(markup).toContain('size-3')
+    expect(markup).toContain('!size-3')
     expect(markup).toContain('data-sidebar="group-content"')
     expect(markup).toContain('data-sidebar="rail"')
     expect(markup).toContain('role="separator"')
@@ -41,6 +45,14 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('hover:text-sidebar-accent-foreground')
     expect(markup).toContain('data-active="true"')
     expect(markup).toContain('>Personal Vault</span>')
+    expect(markup.match(/tabler-icon-box/g)).toHaveLength(2)
+    expect(markup.match(/tabler-icon-files/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-calendar-event/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-chart-dots-3/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-brand-mastercard/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-bolt/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-mail/g)).toHaveLength(1)
+    expect(markup.match(/tabler-icon-search/g)).toHaveLength(1)
     expect(markup).not.toContain('>Board</span>')
     const viewIndex = markup.indexOf('>View</span>')
     expect(viewIndex).toBeGreaterThanOrEqual(0)
@@ -55,6 +67,7 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('>Automation</span>')
     expect(markup).toContain('>Scheduling</span>')
     expect(markup).toContain('data-testid="sidebar-page:schedules"')
+    expect(markup).not.toContain('data-testid="sidebar-badge:schedules"')
     expect(markup.indexOf('>Automation</span>')).toBeGreaterThan(
       markup.indexOf('>Knowledge</span>')
     )
@@ -104,6 +117,29 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-collapsible="min"')
     expect(markup).toContain('data-testid="sidebar-page:notes"')
     expect(markup).toContain('--sidebar-width-min:220px')
+  })
+
+  it('shows the scheduling review count in the sidebar', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        null,
+        createElement(AppSidebar, {
+          activePage: 'schedules',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
+          notesCount: 0,
+          projectsCount: 0,
+          calendarUndoneCount: 0,
+          schedulingReviewCount: 2
+        })
+      )
+    )
+
+    expect(markup).toContain('data-testid="sidebar-badge:schedules"')
+    expect(markup).toContain('aria-label="2 automations need review"')
+    expect(markup).toContain('>2</div>')
   })
 
   it('keeps focus mode on the off-canvas path', () => {
@@ -195,7 +231,12 @@ describe('sidebar shortcuts', () => {
     const markup = renderToStaticMarkup(
       createElement(WorkspaceTabManager, {
         tabs: [
-          { id: 'notes', label: 'Notebooks', icon: NotebookPen, shortcut: ['cmd', '1'] },
+          {
+            id: 'notes',
+            label: 'A very long note title that fades before the tab close control',
+            icon: createElement(NotebookPen),
+            shortcut: ['cmd', '1']
+          },
           { id: 'projects', label: 'Projects' }
         ],
         activeTabId: 'projects',
@@ -211,6 +252,11 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-testid="workspace-tab-close:projects"')
     expect(markup).toContain('data-testid="workspace-tab-add"')
     expect(markup).toContain('data-testid="workspace-tab-icon:notes"')
+    expect(markup).toContain('data-testid="workspace-tab-label:notes"')
+    expect(markup).toContain('workspace-tab-label-fade')
+    expect(markup).toContain(
+      'title="A very long note title that fades before the tab close control"'
+    )
     expect(markup).toContain('data-testid="workspace-tab-shortcut:notes"')
     expect(markup).toContain('app-drag-region min-w-0 flex-1 overflow-x-auto')
     expect(markup).toContain('app-no-drag flex w-max items-center gap-1.5')

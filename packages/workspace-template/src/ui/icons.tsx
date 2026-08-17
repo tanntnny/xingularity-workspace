@@ -65,7 +65,7 @@ import {
   IconPlayerPlayFilled,
   IconPlusFilled,
   IconSendFilled,
-  IconSearchFilled,
+  IconSearch,
   IconSettingsFilled,
   IconShieldFilled,
   IconSparklesFilled,
@@ -169,7 +169,7 @@ export const Plus = IconPlusFilled
 export const Rocket = IconSendFilled
 export const Rows3 = IconListDetailsFilled
 export const Save = IconDeviceFloppyFilled
-export const Search = IconSearchFilled
+export const Search = IconSearch
 export const Settings2 = IconSettingsFilled
 export const Shield = IconShieldFilled
 export const SlidersHorizontal = IconAdjustmentsHorizontalFilled

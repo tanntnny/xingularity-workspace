@@ -46,7 +46,9 @@ export interface TaskCreateAction {
   title: string
   description?: string
   projectId?: string
+  tags?: string[]
   date?: string
+  endDate?: string
   time?: string
   priority?: 'low' | 'medium' | 'high'
   taskType?: string
@@ -62,7 +64,9 @@ export interface TaskUpdateAction {
   title?: string
   description?: string
   projectId?: string | null
+  tags?: string[]
   date?: string
+  endDate?: string | null
   completed?: boolean
   status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
 }
@@ -91,6 +95,7 @@ export interface CalendarEventCreateAction {
   time?: string
   taskType?: string
   projectId?: string
+  tags?: string[]
   status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
   automationSource: string
   automationSourceKey: string
@@ -113,6 +118,7 @@ export interface ScheduleJob {
   runtime: RuntimeType
   code: string
   permissions: SchedulePermission[]
+  secretRefs?: string[]
   outputMode: OutputMode
   createdAt: string
   updatedAt: string
@@ -130,6 +136,7 @@ export interface ScheduleRunRecord {
   stdout: string
   stderr: string
   errorMessage?: string
+  actionErrors?: string[]
   proposedActions: ScriptAction[]
   appliedActions: ScriptAction[]
 }
@@ -144,7 +151,13 @@ export interface ScheduleJobInput {
   runtime: RuntimeType
   code: string
   permissions: SchedulePermission[]
+  secretRefs?: string[]
   outputMode: OutputMode
+}
+
+export interface ScheduleSecretInput {
+  name: string
+  value: string
 }
 
 export interface RendererScheduleApi {
@@ -155,4 +168,7 @@ export interface RendererScheduleApi {
   listRuns: (jobId: string) => Promise<ScheduleRunRecord[]>
   applyActions: (runId: string) => Promise<void>
   dismissRun: (runId: string) => Promise<void>
+  listSecrets: () => Promise<string[]>
+  saveSecret: (input: ScheduleSecretInput) => Promise<void>
+  deleteSecret: (name: string) => Promise<void>
 }

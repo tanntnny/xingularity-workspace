@@ -131,6 +131,7 @@ describe('SettingsStore', () => {
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0].taskType).toBe('follow-up')
     expect(settings.calendarTasks[0].status).toBe('pending')
+    expect(settings.calendarTasks[0].tags).toEqual([])
 
     await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
       '"fontFamily": "Iowan"'
@@ -148,7 +149,7 @@ describe('SettingsStore', () => {
       await fs.readFile(path.join(root, 'tasks', 'task-1.json'), 'utf-8')
     ) as { title: string; taskType?: string }
     expect(canonicalTask).toEqual(
-      expect.objectContaining({ title: 'Legacy task', taskType: 'follow-up' })
+      expect.objectContaining({ title: 'Legacy task', taskType: 'follow-up', tags: [] })
     )
     await expect(fs.access(path.join(legacyDir, 'settings.json'))).rejects.toThrow()
     await expect(fs.access(path.join(legacyDir, 'projects.json'))).rejects.toThrow()
@@ -311,6 +312,7 @@ describe('SettingsStore', () => {
       id: 'task-1',
       title: 'Prepare launch notes',
       projectId: project.id,
+      tags: [],
       completed: false,
       status: 'pending' as const,
       createdAt: '2026-08-02T00:00:00.000Z',
@@ -331,6 +333,25 @@ describe('SettingsStore', () => {
       expect.objectContaining({
         projects: [expect.objectContaining({ id: project.id })],
         calendarTasks: [expect.objectContaining({ projectId: project.id })]
+      })
+    )
+  })
+
+  it('persists the selected Conda environment path', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+
+    const updated = await store.updateVault(root, {
+      pythonCondaEnvironmentPath: '  /opt/conda/envs/automation  ',
+      pythonCondaExecutablePath: '  /opt/conda/bin/conda  '
+    })
+
+    expect(updated.pythonCondaEnvironmentPath).toBe('/opt/conda/envs/automation')
+    expect(updated.pythonCondaExecutablePath).toBe('/opt/conda/bin/conda')
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({
+        pythonCondaEnvironmentPath: '/opt/conda/envs/automation',
+        pythonCondaExecutablePath: '/opt/conda/bin/conda'
       })
     )
   })
@@ -391,5 +412,56 @@ describe('SettingsStore', () => {
     ])
     await expect(fs.access(path.join(root, 'projects', 'project-1.json'))).resolves.toBeUndefined()
     await expect(fs.access(path.join(root, 'projects', 'project-2.json'))).resolves.toBeUndefined()
+  })
+
+  it('persists milestones and clears invalid task milestone links', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const project = {
+      id: 'project-1',
+      name: 'Milestone Project',
+      summary: '',
+      description: '',
+      state: 'active' as const,
+      updatedAt: '2026-08-13T00:00:00.000Z',
+      milestones: [
+        {
+          id: 'milestone-1',
+          title: 'Launch',
+          createdAt: '2026-08-13T00:00:00.000Z',
+          updatedAt: '2026-08-13T00:00:00.000Z'
+        }
+      ],
+      icon: { shape: 'circle' as const, variant: 'filled' as const, color: '#000000' }
+    }
+    const validTask = {
+      id: 'task-valid',
+      title: 'Valid task',
+      projectId: project.id,
+      milestoneId: 'milestone-1',
+      tags: [],
+      completed: false,
+      status: 'pending' as const,
+      createdAt: '2026-08-13T00:00:00.000Z',
+      priority: 'low' as const,
+      taskType: 'assignment' as const,
+      reminders: []
+    }
+    const invalidTask = { ...validTask, id: 'task-invalid', milestoneId: 'missing-milestone' }
+
+    await store.updateVault(root, { projects: [project] })
+    const settings = await store.updateVault(root, {
+      tasks: [validTask, invalidTask],
+      calendarTasks: [validTask, invalidTask]
+    })
+
+    expect(settings.projects[0].milestones).toEqual(project.milestones)
+    expect(settings.calendarTasks).toEqual([
+      expect.objectContaining({ id: 'task-valid', milestoneId: 'milestone-1' }),
+      expect.objectContaining({ id: 'task-invalid', milestoneId: undefined })
+    ])
+    await expect(
+      fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
+    ).resolves.toContain('"title": "Launch"')
   })
 })

@@ -27,6 +27,7 @@ describe('NotebookWorkspaceSession', () => {
     expect(createEmptyNotebookWorkspaceSession()).toEqual({
       currentNotePath: null,
       currentExcalidrawPath: null,
+      browseFolderPath: null,
       currentNoteContent: '',
       currentNoteTags: [],
       currentNoteEditorDraft: null,
@@ -41,6 +42,7 @@ describe('NotebookWorkspaceSession', () => {
     const session = createEmptyNotebookWorkspaceSession()
     session.currentNotePath = 'archive/alpha.md'
     session.currentExcalidrawPath = 'archive/diagram.excalidraw'
+    session.browseFolderPath = 'archive'
     session.selectedNoteTreeEntries = [{ kind: 'folder', relPath: 'archive' }]
     session.searchResults = [
       {
@@ -58,6 +60,7 @@ describe('NotebookWorkspaceSession', () => {
 
     expect(session.currentNotePath).toBe('work/alpha.md')
     expect(session.currentExcalidrawPath).toBe('work/diagram.excalidraw')
+    expect(session.browseFolderPath).toBe('work')
     expect(session.selectedNoteTreeEntries).toEqual([{ kind: 'folder', relPath: 'work' }])
     expect(session.searchResults[0]?.relPath).toBe('work/alpha.md')
     expect(session.noteEditorSessions['work/alpha.md']).toEqual({ content: 'Alpha', tags: [] })
@@ -66,6 +69,7 @@ describe('NotebookWorkspaceSession', () => {
   it('removes deleted paths without affecting unrelated notebook state', () => {
     const session = createEmptyNotebookWorkspaceSession()
     session.currentNotePath = 'archive/alpha.md'
+    session.browseFolderPath = 'archive'
     session.currentNoteContent = 'draft'
     session.noteEditorSessions['archive/alpha.md'] = { content: 'draft', tags: [] }
     session.noteEditorSessions['beta.md'] = { content: 'beta', tags: [] }
@@ -77,6 +81,7 @@ describe('NotebookWorkspaceSession', () => {
     removeNotebookWorkspaceSessionPaths(session, ['archive'])
 
     expect(session.currentNotePath).toBeNull()
+    expect(session.browseFolderPath).toBeNull()
     expect(session.currentNoteContent).toBe('')
     expect(session.noteEditorSessions).toEqual({
       'beta.md': { content: 'beta', tags: [] }

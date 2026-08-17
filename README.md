@@ -66,7 +66,8 @@ When a vault is created or opened, Xingularity ensures this structure exists:
     index.sqlite
 ```
 
-- `notebooks/`: Markdown notebook files
+- `notebooks/`: Markdown notebook files and Excalidraw drawings
+- `notebooks/**/*.excalidraw.bak`: rolling recovery snapshots for drawings; ignored by the app tree
 - `projects/<project-id>.json`: one project record per stable project id
 - `calendar/tasks.json`: scheduled and unscheduled calendar tasks
 - `weekly-plan/state.json`: weekly planning state

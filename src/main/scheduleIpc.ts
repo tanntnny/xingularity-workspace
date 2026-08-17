@@ -5,6 +5,9 @@ import type { ScheduleService } from './scheduleService'
 
 const jobIdSchema = z.string().min(1).max(120)
 const runIdSchema = z.string().min(1).max(120)
+const secretNameSchema = z
+  .string()
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/)
 
 const triggerConfigSchema = z.object({
   type: z.enum(['manual', 'daily', 'every', 'cron', 'on_app_start']),
@@ -39,6 +42,7 @@ const jobInputSchema = z.object({
   runtime: z.enum(['javascript', 'python']),
   code: z.string().max(500_000),
   permissions: permissionsSchema,
+  secretRefs: z.array(secretNameSchema).max(20).optional(),
   outputMode: z.enum(['auto_apply', 'review_before_apply'])
 })
 
@@ -69,5 +73,18 @@ export function registerScheduleIpcHandlers(service: ScheduleService): void {
 
   handleIpc(SCHEDULE_CHANNELS.dismissRun, async (_event, runId: unknown) => {
     await service.dismissRun(runIdSchema.parse(runId))
+  })
+
+  handleIpc(SCHEDULE_CHANNELS.listSecrets, async () => {
+    return service.listSecrets()
+  })
+
+  handleIpc(SCHEDULE_CHANNELS.saveSecret, async (_event, input: unknown) => {
+    const parsed = z.object({ name: secretNameSchema, value: z.string().max(10_000) }).parse(input)
+    await service.saveSecret(parsed.name, parsed.value)
+  })
+
+  handleIpc(SCHEDULE_CHANNELS.deleteSecret, async (_event, name: unknown) => {
+    await service.deleteSecret(secretNameSchema.parse(name))
   })
 }

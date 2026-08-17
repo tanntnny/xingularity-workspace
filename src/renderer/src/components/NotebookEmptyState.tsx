@@ -3,6 +3,7 @@ import { Button } from './ui/button'
 import { FileText, PenTool, Plus } from './ui/icons'
 import { EmptyState } from './ui/empty-state'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
+import { APP_PAGE_ICONS } from '../lib/pageIcons'
 
 export interface RecentNotebookFile {
   kind: 'note' | 'excalidraw'
@@ -26,7 +27,7 @@ export function NotebookEmptyState({
     <EmptyState
       data-testid="notebook-empty-state"
       className="h-full"
-      icon={FileText}
+      icon={APP_PAGE_ICONS.notes}
       title={hasRecentFiles ? 'Pick up where you left off' : 'Start a new notebook'}
       description={
         hasRecentFiles

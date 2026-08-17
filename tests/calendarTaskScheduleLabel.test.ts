@@ -23,4 +23,15 @@ describe('formatCalendarTaskScheduleLabel', () => {
   it('labels tasks without a schedule as unscheduled', () => {
     expect(formatCalendarTaskScheduleLabel({})).toBe('Unscheduled')
   })
+
+  it('labels an end-date-only task as a deadline', () => {
+    expect(
+      formatCalendarTaskScheduleLabel({
+        date: undefined,
+        endDate: '2026-08-20',
+        time: undefined,
+        endTime: undefined
+      })
+    ).toBe('Due Aug 20')
+  })
 })

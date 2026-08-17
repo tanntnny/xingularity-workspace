@@ -2,10 +2,21 @@ import type { WeeklyHeightMode } from '../../../shared/types'
 
 export const WEEKLY_SNAP_MINUTES = 10
 export const WEEKLY_MIN_DURATION_MINUTES = 10
-export const WEEKLY_HOUR_HEIGHT_PX = 80
+export const WEEKLY_HOUR_HEIGHT_PX = 160
+export const WEEKLY_HOUR_HEIGHT_MIN_PX = 80
+export const WEEKLY_HOUR_HEIGHT_MAX_PX = 320
+export const WEEKLY_HOUR_HEIGHT_STEP_PX = 20
 export const WEEKLY_DAY_HEIGHT_PX = 24 * WEEKLY_HOUR_HEIGHT_PX
 export const WEEKLY_MAX_END_MINUTES = 23 * 60 + 50
 export const WEEKLY_PROJECT_ROW_MIN_HEIGHT_PX = 64
+
+export function clampWeeklyHourHeight(heightPx: number): number {
+  return Math.min(WEEKLY_HOUR_HEIGHT_MAX_PX, Math.max(WEEKLY_HOUR_HEIGHT_MIN_PX, heightPx))
+}
+
+export function getWeeklyDayHeightPx(hourHeightPx = WEEKLY_HOUR_HEIGHT_PX): number {
+  return 24 * hourHeightPx
+}
 
 export function shouldShowWeeklyProject(heightPx: number): boolean {
   return heightPx >= WEEKLY_PROJECT_ROW_MIN_HEIGHT_PX
@@ -54,12 +65,12 @@ export function minutesToTime(minutes: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
-export function pixelsToMinutes(pixels: number): number {
-  return (pixels / WEEKLY_HOUR_HEIGHT_PX) * 60
+export function pixelsToMinutes(pixels: number, hourHeightPx = WEEKLY_HOUR_HEIGHT_PX): number {
+  return (pixels / hourHeightPx) * 60
 }
 
-export function minutesToPixels(minutes: number): number {
-  return (minutes / 60) * WEEKLY_HOUR_HEIGHT_PX
+export function minutesToPixels(minutes: number, hourHeightPx = WEEKLY_HOUR_HEIGHT_PX): number {
+  return (minutes / 60) * hourHeightPx
 }
 
 export function snapMinutes(
@@ -139,7 +150,8 @@ export function buildResizedTimedRange(
 }
 
 export function layoutWeeklyTimedTasks(
-  entries: WeeklyTimedTaskLayoutInput[]
+  entries: WeeklyTimedTaskLayoutInput[],
+  hourHeightPx = WEEKLY_HOUR_HEIGHT_PX
 ): WeeklyTimedTaskLayout[] {
   const byDate = new Map<string, WeeklyTimedTaskLayoutInput[]>()
 
@@ -198,10 +210,10 @@ export function layoutWeeklyTimedTasks(
           date,
           lane,
           laneCount,
-          topPx: minutesToPixels(entry.startMinutes),
+          topPx: minutesToPixels(entry.startMinutes, hourHeightPx),
           heightPx: Math.max(
-            minutesToPixels(entry.endMinutes - entry.startMinutes),
-            minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
+            minutesToPixels(entry.endMinutes - entry.startMinutes, hourHeightPx),
+            minutesToPixels(WEEKLY_MIN_DURATION_MINUTES, hourHeightPx)
           ),
           heightMode: entry.heightMode ?? 'duration',
           leftPercent: (lane / laneCount) * 100,

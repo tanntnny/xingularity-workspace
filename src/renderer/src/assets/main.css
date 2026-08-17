@@ -46,6 +46,7 @@
     --overlay: rgb(0 0 0 / 0.8);
     --overlay-muted: rgb(0 0 0 / 0.5);
     --border: #c7c7c7;
+    --panel-border: #dedede;
     --note-block-border: var(--border);
     --note-block-radius: var(--radius);
     --input: #c7c7c7;
@@ -60,7 +61,9 @@
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
     --scrollbar-thumb: #b8b8b8;
     --scrollbar-thumb-hover: #8a8a8a;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+    --radius-surface: var(--radius);
+    --radius-shell: calc(var(--radius) + 4px);
     --sidebar-background: var(--app-background);
     --sidebar-foreground: #1a1a1a;
     --sidebar-primary: #202020;
@@ -147,6 +150,8 @@
     --motion-duration-content: 180ms;
     --motion-duration-panel: 240ms;
     --motion-duration-calendar: 180ms;
+    --motion-duration-disclosure: var(--motion-duration-content);
+    --motion-duration-overlay: var(--motion-duration-fast);
     --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
     --motion-ease-linear: cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -189,6 +194,7 @@
       --info-muted-foreground: #a5f3fc;
       --info-border: #0e7490;
       --border: #353535;
+      --panel-border: #2a2a2a;
       --note-block-border: #4a4a4a;
       --input: #404040;
       --ring: #a3a3a3;
@@ -413,6 +419,305 @@
     }
   }
 
+  .motion-state-chevron {
+    transition:
+      transform var(--motion-duration-disclosure) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .motion-collapsible-content {
+    overflow: hidden;
+  }
+
+  .motion-collapsible-content[data-state='open'] {
+    animation: motion-collapsible-down var(--motion-duration-disclosure) var(--motion-ease-standard);
+  }
+
+  .motion-collapsible-content[data-state='closed'] {
+    animation: motion-collapsible-up var(--motion-duration-disclosure) var(--motion-ease-standard);
+  }
+
+  @keyframes motion-collapsible-down {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+
+    to {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes motion-collapsible-up {
+    from {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
+
+  .motion-milestone-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      grid-template-rows var(--motion-duration-disclosure) var(--motion-ease-standard),
+      opacity var(--motion-duration-disclosure) var(--motion-ease-standard);
+  }
+
+  .motion-milestone-content[data-state='open'] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .motion-milestone-content > div {
+    min-height: 0;
+  }
+
+  .motion-tree-row {
+    transition: top var(--motion-duration-disclosure) var(--motion-ease-standard);
+  }
+
+  .motion-overlay {
+    animation: motion-overlay-in var(--motion-duration-overlay) var(--motion-ease-standard) both;
+  }
+
+  .motion-overlay[data-state='closed'] {
+    animation-name: motion-overlay-out;
+  }
+
+  @keyframes motion-overlay-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes motion-overlay-out {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
+
+  .motion-dialog-content {
+    animation: motion-dialog-in var(--motion-duration-overlay) var(--motion-ease-standard) both;
+  }
+
+  .motion-dialog-content[data-state='closed'] {
+    animation-name: motion-dialog-out;
+  }
+
+  @keyframes motion-dialog-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -48%) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  @keyframes motion-dialog-out {
+    from {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    to {
+      opacity: 0;
+      transform: translate(-50%, -48%) scale(0.98);
+    }
+  }
+
+  .motion-floating-content {
+    --motion-floating-offset-x: 0px;
+    --motion-floating-offset-y: 4px;
+    animation: motion-floating-in var(--motion-duration-overlay) var(--motion-ease-standard) both;
+  }
+
+  .motion-floating-content[data-side='top'] {
+    --motion-floating-offset-y: 4px;
+  }
+
+  .motion-floating-content[data-side='right'] {
+    --motion-floating-offset-x: -4px;
+    --motion-floating-offset-y: 0px;
+  }
+
+  .motion-floating-content[data-side='left'] {
+    --motion-floating-offset-x: 4px;
+    --motion-floating-offset-y: 0px;
+  }
+
+  .motion-floating-content[data-side='bottom'] {
+    --motion-floating-offset-y: -4px;
+  }
+
+  .motion-floating-content[data-state='closed'] {
+    animation-name: motion-floating-out;
+  }
+
+  @keyframes motion-floating-in {
+    from {
+      opacity: 0;
+      translate: var(--motion-floating-offset-x) var(--motion-floating-offset-y);
+      scale: 0.98;
+    }
+
+    to {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  @keyframes motion-floating-out {
+    from {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+
+    to {
+      opacity: 0;
+      translate: var(--motion-floating-offset-x) var(--motion-floating-offset-y);
+      scale: 0.98;
+    }
+  }
+
+  .motion-drawer-content {
+    animation-duration: var(--motion-duration-panel);
+    animation-timing-function: var(--motion-ease-standard);
+    animation-fill-mode: both;
+  }
+
+  .motion-drawer-content[data-side='right'][data-state='open'] {
+    animation-name: motion-drawer-in-right;
+  }
+
+  .motion-drawer-content[data-side='right'][data-state='closed'] {
+    animation-name: motion-drawer-out-right;
+  }
+
+  .motion-drawer-content[data-side='left'][data-state='open'] {
+    animation-name: motion-drawer-in-left;
+  }
+
+  .motion-drawer-content[data-side='left'][data-state='closed'] {
+    animation-name: motion-drawer-out-left;
+  }
+
+  .motion-drawer-content[data-side='top'][data-state='open'] {
+    animation-name: motion-drawer-in-top;
+  }
+
+  .motion-drawer-content[data-side='top'][data-state='closed'] {
+    animation-name: motion-drawer-out-top;
+  }
+
+  .motion-drawer-content[data-side='bottom'][data-state='open'] {
+    animation-name: motion-drawer-in-bottom;
+  }
+
+  .motion-drawer-content[data-side='bottom'][data-state='closed'] {
+    animation-name: motion-drawer-out-bottom;
+  }
+
+  @keyframes motion-drawer-in-right {
+    from {
+      transform: translateX(100%);
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes motion-drawer-out-right {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes motion-drawer-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes motion-drawer-out-left {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(-100%);
+    }
+  }
+
+  @keyframes motion-drawer-in-top {
+    from {
+      transform: translateY(-100%);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes motion-drawer-out-top {
+    from {
+      transform: translateY(0);
+    }
+
+    to {
+      transform: translateY(-100%);
+    }
+  }
+
+  @keyframes motion-drawer-in-bottom {
+    from {
+      transform: translateY(100%);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes motion-drawer-out-bottom {
+    from {
+      transform: translateY(0);
+    }
+
+    to {
+      transform: translateY(100%);
+    }
+  }
+
   .motion-staggered-reveal {
     --motion-reveal-delay: 0ms;
     opacity: 0;
@@ -523,7 +828,7 @@
       width: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
       flex-basis: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
       flex-shrink: 0;
-      border: 1px solid var(--border);
+      border: 1px solid var(--panel-border);
       border-radius: var(--radius);
       background: var(--card);
       box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
@@ -531,6 +836,20 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .motion-state-chevron,
+    .motion-tree-row,
+    .motion-milestone-content {
+      transition: none;
+    }
+
+    .motion-collapsible-content,
+    .motion-overlay,
+    .motion-dialog-content,
+    .motion-floating-content,
+    .motion-drawer-content {
+      animation: none;
+    }
+
     .motion-staggered-reveal,
     .motion-workspace-content,
     .motion-workspace-panel,
@@ -560,7 +879,7 @@
   }
 
   .calendar-full .fc {
-    --fc-border-color: var(--border);
+    --fc-border-color: var(--panel-border);
     --fc-page-bg-color: transparent;
     --fc-neutral-bg-color: var(--muted);
     --fc-today-bg-color: var(--accent);
@@ -569,19 +888,19 @@
 
   .calendar-full .fc-scrollgrid {
     overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-shell);
     background-color: transparent;
   }
 
   .calendar-full .fc-scrollgrid-section > td,
   .calendar-full .fc-scrollgrid-section > th {
-    border-color: var(--border);
+    border-color: var(--panel-border);
     background-color: var(--card);
   }
 
   .calendar-full .fc-col-header-cell {
-    border-color: var(--border);
+    border-color: var(--panel-border);
     background-color: var(--card);
   }
 
@@ -590,7 +909,7 @@
   }
 
   .calendar-full .fc-daygrid-day {
-    border-color: var(--border);
+    border-color: var(--panel-border);
     background-color: transparent;
   }
 
@@ -601,7 +920,7 @@
   }
 
   .calendar-full .fc-daygrid-day[data-calendar-drop-zone='true'] {
-    border-color: var(--border);
+    border-color: var(--panel-border);
     transition:
       background-color var(--motion-duration-fast) var(--motion-ease-standard),
       border-color var(--motion-duration-fast) var(--motion-ease-standard);
@@ -650,21 +969,69 @@
   .note-editor-surface .milkdown {
     --crepe-color-background: transparent;
     --crepe-color-on-background: var(--foreground);
-    --crepe-color-selected: var(--foreground);
+    --crepe-color-surface: var(--popover);
+    --crepe-color-surface-low: var(--muted);
+    --crepe-color-on-surface: var(--popover-foreground);
+    --crepe-color-on-surface-variant: var(--note-editor-muted-foreground);
+    --crepe-color-outline: var(--note-editor-muted-foreground);
+    --crepe-color-primary: var(--primary);
+    --crepe-color-secondary: var(--secondary);
+    --crepe-color-on-secondary: var(--secondary-foreground);
+    --crepe-color-inverse: var(--primary);
+    --crepe-color-on-inverse: var(--primary-foreground);
+    --crepe-color-inline-code: var(--foreground);
+    --crepe-color-error: var(--destructive);
+    --crepe-color-hover: var(--accent);
+    --crepe-color-selected: var(--note-editor-selection);
+    --crepe-color-inline-area: var(--muted);
     --crepe-font-default: var(--app-font-family);
     --crepe-font-title: var(--app-font-family);
+    --crepe-font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --crepe-shadow-1: 0 1px 3px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
+    --crepe-shadow-2: 0 2px 6px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
+    --note-editor-selection: var(--accent);
+    --note-editor-selection-foreground: var(--accent-foreground);
+    --note-editor-cursor: var(--accent);
+    --note-editor-cursor-foreground: var(--accent-foreground);
+    --note-editor-muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--popover));
+    --note-editor-popup-border: color-mix(in srgb, var(--foreground) 30%, var(--popover));
     background: transparent;
     color: var(--foreground);
     font-family: var(--app-font-family);
+  }
+
+  .note-editor-surface .milkdown .ProseMirror {
+    caret-color: var(--foreground);
   }
 
   .note-editor-surface .milkdown .ProseMirror blockquote {
     padding-left: 34px;
   }
 
-  .note-editor-surface .milkdown .ProseMirror *::selection {
-    background: var(--foreground);
-    color: var(--workspace-background);
+  .note-editor-surface .milkdown *::selection {
+    background: var(--note-editor-selection);
+    color: var(--note-editor-selection-foreground) !important;
+  }
+
+  .note-editor-surface [data-vim-mode='normal'] .milkdown .ProseMirror {
+    caret-color: transparent;
+  }
+
+  .note-editor-surface [data-vim-mode='normal'] .note-vim-block-cursor-char {
+    display: inline-block;
+    border-radius: 0;
+    background: var(--note-editor-cursor);
+    color: var(--note-editor-cursor-foreground);
+    line-height: 1.25;
+    vertical-align: text-bottom;
+  }
+
+  .note-editor-surface [data-vim-mode='normal'] .note-vim-block-cursor-empty {
+    display: inline-block;
+    width: 0.65ch;
+    height: 1.25em;
+    background: var(--note-editor-cursor);
+    vertical-align: text-bottom;
   }
 
   .note-editor-surface .milkdown .ProseMirror .note-inline-latex-source-hidden {
@@ -711,6 +1078,17 @@
   background: var(--note-block-border) !important;
 }
 
+.note-editor-surface .milkdown :is(
+  .milkdown-toolbar,
+  .milkdown-link-preview > .link-preview,
+  .milkdown-link-edit > .link-edit,
+  .milkdown-slash-menu,
+  .milkdown-top-bar .top-bar-heading-dropdown,
+  .milkdown-latex-inline-edit
+) {
+  border: 1px solid var(--note-editor-popup-border);
+}
+
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block {
   border: 1px solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
@@ -751,4 +1129,154 @@
 .note-editor-surface .milkdown .ProseMirror pre code {
   color: var(--foreground);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+}
+
+.note-editor-surface .milkdown :is(button, input, [role='button'], .toolbar-item, .button):focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--background);
+}
+
+.note-editor-surface .milkdown .tools-button-group button:focus-visible,
+.note-editor-surface .milkdown .language-button:focus-visible {
+  opacity: 1;
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout {
+  --note-callout-accent: var(--border);
+  --note-callout-surface: var(--muted);
+  margin: 8px 0;
+  border: 1px solid color-mix(in srgb, var(--note-callout-accent) 45%, var(--note-callout-surface));
+  border-radius: var(--note-block-radius);
+  background: var(--note-callout-surface);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout::before {
+  background: var(--note-callout-accent) !important;
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-title {
+  color: var(--note-callout-title, var(--foreground));
+  font-weight: 600;
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-info {
+  --note-callout-accent: var(--info);
+  --note-callout-surface: var(--info-muted);
+  --note-callout-title: var(--info-muted-foreground);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-success {
+  --note-callout-accent: var(--success);
+  --note-callout-surface: var(--success-muted);
+  --note-callout-title: var(--success-muted-foreground);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-warning {
+  --note-callout-accent: var(--warning);
+  --note-callout-surface: var(--warning-muted);
+  --note-callout-title: var(--warning-muted-foreground);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-danger {
+  --note-callout-accent: var(--destructive);
+  --note-callout-surface: var(--destructive-muted);
+  --note-callout-title: var(--destructive-muted-foreground);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-neutral {
+  --note-callout-title: var(--foreground);
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-callout-marker-hidden {
+  display: none;
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-inline-latex-error {
+  color: var(--destructive) !important;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  text-decoration-color: var(--destructive);
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.note-editor-surface .milkdown .ProseMirror .note-latex-preview {
+  color: var(--foreground);
+}
+
+.scheduling-code-editor-surface {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #30363d;
+  border-radius: var(--radius-button);
+  background: #0d1117;
+}
+
+.scheduling-code-editor-surface .cm-editor {
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: #c9d1d9;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.scheduling-code-editor-surface .cm-scroller {
+  height: 100%;
+  overflow: auto;
+  font-family: inherit;
+}
+
+.scheduling-code-editor-surface .cm-content {
+  min-height: 100%;
+  padding: 0.75rem 0;
+}
+
+.scheduling-code-editor-surface .cm-line {
+  padding: 0 0.75rem;
+}
+
+.scheduling-code-editor-surface .cm-gutters {
+  border-right: 1px solid #30363d;
+  background: #161b22;
+  color: #8b949e;
+}
+
+.scheduling-code-editor-surface .cm-activeLine,
+.scheduling-code-editor-surface .cm-activeLineGutter {
+  background: #161b22;
+}
+
+.scheduling-code-editor-surface .cm-selectionBackground,
+.scheduling-code-editor-surface .cm-focused .cm-selectionBackground {
+  background: #264f78 !important;
+}
+
+.scheduling-code-editor-surface .cm-focused {
+  outline: none;
+}
+
+.scheduling-code-editor-surface .cm-cursor {
+  border-left-color: #c9d1d9;
+}
+
+.workspace-tab-label-fade {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 1.25rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 1.25rem),
+    transparent 100%
+  );
 }

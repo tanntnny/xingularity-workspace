@@ -25,11 +25,7 @@ import {
   isExcalidrawPath,
   withExcalidrawExtension
 } from '../shared/excalidrawFile'
-import {
-  isNotePath,
-  serializeStoredNoteDocument,
-  stripNoteExtension
-} from '../shared/noteDocument'
+import { isNotePath, serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -44,9 +40,12 @@ import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
+import { NotebookMutationQueue } from './notebookMutationQueue'
 import { createWarpNewTabUri } from './warp'
+import { buildFolderMarkdown } from './noteMarkdownExport'
 import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { normalizeTaskTags } from '../shared/taskTags'
 import {
   AppSettings,
   AgentChatEvent,
@@ -63,17 +62,23 @@ import {
   AppSettingsUpdateOptions,
   CalendarTask,
   CreateProjectInput,
+  CreateProjectMilestoneInput,
   CreateTaskInput,
+  DeleteProjectMilestoneInput,
+  DeleteProjectMilestoneResult,
   DeleteProjectInput,
   DeleteProjectResult,
   CompleteNoteWithAiInput,
   BlockNoteMigrationResult,
+  NoteImagePathMigrationResult,
   NoteImportResult,
   Project,
+  ProjectMilestone,
   ProjectState,
   SavedVaultState,
   SearchResult,
   StoredNoteDocument,
+  UpdateProjectMilestoneInput,
   UpdateProjectInput,
   VaultRemoveResult,
   VaultOpenResult,
@@ -81,9 +86,12 @@ import {
   HistoryStatus,
   LegacyExcalidrawImportResult,
   ExcalidrawSession,
+  ExcalidrawFileReadResult,
   StoredExcalidrawFileDocument,
   NotePdfExportInput,
   NotePdfExportResult,
+  FolderMarkdownExportInput,
+  FolderMarkdownExportResult,
   FolderPdfExportInput,
   FolderPdfExportResult,
   FleetingConversionResult,
@@ -100,7 +108,7 @@ export class VaultRuntime {
   private settings = new SettingsStore()
   private reminderService = new ReminderService()
   private activationQueue: Promise<void> = Promise.resolve()
-  private notebookMutationQueue: Promise<void> = Promise.resolve()
+  private notebookMutationQueue = new NotebookMutationQueue()
   private settingsQueue: Promise<void> = Promise.resolve()
   private vaultListeners: Array<(paths: VaultPaths | null) => void> = []
   private treeChangeListeners: Array<() => void> = []
@@ -318,9 +326,11 @@ export class VaultRuntime {
     return this.fileService!.readNoteDocument(relPath)
   }
 
-  async readExcalidrawFileDocument(relPath: string): Promise<StoredExcalidrawFileDocument> {
-    this.assertReady()
-    return this.fileService!.readExcalidrawFileDocument(relPath)
+  async readExcalidrawFileDocument(relPath: string): Promise<ExcalidrawFileReadResult> {
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      return this.fileService!.readExcalidrawFileDocument(relPath)
+    })
   }
 
   async writeNote(relPath: string, content: string): Promise<void> {
@@ -366,9 +376,7 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       const relPath = await this.fileService!.createNote(name)
-      const content = serializeStoredNoteDocument(
-        await this.fileService!.readNoteDocument(relPath)
-      )
+      const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
       await this.indexer!.upsertFromRaw({
         id: createStableId(relPath),
         relPath,
@@ -430,9 +438,7 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       const relPath = await this.fileService!.createNoteWithTags(name, tags)
-      const content = serializeStoredNoteDocument(
-        await this.fileService!.readNoteDocument(relPath)
-      )
+      const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(relPath))
       await this.indexer!.upsertFromRaw({
         id: createStableId(relPath),
         relPath,
@@ -531,14 +537,24 @@ export class VaultRuntime {
     })
   }
 
+  async migrateNoteImagePaths(): Promise<NoteImagePathMigrationResult> {
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const result = await this.fileService!.migrateNoteImagePaths()
+      if (result.converted > 0) {
+        await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+        this.notifyTreeChange()
+      }
+      return result
+    })
+  }
+
   async renameNote(oldPath: string, newPath: string): Promise<void> {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       await this.fileService!.rename(oldPath, newPath)
       await this.indexer!.deleteByRelPath(sanitizeNotePath(oldPath))
-      const content = serializeStoredNoteDocument(
-        await this.fileService!.readNoteDocument(newPath)
-      )
+      const content = serializeStoredNoteDocument(await this.fileService!.readNoteDocument(newPath))
       await this.indexer!.upsertFromRaw({
         id: createStableId(newPath),
         relPath: sanitizeNotePath(newPath),
@@ -689,6 +705,43 @@ export class VaultRuntime {
       path: result.filePath,
       noteCount: notes.length,
       warnings: [...documentWarnings, ...printable.warnings, ...imageWarnings]
+    }
+  }
+
+  async exportFolderMarkdown(
+    input: FolderMarkdownExportInput
+  ): Promise<FolderMarkdownExportResult> {
+    this.assertReady()
+    const safeFolderPath = sanitizeEntryPath(input.folderPath)
+    const folderDocuments = await this.fileService!.listNoteDocumentsInFolder(safeFolderPath)
+    const { notes, warnings: documentWarnings } = folderDocuments
+
+    if (notes.length === 0) {
+      return { path: null, noteCount: 0, warnings: documentWarnings }
+    }
+
+    const folderName = path.basename(safeFolderPath)
+    const suggestedName = `${this.sanitizeExportFileName(folderName)}.md`
+    const result = await this.showMarkdownExportDialog(
+      'Export nested notes as Markdown',
+      this.currentPaths!.rootPath,
+      suggestedName
+    )
+
+    if (result.canceled || !result.filePath) {
+      return { path: null, noteCount: notes.length, warnings: [] }
+    }
+
+    const content = buildFolderMarkdown(
+      folderName,
+      notes.map(({ relPath, document }) => ({ relPath, markdown: document.markdown }))
+    )
+    await fs.writeFile(result.filePath, content, 'utf-8')
+
+    return {
+      path: result.filePath,
+      noteCount: notes.length,
+      warnings: documentWarnings
     }
   }
 
@@ -1199,186 +1252,318 @@ export class VaultRuntime {
   }
 
   async createProject(input: CreateProjectInput): Promise<Project> {
-    return this.mutateSettings((settings) => {
-      const name = buildProjectName(settings.projects, input.name)
-      const description = input.description?.trim() || 'Add project details here.'
-      const now = new Date()
-      const startDate = input.startDate ?? toLocalIsoDate(now)
-      assertProjectDateRange(startDate, input.endDate)
-      const project: Project = {
-        id: `project-${randomUUID()}`,
-        name,
-        summary: description,
-        description,
-        state: 'active',
-        startDate,
-        endDate: input.endDate,
-        tags: normalizeProjectValues(input.tags),
-        resources: normalizeProjectValues(input.resources),
-        icon: normalizeProjectIcon(input.icon, name),
-        updatedAt: now.toISOString(),
-      }
+    return this.mutateSettings(
+      (settings) => {
+        const name = buildProjectName(settings.projects, input.name)
+        const description = input.description?.trim() || 'Add project details here.'
+        const now = new Date()
+        const startDate = input.startDate ?? toLocalIsoDate(now)
+        assertProjectDateRange(startDate, input.endDate)
+        const project: Project = {
+          id: `project-${randomUUID()}`,
+          name,
+          summary: description,
+          description,
+          state: 'active',
+          startDate,
+          endDate: input.endDate,
+          tags: normalizeProjectValues(input.tags),
+          resources: normalizeProjectValues(input.resources),
+          icon: normalizeProjectIcon(input.icon, name),
+          updatedAt: now.toISOString()
+        }
 
-      return {
-        next: {
-          projects: [project, ...settings.projects],
-          lastOpenedProjectId: project.id
-        },
-        result: project
-      }
-    }, { label: 'Create project' })
+        return {
+          next: {
+            projects: [project, ...settings.projects],
+            lastOpenedProjectId: project.id
+          },
+          result: project
+        }
+      },
+      { label: 'Create project' }
+    )
   }
 
   async selectProject(projectId: string | null): Promise<{ projectId: string | null }> {
-    return this.mutateSettings((settings) => {
-      if (projectId && !settings.projects.some((project) => project.id === projectId)) {
-        throw new Error(`Project not found: ${projectId}`)
-      }
-      return {
-        next: { lastOpenedProjectId: projectId },
-        result: { projectId }
-      }
-    }, { recordHistory: false })
+    return this.mutateSettings(
+      (settings) => {
+        if (projectId && !settings.projects.some((project) => project.id === projectId)) {
+          throw new Error(`Project not found: ${projectId}`)
+        }
+        return {
+          next: { lastOpenedProjectId: projectId },
+          result: { projectId }
+        }
+      },
+      { recordHistory: false }
+    )
   }
 
   async updateProject(input: UpdateProjectInput): Promise<Project> {
-    return this.mutateSettings((settings) => {
-      const existing = resolveProjectById(settings.projects, input.projectId)
-      const name = input.name === undefined ? existing.name : input.name.trim()
-      if (!name) {
-        throw new Error('Project name is required')
-      }
-      const description =
-        input.description === undefined ? existing.description : input.description.trim()
-      const startDate =
-        input.startDate === null
-          ? undefined
-          : input.startDate === undefined
-            ? existing.startDate
-            : input.startDate
-      const endDate =
-        input.endDate === null
-          ? undefined
-          : input.endDate === undefined
-            ? existing.endDate
-            : input.endDate
-      assertProjectDateRange(startDate, endDate)
-      const updated: Project = {
-        ...existing,
-        name,
-        summary: description ?? existing.summary,
-        description,
-        icon: input.icon ? normalizeProjectIcon(input.icon, existing.id) : existing.icon,
-        startDate,
-        endDate,
-        tags: input.tags === undefined ? existing.tags : normalizeProjectValues(input.tags),
-        resources:
-          input.resources === undefined
-            ? existing.resources
-            : normalizeProjectValues(input.resources),
-        updatedAt: new Date().toISOString()
-      }
-      return {
-        next: {
-          projects: settings.projects.map((project) =>
-            project.id === updated.id ? updated : project
-          )
-        },
-        result: updated
-      }
-    }, { label: 'Update project' })
+    return this.mutateSettings(
+      (settings) => {
+        const existing = resolveProjectById(settings.projects, input.projectId)
+        const name = input.name === undefined ? existing.name : input.name.trim()
+        if (!name) {
+          throw new Error('Project name is required')
+        }
+        const description =
+          input.description === undefined ? existing.description : input.description.trim()
+        const startDate =
+          input.startDate === null
+            ? undefined
+            : input.startDate === undefined
+              ? existing.startDate
+              : input.startDate
+        const endDate =
+          input.endDate === null
+            ? undefined
+            : input.endDate === undefined
+              ? existing.endDate
+              : input.endDate
+        assertProjectDateRange(startDate, endDate)
+        const updated: Project = {
+          ...existing,
+          name,
+          summary: description ?? existing.summary,
+          description,
+          icon: input.icon ? normalizeProjectIcon(input.icon, existing.id) : existing.icon,
+          startDate,
+          endDate,
+          tags: input.tags === undefined ? existing.tags : normalizeProjectValues(input.tags),
+          resources:
+            input.resources === undefined
+              ? existing.resources
+              : normalizeProjectValues(input.resources),
+          updatedAt: new Date().toISOString()
+        }
+        return {
+          next: {
+            projects: settings.projects.map((project) =>
+              project.id === updated.id ? updated : project
+            )
+          },
+          result: updated
+        }
+      },
+      { label: 'Update project' }
+    )
   }
 
   async setProjectState(projectId: string, state: ProjectState): Promise<Project> {
-    return this.mutateSettings((settings) => {
-      const existing = resolveProjectById(settings.projects, projectId)
-      const updated: Project = {
-        ...existing,
-        state,
-        updatedAt: new Date().toISOString()
-      }
-      return {
-        next: {
-          projects: settings.projects.map((project) =>
-            project.id === updated.id ? updated : project
-          )
-        },
-        result: updated
-      }
-    }, { label: state === 'archived' ? 'Archive project' : 'Unarchive project' })
+    return this.mutateSettings(
+      (settings) => {
+        const existing = resolveProjectById(settings.projects, projectId)
+        const updated: Project = {
+          ...existing,
+          state,
+          updatedAt: new Date().toISOString()
+        }
+        return {
+          next: {
+            projects: settings.projects.map((project) =>
+              project.id === updated.id ? updated : project
+            )
+          },
+          result: updated
+        }
+      },
+      { label: state === 'archived' ? 'Archive project' : 'Unarchive project' }
+    )
   }
 
   async setProjectFavorite(
     projectId: string,
     favorite: boolean
   ): Promise<{ projectId: string; favorite: boolean }> {
-    return this.mutateSettings((settings) => {
-      resolveProjectById(settings.projects, projectId)
-      const favoriteProjectIds = favorite
-        ? [projectId, ...settings.favoriteProjectIds.filter((id) => id !== projectId)]
-        : settings.favoriteProjectIds.filter((id) => id !== projectId)
-      return {
-        next: { favoriteProjectIds },
-        result: { projectId, favorite }
-      }
-    }, { recordHistory: false })
+    return this.mutateSettings(
+      (settings) => {
+        resolveProjectById(settings.projects, projectId)
+        const favoriteProjectIds = favorite
+          ? [projectId, ...settings.favoriteProjectIds.filter((id) => id !== projectId)]
+          : settings.favoriteProjectIds.filter((id) => id !== projectId)
+        return {
+          next: { favoriteProjectIds },
+          result: { projectId, favorite }
+        }
+      },
+      { recordHistory: false }
+    )
   }
 
   async deleteProject(input: DeleteProjectInput): Promise<DeleteProjectResult> {
-    return this.mutateSettings((settings) => {
-      resolveProjectById(settings.projects, input.projectId)
-      const nextProjects = settings.projects.filter((project) => project.id !== input.projectId)
-      const linkedTasks = settings.calendarTasks.filter(
-        (task) => task.projectId === input.projectId
-      )
-      const removedTaskIds =
-        input.linkedTasks === 'delete' ? linkedTasks.map((task) => task.id) : []
-      const unassignedTaskIds =
-        input.linkedTasks === 'unassign' ? linkedTasks.map((task) => task.id) : []
-      const nextTasks =
-        input.linkedTasks === 'delete'
-          ? settings.calendarTasks.filter((task) => task.projectId !== input.projectId)
-          : settings.calendarTasks.map((task) =>
-              task.projectId === input.projectId ? { ...task, projectId: undefined } : task
-            )
-      const nextSelectedProjectId =
-        settings.lastOpenedProjectId === input.projectId
-          ? (nextProjects[0]?.id ?? null)
-          : settings.lastOpenedProjectId
-      const nextProjectIcons = { ...settings.projectIcons }
-      delete nextProjectIcons[input.projectId]
+    return this.mutateSettings(
+      (settings) => {
+        resolveProjectById(settings.projects, input.projectId)
+        const nextProjects = settings.projects.filter((project) => project.id !== input.projectId)
+        const linkedTasks = settings.calendarTasks.filter(
+          (task) => task.projectId === input.projectId
+        )
+        const removedTaskIds =
+          input.linkedTasks === 'delete' ? linkedTasks.map((task) => task.id) : []
+        const unassignedTaskIds =
+          input.linkedTasks === 'unassign' ? linkedTasks.map((task) => task.id) : []
+        const nextTasks =
+          input.linkedTasks === 'delete'
+            ? settings.calendarTasks.filter((task) => task.projectId !== input.projectId)
+            : settings.calendarTasks.map((task) =>
+                task.projectId === input.projectId
+                  ? { ...task, projectId: undefined, milestoneId: undefined }
+                  : task
+              )
+        const nextSelectedProjectId =
+          settings.lastOpenedProjectId === input.projectId
+            ? (nextProjects[0]?.id ?? null)
+            : settings.lastOpenedProjectId
+        const nextProjectIcons = { ...settings.projectIcons }
+        delete nextProjectIcons[input.projectId]
 
-      return {
-        next: {
-          projects: nextProjects,
-          projectIcons: nextProjectIcons,
-          tasks: nextTasks,
-          calendarTasks: nextTasks,
-          favoriteProjectIds: settings.favoriteProjectIds.filter(
-            (projectId) => projectId !== input.projectId
-          ),
-          lastOpenedProjectId: nextSelectedProjectId
-        },
-        result: {
-          deletedProjectId: input.projectId,
-          nextSelectedProjectId,
-          removedTaskIds,
-          unassignedTaskIds
+        return {
+          next: {
+            projects: nextProjects,
+            projectIcons: nextProjectIcons,
+            tasks: nextTasks,
+            calendarTasks: nextTasks,
+            favoriteProjectIds: settings.favoriteProjectIds.filter(
+              (projectId) => projectId !== input.projectId
+            ),
+            lastOpenedProjectId: nextSelectedProjectId
+          },
+          result: {
+            deletedProjectId: input.projectId,
+            nextSelectedProjectId,
+            removedTaskIds,
+            unassignedTaskIds
+          }
         }
-      }
-    }, { label: 'Delete project' })
+      },
+      { label: 'Delete project' }
+    )
+  }
+
+  async createProjectMilestone(input: CreateProjectMilestoneInput): Promise<ProjectMilestone> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        const now = new Date().toISOString()
+        const milestone: ProjectMilestone = {
+          id: `milestone-${randomUUID()}`,
+          title: input.title.trim(),
+          createdAt: now,
+          updatedAt: now
+        }
+        const updatedProject: Project = {
+          ...project,
+          milestones: [...(project.milestones ?? []), milestone],
+          updatedAt: now
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: milestone
+        }
+      },
+      { label: 'Create project milestone' }
+    )
+  }
+
+  async updateProjectMilestone(input: UpdateProjectMilestoneInput): Promise<ProjectMilestone> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        const existing = resolveProjectMilestone(project, input.milestoneId)
+        const updated: ProjectMilestone = {
+          ...existing,
+          title: input.title.trim(),
+          updatedAt: new Date().toISOString()
+        }
+        const updatedProject: Project = {
+          ...project,
+          milestones: (project.milestones ?? []).map((milestone) =>
+            milestone.id === updated.id ? updated : milestone
+          ),
+          updatedAt: updated.updatedAt
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updated
+        }
+      },
+      { label: 'Update project milestone' }
+    )
+  }
+
+  async deleteProjectMilestone(
+    input: DeleteProjectMilestoneInput
+  ): Promise<DeleteProjectMilestoneResult> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        resolveProjectMilestone(project, input.milestoneId)
+        const movedTaskIds = settings.calendarTasks
+          .filter(
+            (task) => task.projectId === input.projectId && task.milestoneId === input.milestoneId
+          )
+          .map((task) => task.id)
+        const updatedProject: Project = {
+          ...project,
+          milestones: (project.milestones ?? []).filter(
+            (milestone) => milestone.id !== input.milestoneId
+          ),
+          updatedAt: new Date().toISOString()
+        }
+        const nextTasks = settings.calendarTasks.map((task) =>
+          task.projectId === input.projectId && task.milestoneId === input.milestoneId
+            ? { ...task, milestoneId: undefined }
+            : task
+        )
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            ),
+            tasks: nextTasks,
+            calendarTasks: nextTasks
+          },
+          result: {
+            deletedMilestoneId: input.milestoneId,
+            movedTaskIds
+          }
+        }
+      },
+      { label: 'Delete project milestone' }
+    )
   }
 
   async createTask(input: CreateTaskInput): Promise<CalendarTask> {
     return this.mutateSettings((settings) => {
-      if (input.projectId && !settings.projects.some((project) => project.id === input.projectId)) {
-        throw new Error(`Project not found: ${input.projectId}`)
+      const project = input.projectId
+        ? resolveProjectById(settings.projects, input.projectId)
+        : undefined
+      if (input.milestoneId && !project) {
+        throw new Error('A milestone requires a project')
+      }
+      if (input.milestoneId && project) {
+        resolveProjectMilestone(project, input.milestoneId)
       }
 
       const task: CalendarTask = {
         id: `task-${randomUUID()}`,
         title: input.title.trim(),
         projectId: input.projectId,
+        milestoneId: input.milestoneId,
+        tags: normalizeTaskTags(input.tags),
         date: input.date,
         endDate: input.endDate,
         time: input.time,
@@ -1476,10 +1661,7 @@ export class VaultRuntime {
     this.agentToolInvoker = invoker
   }
 
-  async handleExternalEvent(
-    relPath: string,
-    eventType: VaultEvent
-  ): Promise<void> {
+  async handleExternalEvent(relPath: string, eventType: VaultEvent): Promise<void> {
     if (!this.fileService || !this.indexer || !this.currentPaths) {
       return
     }
@@ -1586,8 +1768,8 @@ export class VaultRuntime {
   }
 
   private async closeCurrentVault(): Promise<void> {
-    await this.notebookMutationQueue
-    this.notebookMutationQueue = Promise.resolve()
+    await this.notebookMutationQueue.drain()
+    this.notebookMutationQueue = new NotebookMutationQueue()
     if (this.currentPaths) {
       this.notifyVaultChange(null)
     }
@@ -1611,12 +1793,7 @@ export class VaultRuntime {
   }
 
   private enqueueNotebookMutation<T>(action: () => Promise<T>): Promise<T> {
-    const run = this.notebookMutationQueue.then(action, action)
-    this.notebookMutationQueue = run.then(
-      () => undefined,
-      () => undefined
-    )
-    return run
+    return this.notebookMutationQueue.enqueue(action)
   }
 
   private enqueueSettingsUpdate<T>(action: () => Promise<T>): Promise<T> {
@@ -2121,6 +2298,14 @@ function resolveProjectById(projects: Project[], projectId: string): Project {
   return project
 }
 
+function resolveProjectMilestone(project: Project, milestoneId: string): ProjectMilestone {
+  const milestone = project.milestones?.find((item) => item.id === milestoneId)
+  if (!milestone) {
+    throw new Error(`Milestone not found: ${milestoneId}`)
+  }
+  return milestone
+}
+
 async function resetIndexArtifacts(indexPath: string, fileMapPath: string): Promise<void> {
   const artifacts = [
     indexPath,
@@ -2177,18 +2362,18 @@ function createStableId(relPath: string): string {
 function isFileExistsError(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'EEXIST'
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'EEXIST'
   )
 }
 
 function isMissingPathError(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'ENOENT'
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ENOENT'
   )
 }
 
@@ -2205,7 +2390,12 @@ async function pathExists(targetPath: string): Promise<boolean> {
 }
 
 function getFleetingTitle(content: string): string {
-  return content.split(/\r?\n/).find((line) => line.trim())?.trim() || 'Captured thought'
+  return (
+    content
+      .split(/\r?\n/)
+      .find((line) => line.trim())
+      ?.trim() || 'Captured thought'
+  )
 }
 
 function createTaskFromFleetingNote(content: string): CalendarTask {
@@ -2221,6 +2411,7 @@ function createTaskFromFleetingNote(content: string): CalendarTask {
     id: `task-${Date.now()}-${randomUUID().slice(0, 8)}`,
     title: title.slice(0, 200),
     ...(description ? { description: description.slice(0, 2000) } : {}),
+    tags: [],
     completed: false,
     status: 'pending',
     createdAt: new Date().toISOString(),
@@ -2321,7 +2512,10 @@ function formatProjectContext(project: Project): string {
     'Tasks:',
     project.tasks && project.tasks.length > 0
       ? project.tasks
-          .map((task) => `- ${task.title} | due ${task.date ?? 'unscheduled'} | status ${task.status ?? (task.completed ? 'completed' : 'pending')}`)
+          .map(
+            (task) =>
+              `- ${task.title} | due ${task.date ?? task.endDate ?? 'unscheduled'} | status ${task.status ?? (task.completed ? 'completed' : 'pending')}`
+          )
           .join('\n')
       : '- None'
   ].join('\n')
@@ -2602,6 +2796,8 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     profile: settings.profile,
     ai: settings.ai,
     fontFamily: settings.fontFamily,
+    pythonCondaEnvironmentPath: settings.pythonCondaEnvironmentPath,
+    pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
     calendarTasks: settings.calendarTasks,
     tasks: settings.tasks ?? settings.calendarTasks,
     projectIcons: settings.projectIcons,
@@ -2663,7 +2859,10 @@ function deriveSettingsHistoryLabel(
     }
   }
 
-  if (previous.calendarTasks.length > next.calendarTasks.length || next.tasks?.length !== previous.tasks?.length) {
+  if (
+    previous.calendarTasks.length > next.calendarTasks.length ||
+    next.tasks?.length !== previous.tasks?.length
+  ) {
     return 'Delete task'
   }
 

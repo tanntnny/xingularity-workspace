@@ -57,14 +57,15 @@ export class ReminderService {
       // Skip completed tasks
       if (task.completed) continue
 
-      // Skip tasks without a date (unscheduled tasks)
-      if (!task.date) continue
+      // Skip tasks without a start date or deadline (unscheduled tasks)
+      const taskDate = task.date ?? task.endDate
+      if (!taskDate) continue
 
       // Skip tasks without reminders
       if (!task.reminders || task.reminders.length === 0) continue
 
       // Parse task date and time
-      const taskDateTime = this.parseTaskDateTime(task.date, task.time)
+      const taskDateTime = this.parseTaskDateTime(taskDate, task.time)
       if (!taskDateTime) continue
 
       for (const reminder of task.reminders) {

@@ -6,6 +6,7 @@ import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
 import { TaskStatusIcon } from './TaskStatusIcon'
 import { getTaskStatus, TASK_STATUS_META } from '../lib/taskStatus'
 import { NoteShapeIcon } from './NoteShapeIcon'
+import { TaskTagSummary } from './TaskTagSummary'
 
 interface CalendarTaskHoverCardProps {
   task: CalendarTask
@@ -26,13 +27,13 @@ export function CalendarTaskHoverCard({
       y={y}
       className="w-72 rounded-lg border-border bg-card p-4 text-card-foreground shadow-sm"
     >
-      <div className="mb-2 truncate text-sm font-semibold text-foreground" title={task.title}>
+      <div className="mb-2 truncate text-base font-bold text-foreground" title={task.title}>
         {task.title}
       </div>
       <dl className="space-y-1.5">
         <CalendarTaskPropertyRow label="Status">
           <span className="flex min-w-0 items-center gap-1.5">
-            <TaskStatusIcon status={task.status} completed={task.completed} size={13} />
+            <TaskStatusIcon status={task.status} completed={task.completed} size={18} />
             {TASK_STATUS_META[getTaskStatus(task.status, task.completed)].label}
           </span>
         </CalendarTaskPropertyRow>
@@ -49,10 +50,17 @@ export function CalendarTaskHoverCard({
         ) : task.projectId ? (
           <CalendarTaskPropertyRow label="Project">{task.projectId}</CalendarTaskPropertyRow>
         ) : null}
-        <CalendarTaskPropertyRow label="Date">{task.date ?? 'Unscheduled'}</CalendarTaskPropertyRow>
+        <CalendarTaskPropertyRow label={task.date ? 'Date' : 'Due'}>
+          {task.date ?? task.endDate ?? 'Unscheduled'}
+        </CalendarTaskPropertyRow>
         <CalendarTaskPropertyRow label="Type">
           <CalendarTaskTypeBadge taskType={task.taskType} />
         </CalendarTaskPropertyRow>
+        {task.tags.length > 0 ? (
+          <CalendarTaskPropertyRow label="Tags">
+            <TaskTagSummary tags={task.tags} mode="compact" />
+          </CalendarTaskPropertyRow>
+        ) : null}
         {(task.reminders || []).some((reminder) => reminder.enabled) ? (
           <CalendarTaskPropertyRow label="Reminders">Enabled</CalendarTaskPropertyRow>
         ) : null}

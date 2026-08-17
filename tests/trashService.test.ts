@@ -64,6 +64,25 @@ describe('TrashService', () => {
     )
   })
 
+  it('moves and restores an Excalidraw backup with its drawing', async () => {
+    const { notesDir, trash } = await makeVault()
+    const drawingPath = path.join(notesDir, 'diagram.excalidraw')
+    await fs.writeFile(drawingPath, '{"version":1}', 'utf-8')
+    await fs.writeFile(`${drawingPath}.bak`, '{"version":1,"backup":true}', 'utf-8')
+
+    const entry = await trash.moveEntryToTrash('diagram.excalidraw')
+    const trashedDrawing = path.join(notesDir, '..', '.trash', entry.trashRelPath)
+
+    await expect(fs.readFile(`${trashedDrawing}.bak`, 'utf-8')).resolves.toBe(
+      '{"version":1,"backup":true}'
+    )
+
+    await trash.restoreEntry(entry)
+    await expect(fs.readFile(`${drawingPath}.bak`, 'utf-8')).resolves.toBe(
+      '{"version":1,"backup":true}'
+    )
+  })
+
   it('archives settings-backed project, task, and grid deletes', async () => {
     const { rootDir, trash } = await makeVault()
     const project = makeProject()
@@ -76,6 +95,7 @@ describe('TrashService', () => {
         {
           id: 'task-1',
           title: 'Task',
+          tags: [],
           completed: false,
           createdAt: '2026-04-19T00:00:00.000Z',
           priority: 'medium',
@@ -146,6 +166,8 @@ function makeSettings(): AppSettings {
     profile: { name: '' },
     ai: { mistralApiKey: '' },
     fontFamily: 'serif',
+    pythonCondaEnvironmentPath: null,
+    pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

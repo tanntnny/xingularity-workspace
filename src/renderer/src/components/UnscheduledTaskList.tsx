@@ -8,7 +8,6 @@ import {
   TaskReminder,
   TaskStatus
 } from '../../../shared/types'
-import { TaskEditDialog } from './TaskEditDialog'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
@@ -27,16 +26,16 @@ import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 export interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
+  hasActiveFilter?: boolean
   projects?: Project[]
   selectedDate: string
   newTaskValue: string
   onNewTaskValueChange: (value: string) => void
-  onToggle: (taskId: string) => void
+  onOpenTask?: (taskId: string) => void
   onDelete: (taskId: string) => void
-  onRename: (taskId: string, newTitle: string) => void
   onUpdatePriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
-  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
+  onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
   onUpdateStatus?: (taskId: string, status: TaskStatus) => void
   onUpdateTime: (taskId: string, time: string | undefined) => void
   onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
@@ -47,16 +46,16 @@ export interface UnscheduledTaskListProps {
 
 export function UnscheduledTaskList({
   tasks,
+  hasActiveFilter = false,
   projects = [],
   selectedDate,
   newTaskValue,
   onNewTaskValueChange,
-  onToggle,
+  onOpenTask,
   onDelete,
-  onRename,
   onUpdatePriority,
   onUpdateTaskType,
-  onUpdateTaskProject,
+  onUpdateTask,
   onUpdateStatus,
   onUpdateTime,
   onUpdateReminders,
@@ -70,7 +69,6 @@ export function UnscheduledTaskList({
     x: number
     y: number
   } | null>(null)
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
 
   const pendingCount = tasks.filter((t) => !t.completed).length
   const completedCount = tasks.filter((t) => t.completed).length
@@ -83,7 +81,6 @@ export function UnscheduledTaskList({
     baseDelayMs: 0,
     maxStaggerSteps: 0
   })
-  const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) : undefined
 
   useEffect(() => subscribeCalendarTaskUnscheduledDragOver(setIsDragOver), [])
 
@@ -173,9 +170,17 @@ export function UnscheduledTaskList({
                   key={task.id}
                   task={task}
                   selectedDate={selectedDate}
-                  onToggle={onToggle}
                   onDelete={onDelete}
-                  onRename={onRename}
+                  onUpdateStatus={(taskId, status) => {
+                    if (onUpdateStatus) {
+                      onUpdateStatus(taskId, status)
+                      return
+                    }
+                    onUpdateTask?.(taskId, {
+                      status,
+                      completed: status === 'completed'
+                    })
+                  }}
                   onUpdatePriority={onUpdatePriority}
                   onUpdateTaskType={onUpdateTaskType}
                   onUpdateTime={onUpdateTime}
@@ -209,7 +214,7 @@ export function UnscheduledTaskList({
                     }}
                     onClick={() => {
                       setHoveredTaskCard(null)
-                      setEditingTaskId(task.id)
+                      onOpenTask?.(task.id)
                     }}
                     onMouseMove={(event) => {
                       const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
@@ -237,7 +242,7 @@ export function UnscheduledTaskList({
 
                       event.preventDefault()
                       setHoveredTaskCard(null)
-                      setEditingTaskId(task.id)
+                      onOpenTask?.(task.id)
                     }}
                     className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
                   >
@@ -257,9 +262,15 @@ export function UnscheduledTaskList({
                 <div className="border bg-card text-card-foreground mb-3 flex h-12 w-12 items-center justify-center rounded-lg">
                   <CalendarPlus size={24} className="text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium text-foreground">No unscheduled tasks</p>
+                <p className="text-sm font-medium text-foreground">
+                  {hasActiveFilter
+                    ? 'No unscheduled tasks match current filters'
+                    : 'No unscheduled tasks'}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Add a task above or drag from calendar
+                  {hasActiveFilter
+                    ? 'Clear a filter to see other unscheduled tasks'
+                    : 'Add a task above or drag from calendar'}
                 </p>
               </div>
             )}
@@ -276,33 +287,6 @@ export function UnscheduledTaskList({
           }
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
-        />
-      ) : null}
-      {editingTask ? (
-        <TaskEditDialog
-          task={editingTask}
-          projects={projects}
-          onClose={() => setEditingTaskId(null)}
-          onSave={(taskId, patch) => {
-            if (patch.title) onRename(taskId, patch.title)
-            if (patch.priority) onUpdatePriority(taskId, patch.priority)
-            if (patch.taskType) onUpdateTaskType(taskId, patch.taskType)
-            if (patch.status) onUpdateStatus?.(taskId, patch.status)
-            if ('projectId' in patch) onUpdateTaskProject?.(taskId, patch.projectId)
-            if ('date' in patch || 'time' in patch) {
-              if (patch.date) {
-                onScheduleTask(taskId, patch.date)
-              } else {
-                onUnscheduleTask?.(taskId)
-              }
-              onUpdateTime(taskId, patch.time)
-            } else {
-              if ('endDate' in patch && patch.endDate) {
-                onScheduleTask(taskId, patch.endDate)
-              }
-            }
-          }}
-          onDelete={onDelete}
         />
       ) : null}
     </div>

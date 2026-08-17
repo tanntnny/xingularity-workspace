@@ -3,27 +3,23 @@ import { flushSync } from 'react-dom'
 import {
   ChevronDown,
   Copy,
-  CreditCard,
   Download,
   LayoutGrid,
-  Paintbrush,
   Trash2,
   Plus,
   Link2,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
-  Clock3,
   FolderOpen,
-  FolderKanban,
-  Inbox,
-  NotebookPen,
   ChevronUp,
   Star,
-  SlidersHorizontal
+  FileText,
+  PenTool
 } from './components/ui/icons'
 import {
   CalendarTask,
+  CondaEnvironment,
   FleetingConversionResult,
   FleetingConversionTarget,
   FleetingNote,
@@ -33,6 +29,7 @@ import {
   NoteTreeNode,
   Project,
   ProjectIconStyle,
+  ProjectMilestone,
   ProjectPropertiesPatch,
   ProjectState,
   NativeMenuItemDescriptor,
@@ -43,11 +40,10 @@ import {
   HistoryAffectedAreas,
   VaultOpenResult
 } from '../../shared/types'
-import {
-  isExcalidrawPath,
-  stripNotebookFileExtension
-} from '../../shared/excalidrawFile'
+import { isExcalidrawPath, stripNotebookFileExtension } from '../../shared/excalidrawFile'
 import { normalizeProjectIcon } from '../../shared/projectIcons'
+import { normalizeCalendarEndDate } from '../../shared/calendarTaskDates'
+import { normalizeTaskTags } from '../../shared/taskTags'
 import {
   appendTextToNoteMarkdown,
   getNoteDisplayName,
@@ -65,9 +61,13 @@ import {
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { CalendarWeekView } from './components/CalendarWeekView'
 import { CalendarTaskPanel } from './components/CalendarTaskPanel'
+import { TaskEditDialog } from './components/TaskEditDialog'
+import { TaskPropertiesPanel } from './components/TaskPropertiesPanel'
+import { CalendarTaskFilter } from './components/CalendarTaskFilter'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
 import { NotesTreeView } from './components/NotesTreeView'
-import { NotebookEmptyState } from './components/NotebookEmptyState'
+import { NotebookCardBrowser } from './components/NotebookCardBrowser'
+import { NoteShapeIcon } from './components/NoteShapeIcon'
 import type { NoteEditorHandle } from './components/Editor'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
@@ -79,7 +79,6 @@ import {
   normalizePageForPlatform
 } from './platform/pageAvailability'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
-import { Badge } from './components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,10 +104,7 @@ import {
   WorkspaceHeaderActionGroup
 } from './components/ui/document-workspace'
 import { EmptyState } from './components/ui/empty-state'
-import {
-  WorkspacePanelSection,
-  WorkspacePanelSectionHeader
-} from './components/ui/workspace-panel-section'
+import { WorkspacePanelSection } from './components/ui/workspace-panel-section'
 import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
 import { ButtonGroup } from './components/ui/button-group'
 import { EditorPage } from './pages/EditorPage'
@@ -120,11 +116,15 @@ import {
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import {
+  SchedulingHeaderActions,
   SchedulingPage,
   SchedulingRightPanel,
+  SchedulingWorkspaceBreadcrumb,
   SchedulingWorkspaceProvider
 } from './pages/SchedulingPage'
+import { SchedulingApiGuidePage } from './pages/SchedulingApiGuidePage'
 import { SchedulingViewTabs } from './components/scheduling/SchedulingViewTabs'
+import { SchedulingPythonTrustPopover } from './components/scheduling/SchedulingPythonTrustPopover'
 import type { SchedulingView } from './components/scheduling/types'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import {
@@ -138,26 +138,44 @@ import {
   KnowledgeOrphanVisibilityPanel
 } from './components/KnowledgeWorkspaceRightPanels'
 import { DesignAuditPage } from './pages/DesignAuditPage'
+import { TaskPage } from './pages/TaskPage'
 import { NoVaultPage } from './pages/NoVaultPage'
 import { CapturePage } from './pages/CapturePage'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { usePersistentState } from './hooks/usePersistentState'
-import { useStaggeredScrollReveal } from './hooks/useStaggeredScrollReveal'
 import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
 import {
   Breadcrumb,
   BreadcrumbItem,
+  BreadcrumbButton,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator
 } from './components/ui/breadcrumb'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from './components/ui/alert-dialog'
 import { Shortcut } from './components/ui/kbd'
-import { normalizeCalendarTasks } from './lib/calendarTasks'
+import {
+  filterCalendarTasks,
+  filterCalendarTasksByTags,
+  getCalendarTaskTagOptions,
+  normalizeCalendarTasks,
+  type CalendarContentFilter
+} from './lib/calendarTasks'
 import { filterProjectsForWorkspace } from './lib/projectTaskRows'
+import { APP_PAGE_ICONS } from './lib/pageIcons'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
-import { flattenRecentNotebookFiles } from './lib/notebookRecentFiles'
+import { getNotebookFolderContents } from './lib/notebookFolderContents'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -187,32 +205,50 @@ const PAGE_LABELS: Record<AppPage, string> = {
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
   schedules: 'Scheduling',
+  schedulingGuide: 'API Guide',
   designAudit: 'Design Audit',
   settings: 'Settings'
 }
 
-const PAGE_TAB_ICONS: Record<AppPage, typeof LayoutGrid> = {
-  capture: Inbox,
-  knowledge: LayoutGrid,
-  notes: NotebookPen,
-  projects: FolderKanban,
-  subscriptions: CreditCard,
-  calendar: CalendarDays,
-  schedules: Clock3,
-  designAudit: Paintbrush,
-  settings: SlidersHorizontal
-}
-
 type CalendarViewMode = 'month' | 'week'
-type CalendarContentFilter = 'all' | 'tasks'
 type StoredProjectsWorkspaceView = 'board' | 'taskList' | 'projectDetail'
 
 type WorkspacePageTab = {
   id: string
   page: AppPage
+  projectId: string | null
+  calendarDate: string
+  calendarViewMode: CalendarViewMode
 }
 
+type TaskOrigin =
+  | {
+      source: 'calendar'
+      selectedDate: string
+      viewMode: CalendarViewMode
+      contentFilter: CalendarContentFilter
+      tags: string[]
+    }
+  | { source: 'projects'; projectId: string | null }
+
+type TaskOriginRequest = { source: 'calendar' } | { source: 'projects'; projectId: string | null }
+
 const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
+
+function createWorkspacePageTab(
+  id: string,
+  page: AppPage,
+  context: Partial<Pick<WorkspacePageTab, 'projectId' | 'calendarDate' | 'calendarViewMode'>> = {}
+): WorkspacePageTab {
+  return {
+    id,
+    page,
+    projectId: null,
+    calendarDate: toIsoDate(new Date()),
+    calendarViewMode: 'month',
+    ...context
+  }
+}
 
 const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 300
 const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 220
@@ -307,51 +343,6 @@ const CALENDAR_VIEW_MODE_OPTIONS = [
 
 const NOTE_AUTOSAVE_DELAY_MS = 1200
 
-function SettingsRightPanelSections(): ReactElement {
-  const revealItemIds = ['settings-appearance', 'settings-editor-defaults', 'settings-shortcuts']
-  const { containerRef, getRevealItemProps } = useStaggeredScrollReveal(revealItemIds, {
-    resetKey: 'settings-right-panel'
-  })
-  const sections = [
-    {
-      id: 'settings-appearance',
-      heading: 'Appearance',
-      description: 'Theme and surface defaults for the workspace'
-    },
-    {
-      id: 'settings-editor-defaults',
-      heading: 'Editor Defaults',
-      description: 'Type, writing, and editing preferences'
-    },
-    {
-      id: 'settings-shortcuts',
-      heading: 'Shortcuts',
-      description: 'Keyboard actions available across the app'
-    }
-  ]
-
-  return (
-    <WorkspacePanelStack ref={containerRef} className="h-full">
-      {sections.map((section) => {
-        const revealProps = getRevealItemProps(section.id)
-        return (
-          <WorkspacePanelSection
-            key={section.id}
-            ref={revealProps.ref}
-            style={revealProps.style}
-            className={`${revealProps.className} rounded-lg`}
-          >
-            <WorkspacePanelSectionHeader
-              heading={section.heading}
-              description={section.description}
-            />
-          </WorkspacePanelSection>
-        )
-      })}
-    </WorkspacePanelStack>
-  )
-}
-
 function App(): ReactElement {
   const platform = useAppPlatform()
   const vaultApi = platform.api
@@ -387,14 +378,49 @@ function App(): ReactElement {
   const patchSettings = useVaultStore((state) => state.patchSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
-  const [schedulingView, setSchedulingView] = useState<SchedulingView>('automation')
+  const [openTaskDialogId, setOpenTaskDialogId] = useState<string | null>(null)
+  const [taskDialogOrigin, setTaskDialogOrigin] = useState<TaskOriginRequest | null>(null)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [taskOrigin, setTaskOrigin] = useState<TaskOrigin | null>(null)
+  const taskOriginRef = useRef<TaskOrigin | null>(null)
+  const [isTaskDeleteDialogOpen, setIsTaskDeleteDialogOpen] = useState(false)
+  const [schedulingReviewCount, setSchedulingReviewCount] = useState(0)
+  const [schedulingView, setSchedulingView] = useState<SchedulingView>('list')
   useEffect(() => {
     if (activePage !== 'schedules') {
-      setSchedulingView('automation')
+      setSchedulingView('list')
     }
   }, [activePage])
+
+  const refreshSchedulingReviewCount = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault?.rootPath) {
+      setSchedulingReviewCount(0)
+      return
+    }
+
+    try {
+      const jobs = await vaultApi.schedules.listJobs()
+      setSchedulingReviewCount(jobs.filter((job) => job.lastStatus === 'review').length)
+    } catch {
+      // Keep the last known count when the non-critical indicator cannot refresh.
+    }
+  }, [vault?.rootPath, vaultApi])
+
+  useEffect(() => {
+    void refreshSchedulingReviewCount()
+
+    if (!vaultApi || !vault?.rootPath) {
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshSchedulingReviewCount()
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [refreshSchedulingReviewCount, vault?.rootPath, vaultApi])
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspacePageTab[]>([
-    { id: INITIAL_WORKSPACE_TAB_ID, page: 'notes' }
+    createWorkspacePageTab(INITIAL_WORKSPACE_TAB_ID, 'notes')
   ])
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState(INITIAL_WORKSPACE_TAB_ID)
   const workspaceTabSequenceRef = useRef(1)
@@ -410,6 +436,18 @@ function App(): ReactElement {
     () => window.matchMedia('(prefers-color-scheme: dark)').matches
   )
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const pythonCondaEnvironmentPath = useVaultStore(
+    (state) => state.settings.pythonCondaEnvironmentPath
+  )
+  const pythonCondaExecutablePath = useVaultStore(
+    (state) => state.settings.pythonCondaExecutablePath
+  )
+  const [condaEnvironments, setCondaEnvironments] = useState<CondaEnvironment[]>([])
+  const [condaEnvironmentsLoading, setCondaEnvironmentsLoading] = useState(false)
+  const [condaEnvironmentsError, setCondaEnvironmentsError] = useState<string | null>(null)
+  const [detectedCondaExecutablePath, setDetectedCondaExecutablePath] = useState<string | null>(
+    null
+  )
   const settingsMutationVersionRef = useRef(0)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
@@ -421,8 +459,28 @@ function App(): ReactElement {
   )
   const [calendarContentFilter, setCalendarContentFilter] =
     usePersistentState<CalendarContentFilter>('calendar-content-filter', 'all', {
-      validate: (value): value is CalendarContentFilter => value === 'all' || value === 'tasks'
+      validate: (value): value is CalendarContentFilter =>
+        value === 'all' || value === 'projectTasks' || value === 'nonProjectTasks'
     })
+  const [calendarTaskTagSettings, setCalendarTaskTagSettings] = usePersistentState<string[]>(
+    'calendar-task-tags',
+    [],
+    {
+      validate: (value): value is string[] =>
+        Array.isArray(value) && value.every((tag) => typeof tag === 'string')
+    }
+  )
+  const restoreTaskOrigin = useCallback((): void => {
+    const origin = taskOriginRef.current
+    if (!origin || origin.source !== 'calendar') {
+      return
+    }
+
+    setSelectedCalendarDate(origin.selectedDate)
+    setCalendarViewMode(origin.viewMode)
+    setCalendarContentFilter(origin.contentFilter)
+    setCalendarTaskTagSettings(origin.tags)
+  }, [setCalendarContentFilter, setCalendarTaskTagSettings, setCalendarViewMode])
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [fleetingNotes, setFleetingNotes] = useState<FleetingNote[]>([])
   const [fleetingNotesLoading, setFleetingNotesLoading] = useState(false)
@@ -436,7 +494,7 @@ function App(): ReactElement {
   const [isNoteExportDialogOpen, setIsNoteExportDialogOpen] = useState(false)
   const [noteExportFormat, setNoteExportFormat] = useState<NoteExportFormat>('markdown')
   const [isNoteExporting, setIsNoteExporting] = useState(false)
-  const [isFolderPdfExporting, setIsFolderPdfExporting] = useState(false)
+  const [isFolderExporting, setIsFolderExporting] = useState(false)
 
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [areAllNoteFoldersCollapsed, setAreAllNoteFoldersCollapsed] = useState(false)
@@ -455,21 +513,34 @@ function App(): ReactElement {
   }, [knowledgeOrphanRingRadiusInput])
   const [noteTree, setNoteTree] = useState<NoteTreeNode[]>([])
   const [selectedNoteTreeEntries, setSelectedNoteTreeEntries] = useState<NoteTreeSelection>([])
+  const [browseFolderPath, setBrowseFolderPath] = useState<string | null>(null)
   const primarySelectedNoteTreeEntry = getPrimaryNoteTreeSelectionEntry(selectedNoteTreeEntries)
   const [pendingNoteTreeEditId, setPendingNoteTreeEditId] = useState<string | null>(null)
   const handlePendingNoteTreeEditHandled = useCallback((): void => {
     setPendingNoteTreeEditId(null)
   }, [])
   const visibleNoteTree = noteTree
-  const recentNotebookFiles = useMemo(
-    () => flattenRecentNotebookFiles(visibleNoteTree, recentNotebookPaths),
-    [recentNotebookPaths, visibleNoteTree]
+  const handleNotebookBrowseFolder = useCallback(
+    (requestedPath: string | null): void => {
+      const nextPath = getNotebookFolderContents(noteTree, requestedPath).path
+      setBrowseFolderPath(nextPath)
+      setSelectedNoteTreeEntries(nextPath ? [{ kind: 'folder', relPath: nextPath }] : [])
+    },
+    [noteTree]
   )
+  const handleNoteTreeSelectionChange = useCallback((entries: NoteTreeSelection): void => {
+    setSelectedNoteTreeEntries(entries)
+    const primaryEntry = getPrimaryNoteTreeSelectionEntry(entries)
+    if (primaryEntry?.kind === 'folder') {
+      setBrowseFolderPath(primaryEntry.relPath)
+    }
+  }, [])
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const selectedProjectIdRef = useRef<string | null>(null)
   const projectMutationVersionRef = useRef(new Map<string, number>())
+  const projectMilestoneMutationVersionRef = useRef(new Map<string, number>())
   const favoriteProjectMutationVersionRef = useRef(new Map<string, number>())
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectsWorkspaceFilterMode>('all')
   const [, setStoredProjectsWorkspaceView] = usePersistentState<StoredProjectsWorkspaceView>(
@@ -522,11 +593,49 @@ function App(): ReactElement {
   const previousActivePageRef = useRef(activePage)
   const activePageRef = useRef(activePage)
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const taskFlushRef = useRef<(() => Promise<void>) | null>(null)
   const notebookRefreshQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
   const hasAttemptedVaultRestoreRef = useRef(false)
-  const hasRightPanel = activePage !== 'designAudit' && activePage !== 'capture'
+  const hasRightPanel =
+    activePage !== 'designAudit' &&
+    activePage !== 'capture' &&
+    activePage !== 'schedulingGuide' &&
+    activePage !== 'settings' &&
+    !(activePage === 'schedules' && schedulingView === 'list')
   const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
+
+  const loadCondaEnvironments = useCallback(async (): Promise<void> => {
+    if (!vaultApi?.python) {
+      setCondaEnvironments([])
+      setCondaEnvironmentsError('Conda environment selection is only available in the desktop app.')
+      setDetectedCondaExecutablePath(null)
+      return
+    }
+
+    setCondaEnvironmentsLoading(true)
+    setCondaEnvironmentsError(null)
+    try {
+      const result = await vaultApi.python.listCondaEnvironments()
+      setCondaEnvironments(result.environments)
+      setDetectedCondaExecutablePath(result.executablePath)
+      setCondaEnvironmentsError(result.error)
+    } catch (error) {
+      setCondaEnvironments([])
+      setDetectedCondaExecutablePath(null)
+      setCondaEnvironmentsError(String(error))
+    } finally {
+      setCondaEnvironmentsLoading(false)
+    }
+  }, [vaultApi])
+
+  useEffect(() => {
+    if (activePage !== 'settings') {
+      return
+    }
+
+    void loadCondaEnvironments()
+  }, [activePage, loadCondaEnvironments])
 
   useEffect(() => {
     currentNotePathRef.current = currentNotePath
@@ -558,10 +667,37 @@ function App(): ReactElement {
     []
   )
 
+  const updateActiveWorkspaceTabContext = useCallback(
+    (
+      patch: Partial<Pick<WorkspacePageTab, 'projectId' | 'calendarDate' | 'calendarViewMode'>>
+    ): void => {
+      const activeTabId = activeWorkspaceTabIdRef.current
+      setWorkspaceTabs((tabs) =>
+        tabs.map((tab) => (tab.id === activeTabId ? { ...tab, ...patch } : tab))
+      )
+    },
+    []
+  )
+
+  useEffect(() => {
+    updateActiveWorkspaceTabContext({
+      projectId: selectedProjectId,
+      calendarDate: selectedCalendarDate,
+      calendarViewMode
+    })
+  }, [
+    activeWorkspaceTabId,
+    calendarViewMode,
+    selectedCalendarDate,
+    selectedProjectId,
+    updateActiveWorkspaceTabContext
+  ])
+
   useEffect(() => {
     const session = getWorkspaceTabSession()
     session.currentNotePath = currentNotePath
     session.currentExcalidrawPath = currentExcalidrawPath
+    session.browseFolderPath = browseFolderPath
     session.currentNoteContent = currentNoteContent
     session.currentNoteTags = [...currentNoteTagsState]
     session.currentNoteEditorDraft = currentNoteEditorDraft
@@ -574,6 +710,7 @@ function App(): ReactElement {
     currentNoteEditorDraft,
     currentNotePath,
     currentNoteTagsState,
+    browseFolderPath,
     getWorkspaceTabSession,
     searchQuery,
     searchResults,
@@ -941,7 +1078,8 @@ function App(): ReactElement {
   )
 
   const captureActiveWorkspaceSession = useCallback(async (): Promise<void> => {
-    const session = getWorkspaceTabSession(activeWorkspaceTabIdRef.current)
+    const capturedTabId = activeWorkspaceTabIdRef.current
+    const session = getWorkspaceTabSession(capturedTabId)
     let checkpointedSession: NoteEditorSessionSnapshot | null = null
     if (currentNotePathRef.current) {
       checkpointedSession = await checkpointCurrentNote({ updateDraftState: false })
@@ -949,16 +1087,33 @@ function App(): ReactElement {
 
     session.currentNotePath = currentNotePathRef.current
     session.currentExcalidrawPath = currentExcalidrawPathRef.current
+    session.browseFolderPath = browseFolderPath
     session.currentNoteContent = checkpointedSession?.content ?? currentNoteContentRef.current
     session.currentNoteTags = [...(checkpointedSession?.tags ?? currentNoteTagsRef.current)]
     session.currentNoteEditorDraft = checkpointedSession?.content ?? currentNoteEditorDraft
     session.searchQuery = searchQuery
     session.searchResults = [...searchResults]
     session.selectedNoteTreeEntries = selectedNoteTreeEntries.map((entry) => ({ ...entry }))
+    setWorkspaceTabs((tabs) =>
+      tabs.map((tab) =>
+        tab.id === capturedTabId
+          ? {
+              ...tab,
+              projectId: selectedProjectId,
+              calendarDate: selectedCalendarDate,
+              calendarViewMode
+            }
+          : tab
+      )
+    )
   }, [
+    calendarViewMode,
     checkpointCurrentNote,
     currentNoteEditorDraft,
     getWorkspaceTabSession,
+    browseFolderPath,
+    selectedCalendarDate,
+    selectedProjectId,
     searchQuery,
     searchResults,
     selectedNoteTreeEntries
@@ -992,6 +1147,7 @@ function App(): ReactElement {
       }
 
       setCurrentExcalidrawPath(session.currentExcalidrawPath)
+      setBrowseFolderPath(session.browseFolderPath)
       setCurrentNotePath(nextNotePath)
       setCurrentNoteContent(nextNoteContent)
       setCurrentNoteTagsState(nextTags)
@@ -1004,6 +1160,7 @@ function App(): ReactElement {
       getStoredNoteFingerprint,
       getWorkspaceTabSession,
       setCurrentExcalidrawPath,
+      setBrowseFolderPath,
       setCurrentNoteContent,
       setCurrentNotePath,
       setSearchQuery,
@@ -1011,32 +1168,191 @@ function App(): ReactElement {
     ]
   )
 
-  // Unscheduled tasks (no date assigned)
-  const unscheduledTasks = useMemo(() => {
-    return normalizeCalendarTasks(calendarTasks).filter((task) => !task.date)
-  }, [calendarTasks])
+  const normalizedCalendarTasks = useMemo(
+    () => normalizeCalendarTasks(calendarTasks),
+    [calendarTasks]
+  )
 
-  const scheduledCalendarTasks = useMemo(() => {
-    return normalizeCalendarTasks(calendarTasks).filter((task) => Boolean(task.date))
-  }, [calendarTasks])
+  const activeTask = useMemo(
+    () =>
+      openTaskId ? (normalizedCalendarTasks.find((task) => task.id === openTaskId) ?? null) : null,
+    [normalizedCalendarTasks, openTaskId]
+  )
+  const taskDialogTask = useMemo(
+    () =>
+      openTaskDialogId
+        ? (normalizedCalendarTasks.find((task) => task.id === openTaskDialogId) ?? null)
+        : null,
+    [normalizedCalendarTasks, openTaskDialogId]
+  )
+  const activeTaskProject = useMemo(
+    () =>
+      taskOrigin?.source === 'projects' && taskOrigin.projectId
+        ? (projects.find((project) => project.id === taskOrigin.projectId) ?? null)
+        : null,
+    [projects, taskOrigin]
+  )
+
+  useEffect(() => {
+    taskOriginRef.current = taskOrigin
+  }, [taskOrigin])
+
+  useEffect(() => {
+    if (!openTaskId || activeTask) {
+      return
+    }
+
+    setOpenTaskId(null)
+    setTaskOrigin(null)
+  }, [activeTask, openTaskId])
+
+  useEffect(() => {
+    if (!openTaskDialogId || taskDialogTask) {
+      return
+    }
+
+    setOpenTaskDialogId(null)
+    setTaskDialogOrigin(null)
+  }, [openTaskDialogId, taskDialogTask])
+
+  const openTaskDialog = useCallback(
+    (taskId: string, origin: TaskOriginRequest): void => {
+      if (!normalizedCalendarTasks.some((task) => task.id === taskId)) {
+        return
+      }
+
+      setTaskDialogOrigin(origin)
+      setOpenTaskDialogId(taskId)
+    },
+    [normalizedCalendarTasks]
+  )
+
+  const openTaskPage = useCallback(
+    (taskId: string, origin: TaskOriginRequest): void => {
+      if (!normalizedCalendarTasks.some((task) => task.id === taskId)) {
+        return
+      }
+
+      const nextOrigin: TaskOrigin =
+        origin.source === 'calendar'
+          ? {
+              source: 'calendar',
+              selectedDate: selectedCalendarDate,
+              viewMode: calendarViewMode,
+              contentFilter: calendarContentFilter,
+              tags: [...calendarTaskTagSettings]
+            }
+          : origin
+      setOpenTaskDialogId(null)
+      setTaskDialogOrigin(null)
+      taskOriginRef.current = nextOrigin
+      setTaskOrigin(nextOrigin)
+      setOpenTaskId(taskId)
+    },
+    [
+      calendarContentFilter,
+      calendarTaskTagSettings,
+      calendarViewMode,
+      normalizedCalendarTasks,
+      selectedCalendarDate
+    ]
+  )
+
+  const closeTaskPage = useCallback(async (): Promise<void> => {
+    await taskFlushRef.current?.()
+    taskFlushRef.current = null
+    setOpenTaskDialogId(null)
+    setTaskDialogOrigin(null)
+    restoreTaskOrigin()
+    taskOriginRef.current = null
+    setOpenTaskId(null)
+    setTaskOrigin(null)
+  }, [restoreTaskOrigin])
+
+  const registerTaskFlush = useCallback((flush: (() => Promise<void>) | null): void => {
+    taskFlushRef.current = flush
+  }, [])
+
+  // Unscheduled tasks have neither a start date nor a deadline.
+  const unscheduledTasks = useMemo(() => {
+    return normalizedCalendarTasks.filter((task) => !task.date && !task.endDate)
+  }, [normalizedCalendarTasks])
+
+  const projectCalendarTasks = useMemo(
+    () => normalizedCalendarTasks.filter((task) => Boolean(task.projectId)),
+    [normalizedCalendarTasks]
+  )
+  const nonProjectCalendarTasks = useMemo(
+    () => normalizedCalendarTasks.filter((task) => !task.projectId),
+    [normalizedCalendarTasks]
+  )
   const calendarContentFilterOptions = useMemo(
     () => [
       {
         value: 'all' as const,
         label: 'All',
-        count: scheduledCalendarTasks.length
+        count: normalizedCalendarTasks.length
       },
       {
-        value: 'tasks' as const,
-        label: 'Tasks',
-        count: scheduledCalendarTasks.length
+        value: 'projectTasks' as const,
+        label: 'Project Tasks',
+        count: projectCalendarTasks.length
+      },
+      {
+        value: 'nonProjectTasks' as const,
+        label: 'Non-project Tasks',
+        count: nonProjectCalendarTasks.length
       }
     ],
-    [scheduledCalendarTasks.length]
+    [nonProjectCalendarTasks.length, normalizedCalendarTasks.length, projectCalendarTasks.length]
   )
-  const visibleCalendarTasks = useMemo(() => {
-    return calendarTasks
-  }, [calendarTasks])
+  const calendarTaskTagOptions = useMemo(
+    () => getCalendarTaskTagOptions(normalizedCalendarTasks),
+    [normalizedCalendarTasks]
+  )
+  const availableCalendarTaskTags = useMemo(
+    () => new Set(calendarTaskTagOptions.map((option) => option.value)),
+    [calendarTaskTagOptions]
+  )
+  const activeCalendarTaskTags = useMemo(
+    () =>
+      normalizeTaskTags(calendarTaskTagSettings).filter((tag) =>
+        availableCalendarTaskTags.has(tag)
+      ),
+    [availableCalendarTaskTags, calendarTaskTagSettings]
+  )
+  useEffect(() => {
+    if (!settingsLoaded) {
+      return
+    }
+
+    const tagsChanged =
+      activeCalendarTaskTags.length !== calendarTaskTagSettings.length ||
+      activeCalendarTaskTags.some((tag, index) => tag !== calendarTaskTagSettings[index])
+
+    if (tagsChanged) {
+      setCalendarTaskTagSettings(activeCalendarTaskTags)
+    }
+  }, [activeCalendarTaskTags, calendarTaskTagSettings, setCalendarTaskTagSettings, settingsLoaded])
+  const tagFilteredCalendarTasks = useMemo(
+    () => filterCalendarTasksByTags(normalizedCalendarTasks, activeCalendarTaskTags),
+    [activeCalendarTaskTags, normalizedCalendarTasks]
+  )
+  const visibleCalendarTasks = useMemo(
+    () => filterCalendarTasks(tagFilteredCalendarTasks, calendarContentFilter),
+    [calendarContentFilter, tagFilteredCalendarTasks]
+  )
+  const visibleUnscheduledTasks = useMemo(
+    () =>
+      filterCalendarTasks(
+        filterCalendarTasksByTags(unscheduledTasks, activeCalendarTaskTags),
+        calendarContentFilter
+      ),
+    [activeCalendarTaskTags, calendarContentFilter, unscheduledTasks]
+  )
+  const calendarActiveFilterCount =
+    activeCalendarTaskTags.length + (calendarContentFilter === 'all' ? 0 : 1)
+  const hasActiveCalendarFilter = calendarActiveFilterCount > 0
   const calendarUndoneCount = useMemo(() => {
     return calendarTasks.filter((task) => !task.completed).length
   }, [calendarTasks])
@@ -1101,15 +1417,7 @@ function App(): ReactElement {
     return null
   }, [activePage, hasVault, searchQuery, currentExcalidrawPath, currentNotePath])
   const calendarCurrentPeriodTitle = useMemo(() => {
-    if (calendarViewMode === 'week') {
-      const start = startOfWeekIso(parseIsoDate(selectedCalendarDate))
-      return formatWeekRange(start, addIsoDays(start, 6))
-    }
-
-    return parseIsoDate(selectedCalendarDate).toLocaleDateString(undefined, {
-      month: 'long',
-      year: 'numeric'
-    })
+    return formatCalendarTabPeriodTitle(selectedCalendarDate, calendarViewMode)
   }, [calendarViewMode, selectedCalendarDate])
   const calendarTodayHeader = useMemo(() => getCalendarHeaderDateParts(todayIso), [todayIso])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
@@ -1125,6 +1433,13 @@ function App(): ReactElement {
       .split('/')
       .filter(Boolean)
   }, [activePage, currentExcalidrawPath, currentNotePath, searchQuery])
+  const notebookBrowseBreadcrumbSegments = useMemo(() => {
+    if (activePage !== 'notes' || searchQuery.trim() || currentNotePath || currentExcalidrawPath) {
+      return null
+    }
+
+    return browseFolderPath?.split('/').filter(Boolean) ?? []
+  }, [activePage, browseFolderPath, currentExcalidrawPath, currentNotePath, searchQuery])
 
   useEffect(() => {
     if (!vaultApi || !vault?.rootPath) {
@@ -1472,6 +1787,51 @@ function App(): ReactElement {
     ]
   )
 
+  const handleNotebookBreadcrumbFolderClick = useCallback(
+    async (requestedPath: string | null): Promise<void> => {
+      try {
+        await flushCurrentNote({ force: true, settleEditor: true })
+      } catch (error) {
+        pushToast('error', String(error))
+        return
+      }
+
+      const nextPath = getNotebookFolderContents(noteTree, requestedPath).path
+      const activeSession = getWorkspaceTabSession()
+      activeSession.currentNotePath = null
+      activeSession.currentExcalidrawPath = null
+      activeSession.currentNoteContent = ''
+      activeSession.currentNoteTags = []
+      activeSession.currentNoteEditorDraft = null
+      activeSession.browseFolderPath = nextPath
+      activeSession.selectedNoteTreeEntries = nextPath
+        ? [{ kind: 'folder', relPath: nextPath }]
+        : []
+
+      currentNotePathRef.current = null
+      currentExcalidrawPathRef.current = null
+      currentNoteContentRef.current = ''
+      currentNoteTagsRef.current = []
+      setCurrentNotePath(null)
+      setCurrentExcalidrawPath(null)
+      setCurrentNoteContent('')
+      setCurrentNoteTagsState([])
+      resetCurrentNoteEditorSession()
+      setBrowseFolderPath(nextPath)
+      setSelectedNoteTreeEntries(nextPath ? [{ kind: 'folder', relPath: nextPath }] : [])
+    },
+    [
+      flushCurrentNote,
+      getWorkspaceTabSession,
+      noteTree,
+      pushToast,
+      resetCurrentNoteEditorSession,
+      setCurrentExcalidrawPath,
+      setCurrentNoteContent,
+      setCurrentNotePath
+    ]
+  )
+
   const scheduleCurrentNoteAutosave = useCallback((): void => {
     if (!noteSaveCoordinator || !currentNotePathRef.current) {
       return
@@ -1620,6 +1980,14 @@ function App(): ReactElement {
 
         const targetPage = normalizePageForPlatform(platform, page)
         const currentPage = activePageRef.current
+        await taskFlushRef.current?.()
+        taskFlushRef.current = null
+        setOpenTaskDialogId(null)
+        setTaskDialogOrigin(null)
+        restoreTaskOrigin()
+        taskOriginRef.current = null
+        setOpenTaskId(null)
+        setTaskOrigin(null)
         if (targetPage === currentPage) {
           return
         }
@@ -1658,7 +2026,13 @@ function App(): ReactElement {
       pageNavigationQueueRef.current = queuedNavigation
       await queuedNavigation
     },
-    [captureActiveWorkspaceSession, hasVault, persistCurrentNoteForPageLeave, platform]
+    [
+      captureActiveWorkspaceSession,
+      hasVault,
+      persistCurrentNoteForPageLeave,
+      platform,
+      restoreTaskOrigin
+    ]
   )
 
   const createWorkspaceTabId = useCallback((): string => {
@@ -1679,11 +2053,32 @@ function App(): ReactElement {
       }
 
       const runActivation = async (): Promise<void> => {
+        await taskFlushRef.current?.()
+        taskFlushRef.current = null
+        setOpenTaskDialogId(null)
+        setTaskDialogOrigin(null)
+        restoreTaskOrigin()
+        taskOriginRef.current = null
+        setOpenTaskId(null)
+        setTaskOrigin(null)
         await captureActiveWorkspaceSession()
         await stageCurrentNoteForBackgroundSave()
 
         activeWorkspaceTabIdRef.current = tabId
         activePageRef.current = targetPage
+        if (targetPage === 'projects') {
+          const targetProjectId =
+            targetTab?.projectId && projects.some((project) => project.id === targetTab.projectId)
+              ? targetTab.projectId
+              : selectedProjectId && projects.some((project) => project.id === selectedProjectId)
+                ? selectedProjectId
+                : (projects[0]?.id ?? null)
+          selectProject(targetProjectId)
+        }
+        if (targetPage === 'calendar') {
+          setSelectedCalendarDate(targetTab?.calendarDate ?? selectedCalendarDate)
+          setCalendarViewMode(targetTab?.calendarViewMode ?? calendarViewMode)
+        }
         setActiveWorkspaceTabId(tabId)
         setActivePage(targetPage)
         restoreWorkspaceSession(tabId)
@@ -1697,9 +2092,17 @@ function App(): ReactElement {
     },
     [
       captureActiveWorkspaceSession,
+      calendarViewMode,
       hasVault,
+      projects,
       restoreWorkspaceSession,
       stageCurrentNoteForBackgroundSave,
+      restoreTaskOrigin,
+      selectProject,
+      selectedCalendarDate,
+      selectedProjectId,
+      setCalendarViewMode,
+      setSelectedCalendarDate,
       workspaceTabs
     ]
   )
@@ -1711,9 +2114,23 @@ function App(): ReactElement {
 
     const tabId = createWorkspaceTabId()
     workspaceTabSessionsRef.current[tabId] = createEmptyNotebookWorkspaceSession()
-    setWorkspaceTabs((tabs) => [...tabs, { id: tabId, page: 'notes' }])
+    setWorkspaceTabs((tabs) => [
+      ...tabs,
+      createWorkspacePageTab(tabId, 'notes', {
+        projectId: selectedProjectId,
+        calendarDate: selectedCalendarDate,
+        calendarViewMode
+      })
+    ])
     void activateWorkspaceTab(tabId, 'notes')
-  }, [activateWorkspaceTab, createWorkspaceTabId, hasVault])
+  }, [
+    activateWorkspaceTab,
+    calendarViewMode,
+    createWorkspaceTabId,
+    hasVault,
+    selectedCalendarDate,
+    selectedProjectId
+  ])
 
   const handleSelectWorkspaceTab = useCallback(
     (tabId: string): void => {
@@ -1761,10 +2178,23 @@ function App(): ReactElement {
       workspaceTabSessionsRef.current[replacementTabId] = createEmptyNotebookWorkspaceSession()
       void activateWorkspaceTab(replacementTabId, 'notes').then(() => {
         delete workspaceTabSessionsRef.current[tabId]
-        setWorkspaceTabs([{ id: replacementTabId, page: 'notes' }])
+        setWorkspaceTabs([
+          createWorkspacePageTab(replacementTabId, 'notes', {
+            projectId: selectedProjectId,
+            calendarDate: selectedCalendarDate,
+            calendarViewMode
+          })
+        ])
       })
     },
-    [activateWorkspaceTab, createWorkspaceTabId, workspaceTabs]
+    [
+      activateWorkspaceTab,
+      calendarViewMode,
+      createWorkspaceTabId,
+      selectedCalendarDate,
+      selectedProjectId,
+      workspaceTabs
+    ]
   )
 
   const refreshAfterHistoryOperation = useCallback(
@@ -1984,6 +2414,66 @@ function App(): ReactElement {
     }
   }
 
+  const updatePythonCondaEnvironment = async (path: string | null): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({
+        pythonCondaEnvironmentPath: path
+      })
+      patchSettings({ pythonCondaEnvironmentPath: nextSettings.pythonCondaEnvironmentPath })
+      pushToast('success', path ? 'Conda environment selected' : 'Using system Python')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const choosePythonCondaExecutable = async (): Promise<void> => {
+    if (!vaultApi?.python) {
+      return
+    }
+
+    try {
+      const result = await vaultApi.python.chooseCondaExecutable()
+      if (result.error) {
+        setCondaEnvironmentsError(result.error)
+        return
+      }
+
+      if (!result.path) {
+        return
+      }
+
+      const nextSettings = await vaultApi.settings.update({
+        pythonCondaExecutablePath: result.path
+      })
+      patchSettings({ pythonCondaExecutablePath: nextSettings.pythonCondaExecutablePath })
+      pushToast('success', 'Conda executable selected')
+      await loadCondaEnvironments()
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const resetPythonCondaExecutable = async (): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({
+        pythonCondaExecutablePath: null
+      })
+      patchSettings({ pythonCondaExecutablePath: nextSettings.pythonCondaExecutablePath })
+      pushToast('success', 'Using automatic Conda discovery')
+      await loadCondaEnvironments()
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
   const persistCalendarTasks = async (calendarTasks: CalendarTask[]): Promise<void> => {
     if (!vaultApi) {
       return
@@ -2088,7 +2578,8 @@ function App(): ReactElement {
     date?: string,
     time?: string,
     endTime?: string,
-    projectId?: string
+    projectId?: string,
+    milestoneId?: string
   ): Promise<CalendarTask> => {
     if (!vaultApi) {
       throw new Error('No vault is open')
@@ -2098,6 +2589,7 @@ function App(): ReactElement {
     const nextTask = await vaultApi.tasks.create({
       title: trimmed,
       projectId,
+      milestoneId,
       date,
       time,
       endTime
@@ -2114,25 +2606,173 @@ function App(): ReactElement {
 
   const createProjectTask = async (
     projectId: string | undefined,
-    title: string
+    title: string,
+    milestoneId?: string
   ): Promise<CalendarTask> => {
     try {
-      return await createCalendarTask(title, undefined, undefined, undefined, projectId)
+      return await createCalendarTask(
+        title,
+        undefined,
+        undefined,
+        undefined,
+        projectId,
+        milestoneId
+      )
     } catch (error) {
       pushToast('error', String(error))
       throw error
     }
   }
 
-  const updateProjectTask = (taskId: string, patch: Partial<CalendarTask>): void => {
-    void updateCalendarTasks((tasks) =>
+  const createProjectMilestone = async (
+    projectId: string,
+    title: string
+  ): Promise<ProjectMilestone> => {
+    if (!vaultApi) {
+      throw new Error('No vault is open')
+    }
+
+    try {
+      settingsMutationVersionRef.current += 1
+      const milestone = await vaultApi.projects.createMilestone({
+        projectId,
+        title: title.trim() || 'New Milestone'
+      })
+      const currentSettings = useVaultStore.getState().settings
+      setSettings({
+        ...currentSettings,
+        projects: currentSettings.projects.map((project) =>
+          project.id === projectId
+            ? { ...project, milestones: [...(project.milestones ?? []), milestone] }
+            : project
+        )
+      })
+      return milestone
+    } catch (error) {
+      pushToast('error', String(error))
+      throw error
+    }
+  }
+
+  const updateProjectMilestone = (projectId: string, milestoneId: string, title: string): void => {
+    if (!vaultApi) {
+      return
+    }
+
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      return
+    }
+
+    const currentSettings = useVaultStore.getState().settings
+    const previousProject = currentSettings.projects.find((project) => project.id === projectId)
+    const previousMilestone = previousProject?.milestones?.find(
+      (milestone) => milestone.id === milestoneId
+    )
+    if (!previousProject || !previousMilestone) {
+      return
+    }
+
+    const mutationKey = `${projectId}:${milestoneId}`
+    const mutationVersion = (projectMilestoneMutationVersionRef.current.get(mutationKey) ?? 0) + 1
+    projectMilestoneMutationVersionRef.current.set(mutationKey, mutationVersion)
+    const optimisticMilestone = {
+      ...previousMilestone,
+      title: normalizedTitle,
+      updatedAt: new Date().toISOString()
+    }
+    const optimisticProject = {
+      ...previousProject,
+      milestones: (previousProject.milestones ?? []).map((milestone) =>
+        milestone.id === milestoneId ? optimisticMilestone : milestone
+      ),
+      updatedAt: optimisticMilestone.updatedAt
+    }
+    setSettings({
+      ...currentSettings,
+      projects: currentSettings.projects.map((project) =>
+        project.id === projectId ? optimisticProject : project
+      )
+    })
+
+    void vaultApi.projects
+      .updateMilestone({ projectId, milestoneId, title: normalizedTitle })
+      .then((updatedMilestone) => {
+        if (projectMilestoneMutationVersionRef.current.get(mutationKey) !== mutationVersion) {
+          return
+        }
+        const latestSettings = useVaultStore.getState().settings
+        setSettings({
+          ...latestSettings,
+          projects: latestSettings.projects.map((project) =>
+            project.id === projectId
+              ? {
+                  ...project,
+                  milestones: (project.milestones ?? []).map((milestone) =>
+                    milestone.id === milestoneId ? updatedMilestone : milestone
+                  )
+                }
+              : project
+          )
+        })
+      })
+      .catch((error: unknown) => {
+        if (projectMilestoneMutationVersionRef.current.get(mutationKey) === mutationVersion) {
+          const latestSettings = useVaultStore.getState().settings
+          setSettings({
+            ...latestSettings,
+            projects: latestSettings.projects.map((project) =>
+              project.id === projectId ? previousProject : project
+            )
+          })
+        }
+        pushToast('error', String(error))
+      })
+  }
+
+  const deleteProjectMilestone = async (projectId: string, milestoneId: string): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      settingsMutationVersionRef.current += 1
+      const result = await vaultApi.projects.deleteMilestone({ projectId, milestoneId })
+      const movedTaskIds = new Set(result.movedTaskIds)
+      const currentSettings = useVaultStore.getState().settings
+      const nextTasks = currentSettings.calendarTasks.map((task) =>
+        movedTaskIds.has(task.id) ? { ...task, milestoneId: undefined } : task
+      )
+      calendarTasksRef.current = nextTasks
+      setSettings({
+        ...currentSettings,
+        projects: currentSettings.projects.map((project) =>
+          project.id === projectId
+            ? {
+                ...project,
+                milestones: (project.milestones ?? []).filter(
+                  (milestone) => milestone.id !== milestoneId
+                )
+              }
+            : project
+        ),
+        calendarTasks: nextTasks,
+        tasks: nextTasks
+      })
+      pushToast('success', 'Milestone removed')
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateProjectTask = async (taskId: string, patch: Partial<CalendarTask>): Promise<void> => {
+    await updateCalendarTasks((tasks) =>
       tasks.map((task) => {
         if (task.id !== taskId) return task
         const next = { ...task, ...patch }
         if ('date' in patch || 'endDate' in patch) {
-          const nextDate = patch.date
-          const nextEndDate =
-            nextDate && patch.endDate && patch.endDate >= nextDate ? patch.endDate : undefined
+          const nextDate = next.date
+          const nextEndDate = normalizeCalendarEndDate(nextDate, next.endDate)
           next.date = nextDate
           next.endDate = nextEndDate
         }
@@ -2165,26 +2805,8 @@ function App(): ReactElement {
     return createCalendarTask('New Task', schedule.date, schedule.time, schedule.endTime)
   }
 
-  const toggleCalendarTask = async (taskId: string): Promise<void> => {
-    await updateCalendarTasks((tasks) =>
-      tasks.map((task) => {
-        if (task.id !== taskId) return task
-        const completed = !task.completed
-        return { ...task, completed, status: completed ? 'completed' : 'pending' }
-      })
-    )
-  }
-
   const removeCalendarTask = async (taskId: string): Promise<void> => {
     await updateCalendarTasks((tasks) => tasks.filter((task) => task.id !== taskId))
-  }
-
-  const renameCalendarTask = async (taskId: string, newTitle: string): Promise<void> => {
-    const trimmed = newTitle.trim()
-    if (!trimmed) return
-    await updateCalendarTasks((tasks) =>
-      tasks.map((task) => (task.id === taskId ? { ...task, title: trimmed } : task))
-    )
   }
 
   const updateCalendarTaskType = async (
@@ -2231,12 +2853,7 @@ function App(): ReactElement {
         }
 
         const nextDate = schedule.date
-        const nextEndDate =
-          nextDate && schedule.endDate
-            ? schedule.endDate >= nextDate
-              ? schedule.endDate
-              : nextDate
-            : undefined
+        const nextEndDate = normalizeCalendarEndDate(nextDate, schedule.endDate)
 
         return {
           ...task,
@@ -2275,6 +2892,10 @@ function App(): ReactElement {
 
         if (!newDate) {
           return { ...task, date: undefined, endDate: undefined }
+        }
+
+        if (!task.date && task.endDate) {
+          return { ...task, date: undefined, endDate: newDate }
         }
 
         if (!task.date) {
@@ -2550,17 +3171,16 @@ function App(): ReactElement {
     void persistFavoriteNotePaths(favoriteNotePaths)
   }, [settingsLoaded, favoriteNotePaths, favoriteNotePathSettings.length, persistFavoriteNotePaths])
 
-  const enqueueNotebookRefresh = useCallback(
-    function enqueueNotebookRefresh<T>(task: () => Promise<T>): Promise<T> {
-      const run = notebookRefreshQueueRef.current.then(task, task)
-      notebookRefreshQueueRef.current = run.then(
-        () => undefined,
-        () => undefined
-      )
-      return run
-    },
-    []
-  )
+  const enqueueNotebookRefresh = useCallback(function enqueueNotebookRefresh<T>(
+    task: () => Promise<T>
+  ): Promise<T> {
+    const run = notebookRefreshQueueRef.current.then(task, task)
+    notebookRefreshQueueRef.current = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }, [])
 
   const loadNoteTree = useCallback(async (): Promise<void> => {
     if (!vaultApi || !vault) {
@@ -2602,7 +3222,7 @@ function App(): ReactElement {
     workspaceTabSequenceRef.current = 1
     activeWorkspaceTabIdRef.current = INITIAL_WORKSPACE_TAB_ID
     activePageRef.current = 'notes'
-    setWorkspaceTabs([{ id: INITIAL_WORKSPACE_TAB_ID, page: 'notes' }])
+    setWorkspaceTabs([createWorkspacePageTab(INITIAL_WORKSPACE_TAB_ID, 'notes')])
     setActiveWorkspaceTabId(INITIAL_WORKSPACE_TAB_ID)
     setActivePage('notes')
     currentNotePathRef.current = null
@@ -2619,6 +3239,7 @@ function App(): ReactElement {
     }
     setCurrentNotePath(null)
     setCurrentExcalidrawPath(null)
+    setBrowseFolderPath(null)
     resetCurrentNoteEditorSession()
     setCurrentNoteTagsState([])
     setCurrentNoteContent('')
@@ -2938,6 +3559,50 @@ function App(): ReactElement {
       pushToast(
         result.failed.length > 0 ? 'error' : 'success',
         `Normalized ${result.converted} note${result.converted === 1 ? '' : 's'}${failedLabel}`
+      )
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const migrateNoteImagePaths = async (): Promise<void> => {
+    if (!vaultApi) {
+      pushToast('error', 'Note migration is only available inside the Electron app')
+      return
+    }
+
+    if (!vault) {
+      pushToast('error', 'Select a vault in Settings before migrating note images')
+      void navigateToPage('settings')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Repair image paths in this vault? This rewrites legacy image links and copies missing attachments when their original files are still available.'
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const openPath = currentNotePathRef.current
+
+    try {
+      await flushCurrentNote({ force: true, settleEditor: true })
+      const result = await vaultApi.files.migrateNoteImagePaths()
+      Object.values(workspaceTabSessionsRef.current).forEach((session) => {
+        session.noteEditorSessions = {}
+      })
+      persistedNoteFingerprintsRef.current = {}
+      await refreshNotesAndTree()
+
+      if (openPath) {
+        await openNote(openPath)
+      }
+
+      const failedLabel = result.failed.length > 0 ? `, ${result.failed.length} failed` : ''
+      pushToast(
+        result.failed.length > 0 ? 'error' : 'success',
+        `Repaired ${result.imagesConverted} image path${result.imagesConverted === 1 ? '' : 's'} in ${result.converted} note${result.converted === 1 ? '' : 's'}${result.attachmentsCopied > 0 ? ` and copied ${result.attachmentsCopied} attachment${result.attachmentsCopied === 1 ? '' : 's'}` : ''}${failedLabel}`
       )
     } catch (error) {
       pushToast('error', String(error))
@@ -3474,12 +4139,12 @@ function App(): ReactElement {
   }
 
   const exportFolderPdf = async (folderPath: string): Promise<void> => {
-    if (!vaultApi || isFolderPdfExporting) {
+    if (!vaultApi || isFolderExporting) {
       return
     }
 
     try {
-      setIsFolderPdfExporting(true)
+      setIsFolderExporting(true)
       await flushCurrentNote({ force: true })
       const result = await vaultApi.files.exportFolderPdf({ folderPath })
 
@@ -3503,7 +4168,41 @@ function App(): ReactElement {
     } catch (error) {
       pushToast('error', String(error))
     } finally {
-      setIsFolderPdfExporting(false)
+      setIsFolderExporting(false)
+    }
+  }
+
+  const exportFolderMarkdown = async (folderPath: string): Promise<void> => {
+    if (!vaultApi || isFolderExporting) {
+      return
+    }
+
+    try {
+      setIsFolderExporting(true)
+      await flushCurrentNote({ force: true })
+      const result = await vaultApi.files.exportFolderMarkdown({ folderPath })
+
+      if (result.noteCount === 0) {
+        pushToast('info', 'No readable Markdown notes found in the selected folder')
+        if (result.warnings.length > 0) {
+          pushToast('info', `Markdown export encountered ${result.warnings.length} warning(s)`)
+        }
+        return
+      }
+
+      if (!result.path) {
+        return
+      }
+
+      const noteLabel = result.noteCount === 1 ? 'note' : 'notes'
+      pushToast('success', `Exported ${result.noteCount} nested ${noteLabel} to ${result.path}`)
+      if (result.warnings.length > 0) {
+        pushToast('info', `Markdown export encountered ${result.warnings.length} warning(s)`)
+      }
+    } catch (error) {
+      pushToast('error', String(error))
+    } finally {
+      setIsFolderExporting(false)
     }
   }
 
@@ -4210,10 +4909,14 @@ function App(): ReactElement {
       return
     }
 
-    const [nextSettings] = await Promise.all([vaultApi.settings.get(), refreshNotesAndTree()])
+    const [nextSettings] = await Promise.all([
+      vaultApi.settings.get(),
+      refreshNotesAndTree(),
+      refreshSchedulingReviewCount()
+    ])
     calendarTasksRef.current = nextSettings.calendarTasks
     setSettings(nextSettings)
-  }, [refreshNotesAndTree, setSettings, vaultApi])
+  }, [refreshNotesAndTree, refreshSchedulingReviewCount, setSettings, vaultApi])
 
   const createFleetingNote = useCallback(
     async (content: string): Promise<void> => {
@@ -4865,22 +5568,84 @@ function App(): ReactElement {
       : hasVault
         ? PAGE_LABELS[activePage]
         : 'Vault'
-  const getWorkspaceTabLabel = (tab: WorkspacePageTab): string => {
+  const getWorkspaceTabPresentation = (
+    tab: WorkspacePageTab
+  ): {
+    label: string
+    icon: ReactElement
+  } => {
     if (!hasVault) {
-      return 'Vault'
+      return {
+        label: 'Vault',
+        icon: <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+      }
     }
 
-    if (tab.page !== 'notes') {
-      return PAGE_LABELS[tab.page]
+    if (tab.page === 'notes') {
+      const session = getWorkspaceTabSession(tab.id)
+      const notePath =
+        tab.id === activeWorkspaceTabId
+          ? (currentNotePath ?? currentExcalidrawPath)
+          : (session.currentNotePath ?? session.currentExcalidrawPath)
+
+      if (notePath) {
+        const isDrawing = isExcalidrawPath(notePath)
+        return {
+          label: getNoteDisplayName(notePath),
+          icon: isDrawing ? (
+            <PenTool size={16} strokeWidth={1.8} aria-hidden="true" />
+          ) : (
+            <FileText size={16} strokeWidth={1.8} aria-hidden="true" />
+          )
+        }
+      }
+
+      const folderPath =
+        tab.id === activeWorkspaceTabId ? browseFolderPath : session.browseFolderPath
+      if (folderPath) {
+        return {
+          label: getNotebookFolderContents(noteTree, folderPath).name,
+          icon: <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+        }
+      }
+
+      return {
+        label: 'New note',
+        icon: <FileText size={16} strokeWidth={1.8} aria-hidden="true" />
+      }
     }
 
-    const session = getWorkspaceTabSession(tab.id)
-    const notePath =
-      tab.id === activeWorkspaceTabId
-        ? (currentNotePath ?? currentExcalidrawPath)
-        : (session.currentNotePath ?? session.currentExcalidrawPath)
+    if (tab.page === 'projects') {
+      const project =
+        projects.find((candidate) => candidate.id === tab.projectId) ??
+        (tab.id === activeWorkspaceTabId
+          ? (projects.find((candidate) => candidate.id === selectedProjectId) ??
+            selectedProjectForHeader)
+          : null)
 
-    return notePath ? `${PAGE_LABELS.notes} · ${getNoteDisplayName(notePath)}` : PAGE_LABELS.notes
+      return project
+        ? {
+            label: project.name,
+            icon: <NoteShapeIcon icon={project.icon} size={16} />
+          }
+        : {
+            label: PAGE_LABELS.projects,
+            icon: <APP_PAGE_ICONS.projects size={16} strokeWidth={1.8} aria-hidden="true" />
+          }
+    }
+
+    if (tab.page === 'calendar') {
+      return {
+        label: formatCalendarTabPeriodTitle(tab.calendarDate, tab.calendarViewMode),
+        icon: <CalendarDays size={16} strokeWidth={1.8} aria-hidden="true" />
+      }
+    }
+
+    const PageIcon = APP_PAGE_ICONS[tab.page]
+    return {
+      label: PAGE_LABELS[tab.page],
+      icon: <PageIcon size={16} strokeWidth={1.8} aria-hidden="true" />
+    }
   }
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
@@ -4937,6 +5702,38 @@ function App(): ReactElement {
     }
   }
 
+  const calendarViewToggle = (
+    <WorkspaceHeaderActionGroup>
+      <ToggleGroup
+        type="single"
+        value={calendarViewMode}
+        onValueChange={(value) => value && setCalendarViewMode(value as CalendarViewMode)}
+        variant="outline"
+        size="sm"
+        aria-label="Calendar view"
+        data-testid="calendar-view-toggle"
+      >
+        {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
+          <ToggleGroupItem key={option.value} value={option.value}>
+            <span className="inline-flex items-center gap-2">
+              {option.value === 'month' ? (
+                <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
+              ) : (
+                <CalendarDays size={15} className="shrink-0" aria-hidden="true" />
+              )}
+              {option.label}
+            </span>
+          </ToggleGroupItem>
+        ))}
+        <Shortcut
+          keys={['option', 'tab']}
+          data-testid="workspace-shortcut:calendar-view-toggle"
+          className="shrink-0"
+        />
+      </ToggleGroup>
+    </WorkspaceHeaderActionGroup>
+  )
+
   return (
     <div className="flex h-screen">
       {hasVault ? (
@@ -4956,6 +5753,7 @@ function App(): ReactElement {
             notesCount={notes.length}
             projectsCount={projects.length}
             calendarUndoneCount={calendarUndoneCount}
+            schedulingReviewCount={schedulingReviewCount}
             isLocked={!hasVault}
             availablePages={availablePages}
             className={paletteSurfaceClass}
@@ -4971,12 +5769,15 @@ function App(): ReactElement {
                 onTogglePanel={() => setIsRightPanelCollapsed((current) => !current)}
               >
                 <WorkspaceTabManager
-                  tabs={workspaceTabs.map((tab, index) => ({
-                    id: tab.id,
-                    label: getWorkspaceTabLabel(tab),
-                    icon: hasVault ? PAGE_TAB_ICONS[tab.page] : FolderOpen,
-                    shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
-                  }))}
+                  tabs={workspaceTabs.map((tab, index) => {
+                    const presentation = getWorkspaceTabPresentation(tab)
+                    return {
+                      id: tab.id,
+                      label: presentation.label,
+                      icon: presentation.icon,
+                      shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
+                    }
+                  })}
                   activeTabId={activeWorkspaceTabId}
                   onSelectTab={handleSelectWorkspaceTab}
                   onCloseTab={handleCloseWorkspaceTab}
@@ -4984,296 +5785,380 @@ function App(): ReactElement {
                   addDisabled={!hasVault}
                 />
                 <DocumentWorkspace hasPanel={hasRightPanel}>
-                  <DocumentWorkspaceMainHeader
-                    breadcrumb={
-                      <div className="flex min-w-0 items-center gap-2">
-                        {activePage === 'projects' || activePage === 'calendar' ? null : (
-                          <Breadcrumb>
-                            <BreadcrumbList className="text-muted-foreground">
-                              <BreadcrumbItem>
-                                <BreadcrumbPage className="text-sm text-muted-foreground">
-                                  {headerPageLabel}
-                                </BreadcrumbPage>
-                              </BreadcrumbItem>
-                              {noteHeaderBreadcrumbSegments ? (
-                                noteHeaderBreadcrumbSegments.map((segment, index) => {
-                                  const isLast = index === noteHeaderBreadcrumbSegments.length - 1
-
-                                  return (
-                                    <Fragment key={`${segment}:${index}`}>
-                                      <BreadcrumbSeparator className="text-muted-foreground" />
-                                      <BreadcrumbItem>
-                                        <BreadcrumbPage
-                                          className={
-                                            isLast
-                                              ? 'max-w-[220px] truncate text-sm font-semibold text-foreground'
-                                              : 'max-w-[140px] truncate text-sm text-muted-foreground'
-                                          }
-                                        >
-                                          {segment}
-                                        </BreadcrumbPage>
-                                      </BreadcrumbItem>
-                                    </Fragment>
-                                  )
-                                })
-                              ) : middleHeaderBreadcrumbItem ? (
-                                <>
-                                  <BreadcrumbSeparator className="text-muted-foreground" />
-                                  <BreadcrumbItem>
-                                    <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
-                                      {middleHeaderBreadcrumbItem}
-                                    </BreadcrumbPage>
-                                  </BreadcrumbItem>
-                                </>
-                              ) : null}
-                            </BreadcrumbList>
-                          </Breadcrumb>
-                        )}
-                      </div>
-                    }
-                    secondaryActions={
-                      activePage === 'schedules' ? (
-                        <SchedulingViewTabs
-                          value={schedulingView}
-                          onValueChange={setSchedulingView}
-                        />
-                      ) : activePage === 'calendar' ? (
-                        <div
-                          data-testid="calendar-workspace-toolbar"
-                          className="flex min-w-max items-center gap-3"
-                        >
-                          <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
-                            <div className="flex h-3.5 items-center justify-center bg-primary px-2 text-center text-xs font-extrabold leading-none text-primary-foreground">
-                              {calendarTodayHeader.monthShort}
-                            </div>
-                            <div className="flex h-4 items-center justify-center border-t border-border px-2 text-center">
-                              <span className="block text-sm font-medium leading-none text-foreground">
-                                {calendarTodayHeader.dayNumber}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold leading-4 text-foreground">
-                              {calendarCurrentPeriodTitle}
-                            </p>
-                          </div>
-                          <ToggleGroup
-                            type="single"
-                            value={calendarContentFilter}
-                            onValueChange={(value) =>
-                              value && setCalendarContentFilter(value as CalendarContentFilter)
-                            }
-                            variant="outline"
-                            size="sm"
-                            aria-label="Calendar content filter"
-                          >
-                            {calendarContentFilterOptions.map((option) => (
-                              <ToggleGroupItem key={option.value} value={option.value}>
-                                <span className="inline-flex items-center gap-2">
-                                  <span>{option.label}</span>
-                                  <Badge
-                                    variant="secondary"
-                                    className="h-5 min-w-5 justify-center px-1 text-xs"
-                                  >
-                                    {option.count}
-                                  </Badge>
-                                </span>
-                              </ToggleGroupItem>
-                            ))}
-                          </ToggleGroup>
-                          <ButtonGroup
-                            variant="outline"
-                            size="sm"
-                            className="[&>button]:border-0"
-                            aria-label="Calendar period navigation"
-                          >
-                            <WorkspaceIconButton
-                              onClick={goToPrevCalendarPeriod}
-                              title={
-                                calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
-                              }
-                              icon={<ChevronLeft size={18} />}
-                            />
-                            <WorkspaceIconButton
-                              onClick={goToToday}
-                              title={
-                                calendarViewMode === 'week'
-                                  ? 'Go to current week'
-                                  : 'Go to current month'
-                              }
-                              aria-label={
-                                calendarViewMode === 'week'
-                                  ? 'Go to current week'
-                                  : 'Go to current month'
-                              }
-                              icon={<CalendarDays size={18} />}
-                              label={calendarViewMode === 'week' ? 'Current week' : 'Current month'}
-                            />
-                            <WorkspaceIconButton
-                              onClick={goToNextCalendarPeriod}
-                              title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                              icon={<ChevronRight size={18} />}
-                            />
-                          </ButtonGroup>
-                        </div>
-                      ) : null
-                    }
-                    actions={
-                      noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-                        <WorkspaceHeaderActions>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <WorkspaceIconButton
-                                title="Show backlinks"
-                                aria-label="Show backlinks"
-                                icon={<Link2 size={18} />}
-                              />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-72">
-                              {currentNoteBacklinks.length > 0 ? (
-                                currentNoteBacklinks.map((note) => (
-                                  <DropdownMenuItem
-                                    key={note.relPath}
-                                    onSelect={() => {
-                                      void openNote(note.relPath)
+                  <SchedulingWorkspaceProvider
+                    enabled={activePage === 'schedules'}
+                    vaultApi={vaultApi}
+                    vaultRoot={vault?.rootPath ?? null}
+                    pushToast={pushToast}
+                    onWorkspaceDataChanged={refreshAutomationWorkspace}
+                  >
+                    <DocumentWorkspaceMainHeader
+                      breadcrumb={
+                        <div className="flex min-w-0 items-center gap-2">
+                          {activeTask ? (
+                            <Breadcrumb>
+                              <BreadcrumbList className="text-muted-foreground">
+                                <BreadcrumbItem>
+                                  <BreadcrumbButton
+                                    onClick={() => {
+                                      void closeTaskPage()
                                     }}
-                                    className="flex flex-col items-start gap-0.5"
+                                    className="text-sm text-muted-foreground"
                                   >
-                                    <span className="max-w-full truncate font-medium">
-                                      {getNoteDisplayName(note.relPath)}
-                                    </span>
-                                    <span className="max-w-full truncate text-xs text-muted-foreground">
-                                      {stripNoteExtension(note.relPath)}
-                                    </span>
-                                  </DropdownMenuItem>
-                                ))
-                              ) : (
-                                <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          <WorkspaceIconButton
-                            onClick={() => {
-                              void copyCurrentNoteMarkdown()
-                            }}
-                            title="Copy Raw Markdown"
-                            aria-label="Copy Raw Markdown"
-                            icon={<Copy size={18} />}
-                          />
-                          <WorkspaceIconButton
-                            onClick={() => {
-                              setIsNoteExportDialogOpen(true)
-                            }}
-                            title="Export Note"
-                            aria-label="Export Note"
-                            icon={<Download size={18} />}
-                          />
-                          <WorkspaceHeaderActionDivider />
-                          <WorkspaceHeaderActionGroup>
-                            <WorkspaceIconButton
-                              onClick={toggleCurrentNoteFavorite}
-                              title={
-                                currentNoteIsFavorite ? 'Remove from Favorites' : 'Add to Favorites'
-                              }
-                              className={
-                                currentNoteIsFavorite
-                                  ? 'border-border bg-accent text-muted-foreground hover:text-muted-foreground'
-                                  : 'hover:border-border hover:bg-accent hover:text-muted-foreground'
-                              }
-                              icon={
-                                <Star
-                                  size={18}
-                                  className={currentNoteIsFavorite ? 'fill-current' : ''}
-                                />
-                              }
+                                    {taskOrigin?.source === 'projects' ? 'Projects' : 'Calendar'}
+                                  </BreadcrumbButton>
+                                </BreadcrumbItem>
+                                {taskOrigin?.source === 'projects' && activeTaskProject ? (
+                                  <>
+                                    <BreadcrumbSeparator className="text-muted-foreground" />
+                                    <BreadcrumbItem>
+                                      <BreadcrumbButton
+                                        onClick={() => {
+                                          selectProject(activeTaskProject.id)
+                                          void closeTaskPage()
+                                        }}
+                                        className="max-w-[180px] truncate text-sm text-muted-foreground"
+                                      >
+                                        {activeTaskProject.name}
+                                      </BreadcrumbButton>
+                                    </BreadcrumbItem>
+                                  </>
+                                ) : null}
+                                <BreadcrumbSeparator className="text-muted-foreground" />
+                                <BreadcrumbItem>
+                                  <BreadcrumbPage className="max-w-[260px] truncate text-sm font-semibold text-foreground">
+                                    {activeTask.title}
+                                  </BreadcrumbPage>
+                                </BreadcrumbItem>
+                              </BreadcrumbList>
+                            </Breadcrumb>
+                          ) : activePage === 'schedules' ? (
+                            <SchedulingWorkspaceBreadcrumb
+                              value={schedulingView}
+                              onNavigate={setSchedulingView}
                             />
-                          </WorkspaceHeaderActionGroup>
-                          <WorkspaceHeaderActionDivider />
-                          <WorkspaceHeaderActionGroup>
+                          ) : activePage === 'calendar' || activePage === 'projects' ? null : (
+                            <Breadcrumb>
+                              <BreadcrumbList className="text-muted-foreground">
+                                <BreadcrumbItem>
+                                  {noteHeaderBreadcrumbSegments ? (
+                                    <BreadcrumbButton
+                                      onClick={() => {
+                                        void handleNotebookBreadcrumbFolderClick(null)
+                                      }}
+                                      className="text-sm text-muted-foreground"
+                                      data-testid="notebook-breadcrumb:root"
+                                    >
+                                      {headerPageLabel}
+                                    </BreadcrumbButton>
+                                  ) : notebookBrowseBreadcrumbSegments && browseFolderPath ? (
+                                    <BreadcrumbButton
+                                      onClick={() => handleNotebookBrowseFolder(null)}
+                                      className="text-sm text-muted-foreground"
+                                      data-testid="notebook-breadcrumb:root"
+                                    >
+                                      {headerPageLabel}
+                                    </BreadcrumbButton>
+                                  ) : (
+                                    <BreadcrumbPage className="text-sm text-muted-foreground">
+                                      {headerPageLabel}
+                                    </BreadcrumbPage>
+                                  )}
+                                </BreadcrumbItem>
+                                {notebookBrowseBreadcrumbSegments ? (
+                                  notebookBrowseBreadcrumbSegments.map((segment, index) => {
+                                    const isLast =
+                                      index === notebookBrowseBreadcrumbSegments.length - 1
+                                    const path = notebookBrowseBreadcrumbSegments
+                                      .slice(0, index + 1)
+                                      .join('/')
+
+                                    return (
+                                      <Fragment key={`${path}:${index}`}>
+                                        <BreadcrumbSeparator className="text-muted-foreground" />
+                                        <BreadcrumbItem>
+                                          {isLast ? (
+                                            <BreadcrumbPage
+                                              className="max-w-[220px] truncate text-sm font-semibold text-foreground"
+                                              data-testid={`notebook-breadcrumb:current:${path}`}
+                                            >
+                                              {segment}
+                                            </BreadcrumbPage>
+                                          ) : (
+                                            <BreadcrumbButton
+                                              onClick={() => handleNotebookBrowseFolder(path)}
+                                              className="max-w-[140px] truncate text-sm text-muted-foreground"
+                                              data-testid={`notebook-breadcrumb:ancestor:${path}`}
+                                            >
+                                              {segment}
+                                            </BreadcrumbButton>
+                                          )}
+                                        </BreadcrumbItem>
+                                      </Fragment>
+                                    )
+                                  })
+                                ) : noteHeaderBreadcrumbSegments ? (
+                                  noteHeaderBreadcrumbSegments.map((segment, index) => {
+                                    const isLast = index === noteHeaderBreadcrumbSegments.length - 1
+                                    const path = noteHeaderBreadcrumbSegments
+                                      .slice(0, index + 1)
+                                      .join('/')
+
+                                    return (
+                                      <Fragment key={`${segment}:${index}`}>
+                                        <BreadcrumbSeparator className="text-muted-foreground" />
+                                        <BreadcrumbItem>
+                                          {isLast ? (
+                                            <BreadcrumbPage className="max-w-[220px] truncate text-sm font-semibold text-foreground">
+                                              {segment}
+                                            </BreadcrumbPage>
+                                          ) : (
+                                            <BreadcrumbButton
+                                              onClick={() => {
+                                                void handleNotebookBreadcrumbFolderClick(path)
+                                              }}
+                                              className="max-w-[140px] truncate text-sm text-muted-foreground"
+                                              data-testid={`notebook-breadcrumb:ancestor:${path}`}
+                                            >
+                                              {segment}
+                                            </BreadcrumbButton>
+                                          )}
+                                        </BreadcrumbItem>
+                                      </Fragment>
+                                    )
+                                  })
+                                ) : middleHeaderBreadcrumbItem ? (
+                                  <>
+                                    <BreadcrumbSeparator className="text-muted-foreground" />
+                                    <BreadcrumbItem>
+                                      <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
+                                        {middleHeaderBreadcrumbItem}
+                                      </BreadcrumbPage>
+                                    </BreadcrumbItem>
+                                  </>
+                                ) : null}
+                              </BreadcrumbList>
+                            </Breadcrumb>
+                          )}
+                        </div>
+                      }
+                      secondaryActions={
+                        activeTask ? null : activePage === 'schedules' ? (
+                          <div className="flex min-w-max items-center gap-1.5">
+                            {schedulingView !== 'list' ? (
+                              <SchedulingViewTabs
+                                value={schedulingView}
+                                onValueChange={setSchedulingView}
+                                reviewCount={schedulingReviewCount}
+                              />
+                            ) : null}
+                            {schedulingView === 'automation' ? (
+                              <SchedulingPythonTrustPopover vaultRoot={vault?.rootPath ?? null} />
+                            ) : null}
+                          </div>
+                        ) : activePage === 'calendar' ? (
+                          <div className="flex min-w-max items-center gap-1.5">
+                            {calendarViewToggle}
+                            <CalendarTaskFilter
+                              tagOptions={calendarTaskTagOptions}
+                              contentFilterOptions={calendarContentFilterOptions}
+                              contentFilter={calendarContentFilter}
+                              onContentFilterChange={setCalendarContentFilter}
+                              selectedTags={activeCalendarTaskTags}
+                              onSelectedTagsChange={setCalendarTaskTagSettings}
+                            />
+                          </div>
+                        ) : null
+                      }
+                      actions={
+                        activeTask ? (
+                          <WorkspaceHeaderActions>
                             <WorkspaceIconButton
-                              onClick={() => {
-                                void deleteCurrentNote()
-                              }}
-                              title="Delete Note"
+                              onClick={() => setIsTaskDeleteDialogOpen(true)}
+                              aria-label="Delete task"
+                              title="Delete task"
                               icon={<Trash2 size={18} />}
                             />
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
-                      ) : activePage === 'projects' ? (
-                        <WorkspaceHeaderActions>
-                          <WorkspaceHeaderActionGroup>
-                            <WorkspaceIconButton
-                              onClick={() => void createProjectFromToolbar()}
-                              disabled={isCreatingProject}
-                              data-testid="new-project-button"
-                              icon={<Plus size={16} />}
-                              label="New Project"
-                              aria-label="New Project"
-                              title="New Project"
-                            />
-                          </WorkspaceHeaderActionGroup>
-                          <ProjectsWorkspaceHeaderActions
-                            project={selectedProjectForHeader}
-                            onDelete={() => {
-                              if (selectedProjectForHeader) {
-                                void removeProjectById(selectedProjectForHeader.id)
-                              }
+                          </WorkspaceHeaderActions>
+                        ) : activePage === 'schedules' ? (
+                          <SchedulingHeaderActions
+                            activeView={schedulingView}
+                            onViewChange={setSchedulingView}
+                            onOpenApiGuide={() => {
+                              void navigateToPage('schedulingGuide')
                             }}
                           />
-                        </WorkspaceHeaderActions>
-                      ) : activePage === 'calendar' ? (
-                        <WorkspaceHeaderActions>
-                          <WorkspaceHeaderActionGroup>
-                            <ToggleGroup
-                              type="single"
-                              value={calendarViewMode}
-                              onValueChange={(value) =>
-                                value && setCalendarViewMode(value as CalendarViewMode)
-                              }
-                              variant="outline"
-                              size="sm"
-                              aria-label="Calendar view"
-                            >
-                              {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
-                                <ToggleGroupItem key={option.value} value={option.value}>
-                                  <span className="inline-flex items-center gap-2">
-                                    {option.value === 'month' ? (
-                                      <LayoutGrid
-                                        size={15}
-                                        className="shrink-0"
-                                        aria-hidden="true"
-                                      />
-                                    ) : (
-                                      <CalendarDays
-                                        size={15}
-                                        className="shrink-0"
-                                        aria-hidden="true"
-                                      />
-                                    )}
-                                    {option.label}
-                                  </span>
-                                </ToggleGroupItem>
-                              ))}
-                              <Shortcut
-                                keys={['option', 'tab']}
-                                data-testid="workspace-shortcut:calendar-view-toggle"
-                                className="shrink-0"
+                        ) : noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
+                          <WorkspaceHeaderActions>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <WorkspaceIconButton
+                                  title="Show backlinks"
+                                  aria-label="Show backlinks"
+                                  icon={<Link2 size={18} />}
+                                />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-72">
+                                {currentNoteBacklinks.length > 0 ? (
+                                  currentNoteBacklinks.map((note) => (
+                                    <DropdownMenuItem
+                                      key={note.relPath}
+                                      onSelect={() => {
+                                        void openNote(note.relPath)
+                                      }}
+                                      className="flex flex-col items-start gap-0.5"
+                                    >
+                                      <span className="max-w-full truncate font-medium">
+                                        {getNoteDisplayName(note.relPath)}
+                                      </span>
+                                      <span className="max-w-full truncate text-xs text-muted-foreground">
+                                        {stripNoteExtension(note.relPath)}
+                                      </span>
+                                    </DropdownMenuItem>
+                                  ))
+                                ) : (
+                                  <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <WorkspaceIconButton
+                              onClick={() => {
+                                void copyCurrentNoteMarkdown()
+                              }}
+                              title="Copy Raw Markdown"
+                              aria-label="Copy Raw Markdown"
+                              icon={<Copy size={18} />}
+                            />
+                            <WorkspaceIconButton
+                              onClick={() => {
+                                setIsNoteExportDialogOpen(true)
+                              }}
+                              title="Export Note"
+                              aria-label="Export Note"
+                              icon={<Download size={18} />}
+                            />
+                            <WorkspaceHeaderActionDivider />
+                            <WorkspaceHeaderActionGroup>
+                              <WorkspaceIconButton
+                                onClick={toggleCurrentNoteFavorite}
+                                title={
+                                  currentNoteIsFavorite
+                                    ? 'Remove from Favorites'
+                                    : 'Add to Favorites'
+                                }
+                                className={
+                                  currentNoteIsFavorite
+                                    ? 'border-border bg-accent text-muted-foreground hover:text-muted-foreground'
+                                    : 'hover:border-border hover:bg-accent hover:text-muted-foreground'
+                                }
+                                icon={
+                                  <Star
+                                    size={18}
+                                    className={currentNoteIsFavorite ? 'fill-current' : ''}
+                                  />
+                                }
                               />
-                            </ToggleGroup>
-                          </WorkspaceHeaderActionGroup>
-                        </WorkspaceHeaderActions>
-                      ) : null
-                    }
-                  />
+                            </WorkspaceHeaderActionGroup>
+                            <WorkspaceHeaderActionDivider />
+                            <WorkspaceHeaderActionGroup>
+                              <WorkspaceIconButton
+                                onClick={() => {
+                                  void deleteCurrentNote()
+                                }}
+                                title="Delete Note"
+                                icon={<Trash2 size={18} />}
+                              />
+                            </WorkspaceHeaderActionGroup>
+                          </WorkspaceHeaderActions>
+                        ) : activePage === 'projects' ? (
+                          <WorkspaceHeaderActions>
+                            <WorkspaceHeaderActionGroup>
+                              <WorkspaceIconButton
+                                onClick={() => void createProjectFromToolbar()}
+                                disabled={isCreatingProject}
+                                data-testid="new-project-button"
+                                icon={<Plus size={16} />}
+                                label="New Project"
+                                aria-label="New Project"
+                                title="New Project"
+                              />
+                            </WorkspaceHeaderActionGroup>
+                            <ProjectsWorkspaceHeaderActions
+                              project={selectedProjectForHeader}
+                              onDelete={() => {
+                                if (selectedProjectForHeader) {
+                                  void removeProjectById(selectedProjectForHeader.id)
+                                }
+                              }}
+                            />
+                          </WorkspaceHeaderActions>
+                        ) : activePage === 'calendar' ? (
+                          <WorkspaceHeaderActions className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
+                            <div
+                              data-testid="calendar-workspace-toolbar"
+                              className="flex min-w-max items-center gap-3"
+                            >
+                              <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
+                                <div className="flex h-3.5 items-center justify-center bg-primary px-2 text-center text-xs font-extrabold leading-none text-primary-foreground">
+                                  {calendarTodayHeader.monthShort}
+                                </div>
+                                <div className="flex h-4 items-center justify-center border-t border-border px-2 text-center">
+                                  <span className="block text-sm font-medium leading-none text-foreground">
+                                    {calendarTodayHeader.dayNumber}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="min-w-0">
+                                <p
+                                  data-testid="calendar-period-title"
+                                  className="truncate text-sm font-semibold leading-4 text-foreground"
+                                >
+                                  {calendarCurrentPeriodTitle}
+                                </p>
+                              </div>
+                              <ButtonGroup
+                                variant="outline"
+                                size="sm"
+                                className="[&>button]:border-0"
+                                aria-label="Calendar period navigation"
+                              >
+                                <WorkspaceIconButton
+                                  onClick={goToPrevCalendarPeriod}
+                                  title={
+                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
+                                  }
+                                  icon={<ChevronLeft size={18} />}
+                                />
+                                <WorkspaceIconButton
+                                  onClick={goToToday}
+                                  title={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  aria-label={
+                                    calendarViewMode === 'week'
+                                      ? 'Go to current week'
+                                      : 'Go to current month'
+                                  }
+                                  icon={<CalendarDays size={18} />}
+                                  label={
+                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
+                                  }
+                                />
+                                <WorkspaceIconButton
+                                  onClick={goToNextCalendarPeriod}
+                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
+                                  icon={<ChevronRight size={18} />}
+                                />
+                              </ButtonGroup>
+                            </div>
+                          </WorkspaceHeaderActions>
+                        ) : null
+                      }
+                    />
 
-                  <DocumentWorkspaceMain className={paletteSurfaceClass}>
-                    <SchedulingWorkspaceProvider
-                      enabled={activePage === 'schedules'}
-                      vaultApi={vaultApi}
-                      vaultRoot={vault?.rootPath ?? null}
-                      pushToast={pushToast}
-                      onWorkspaceDataChanged={refreshAutomationWorkspace}
-                    >
+                    <DocumentWorkspaceMain className={paletteSurfaceClass}>
                       <WorkspaceResizableLayout
                         hasPanel={hasRightPanel}
                         panelWidth={rightPanelWidth}
@@ -5286,23 +6171,31 @@ function App(): ReactElement {
                       >
                         <DocumentWorkspaceMainContent
                           className={
-                            activePage === 'calendar'
-                              ? 'overflow-y-auto overflow-x-hidden'
-                              : activePage === 'schedules'
-                                ? '!overflow-hidden'
-                                : activePage === 'notes' &&
-                                    !searchQuery.trim() &&
-                                    noteIsOpen &&
-                                    !currentExcalidrawPath
+                            activeTask
+                              ? '!overflow-hidden'
+                              : activePage === 'calendar'
+                                ? 'overflow-y-auto overflow-x-hidden'
+                                : activePage === 'schedules'
                                   ? '!overflow-hidden'
-                                  : undefined
+                                  : activePage === 'notes' &&
+                                      !searchQuery.trim() &&
+                                      noteIsOpen &&
+                                      !currentExcalidrawPath
+                                    ? '!overflow-hidden'
+                                    : undefined
                           }
                         >
                           <div
-                            key={`${activeWorkspaceTabId}:${activePage}`}
-                            className={`motion-workspace-content w-full ${activePage === 'calendar' ? '' : 'h-full'}`.trim()}
+                            key={`${activeWorkspaceTabId}:${activePage}:${activeTask?.id ?? 'workspace'}`}
+                            className={`motion-workspace-content w-full ${activeTask || activePage !== 'calendar' ? 'h-full' : ''}`.trim()}
                           >
-                            {activePage === 'capture' ? (
+                            {activeTask ? (
+                              <TaskPage
+                                task={activeTask}
+                                onUpdateTask={updateProjectTask}
+                                onRegisterFlush={registerTaskFlush}
+                              />
+                            ) : activePage === 'capture' ? (
                               <CapturePage
                                 notes={fleetingNotes}
                                 isLoading={fleetingNotesLoading}
@@ -5354,14 +6247,46 @@ function App(): ReactElement {
                                   vimKeyMappings={editorVimKeyMappings}
                                 />
                               ) : (
-                                <NotebookEmptyState
-                                  recentFiles={recentNotebookFiles}
-                                  onOpenFile={(relPath) => {
+                                <NotebookCardBrowser
+                                  tree={visibleNoteTree}
+                                  folderPath={browseFolderPath}
+                                  selectedEntries={selectedNoteTreeEntries}
+                                  onBrowseFolder={handleNotebookBrowseFolder}
+                                  onSelectionChange={setSelectedNoteTreeEntries}
+                                  onOpenPath={(relPath) => {
                                     void openNotebookPath(relPath)
                                   }}
-                                  onCreateNote={() => {
-                                    void createNoteFromTree()
+                                  onCreateNote={(parentDir) => {
+                                    setSelectedNoteTreeEntries(
+                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                    )
+                                    void createNoteFromTree(parentDir)
                                   }}
+                                  onCreateExcalidraw={(parentDir) => {
+                                    setSelectedNoteTreeEntries(
+                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                    )
+                                    void createExcalidrawFromTree(parentDir)
+                                  }}
+                                  onCreateFolder={(parentDir) => {
+                                    setSelectedNoteTreeEntries(
+                                      parentDir ? [{ kind: 'folder', relPath: parentDir }] : []
+                                    )
+                                    void createFolderFromTree(parentDir)
+                                  }}
+                                  onExportFolderPdf={(folderPath) => {
+                                    void exportFolderPdf(folderPath)
+                                  }}
+                                  onExportFolderMarkdown={(folderPath) => {
+                                    void exportFolderMarkdown(folderPath)
+                                  }}
+                                  onRenamePath={(relPath, nextName, kind) => {
+                                    void renameTreePath(relPath, nextName, kind)
+                                  }}
+                                  onDeleteEntries={(entries) => {
+                                    void deleteTreeEntries(entries)
+                                  }}
+                                  onMoveEntries={moveTreeEntries}
                                 />
                               )
                             ) : activePage === 'knowledge' ? (
@@ -5385,6 +6310,9 @@ function App(): ReactElement {
                                 filterMode={projectFilterMode}
                                 onFilterModeChange={setProjectFilterMode}
                                 onCreateTask={createProjectTask}
+                                onCreateMilestone={createProjectMilestone}
+                                onUpdateMilestone={updateProjectMilestone}
+                                onDeleteMilestone={deleteProjectMilestone}
                                 onUpdateProject={(projectId, draft) =>
                                   saveProject(projectId, {
                                     name: draft.name,
@@ -5395,11 +6323,22 @@ function App(): ReactElement {
                                 onUpdateProjectProperties={saveProjectProperties}
                                 onUpdateTask={updateProjectTask}
                                 onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
+                                onOpenTask={(taskId) => {
+                                  openTaskDialog(taskId, {
+                                    source: 'projects',
+                                    projectId: selectedProjectForHeader?.id ?? selectedProjectId
+                                  })
+                                }}
                               />
                             ) : activePage === 'subscriptions' ? (
                               <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
                             ) : activePage === 'schedules' ? (
-                              <SchedulingPage activeView={schedulingView} />
+                              <SchedulingPage
+                                activeView={schedulingView}
+                                onViewChange={setSchedulingView}
+                              />
+                            ) : activePage === 'schedulingGuide' ? (
+                              <SchedulingApiGuidePage />
                             ) : activePage === 'calendar' ? (
                               <div className="min-h-full">
                                 <section
@@ -5418,6 +6357,9 @@ function App(): ReactElement {
                                         projects={projects}
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForWeeklyTime}
+                                        onOpenTask={(taskId) => {
+                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        }}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
                                         }}
@@ -5425,18 +6367,6 @@ function App(): ReactElement {
                                           void removeCalendarTask(taskId)
                                         }}
                                         onUpdateTask={updateProjectTask}
-                                        onRenameTask={(taskId, newTitle) => {
-                                          void renameCalendarTask(taskId, newTitle)
-                                        }}
-                                        onUpdateTaskPriority={(taskId, priority) => {
-                                          void updateCalendarTaskPriority(taskId, priority)
-                                        }}
-                                        onUpdateTaskType={(taskId, taskType) => {
-                                          void updateCalendarTaskType(taskId, taskType)
-                                        }}
-                                        onUpdateTaskProject={(taskId, projectId) => {
-                                          void updateProjectTask(taskId, { projectId })
-                                        }}
                                         onUpdateTaskSchedule={(taskId, schedule) => {
                                           void updateCalendarTaskSchedule(taskId, schedule)
                                         }}
@@ -5448,6 +6378,9 @@ function App(): ReactElement {
                                         projects={projects}
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForDate}
+                                        onOpenTask={(taskId) => {
+                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        }}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
                                         }}
@@ -5457,30 +6390,18 @@ function App(): ReactElement {
                                         onResizeTaskEnd={(taskId, newEndDate) => {
                                           void resizeCalendarTaskEnd(taskId, newEndDate)
                                         }}
-                                        onToggleTask={(taskId) => {
-                                          void toggleCalendarTask(taskId)
-                                        }}
                                         onDeleteTask={(taskId) => {
                                           void removeCalendarTask(taskId)
                                         }}
                                         onUpdateTask={updateProjectTask}
-                                        onRenameTask={(taskId, newTitle) => {
-                                          void renameCalendarTask(taskId, newTitle)
-                                        }}
                                         onUpdateTaskPriority={(taskId, priority) => {
                                           void updateCalendarTaskPriority(taskId, priority)
                                         }}
                                         onUpdateTaskType={(taskId, taskType) => {
                                           void updateCalendarTaskType(taskId, taskType)
                                         }}
-                                        onUpdateTaskProject={(taskId, projectId) => {
-                                          void updateProjectTask(taskId, { projectId })
-                                        }}
                                         onUpdateTaskTime={(taskId, time) => {
                                           void updateCalendarTaskTime(taskId, time)
-                                        }}
-                                        onUpdateTaskSchedule={(taskId, schedule) => {
-                                          void updateCalendarTaskSchedule(taskId, schedule)
                                         }}
                                         onUpdateTaskReminders={(taskId, reminders) => {
                                           void updateCalendarTaskReminders(taskId, reminders)
@@ -5519,11 +6440,32 @@ function App(): ReactElement {
                                 onMigrateTaggedNoteBodyFrontmatter={() => {
                                   void migrateTaggedNoteBodyFrontmatter()
                                 }}
+                                onMigrateNoteImagePaths={() => {
+                                  void migrateNoteImagePaths()
+                                }}
                                 onImportLegacyExcalidrawSessions={() => {
                                   void importLegacyExcalidrawSessions()
                                 }}
                                 onOpenDesignAudit={() => {
                                   void navigateToPage('designAudit')
+                                }}
+                                pythonCondaEnvironmentPath={pythonCondaEnvironmentPath}
+                                pythonCondaExecutablePath={pythonCondaExecutablePath}
+                                detectedCondaExecutablePath={detectedCondaExecutablePath}
+                                condaEnvironments={condaEnvironments}
+                                condaEnvironmentsLoading={condaEnvironmentsLoading}
+                                condaEnvironmentsError={condaEnvironmentsError}
+                                onRefreshCondaEnvironments={() => {
+                                  void loadCondaEnvironments()
+                                }}
+                                onSelectCondaEnvironment={(path) => {
+                                  void updatePythonCondaEnvironment(path)
+                                }}
+                                onChooseCondaExecutable={() => {
+                                  void choosePythonCondaExecutable()
+                                }}
+                                onResetCondaExecutable={() => {
+                                  void resetPythonCondaExecutable()
                                 }}
                               />
                             ) : (
@@ -5664,6 +6606,12 @@ function App(): ReactElement {
                                       />
                                     </WorkspacePanelSection>
                                   </WorkspacePanelStack>
+                                ) : activeTask ? (
+                                  <TaskPropertiesPanel
+                                    task={activeTask}
+                                    projects={projects}
+                                    onUpdateTask={updateProjectTask}
+                                  />
                                 ) : activePage === 'notes' ? (
                                   <WorkspacePanelStack className="h-full">
                                     <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
@@ -5676,7 +6624,7 @@ function App(): ReactElement {
                                         shouldCollapseAllFolders={areAllNoteFoldersCollapsed}
                                         pendingEditId={pendingNoteTreeEditId}
                                         onPendingEditHandled={handlePendingNoteTreeEditHandled}
-                                        onSelectionChange={setSelectedNoteTreeEntries}
+                                        onSelectionChange={handleNoteTreeSelectionChange}
                                         onOpenNote={(relPath) => {
                                           setSearchQuery('')
                                           setSearchResults([])
@@ -5709,6 +6657,9 @@ function App(): ReactElement {
                                         onExportFolderPdf={(folderPath) => {
                                           void exportFolderPdf(folderPath)
                                         }}
+                                        onExportFolderMarkdown={(folderPath) => {
+                                          void exportFolderMarkdown(folderPath)
+                                        }}
                                         onRenamePath={(relPath, nextName, kind) => {
                                           void renameTreePath(relPath, nextName, kind)
                                         }}
@@ -5732,19 +6683,17 @@ function App(): ReactElement {
                                   />
                                 ) : activePage === 'calendar' ? (
                                   <CalendarTaskPanel
-                                    tasks={unscheduledTasks}
+                                    tasks={visibleUnscheduledTasks}
+                                    hasActiveFilter={hasActiveCalendarFilter}
                                     projects={projects}
                                     selectedDate={selectedCalendarDate}
                                     newTaskValue={calendarHeaderNewTask}
                                     onNewTaskValueChange={setCalendarHeaderNewTask}
-                                    onToggle={(taskId) => {
-                                      void toggleCalendarTask(taskId)
+                                    onOpenTask={(taskId) => {
+                                      openTaskDialog(taskId, { source: 'calendar' })
                                     }}
                                     onDelete={(taskId) => {
                                       void removeCalendarTask(taskId)
-                                    }}
-                                    onRename={(taskId, newTitle) => {
-                                      void renameCalendarTask(taskId, newTitle)
                                     }}
                                     onUpdatePriority={(taskId, priority) => {
                                       void updateCalendarTaskPriority(taskId, priority)
@@ -5752,14 +6701,14 @@ function App(): ReactElement {
                                     onUpdateTaskType={(taskId, taskType) => {
                                       void updateCalendarTaskType(taskId, taskType)
                                     }}
+                                    onUpdateTask={(taskId, patch) => {
+                                      void updateProjectTask(taskId, patch)
+                                    }}
                                     onUpdateStatus={(taskId, status) => {
                                       void updateProjectTask(taskId, {
                                         status,
                                         completed: status === 'completed'
                                       })
-                                    }}
-                                    onUpdateTaskProject={(taskId, projectId) => {
-                                      void updateProjectTask(taskId, { projectId })
                                     }}
                                     onUpdateTime={(taskId, time) => {
                                       void updateCalendarTaskTime(taskId, time)
@@ -5778,9 +6727,7 @@ function App(): ReactElement {
                                     }}
                                   />
                                 ) : activePage === 'schedules' ? (
-                                  <SchedulingRightPanel />
-                                ) : activePage === 'settings' ? (
-                                  <SettingsRightPanelSections />
+                                  <SchedulingRightPanel activeView={schedulingView} />
                                 ) : (
                                   <WorkspacePanelStack className="h-full">
                                     <WorkspacePanelSection>
@@ -5798,8 +6745,8 @@ function App(): ReactElement {
                           </DocumentWorkspacePanel>
                         )}
                       </WorkspaceResizableLayout>
-                    </SchedulingWorkspaceProvider>
-                  </DocumentWorkspaceMain>
+                    </DocumentWorkspaceMain>
+                  </SchedulingWorkspaceProvider>
                 </DocumentWorkspace>
                 <WorkspaceFooter />
               </WorkspaceContextProvider>
@@ -5827,6 +6774,58 @@ function App(): ReactElement {
           void exportCurrentNote(noteExportFormat)
         }}
       />
+      {taskDialogTask ? (
+        <TaskEditDialog
+          key={taskDialogTask.id}
+          task={taskDialogTask}
+          projects={projects}
+          onClose={() => {
+            setOpenTaskDialogId(null)
+            setTaskDialogOrigin(null)
+          }}
+          onSave={updateProjectTask}
+          onDelete={(taskId) => {
+            setOpenTaskDialogId(null)
+            setTaskDialogOrigin(null)
+            void removeCalendarTask(taskId)
+          }}
+          onOpenFullPage={() => {
+            if (!taskDialogOrigin) {
+              return
+            }
+
+            openTaskPage(taskDialogTask.id, taskDialogOrigin)
+          }}
+        />
+      ) : null}
+      <AlertDialog open={isTaskDeleteDialogOpen} onOpenChange={setIsTaskDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes “{activeTask?.title ?? 'this task'}” from the calendar and
+              project views.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const taskId = activeTask?.id
+                setIsTaskDeleteDialogOpen(false)
+                if (!taskId) {
+                  return
+                }
+
+                void closeTaskPage().then(() => removeCalendarTask(taskId))
+              }}
+            >
+              Delete task
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <CommandPalette
         open={hasVault && commandPaletteOpen}
         initialQuery={commandPaletteInitialQuery}
@@ -5917,6 +6916,18 @@ function addIsoDays(iso: string, days: number): string {
   const date = parseIsoDate(iso)
   date.setDate(date.getDate() + days)
   return toIsoDate(date)
+}
+
+function formatCalendarTabPeriodTitle(dateIso: string, viewMode: CalendarViewMode): string {
+  if (viewMode === 'week') {
+    const start = startOfWeekIso(parseIsoDate(dateIso))
+    return formatWeekRange(start, addIsoDays(start, 6))
+  }
+
+  return parseIsoDate(dateIso).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric'
+  })
 }
 
 function getCalendarHeaderDateParts(isoDate: string): {

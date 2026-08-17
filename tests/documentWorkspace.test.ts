@@ -3,14 +3,31 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import {
+  DocumentWorkspace,
   DocumentWorkspaceMainContent,
   DocumentWorkspacePanel,
   WorkspacePanelStack,
   WorkspaceResizableLayout
 } from '../src/renderer/src/components/ui/document-workspace'
+import { Card } from '../src/renderer/src/components/ui/card'
+import { WorkspacePanelSection } from '../src/renderer/src/components/ui/workspace-panel-section'
 import { WorkspacePage } from '../src/renderer/src/components/workspace/page'
 
 describe('document workspace right panel', () => {
+  it('uses the softer panel border token across shared surfaces', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        createElement(Card, null, 'Card'),
+        createElement(WorkspacePanelSection, null, 'Panel'),
+        createElement(DocumentWorkspace, null, 'Workspace')
+      )
+    )
+
+    expect(markup.match(/border-panel-border/g)).toHaveLength(3)
+  })
+
   it('provides a full-width scrolling main content surface', () => {
     const markup = renderToStaticMarkup(createElement(DocumentWorkspaceMainContent, null, 'body'))
 

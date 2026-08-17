@@ -114,6 +114,8 @@ const SelectiveChip = React.forwardRef<HTMLButtonElement, SelectiveChipProps>(
   ) => {
     const [open, setOpen] = React.useState(false)
     const radioGroupName = React.useId()
+    const selectedInputRef = React.useRef<HTMLInputElement>(null)
+    const firstInputRef = React.useRef<HTMLInputElement>(null)
     const selectedOption =
       options.find((option) => option.value === value) ??
       ({ value, label: value } satisfies SelectiveChipOption)
@@ -137,10 +139,21 @@ const SelectiveChip = React.forwardRef<HTMLButtonElement, SelectiveChipProps>(
             {showValue ? <span>{selectedOption.label}</span> : null}
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-48 p-1" aria-label={`${label} options`}>
+        <PopoverContent
+          align="start"
+          className="w-48 p-1"
+          aria-label={`${label} options`}
+          onOpenAutoFocus={(event) => {
+            const focusTarget = selectedInputRef.current ?? firstInputRef.current
+            if (!focusTarget) return
+
+            event.preventDefault()
+            focusTarget.focus()
+          }}
+        >
           <fieldset className="grid gap-1">
             <legend className="sr-only">{label} options</legend>
-            {options.map((option) => {
+            {options.map((option, index) => {
               const selected = option.value === value
 
               return (
@@ -150,6 +163,7 @@ const SelectiveChip = React.forwardRef<HTMLButtonElement, SelectiveChipProps>(
                   className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-button)] px-2 py-1.5 text-left text-sm text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-within:ring-2 focus-within:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
                 >
                   <input
+                    ref={selected ? selectedInputRef : index === 0 ? firstInputRef : undefined}
                     type="radio"
                     name={radioGroupName}
                     value={option.value}

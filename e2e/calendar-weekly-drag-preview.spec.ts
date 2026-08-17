@@ -33,10 +33,19 @@ function getAdjacentWeekDate(iso: string): string {
   return addIsoDays(iso, date.getDay() === 6 ? -1 : 1)
 }
 
+async function openTaskPageFromCenterDialog(page: Page): Promise<void> {
+  const taskDialog = page.getByTestId('task-center-dialog')
+  await expect(taskDialog).toBeVisible()
+  await expect(taskDialog.locator('.ProseMirror')).toHaveCount(0)
+  await taskDialog.getByRole('button', { name: 'Open full page', exact: true }).click()
+  await expect(page.getByTestId('task-page')).toBeVisible()
+}
+
 async function createFixtureVault(
   options: {
     includeUnscheduled?: boolean
     includeAllDay?: boolean
+    includeMixedAllDay?: boolean
     includeOverlap?: boolean
   } = {}
 ): Promise<{ rootPath: string; todayIso: string }> {
@@ -47,6 +56,7 @@ async function createFixtureVault(
     {
       id: 'task-weekly-preview',
       title: 'Timed drag preview task',
+      tags: [],
       date: todayIso,
       time: '09:00',
       endTime: '09:40',
@@ -62,6 +72,7 @@ async function createFixtureVault(
     calendarTasks.push({
       id: 'task-weekly-unscheduled',
       title: 'Unscheduled timed drag task',
+      tags: [],
       date: undefined,
       completed: false,
       createdAt: new Date().toISOString(),
@@ -75,6 +86,7 @@ async function createFixtureVault(
     calendarTasks.push({
       id: 'task-weekly-all-day',
       title: 'All-day task for timed conversion',
+      tags: [],
       date: todayIso,
       endDate: addIsoDays(todayIso, 1),
       completed: false,
@@ -85,10 +97,52 @@ async function createFixtureVault(
     })
   }
 
+  if (options.includeMixedAllDay) {
+    calendarTasks.push(
+      {
+        id: 'task-weekly-all-day-short',
+        title: 'Short all-day task',
+        tags: [],
+        date: todayIso,
+        endDate: todayIso,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        priority: 'medium',
+        taskType: 'assignment',
+        reminders: []
+      },
+      {
+        id: 'task-weekly-all-day-follow-up',
+        title: 'Same-day follow-up',
+        tags: [],
+        date: todayIso,
+        endDate: todayIso,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        priority: 'medium',
+        taskType: 'assignment',
+        reminders: []
+      },
+      {
+        id: 'task-weekly-all-day-tall',
+        title: 'Tall all-day task with tags',
+        tags: ['planning', 'review'],
+        date: adjacentWeekDate,
+        endDate: adjacentWeekDate,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        priority: 'medium',
+        taskType: 'assignment',
+        reminders: []
+      }
+    )
+  }
+
   if (options.includeOverlap) {
     calendarTasks.push({
       id: 'task-weekly-overlap',
       title: 'Existing overlapping task',
+      tags: [],
       date: adjacentWeekDate,
       time: '01:00',
       endTime: '01:30',
@@ -301,6 +355,61 @@ test.describe('calendar weekly drag preview', () => {
     }
   })
 
+  test('resizes timed cells with command wheel without cancelling normal wheel events', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      const wheelResults = await page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>(
+          '[data-testid="calendar-week-timed-scroller"]'
+        )
+        if (!scroller) {
+          throw new Error('Weekly timed scroller is missing')
+        }
+
+        const normalWheel = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: 100
+        })
+        const normalDispatchResult = scroller.dispatchEvent(normalWheel)
+        const commandWheel = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: -100,
+          metaKey: true
+        })
+        const commandDispatchResult = scroller.dispatchEvent(commandWheel)
+
+        return {
+          initialHeight: scroller.dataset.weeklyHourHeight,
+          normalCancelled: !normalDispatchResult,
+          normalDefaultPrevented: normalWheel.defaultPrevented,
+          commandCancelled: !commandDispatchResult,
+          commandDefaultPrevented: commandWheel.defaultPrevented
+        }
+      })
+
+      expect(wheelResults).toEqual({
+        initialHeight: '160',
+        normalCancelled: false,
+        normalDefaultPrevented: false,
+        commandCancelled: true,
+        commandDefaultPrevented: true
+      })
+      await expect(page.getByTestId('calendar-week-timed-scroller')).toHaveAttribute(
+        'data-weekly-hour-height',
+        '180'
+      )
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   test('creates and opens a timed task when double-clicking an empty weekly cell', async () => {
     const { rootPath, todayIso } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
@@ -327,12 +436,10 @@ test.describe('calendar weekly drag preview', () => {
         )
       }, todayIso)
 
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible()
-      await expect(dialog.getByRole('heading', { name: 'Edit task' })).toBeVisible()
-      await expect(dialog.locator('input[type="date"]').first()).toHaveValue(todayIso)
-      await expect(dialog.locator('input[type="time"]').first()).toHaveValue('06:20')
-      await expect(dialog.locator('input[type="time"]').nth(1)).toHaveValue('07:20')
+      await openTaskPageFromCenterDialog(page)
+      await expect(page.getByLabel('Task start time')).toHaveValue('06:20')
+      await expect(page.getByLabel('Task end time')).toHaveValue('07:20')
+      await expect(page.getByLabel('Task start date')).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -416,6 +523,82 @@ test.describe('calendar weekly drag preview', () => {
         source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
       })
       await expect(floatingPreview).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('auto-scrolls the calendar page while dragging near the workspace edge', async () => {
+    const { rootPath, todayIso } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      const workspaceContent = page.locator('.document-workspace-main-content')
+      await expect
+        .poll(() =>
+          workspaceContent.evaluate((element) => element.scrollHeight > element.clientHeight)
+        )
+        .toBe(true)
+
+      await page.evaluate((dateIso) => {
+        const source = document.querySelector<HTMLElement>(
+          '[data-testid="calendar-week-task:task-weekly-preview"]'
+        )
+        const calendar = document.querySelector<HTMLElement>('[data-testid="calendar-week-view"]')
+        const scroller = document.querySelector<HTMLElement>('.document-workspace-main-content')
+        if (!source || !calendar || !scroller) {
+          throw new Error('Weekly calendar autoscroll fixtures are missing')
+        }
+
+        const sourceRect = source.getBoundingClientRect()
+        const scrollerRect = scroller.getBoundingClientRect()
+        const dataTransfer = new DataTransfer()
+        source.dispatchEvent(
+          new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: sourceRect.left + sourceRect.width / 2,
+            clientY: sourceRect.top + 12
+          })
+        )
+
+        calendar.dispatchEvent(
+          new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: scrollerRect.left + 20,
+            clientY: scrollerRect.bottom - 4
+          })
+        )
+
+        const target = document.querySelector<HTMLElement>(
+          `[data-testid="calendar-week-timed-column:${dateIso}"]`
+        )
+        target?.dispatchEvent(
+          new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2,
+            clientY: scrollerRect.bottom - 4
+          })
+        )
+      }, todayIso)
+
+      await expect
+        .poll(() => workspaceContent.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0)
+
+      await page.evaluate(() => {
+        document
+          .querySelector<HTMLElement>('[data-testid="calendar-week-task:task-weekly-preview"]')
+          ?.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+      })
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -509,6 +692,69 @@ test.describe('calendar weekly drag preview', () => {
       await expect(page.getByTestId('calendar-week-all-day-task:task-weekly-all-day')).toHaveCount(
         0
       )
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('fits all-day cards to content without coupling neighboring day heights', async () => {
+    const { rootPath } = await createFixtureVault({ includeMixedAllDay: true })
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const shortTask = document.querySelector<HTMLElement>(
+              '[data-testid="calendar-week-all-day-task:task-weekly-all-day-short"]'
+            )
+            const tallTask = document.querySelector<HTMLElement>(
+              '[data-testid="calendar-week-all-day-task:task-weekly-all-day-tall"]'
+            )
+            return Boolean(
+              shortTask &&
+              tallTask &&
+              tallTask.getBoundingClientRect().height > shortTask.getBoundingClientRect().height
+            )
+          })
+        )
+        .toBe(true)
+
+      const rects = await page.evaluate(() => {
+        const taskIds = [
+          'task-weekly-all-day-short',
+          'task-weekly-all-day-follow-up',
+          'task-weekly-all-day-tall'
+        ]
+
+        return Object.fromEntries(
+          taskIds.map((taskId) => {
+            const element = document.querySelector<HTMLElement>(
+              `[data-testid="calendar-week-all-day-task:${taskId}"]`
+            )
+            if (!element) {
+              throw new Error(`Missing all-day task ${taskId}`)
+            }
+
+            const rect = element.getBoundingClientRect()
+            return [taskId, { top: rect.top, bottom: rect.bottom, height: rect.height }]
+          })
+        )
+      })
+
+      const shortTask = rects['task-weekly-all-day-short']
+      const followUpTask = rects['task-weekly-all-day-follow-up']
+      const tallTask = rects['task-weekly-all-day-tall']
+      expect(tallTask.height).toBeGreaterThan(shortTask.height)
+      expect(Math.abs(tallTask.top - shortTask.top)).toBeLessThan(2)
+
+      const sameDayTasks = [shortTask, followUpTask].sort((left, right) => left.top - right.top)
+      const sameDayGap = sameDayTasks[1].top - sameDayTasks[0].bottom
+      expect(sameDayGap).toBeGreaterThanOrEqual(7)
+      expect(sameDayGap).toBeLessThanOrEqual(9)
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

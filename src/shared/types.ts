@@ -62,6 +62,16 @@ export interface FolderPdfExportResult {
   warnings: string[]
 }
 
+export interface FolderMarkdownExportInput {
+  folderPath: string
+}
+
+export interface FolderMarkdownExportResult {
+  path: Maybe<string>
+  noteCount: number
+  warnings: string[]
+}
+
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
 export type ProjectIconSet = 'tabler'
 export type LegacyProjectIconSet = 'shape' | 'lucide'
@@ -246,8 +256,10 @@ export interface CalendarTask {
   title: string
   description?: string
   projectId?: string
+  milestoneId?: string
+  tags: string[]
   date?: string // Optional - undefined means unscheduled
-  endDate?: string // Optional - if set, task spans from `date` through `endDate`
+  endDate?: string // Optional - spans from `date` through `endDate`, or acts as a deadline when `date` is absent
   // Compatibility field for older vaults. New records use status as the source of truth.
   completed: boolean
   status?: TaskStatus
@@ -266,6 +278,8 @@ export interface CalendarTask {
 export interface CreateTaskInput {
   title: string
   projectId?: string
+  milestoneId?: string
+  tags?: string[]
   date?: string
   endDate?: string
   time?: string
@@ -280,6 +294,13 @@ export interface CreateTaskInput {
 export type Task = CalendarTask
 
 export type ProjectState = 'active' | 'archived'
+
+export interface ProjectMilestone {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
 
 export interface Project {
   id: string
@@ -297,6 +318,7 @@ export interface Project {
   // Tasks are resolved from Task.projectId at runtime; this optional field is only
   // used by project-focused renderer projections.
   tasks?: CalendarTask[]
+  milestones?: ProjectMilestone[]
   icon: ProjectIconStyle
 }
 
@@ -338,6 +360,27 @@ export interface DeleteProjectResult {
   nextSelectedProjectId: string | null
   removedTaskIds: string[]
   unassignedTaskIds: string[]
+}
+
+export interface CreateProjectMilestoneInput {
+  projectId: string
+  title: string
+}
+
+export interface UpdateProjectMilestoneInput {
+  projectId: string
+  milestoneId: string
+  title: string
+}
+
+export interface DeleteProjectMilestoneInput {
+  projectId: string
+  milestoneId: string
+}
+
+export interface DeleteProjectMilestoneResult {
+  deletedMilestoneId: string
+  movedTaskIds: string[]
 }
 
 export type GridBoardItemKind = 'note' | 'project' | 'text'
@@ -402,6 +445,11 @@ export interface StoredExcalidrawFileDocument {
   scene: ExcalidrawSessionScene
 }
 
+export interface ExcalidrawFileReadResult {
+  document: StoredExcalidrawFileDocument
+  recovered: boolean
+}
+
 export interface FileMapEntry {
   id: string
   hash: string
@@ -409,6 +457,22 @@ export interface FileMapEntry {
 }
 
 export type FileMap = Record<string, FileMapEntry>
+
+export interface CondaEnvironment {
+  name: string
+  path: string
+}
+
+export interface CondaEnvironmentListResult {
+  environments: CondaEnvironment[]
+  executablePath: string | null
+  error: string | null
+}
+
+export interface CondaExecutablePickerResult {
+  path: string | null
+  error: string | null
+}
 
 export interface AppSettings {
   isSidebarCollapsed: boolean // Tracks if the calendar sidebar is collapsed
@@ -425,6 +489,8 @@ export interface AppSettings {
     mistralApiKey: string
   }
   fontFamily: string
+  pythonCondaEnvironmentPath: Maybe<string>
+  pythonCondaExecutablePath: Maybe<string>
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
   calendarTasks: CalendarTask[]
@@ -445,6 +511,8 @@ export interface AppSettingsUpdate {
     mistralApiKey: string
   }
   fontFamily?: string
+  pythonCondaEnvironmentPath?: Maybe<string>
+  pythonCondaExecutablePath?: Maybe<string>
   editorVimModeEnabled?: boolean
   editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
@@ -975,6 +1043,17 @@ export interface NoteBodyFrontmatterMigrationResult {
   }>
 }
 
+export interface NoteImagePathMigrationResult {
+  converted: number
+  skipped: number
+  imagesConverted: number
+  attachmentsCopied: number
+  failed: Array<{
+    relPath: string
+    error: string
+  }>
+}
+
 export interface LegacyExcalidrawImportResult {
   imported: Array<{
     sourceId: string
@@ -1023,7 +1102,7 @@ export interface RendererVaultApi {
     onTreeChanged: (listener: () => void) => () => void
     readNote: (relPath: string) => Promise<string>
     readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
-    readExcalidrawFileDocument: (relPath: string) => Promise<StoredExcalidrawFileDocument>
+    readExcalidrawFileDocument: (relPath: string) => Promise<ExcalidrawFileReadResult>
     writeNote: (relPath: string, content: string) => Promise<void>
     writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
     writeExcalidrawFileDocument: (
@@ -1038,6 +1117,7 @@ export interface RendererVaultApi {
     importNotes: () => Promise<NoteImportResult>
     migrateBlockNoteNotes: () => Promise<BlockNoteMigrationResult>
     migrateTaggedNoteBodyFrontmatter: () => Promise<NoteBodyFrontmatterMigrationResult>
+    migrateNoteImagePaths: () => Promise<NoteImagePathMigrationResult>
     rename: (fromRelPath: string, toRelPath: string) => Promise<void>
     renamePath: (fromRelPath: string, toRelPath: string) => Promise<void>
     delete: (relPath: string) => Promise<void>
@@ -1046,6 +1126,7 @@ export interface RendererVaultApi {
     exportNote: (relPath: string, content: string) => Promise<Maybe<string>>
     exportNotePdf: (input: NotePdfExportInput) => Promise<NotePdfExportResult>
     exportFolderPdf: (input: FolderPdfExportInput) => Promise<FolderPdfExportResult>
+    exportFolderMarkdown: (input: FolderMarkdownExportInput) => Promise<FolderMarkdownExportResult>
     exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
   }
   fleeting: {
@@ -1093,6 +1174,10 @@ export interface RendererVaultApi {
       options?: AppSettingsUpdateOptions
     ) => Promise<AppSettings>
   }
+  python: {
+    listCondaEnvironments: () => Promise<CondaEnvironmentListResult>
+    chooseCondaExecutable: () => Promise<CondaExecutablePickerResult>
+  }
   projects: {
     create: (input: CreateProjectInput) => Promise<Project>
     select: (input: { projectId: string | null }) => Promise<{ projectId: string | null }>
@@ -1103,6 +1188,9 @@ export interface RendererVaultApi {
       favorite: boolean
     }>
     delete: (input: DeleteProjectInput) => Promise<DeleteProjectResult>
+    createMilestone: (input: CreateProjectMilestoneInput) => Promise<ProjectMilestone>
+    updateMilestone: (input: UpdateProjectMilestoneInput) => Promise<ProjectMilestone>
+    deleteMilestone: (input: DeleteProjectMilestoneInput) => Promise<DeleteProjectMilestoneResult>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<CalendarTask>

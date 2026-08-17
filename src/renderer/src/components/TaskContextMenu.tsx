@@ -1,23 +1,16 @@
 import { ReactElement, useState } from 'react'
-import {
-  Bell,
-  BellRing,
-  Calendar,
-  Check,
-  Clock3,
-  Flag,
-  Pencil,
-  Target,
-  Trash2,
-  X
-} from './ui/icons'
+import { Bell, BellRing, Calendar, Check, Clock3, Flag, Target, Trash2, X } from './ui/icons'
 import {
   CALENDAR_TASK_TYPE_OPTIONS,
+  TASK_STATUS_OPTIONS,
   CalendarTask,
   CalendarTaskType,
   TaskPriority,
-  TaskReminder
+  TaskReminder,
+  TaskStatus
 } from '../../../shared/types'
+import { getTaskStatus } from '../lib/taskStatus'
+import { TaskStatusIcon } from './TaskStatusIcon'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -48,19 +41,16 @@ import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
 
 interface TaskContextMenuProps {
   task: CalendarTask
-  selectedDate: string
-  onToggle: (taskId: string) => void
+  selectedDate?: string
   onDelete: (taskId: string) => void
-  onRename: (taskId: string, newTitle: string) => void
+  onUpdateStatus: (taskId: string, status: TaskStatus) => void
   onUpdatePriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
   onUpdateTime: (taskId: string, time: string | undefined) => void
   onUpdateReminders: (taskId: string, reminders: TaskReminder[]) => void
-  onScheduleTask: (taskId: string, date: string) => void
-  onUnscheduleTask: (taskId: string) => void
-  children: ReactElement<{
-    onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void
-  }>
+  onScheduleTask?: (taskId: string, date: string) => void
+  onUnscheduleTask?: (taskId: string) => void
+  children: ReactElement
 }
 
 const QUICK_TIME_OPTIONS = [
@@ -79,9 +69,8 @@ const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
 export function TaskContextMenu({
   task,
   selectedDate,
-  onToggle,
   onDelete,
-  onRename,
+  onUpdateStatus,
   onUpdatePriority,
   onUpdateTaskType,
   onUpdateTime,
@@ -95,6 +84,7 @@ export function TaskContextMenu({
   const [timeInputValue, setTimeInputValue] = useState(task.time ?? '')
   const [newReminderValue, setNewReminderValue] = useState(30)
   const [newReminderType, setNewReminderType] = useState<'minutes' | 'hours' | 'days'>('minutes')
+  const currentStatus = getTaskStatus(task.status, task.completed)
 
   const formatReminderLabel = (reminder: TaskReminder): string => {
     const unit = reminder.value === 1 ? reminder.type.slice(0, -1) : reminder.type
@@ -125,27 +115,29 @@ export function TaskContextMenu({
     onUpdateReminders(task.id, nextReminders)
   }
 
-  const handleRename = (): void => {
-    const raw = window.prompt('Rename task', task.title)
-    if (raw === null) return
-    const nextTitle = raw.trim()
-    if (!nextTitle) return
-    onRename(task.id, nextTitle)
-  }
-
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onClick={() => onToggle(task.id)}>
-            <Check className="mr-2 h-4 w-4" />
-            {task.completed ? 'Mark as pending' : 'Mark as complete'}
-          </ContextMenuItem>
-          <ContextMenuItem onClick={handleRename}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Rename
-          </ContextMenuItem>
+        <ContextMenuContent data-testid={`task-context-menu:${task.id}`}>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Check className="mr-2 h-4 w-4" />
+              Set status
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {TASK_STATUS_OPTIONS.map((option) => (
+                <ContextMenuItem
+                  key={option.value}
+                  onSelect={() => onUpdateStatus(task.id, option.value)}
+                >
+                  <TaskStatusIcon status={option.value} size={16} />
+                  {option.label}
+                  {currentStatus === option.value && <Check className="ml-auto h-4 w-4" />}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuSub>
             <ContextMenuSubTrigger>
               <Target className="mr-2 h-4 w-4" />
@@ -155,7 +147,7 @@ export function TaskContextMenu({
               {CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => (
                 <ContextMenuItem
                   key={taskType.value}
-                  onClick={() => onUpdateTaskType(task.id, taskType.value)}
+                  onSelect={() => onUpdateTaskType(task.id, taskType.value)}
                 >
                   <CalendarTaskTypeBadge taskType={taskType.value} />
                   {(task.taskType || 'assignment') === taskType.value && (
@@ -193,27 +185,27 @@ export function TaskContextMenu({
               {QUICK_TIME_OPTIONS.map((option) => (
                 <ContextMenuItem
                   key={option.value}
-                  onClick={() => onUpdateTime(task.id, option.value)}
+                  onSelect={() => onUpdateTime(task.id, option.value)}
                 >
                   {option.label}
                   {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
                 </ContextMenuItem>
               ))}
               <ContextMenuItem
-                onClick={() => {
+                onSelect={() => {
                   setTimeInputValue(task.time ?? '')
                   setIsTimeDialogOpen(true)
                 }}
               >
                 Custom time...
               </ContextMenuItem>
-              <ContextMenuItem onClick={() => onUpdateTime(task.id, undefined)}>
+              <ContextMenuItem onSelect={() => onUpdateTime(task.id, undefined)}>
                 Clear time
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
           <ContextMenuItem
-            onClick={() => {
+            onSelect={() => {
               setIsReminderDialogOpen(true)
             }}
           >
@@ -221,20 +213,20 @@ export function TaskContextMenu({
             Manage reminders
           </ContextMenuItem>
           <ContextMenuSeparator />
-          {task.date ? (
-            <ContextMenuItem onClick={() => onUnscheduleTask(task.id)}>
+          {task.date && onUnscheduleTask ? (
+            <ContextMenuItem onSelect={() => onUnscheduleTask(task.id)}>
               <Calendar className="mr-2 h-4 w-4" />
               Move to unscheduled
             </ContextMenuItem>
-          ) : (
-            <ContextMenuItem onClick={() => onScheduleTask(task.id, selectedDate)}>
+          ) : !task.date && selectedDate && onScheduleTask ? (
+            <ContextMenuItem onSelect={() => onScheduleTask(task.id, selectedDate)}>
               <Calendar className="mr-2 h-4 w-4" />
-              Schedule to {selectedDate}
+              {task.endDate ? `Move deadline to ${selectedDate}` : `Schedule to ${selectedDate}`}
             </ContextMenuItem>
-          )}
-          <ContextMenuItem destructive onClick={() => onDelete(task.id)}>
+          ) : null}
+          <ContextMenuItem destructive onSelect={() => onDelete(task.id)}>
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete
+            Delete task
             <ContextMenuShortcut>
               <Shortcut keys={['cmd', 'backspace']} />
             </ContextMenuShortcut>

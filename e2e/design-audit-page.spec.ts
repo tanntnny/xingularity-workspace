@@ -64,6 +64,14 @@ test.describe('design audit page', () => {
       await expect(page.getByTestId('design-audit-dialog')).toBeVisible()
       await page.getByTestId('design-audit-dialog').getByRole('button', { name: 'Close' }).click()
 
+      await page.getByRole('button', { name: 'Open menu' }).click()
+      await expect(page.getByRole('menu')).toBeVisible()
+      await page.getByRole('button', { name: 'Open popover' }).click()
+      const popover = page.getByRole('dialog').filter({ hasText: 'Popover content specimen' })
+      await expect(popover).toBeVisible()
+      await popover.getByText('Popover content specimen', { exact: true }).click()
+      await page.keyboard.press('Escape')
+
       await page.getByRole('button', { name: 'Open command palette' }).click()
       await page.locator('[cmdk-input]').fill('>design audit')
       await expect(page.getByText('Go to Design Audit')).toBeVisible()

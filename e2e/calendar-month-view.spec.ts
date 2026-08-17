@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -29,7 +29,9 @@ function getMonthDayCellCount(date: Date): number {
 
 async function createFixtureVault(
   taskCount = 1,
-  includeUnscheduled = false
+  includeUnscheduled = false,
+  tagsByIndex: Record<number, string[]> = {},
+  projectIndexes: readonly number[] = []
 ): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-month-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
@@ -46,6 +48,8 @@ async function createFixtureVault(
     createdAt: new Date().toISOString(),
     priority: 'medium',
     taskType: 'assignment',
+    tags: tagsByIndex[index] ?? [],
+    projectId: projectIndexes.includes(index) ? `project-${index}` : undefined,
     reminders: []
   }))
 
@@ -133,6 +137,146 @@ async function openMonthlyCalendar(page: Page): Promise<void> {
 }
 
 test.describe('calendar monthly view', () => {
+  test('keeps period controls on the first row and view filters on the second row', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const viewToggle = page.getByTestId('calendar-view-toggle')
+      const periodToolbar = page.getByTestId('calendar-workspace-toolbar')
+      const filterButton = page.getByTestId('calendar-task-filter-trigger')
+      const workspaceTab = page.getByTestId('workspace-tab:workspace-tab-1')
+      const periodTitle = (await page.getByTestId('calendar-period-title').textContent())?.trim()
+      expect(periodTitle).toBeTruthy()
+      await expect(workspaceTab).toContainText(periodTitle ?? '')
+      await expect(workspaceTab).not.toContainText('Calendar')
+      await expect(viewToggle).toBeVisible()
+      await expect(periodToolbar).toBeVisible()
+      await expect(filterButton).toBeVisible()
+
+      const toggleBox = await viewToggle.boundingBox()
+      const toolbarBox = await periodToolbar.boundingBox()
+      const filterButtonBox = await filterButton.boundingBox()
+      if (!toggleBox || !toolbarBox || !filterButtonBox) {
+        throw new Error('Expected calendar header controls to have layout boxes')
+      }
+
+      expect(toggleBox.y).toBeGreaterThan(toolbarBox.y + toolbarBox.height - 4)
+      expect(filterButtonBox.x).toBeGreaterThan(toggleBox.x + toggleBox.width)
+      expect(Math.abs(filterButtonBox.y - toggleBox.y)).toBeLessThanOrEqual(4)
+
+      await page.getByTestId('workspace-tab-add').click()
+      const secondWorkspaceTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondWorkspaceTab).toBeVisible()
+      await page.getByTestId('sidebar-page:calendar').click()
+      await expect(page.getByTestId('calendar-month-view')).toBeVisible()
+      await page.getByTestId('calendar-view-toggle').getByText('Weekly', { exact: true }).click()
+      await expect(page.getByTestId('calendar-week-view')).toBeVisible()
+      const weeklyPeriodTitle = (
+        await page.getByTestId('calendar-period-title').textContent()
+      )?.trim()
+      expect(weeklyPeriodTitle).toBeTruthy()
+      await expect(secondWorkspaceTab).toContainText(weeklyPeriodTitle ?? '')
+
+      await workspaceTab.click()
+      await expect(page.getByTestId('calendar-month-view')).toBeVisible()
+      await expect(workspaceTab).toContainText(periodTitle ?? '')
+
+      await secondWorkspaceTab.click()
+      await expect(page.getByTestId('calendar-week-view')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('filters scheduled and unscheduled tasks by searchable tags and remembers selection', async () => {
+    const { rootPath } = await createFixtureVault(4, true, {
+      0: ['planning'],
+      1: ['review'],
+      3: ['planning']
+    })
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const filterButton = page.getByTestId('calendar-task-filter-trigger')
+      const eventByTitle = (title: string): Locator =>
+        page.locator('.calendar-full .fc-event.calendar-task-event').filter({ hasText: title })
+
+      await filterButton.click()
+      const popover = page.getByTestId('calendar-task-filter-popover')
+      await expect(popover).toBeVisible()
+      await popover.locator('input[aria-label="Search calendar task tags"]').fill('planning')
+
+      const planningOption = page.getByTestId('calendar-task-tag-option:planning')
+      await expect(planningOption).toBeVisible()
+      await planningOption.click()
+      await expect(planningOption).toHaveAttribute('data-checked', 'true')
+      await expect(filterButton).toContainText('Filter (1)')
+
+      await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
+      await expect(eventByTitle('Overflow task 2')).toHaveCount(0)
+      await expect(eventByTitle('Overflow task 3')).toHaveCount(0)
+      await expect(page.getByTestId('calendar-task-filter-popover')).toBeVisible()
+      await expect(page.locator('[data-unscheduled-task-id="task-month-visible-3"]')).toBeVisible()
+
+      await page.reload()
+      await page.waitForLoadState('domcontentloaded')
+      await page.waitForFunction(() => typeof window.vaultApi?.vault?.restoreLast === 'function')
+      await openMonthlyCalendar(page)
+      await expect(page.getByTestId('calendar-task-filter-trigger')).toContainText('Filter (1)')
+      await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
+
+      await page.getByTestId('calendar-task-filter-trigger').click()
+      await page.getByTestId('calendar-task-filter-clear').click()
+      await expect(page.getByTestId('calendar-task-filter-trigger')).toHaveText('Filter')
+      await expect(eventByTitle('Overflow task 2')).toHaveCount(1)
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('applies project and non-project filters to scheduled and unscheduled tasks', async () => {
+    const { rootPath } = await createFixtureVault(4, true, {}, [0, 3])
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const eventByTitle = (title: string): Locator =>
+        page.locator('.calendar-full .fc-event.calendar-task-event').filter({ hasText: title })
+      const filterButton = page.getByTestId('calendar-task-filter-trigger')
+
+      await filterButton.click()
+      await expect(page.getByTestId('calendar-content-filter')).toBeVisible()
+
+      await page.getByTestId('calendar-content-filter-option:projectTasks').click()
+      await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
+      await expect(eventByTitle('Overflow task 2')).toHaveCount(0)
+      await expect(eventByTitle('Overflow task 3')).toHaveCount(0)
+      await expect(page.locator('[data-unscheduled-task-id="task-month-visible-3"]')).toBeVisible()
+
+      await page.getByTestId('calendar-content-filter-option:nonProjectTasks').click()
+      await expect(eventByTitle('Overflow task 1')).toHaveCount(0)
+      await expect(eventByTitle('Overflow task 2')).toHaveCount(1)
+      await expect(eventByTitle('Overflow task 3')).toHaveCount(1)
+      await expect(page.locator('[data-unscheduled-task-id="task-month-visible-3"]')).toHaveCount(0)
+
+      await page.getByTestId('calendar-task-filter-clear').click()
+      await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
+      await expect(eventByTitle('Overflow task 2')).toHaveCount(1)
+      await expect(page.locator('[data-unscheduled-task-id="task-month-visible-3"]')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   test('renders a visible month grid with day cells', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)

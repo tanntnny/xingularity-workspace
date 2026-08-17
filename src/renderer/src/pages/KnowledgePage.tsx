@@ -2,11 +2,11 @@ import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, useViewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import * as d3 from 'd3'
-import { Sparkles } from '../components/ui/icons'
 import { EmptyState } from '../components/ui/empty-state'
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3'
 import type { NoteListItem } from '../../../shared/types'
 import { buildKnowledgeGraph, filterKnowledgeGraph } from '../lib/knowledgeGraph'
+import { APP_PAGE_ICONS } from '../lib/pageIcons'
 
 interface KnowledgePageProps {
   notes: NoteListItem[]
@@ -292,7 +292,7 @@ function KnowledgeCanvas({
         >
           <EmptyState
             className="max-w-xl"
-            icon={Sparkles}
+            icon={APP_PAGE_ICONS.knowledge}
             title="No note connections yet"
             description={
               showOrphans

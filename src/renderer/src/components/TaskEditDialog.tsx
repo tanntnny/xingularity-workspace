@@ -15,14 +15,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
 import { TaskPriorityBadge } from './ui/task-priority-badge'
 import { TaskStatusIcon } from './TaskStatusIcon'
+import { TagEditor } from './TagEditor'
 import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
+import { normalizeCalendarEndDate } from '../../../shared/calendarTaskDates'
 import {
   Dialog,
   DialogActionButton,
   DialogBody,
   DialogCloseAction,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogShell,
   DialogShellFooter,
@@ -33,9 +34,9 @@ export interface TaskEditDialogProps {
   task: CalendarTask
   projects?: Project[]
   onClose: () => void
-  onSave: (taskId: string, patch: Partial<CalendarTask>) => void
+  onSave: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
   onDelete: (taskId: string) => void
-  description?: string
+  onOpenFullPage: () => void | Promise<void>
 }
 
 export function TaskEditDialog({
@@ -44,24 +45,26 @@ export function TaskEditDialog({
   onClose,
   onSave,
   onDelete,
-  description = 'Update task details without leaving the current view.'
+  onOpenFullPage
 }: TaskEditDialogProps): ReactElement {
   const [title, setTitle] = useState(task.title)
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
   const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
   const [status, setStatus] = useState<TaskStatus>(getTaskStatus(task.status, task.completed))
   const [projectId, setProjectId] = useState(task.projectId ?? '')
+  const [milestoneId, setMilestoneId] = useState(task.milestoneId ?? '')
+  const [tags, setTags] = useState(task.tags ?? [])
   const [date, setDate] = useState(task.date ?? '')
   const [endDate, setEndDate] = useState(task.endDate ?? '')
   const [time, setTime] = useState(task.time ?? '')
   const [endTime, setEndTime] = useState(task.endTime ?? '')
   const closeHandledRef = useRef(false)
   const selectedProject = projects.find((project) => project.id === projectId)
+  const selectedMilestone = selectedProject?.milestones?.find(
+    (milestone) => milestone.id === milestoneId
+  )
 
-  const handleClose = (): void => {
-    if (closeHandledRef.current) return
-    closeHandledRef.current = true
-
+  const buildPatch = (): Partial<CalendarTask> => {
     const patch: Partial<CalendarTask> = {}
     const trimmedTitle = title.trim()
     if (trimmedTitle && trimmedTitle !== task.title) {
@@ -83,15 +86,22 @@ export function TaskEditDialog({
       patch.projectId = normalizedProjectId
     }
 
+    const normalizedMilestoneId = milestoneId.trim() || undefined
+    if ((task.milestoneId ?? undefined) !== normalizedMilestoneId) {
+      patch.milestoneId = normalizedMilestoneId
+    }
+
+    const initialTags = task.tags ?? []
+    if (
+      tags.length !== initialTags.length ||
+      tags.some((tag, index) => tag !== initialTags[index])
+    ) {
+      patch.tags = tags
+    }
+
     const normalizedDate = date.trim() || undefined
     const normalizedEndDate = endDate.trim() || undefined
-    const normalizedEndDateValue = normalizedDate
-      ? normalizedEndDate && normalizedEndDate >= normalizedDate
-        ? normalizedEndDate
-        : normalizedEndDate
-          ? normalizedDate
-          : undefined
-      : undefined
+    const normalizedEndDateValue = normalizeCalendarEndDate(normalizedDate, normalizedEndDate)
     const normalizedTime = time.trim() || undefined
     const normalizedEndTime = endTime.trim() || undefined
 
@@ -107,10 +117,30 @@ export function TaskEditDialog({
       patch.endTime = normalizedEndTime
     }
 
+    return patch
+  }
+
+  const handleClose = (): void => {
+    if (closeHandledRef.current) return
+    closeHandledRef.current = true
+
+    const patch = buildPatch()
     if (Object.keys(patch).length > 0) {
-      onSave(task.id, patch)
+      void onSave(task.id, patch)
     }
     onClose()
+  }
+
+  const handleOpenFullPage = async (): Promise<void> => {
+    if (closeHandledRef.current) return
+    closeHandledRef.current = true
+
+    const patch = buildPatch()
+    if (Object.keys(patch).length > 0) {
+      await onSave(task.id, patch)
+    }
+    onClose()
+    await onOpenFullPage()
   }
 
   const handleDelete = (): void => {
@@ -127,13 +157,23 @@ export function TaskEditDialog({
         if (!open) handleClose()
       }}
     >
-      <DialogContent className="max-w-lg" showCloseButton={false}>
+      <DialogContent
+        className="max-h-[min(760px,calc(100vh-2rem))] max-w-lg overflow-hidden"
+        data-testid="task-center-dialog"
+        showCloseButton={false}
+      >
         <DialogShell>
-          <DialogHeader>
+          <DialogHeader className="flex-row items-start justify-between gap-4 space-y-0 text-left">
             <DialogTitle>Edit task</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
+            <DialogActionButton
+              onClick={() => {
+                void handleOpenFullPage()
+              }}
+              label="Open full page"
+              data-testid="task-open-full-page"
+            />
           </DialogHeader>
-          <DialogBody>
+          <DialogBody className="overflow-y-auto pr-1">
             <div className="space-y-4">
               <div>
                 <label
@@ -152,6 +192,14 @@ export function TaskEditDialog({
                 />
               </div>
               <div>
+                <TagEditor
+                  value={tags}
+                  onChange={setTags}
+                  label="Task tags"
+                  testId="task-tags-editor"
+                />
+              </div>
+              <div>
                 <label
                   htmlFor={`task-project-${task.id}`}
                   className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -160,7 +208,17 @@ export function TaskEditDialog({
                 </label>
                 <Select
                   value={projectId || '__none__'}
-                  onValueChange={(value) => setProjectId(value === '__none__' ? '' : value)}
+                  onValueChange={(value) => {
+                    const nextProjectId = value === '__none__' ? '' : value
+                    setProjectId(nextProjectId)
+                    if (
+                      !projects
+                        .find((project) => project.id === nextProjectId)
+                        ?.milestones?.some((milestone) => milestone.id === milestoneId)
+                    ) {
+                      setMilestoneId('')
+                    }
+                  }}
                 >
                   <SelectTrigger id={`task-project-${task.id}`} className="mt-1 w-full">
                     <SelectValue placeholder="No project">
@@ -187,6 +245,35 @@ export function TaskEditDialog({
               </div>
               <div>
                 <label
+                  htmlFor={`task-milestone-${task.id}`}
+                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  Milestone
+                </label>
+                <Select
+                  value={milestoneId || '__none__'}
+                  onValueChange={(value) => setMilestoneId(value === '__none__' ? '' : value)}
+                  disabled={!selectedProject}
+                >
+                  <SelectTrigger id={`task-milestone-${task.id}`} className="mt-1 w-full">
+                    <SelectValue placeholder="No milestone">
+                      {selectedMilestone ? (
+                        <span className="truncate">{selectedMilestone.title}</span>
+                      ) : null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No milestone</SelectItem>
+                    {selectedProject?.milestones?.map((milestone) => (
+                      <SelectItem key={milestone.id} value={milestone.id}>
+                        <span className="truncate">{milestone.title}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label
                   htmlFor={`task-status-${task.id}`}
                   className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
@@ -196,7 +283,7 @@ export function TaskEditDialog({
                   <SelectTrigger id={`task-status-${task.id}`} className="mt-1 w-full">
                     <SelectValue asChild>
                       <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
-                        <TaskStatusIcon status={status} size={14} className="shrink-0" />
+                        <TaskStatusIcon status={status} size={18} className="shrink-0" />
                         <span className="truncate">{TASK_STATUS_META[status].label}</span>
                       </span>
                     </SelectValue>
@@ -205,7 +292,7 @@ export function TaskEditDialog({
                     {TASK_STATUS_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <TaskStatusIcon status={option.value} size={14} className="shrink-0" />
+                          <TaskStatusIcon status={option.value} size={18} className="shrink-0" />
                           <span>{option.label}</span>
                         </span>
                       </SelectItem>
@@ -303,7 +390,7 @@ export function TaskEditDialog({
                     htmlFor={`task-end-date-${task.id}`}
                     className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   >
-                    End date
+                    {date ? 'End date' : 'Due date'}
                   </label>
                   <Input
                     id={`task-end-date-${task.id}`}
@@ -318,7 +405,7 @@ export function TaskEditDialog({
                     htmlFor={`task-end-time-${task.id}`}
                     className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   >
-                    End time
+                    {date ? 'End time' : 'Due time'}
                   </label>
                   <Input
                     id={`task-end-time-${task.id}`}
@@ -331,7 +418,10 @@ export function TaskEditDialog({
               </div>
             </div>
           </DialogBody>
-          <DialogShellFooter closeAction={<DialogCloseAction label="Close task editor" />}>
+          <DialogShellFooter
+            className="border-t border-border pt-3"
+            closeAction={<DialogCloseAction label="Close task editor" />}
+          >
             <DialogActionButton
               onClick={handleDelete}
               title="Delete task"

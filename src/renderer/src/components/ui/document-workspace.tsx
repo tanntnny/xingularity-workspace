@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import type { PanelImperativeHandle } from 'react-resizable-panels'
-import { type FilledIcon, PanelRightClose, PanelRightOpen, Plus, X } from './icons'
+import { PanelRightClose, PanelRightOpen, Plus, X } from './icons'
 
 import { cn } from '../../lib/utils'
 import { ActionButtonGroup } from './button-group'
@@ -13,7 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from './toggle-group'
 type WorkspaceTab = {
   id: string
   label: string
-  icon?: FilledIcon
+  icon?: React.ReactNode
   shortcut?: readonly ShortcutKey[]
 }
 
@@ -27,6 +27,7 @@ interface WorkspaceIconButtonProps extends Omit<
   icon: React.ReactNode
   label?: string
   active?: boolean
+  bordered?: boolean
   borderless?: boolean
 }
 
@@ -34,7 +35,7 @@ const WorkspaceIconButton = React.forwardRef<
   React.ElementRef<typeof Button>,
   WorkspaceIconButtonProps
 >(({ className, icon, label, active = false, type = 'button', ...props }, ref) => {
-  const { borderless = false, ...buttonProps } = props
+  const { bordered = false, borderless = false, ...buttonProps } = props
   const inferredLabel =
     label ??
     (typeof buttonProps['aria-label'] === 'string' ? buttonProps['aria-label'] : undefined) ??
@@ -49,7 +50,7 @@ const WorkspaceIconButton = React.forwardRef<
       data-active={active ? 'true' : 'false'}
       className={cn(
         'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
-        !label && !borderless ? 'border border-input' : undefined,
+        bordered || (!label && !borderless) ? 'border border-input' : undefined,
         label ? 'gap-1.5' : undefined,
         className
       )}
@@ -113,36 +114,40 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
             selectionIndicatorAnimated={false}
           >
             {tabs.map((tab) => {
-              const TabIcon = tab.icon
-
               return (
                 <div
                   key={tab.id}
                   role="presentation"
                   data-active={tab.id === activeTabId ? 'true' : 'false'}
                   data-toggle-group-indicator-target="true"
-                  className="group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-card data-[active=true]:bg-transparent"
+                  className="group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center overflow-hidden rounded-full border bg-card data-[active=true]:bg-transparent"
                 >
                   <ToggleGroupItem
                     value={tab.id}
                     variant="outline"
                     id={`workspace-tab:${tab.id}`}
                     aria-label={tab.label}
+                    title={tab.label}
                     aria-selected={tab.id === activeTabId}
                     role="tab"
                     data-testid={`workspace-tab:${tab.id}`}
                     className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left transition-none hover:bg-accent/60 hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                   >
-                    {TabIcon ? (
-                      <TabIcon
-                        size={16}
-                        strokeWidth={1.8}
+                    {tab.icon ? (
+                      <span
                         aria-hidden="true"
                         data-testid={`workspace-tab-icon:${tab.id}`}
-                        className="shrink-0 text-muted-foreground"
-                      />
+                        className="flex shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+                      >
+                        {tab.icon}
+                      </span>
                     ) : null}
-                    <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                    <span
+                      data-testid={`workspace-tab-label:${tab.id}`}
+                      className="workspace-tab-label-fade min-w-0 flex-1"
+                    >
+                      {tab.label}
+                    </span>
                     {tab.shortcut ? (
                       <Shortcut
                         keys={tab.shortcut}
@@ -184,10 +189,10 @@ WorkspaceTabManager.displayName = 'WorkspaceTabManager'
 const workspaceMainHeaderClass = 'grid h-24 min-h-24 shrink-0 grid-rows-[48px_48px]'
 
 const workspacePanelHeaderClass =
-  'app-drag-region flex h-10 shrink-0 items-center gap-2 border-b bg-card px-3'
+  'app-drag-region flex h-10 shrink-0 items-center gap-2 border-b border-panel-border bg-card px-3'
 
 const workspaceHeaderActionRowClass = cn(
-  'app-no-drag ml-auto flex shrink-0 items-center gap-2',
+  'app-no-drag ml-auto flex min-w-0 max-w-full shrink items-center gap-2',
   workspaceTopbarControlClass
 )
 
@@ -278,7 +283,7 @@ const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProp
       ref={ref}
       data-has-panel={hasPanel ? 'true' : 'false'}
       className={cn(
-        'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-workspace',
+        'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-shell border border-panel-border bg-workspace',
         className
       )}
       {...props}
@@ -316,7 +321,7 @@ const DocumentWorkspaceMain = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      'relative flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden rounded-xl p-2',
+      'relative flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden rounded-surface p-2',
       className
     )}
     {...props}
@@ -605,7 +610,7 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
 
     return (
       <header ref={ref} className={cn(workspaceMainHeaderClass, className)} {...props}>
-        <div className="app-drag-region flex min-w-0 items-center gap-2 border-b px-3">
+        <div className="app-drag-region flex min-w-0 items-center gap-2 border-b border-panel-border px-3">
           <div className="app-no-drag flex min-w-0 items-center gap-3">{breadcrumb}</div>
           {actions ? <div className={workspaceHeaderActionRowClass}>{actions}</div> : null}
         </div>

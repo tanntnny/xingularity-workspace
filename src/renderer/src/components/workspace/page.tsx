@@ -80,7 +80,7 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
       <div className="min-w-0 w-full p-3">
         <div className="flex min-h-full w-full flex-col gap-6">
           {heading || description || toolbar ? (
-            <header className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <header className="flex flex-col gap-4 border-b border-panel-border pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 {heading ? (
                   <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
@@ -98,7 +98,7 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
       {aside ? (
         <aside
           aria-label={asideLabel}
-          className="min-h-0 overflow-y-auto border-t bg-muted p-3 lg:border-l lg:border-t-0"
+          className="min-h-0 overflow-y-auto border-t border-panel-border bg-muted p-3 lg:border-l lg:border-t-0"
         >
           {aside}
         </aside>
@@ -113,7 +113,10 @@ const WorkspaceSectionCard = React.forwardRef<HTMLDivElement, React.HTMLAttribut
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('rounded-lg border bg-card p-6 text-card-foreground', className)}
+      className={cn(
+        'rounded-lg border border-panel-border bg-card p-6 text-card-foreground',
+        className
+      )}
       {...props}
     />
   )

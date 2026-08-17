@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { createFileAtomically, writeFileAtomically } from './atomicFile'
 import { createDirectoryAncestors, getDirectoryTraversal } from './directoryTraversal'
 import {
   createEmptyExcalidrawFileDocument,
@@ -36,6 +37,8 @@ import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shar
 import {
   ImportedNoteResult,
   BlockNoteMigrationResult,
+  ExcalidrawFileReadResult,
+  NoteImagePathMigrationResult,
   NoteListItem,
   NoteTreeExcalidrawFile,
   NoteTreeFile,
@@ -48,6 +51,9 @@ import {
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
 const noteNameSchema = z.string().min(1).max(120)
+const EXCALIDRAW_BACKUP_SUFFIX = '.bak'
+const EXCALIDRAW_READ_RETRY_COUNT = 3
+const EXCALIDRAW_READ_RETRY_DELAY_MS = 30
 
 type InternalWriteCallback = (relPath: string) => void
 
@@ -94,7 +100,7 @@ export class FileService {
     const stats = await fs.stat(folderPath)
 
     if (!stats.isDirectory()) {
-      throw new Error('Folder PDF export requires a folder path')
+      throw new Error('Folder export requires a folder path')
     }
 
     const notePaths = await listNotePaths(folderPath)
@@ -125,11 +131,39 @@ export class FileService {
     }
   }
 
-  async readExcalidrawFileDocument(relPathInput: string): Promise<StoredExcalidrawFileDocument> {
+  async readExcalidrawFileDocument(relPathInput: string): Promise<ExcalidrawFileReadResult> {
     const relPath = sanitizeExcalidrawPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
-    const raw = await fs.readFile(absolutePath, 'utf-8')
-    return parseStoredExcalidrawFileDocument(raw)
+    let primaryError: unknown
+
+    for (let attempt = 0; attempt < EXCALIDRAW_READ_RETRY_COUNT; attempt += 1) {
+      const raw = await fs.readFile(absolutePath, 'utf-8')
+      try {
+        return {
+          document: parseStoredExcalidrawFileDocument(raw),
+          recovered: false
+        }
+      } catch (error) {
+        primaryError = error
+        if (attempt + 1 < EXCALIDRAW_READ_RETRY_COUNT) {
+          await delay(EXCALIDRAW_READ_RETRY_DELAY_MS)
+        }
+      }
+    }
+
+    const backupPath = getExcalidrawBackupPath(absolutePath)
+    try {
+      const backupRaw = await fs.readFile(backupPath, 'utf-8')
+      const document = parseStoredExcalidrawFileDocument(backupRaw)
+      await writeFileAtomically(absolutePath, serializeStoredExcalidrawFileDocument(document))
+      this.onInternalWrite(relPath)
+      console.warn('[FileService] Recovered Excalidraw file from backup', { relPath })
+      return { document, recovered: true }
+    } catch (backupError) {
+      throw new Error(
+        `Unable to read Excalidraw drawing ${relPath}: ${describeError(primaryError)}; backup unavailable or invalid: ${describeError(backupError)}`
+      )
+    }
   }
 
   async writeNote(relPathInput: string, content: string): Promise<void> {
@@ -153,7 +187,20 @@ export class FileService {
     const relPath = sanitizeExcalidrawPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, serializeStoredExcalidrawFileDocument(document), 'utf-8')
+    const serialized = serializeStoredExcalidrawFileDocument(document)
+    parseStoredExcalidrawFileDocument(serialized)
+
+    try {
+      const existingRaw = await fs.readFile(absolutePath, 'utf-8')
+      parseStoredExcalidrawFileDocument(existingRaw)
+      await writeFileAtomically(getExcalidrawBackupPath(absolutePath), existingRaw)
+    } catch (error) {
+      if (!isMissingPathError(error) && !isInvalidExcalidrawFileError(error)) {
+        throw error
+      }
+    }
+
+    await writeFileAtomically(absolutePath, serialized)
     this.onInternalWrite(relPath)
   }
 
@@ -177,11 +224,11 @@ export class FileService {
     const relPath = sanitizeExcalidrawPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(
+    await createFileAtomically(
       absolutePath,
-      serializeStoredExcalidrawFileDocument(createEmptyExcalidrawFileDocument()),
-      { flag: 'wx' }
+      serializeStoredExcalidrawFileDocument(createEmptyExcalidrawFileDocument())
     )
+    await fs.rm(getExcalidrawBackupPath(absolutePath), { force: true })
     this.onInternalWrite(relPath)
     return relPath
   }
@@ -346,6 +393,62 @@ export class FileService {
     return result
   }
 
+  async migrateNoteImagePaths(): Promise<NoteImagePathMigrationResult> {
+    const noteFiles = await listNotePaths(this.notesRoot)
+    const result: NoteImagePathMigrationResult = {
+      converted: 0,
+      skipped: 0,
+      imagesConverted: 0,
+      attachmentsCopied: 0,
+      failed: []
+    }
+    const attachmentFiles = await listFilesRecursively(this.attachmentsRoot)
+    const attachmentByName = new Map<string, string[]>()
+
+    for (const attachmentPath of attachmentFiles) {
+      const name = path.basename(attachmentPath)
+      const matches = attachmentByName.get(name) ?? []
+      matches.push(attachmentPath)
+      attachmentByName.set(name, matches)
+    }
+
+    for (const absolutePath of noteFiles) {
+      const relPath = normalizeRelativePath(path.relative(this.notesRoot, absolutePath))
+      try {
+        const raw = await fs.readFile(absolutePath, 'utf-8')
+        const document = parseStoredNoteDocument(raw)
+        const migrated = await migrateMarkdownImagePaths(
+          document.markdown,
+          absolutePath,
+          this.attachmentsRoot,
+          attachmentByName
+        )
+
+        if (migrated.markdown === document.markdown) {
+          result.skipped += 1
+          continue
+        }
+
+        await fs.writeFile(
+          absolutePath,
+          serializeStoredNoteDocument({ ...document, markdown: migrated.markdown }),
+          'utf-8'
+        )
+        this.onInternalWrite(relPath)
+        result.converted += 1
+        result.imagesConverted += migrated.imagesConverted
+        result.attachmentsCopied += migrated.attachmentsCopied
+      } catch (error) {
+        result.failed.push({
+          relPath,
+          error: String(error)
+        })
+      }
+    }
+
+    return result
+  }
+
   async rename(oldRelPathInput: string, newRelPathInput: string): Promise<void> {
     const oldRelPath = sanitizeNotePath(oldRelPathInput)
     const newRelPath = sanitizeNotePath(newRelPathInput)
@@ -364,6 +467,9 @@ export class FileService {
     }
     await fs.mkdir(path.dirname(to), { recursive: true })
     await fs.rename(from, to)
+    if (!fromStats.isDirectory() && isExcalidrawPath(oldRelPath)) {
+      await moveExcalidrawBackup(from, to)
+    }
     await rewriteNoteMentionTargetsForRename(
       this.notesRoot,
       oldRelPath,
@@ -387,6 +493,9 @@ export class FileService {
       await fs.rm(absolutePath, { recursive: true })
     } else {
       await fs.rm(absolutePath)
+      if (isExcalidrawPath(relPath)) {
+        await fs.rm(getExcalidrawBackupPath(absolutePath), { force: true })
+      }
     }
     this.onInternalWrite(relPath)
   }
@@ -566,6 +675,36 @@ async function rewriteNoteMentionTargetsForRename(
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function getExcalidrawBackupPath(absolutePath: string): string {
+  return `${absolutePath}${EXCALIDRAW_BACKUP_SUFFIX}`
+}
+
+async function moveExcalidrawBackup(from: string, to: string): Promise<void> {
+  const fromBackup = getExcalidrawBackupPath(from)
+  const toBackup = getExcalidrawBackupPath(to)
+
+  try {
+    await fs.rm(toBackup, { force: true })
+    await fs.rename(fromBackup, toBackup)
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      console.warn('[FileService] Failed to move Excalidraw backup', { from, to, error })
+    }
+  }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+}
+
+function isInvalidExcalidrawFileError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('excalidraw file')
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 async function listNotePaths(root: string, ancestors?: ReadonlySet<string>): Promise<string[]> {
@@ -763,6 +902,198 @@ function assertMoveTargetIsValid(
 
   if (newRelPath === oldRelPath || newRelPath.startsWith(`${oldRelPath}/`)) {
     throw new Error('Cannot move a folder into itself or one of its descendants')
+  }
+}
+
+const MARKDOWN_IMAGE_TARGET_PATTERN = /(!\[[^\]]*\]\()(<[^>]*>|[^\s)]+)([^)]*\))/g
+
+async function migrateMarkdownImagePaths(
+  markdown: string,
+  noteAbsolutePath: string,
+  attachmentsRoot: string,
+  attachmentByName: Map<string, string[]>
+): Promise<{ markdown: string; imagesConverted: number; attachmentsCopied: number }> {
+  const matches = Array.from(markdown.matchAll(MARKDOWN_IMAGE_TARGET_PATTERN))
+  if (matches.length === 0) {
+    return { markdown, imagesConverted: 0, attachmentsCopied: 0 }
+  }
+
+  const replacements = new Map<string, { target: string; copied: boolean }>()
+  let imagesConverted = 0
+  let attachmentsCopied = 0
+  let nextMarkdown = markdown
+
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const match = matches[index]
+    const rawTarget = match[2]
+    const target =
+      rawTarget.startsWith('<') && rawTarget.endsWith('>') ? rawTarget.slice(1, -1) : rawTarget
+    let replacement = replacements.get(target)
+
+    if (!replacement) {
+      const migrated = await migrateImageTarget(
+        target,
+        noteAbsolutePath,
+        attachmentsRoot,
+        attachmentByName
+      )
+      replacement = migrated ? migrated : { target, copied: false }
+      replacements.set(target, replacement)
+    }
+
+    if (replacement.target === target) {
+      continue
+    }
+
+    const replacementStart = match.index + match[1].length
+    const replacementEnd = replacementStart + rawTarget.length
+    nextMarkdown = `${nextMarkdown.slice(0, replacementStart)}${replacement.target}${nextMarkdown.slice(replacementEnd)}`
+    imagesConverted += 1
+    if (replacement.copied) {
+      attachmentsCopied += 1
+    }
+  }
+
+  return { markdown: nextMarkdown, imagesConverted, attachmentsCopied }
+}
+
+async function migrateImageTarget(
+  target: string,
+  noteAbsolutePath: string,
+  attachmentsRoot: string,
+  attachmentByName: Map<string, string[]>
+): Promise<{ target: string; copied: boolean } | null> {
+  const decodedTarget = decodeImageTarget(target)
+  if (!decodedTarget || !isSupportedImagePath(decodedTarget)) {
+    return null
+  }
+
+  const vaultRoot = path.dirname(attachmentsRoot)
+  const sourcePath = getAbsoluteImagePath(target)
+  if (sourcePath && isWithinRoot(sourcePath, attachmentsRoot) && (await isFile(sourcePath))) {
+    return { target: toVaultFileUrl(sourcePath), copied: false }
+  }
+
+  const currentRelativePath = decodedTarget.replace(/^\.\//, '')
+  const relativeCandidate = currentRelativePath.startsWith('attachments/')
+    ? path.resolve(vaultRoot, currentRelativePath)
+    : path.resolve(path.dirname(noteAbsolutePath), currentRelativePath)
+
+  if (isWithinRoot(relativeCandidate, attachmentsRoot) && (await isFile(relativeCandidate))) {
+    return { target: toVaultFileUrl(relativeCandidate), copied: false }
+  }
+
+  const sourceName = sourcePath ? path.basename(sourcePath) : path.basename(decodedTarget)
+  const currentMatches = attachmentByName.get(sourceName) ?? []
+  if (currentMatches.length === 1) {
+    return { target: toVaultFileUrl(currentMatches[0]), copied: false }
+  }
+
+  if (!sourcePath || !isAttachmentPath(sourcePath) || !(await isFile(sourcePath))) {
+    return null
+  }
+
+  const copiedPath = await copyMigratedAttachment(sourcePath, attachmentsRoot, attachmentByName)
+  return { target: toVaultFileUrl(copiedPath), copied: true }
+}
+
+function decodeImageTarget(target: string): string | null {
+  try {
+    return decodeURIComponent(target).replace(/\\/g, '/')
+  } catch {
+    return null
+  }
+}
+
+function getAbsoluteImagePath(target: string): string | null {
+  try {
+    if (/^(vault-file|file):\/\//i.test(target)) {
+      const url = new URL(target)
+      const rawPath = url.host ? `/${url.host}${url.pathname}` : url.pathname
+      return path.normalize(decodeURIComponent(rawPath))
+    }
+
+    const decodedTarget = decodeImageTarget(target)
+    if (decodedTarget && (path.isAbsolute(decodedTarget) || path.win32.isAbsolute(decodedTarget))) {
+      return path.normalize(decodedTarget)
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function isAttachmentPath(absolutePath: string): boolean {
+  return path.basename(path.dirname(absolutePath)).toLowerCase() === 'attachments'
+}
+
+function isSupportedImagePath(absolutePath: string): boolean {
+  return ['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp'].includes(
+    path.extname(absolutePath).toLowerCase()
+  )
+}
+
+function isWithinRoot(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate))
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function toVaultFileUrl(absolutePath: string): string {
+  const normalizedPath = path.resolve(absolutePath).replace(/\\/g, '/')
+  const urlPath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`
+  return `vault-file://${encodeURI(urlPath)}`
+}
+
+async function copyMigratedAttachment(
+  sourcePath: string,
+  attachmentsRoot: string,
+  attachmentByName: Map<string, string[]>
+): Promise<string> {
+  const originalName = path.basename(sourcePath)
+  const extension = path.extname(originalName)
+  const stem = path.basename(originalName, extension)
+  let targetName = originalName
+  let targetPath = path.join(attachmentsRoot, targetName)
+  let suffix = 1
+
+  while (await fileExists(targetPath)) {
+    targetName = `${stem}-migrated-${suffix}${extension}`
+    targetPath = path.join(attachmentsRoot, targetName)
+    suffix += 1
+  }
+
+  await fs.mkdir(attachmentsRoot, { recursive: true })
+  await fs.copyFile(sourcePath, targetPath)
+  const matches = attachmentByName.get(targetName) ?? []
+  matches.push(targetPath)
+  attachmentByName.set(targetName, matches)
+  return targetPath
+}
+
+async function listFilesRecursively(root: string): Promise<string[]> {
+  if (!(await fileExists(root))) {
+    return []
+  }
+
+  const entries = await fs.readdir(root, { withFileTypes: true })
+  const files: string[] = []
+  for (const entry of entries) {
+    const absolutePath = path.join(root, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...(await listFilesRecursively(absolutePath)))
+    } else if (entry.isFile()) {
+      files.push(absolutePath)
+    }
+  }
+  return files
+}
+
+async function isFile(absolutePath: string): Promise<boolean> {
+  try {
+    return (await fs.stat(absolutePath)).isFile()
+  } catch {
+    return false
   }
 }
 

@@ -61,6 +61,8 @@ export const useVaultStore = create<VaultState>((set) => ({
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    pythonCondaEnvironmentPath: null,
+    pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],

@@ -77,6 +77,8 @@ test.describe('settings page', () => {
     try {
       await page.getByRole('button', { name: 'Settings' }).first().click()
       await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+      await expect(page.getByText('Editor Defaults', { exact: true })).toHaveCount(0)
+      await expect(page.getByText('Shortcuts', { exact: true })).toHaveCount(0)
 
       await expect(page.getByRole('radio', { name: 'Profile' })).toBeVisible()
       await expect(page.getByRole('radio', { name: 'Workspace' })).toBeVisible()

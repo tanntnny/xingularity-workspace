@@ -176,6 +176,7 @@ function serializeProject(
   | 'endDate'
   | 'tags'
   | 'resources'
+  | 'milestones'
   | 'updatedAt'
 > {
   return {
@@ -188,6 +189,7 @@ function serializeProject(
     endDate: project.endDate,
     tags: project.tags ?? [],
     resources: project.resources ?? [],
+    milestones: project.milestones ?? [],
     updatedAt: project.updatedAt
   }
 }

@@ -6,6 +6,7 @@ export type AppPage =
   | 'subscriptions'
   | 'calendar'
   | 'schedules'
+  | 'schedulingGuide'
   | 'designAudit'
   | 'settings'
 

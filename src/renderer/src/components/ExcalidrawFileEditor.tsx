@@ -19,6 +19,14 @@ type ExcalidrawApi = Parameters<NonNullable<ComponentProps<typeof Excalidraw>['e
 type ExcalidrawOnChange = NonNullable<ComponentProps<typeof Excalidraw>['onChange']>
 type ExcalidrawInitialData = NonNullable<ComponentProps<typeof Excalidraw>['initialData']>
 type ToastKind = 'info' | 'error' | 'success'
+type PendingScene = {
+  notePath: string
+  scene: ExcalidrawSessionScene
+}
+
+interface FlushPendingSaveOptions {
+  throwOnError?: boolean
+}
 
 interface ExcalidrawFileEditorProps {
   notePath: string
@@ -79,7 +87,8 @@ export const ExcalidrawFileEditor = forwardRef<
   )
   const apiRef = useRef<ExcalidrawApi | null>(null)
   const saveTimerRef = useRef<number | null>(null)
-  const pendingSceneRef = useRef<ExcalidrawSessionScene | null>(null)
+  const pendingSceneRef = useRef<PendingScene | null>(null)
+  const saveInFlightRef = useRef<Promise<void> | null>(null)
   const saveVersionRef = useRef(0)
   const skipCleanupSaveRef = useRef(false)
   const loadedNotePathRef = useRef<string | null>(null)
@@ -97,44 +106,90 @@ export const ExcalidrawFileEditor = forwardRef<
     [scene]
   )
 
-  const flushPendingSave = useCallback(async (): Promise<void> => {
-    if (!vaultApi) {
-      return
-    }
-
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-
-    const pendingScene = pendingSceneRef.current
-    if (!pendingScene) {
-      return
-    }
-
-    pendingSceneRef.current = null
-    const saveVersion = saveVersionRef.current + 1
-    saveVersionRef.current = saveVersion
-
-    try {
-      await vaultApi.files.writeExcalidrawFileDocument(notePath, {
-        version: 1,
-        scene: pendingScene
-      })
-      if (saveVersion === saveVersionRef.current) {
-        setScene(pendingScene)
+  const flushPendingSave = useCallback(
+    async ({ throwOnError = false }: FlushPendingSaveOptions = {}): Promise<void> => {
+      if (!vaultApi) {
+        return
       }
-    } catch (error) {
-      pushToast('error', error instanceof Error ? error.message : 'Failed to save drawing')
-    }
-  }, [notePath, pushToast, vaultApi])
+
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+
+      let firstError: unknown = null
+
+      while (true) {
+        const inFlight = saveInFlightRef.current
+        if (inFlight) {
+          try {
+            await inFlight
+          } catch (error) {
+            firstError ??= error
+            if (throwOnError) {
+              throw error
+            }
+          }
+          continue
+        }
+
+        const pendingScene = pendingSceneRef.current
+        if (!pendingScene) {
+          break
+        }
+
+        pendingSceneRef.current = null
+        const saveVersion = saveVersionRef.current + 1
+        saveVersionRef.current = saveVersion
+        const savePromise = (async (): Promise<void> => {
+          await vaultApi.files.writeExcalidrawFileDocument(pendingScene.notePath, {
+            version: 1,
+            scene: pendingScene.scene
+          })
+          if (
+            saveVersion === saveVersionRef.current &&
+            loadedNotePathRef.current === pendingScene.notePath
+          ) {
+            setScene(pendingScene.scene)
+          }
+        })()
+        saveInFlightRef.current = savePromise
+
+        try {
+          await savePromise
+        } catch (error) {
+          firstError ??= error
+          if (!throwOnError) {
+            pushToast('error', error instanceof Error ? error.message : 'Failed to save drawing')
+          }
+          if (throwOnError) {
+            throw error
+          }
+        } finally {
+          if (saveInFlightRef.current === savePromise) {
+            saveInFlightRef.current = null
+          }
+        }
+      }
+
+      if (throwOnError && firstError) {
+        throw firstError
+      }
+    },
+    [pushToast, vaultApi]
+  )
 
   useImperativeHandle(
     ref,
     () => ({
       prepareForPathMutation: async () => {
         skipCleanupSaveRef.current = true
-        await flushPendingSave()
+        try {
+          await flushPendingSave({ throwOnError: true })
+        } catch (error) {
+          skipCleanupSaveRef.current = false
+          throw error
+        }
       },
       cancelPathMutation: () => {
         skipCleanupSaveRef.current = false
@@ -158,7 +213,6 @@ export const ExcalidrawFileEditor = forwardRef<
       loadedNotePathRef.current = notePath
       skipCleanupSaveRef.current = false
     }
-    void flushPendingSave()
 
     const load = async (): Promise<void> => {
       if (!vaultApi) {
@@ -168,12 +222,16 @@ export const ExcalidrawFileEditor = forwardRef<
 
       setIsLoading(true)
       try {
-        const document = await vaultApi.files.readExcalidrawFileDocument(notePath)
+        await flushPendingSave({ throwOnError: true })
+        const result = await vaultApi.files.readExcalidrawFileDocument(notePath)
         if (cancelled) {
           return
         }
         pendingSceneRef.current = null
-        setScene(document.scene)
+        if (result.recovered) {
+          pushToast('info', 'Drawing recovered from its last valid save')
+        }
+        setScene(result.document.scene)
       } catch (error) {
         if (!cancelled) {
           pushToast('error', error instanceof Error ? error.message : 'Failed to load drawing')
@@ -204,7 +262,10 @@ export const ExcalidrawFileEditor = forwardRef<
   const handleSceneChange = useCallback<ExcalidrawOnChange>(
     (elements, appState, files) => {
       setActiveToolType(appState.activeTool.type)
-      pendingSceneRef.current = serializeScene(elements, appState, files)
+      pendingSceneRef.current = {
+        notePath,
+        scene: serializeScene(elements, appState, files)
+      }
 
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current)
@@ -214,7 +275,7 @@ export const ExcalidrawFileEditor = forwardRef<
         void flushPendingSave()
       }, SAVE_DEBOUNCE_MS)
     },
-    [flushPendingSave]
+    [flushPendingSave, notePath]
   )
 
   return (

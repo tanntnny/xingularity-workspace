@@ -8,15 +8,17 @@ interface TagChipProps {
   tag: string
   onClick?: (tag: string) => void
   onRemove?: (tag: string) => void
+  className?: string
 }
 
-export function TagChip({ tag, onClick, onRemove }: TagChipProps): ReactElement {
+export function TagChip({ tag, onClick, onRemove, className }: TagChipProps): ReactElement {
   return (
     <Badge
       variant={getTagColorVariant(tag)}
       className={cn(
         'min-w-0 shrink-0 px-2 py-0.5 font-normal leading-[1.2]',
-        onClick && 'cursor-pointer'
+        onClick && 'cursor-pointer',
+        className
       )}
     >
       {onClick ? (

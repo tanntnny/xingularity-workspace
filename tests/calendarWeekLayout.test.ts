@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMovedTimedRange,
   buildResizedTimedRange,
+  clampWeeklyHourHeight,
   formatWeeklyTimeLabel,
+  getWeeklyDayHeightPx,
   layoutWeeklyTimedTasks,
+  minutesToPixels,
+  pixelsToMinutes,
   normalizeTimedRange,
   snapMinutes,
   shouldShowWeeklyProject,
@@ -17,6 +21,24 @@ describe('formatWeeklyTimeLabel', () => {
     expect(formatWeeklyTimeLabel(1)).toBe('01:00')
     expect(formatWeeklyTimeLabel(13)).toBe('13:00')
     expect(formatWeeklyTimeLabel(23)).toBe('23:00')
+  })
+})
+
+describe('weekly grid scale', () => {
+  it('uses 160 pixels for each hour cell', () => {
+    expect(minutesToPixels(60)).toBe(160)
+  })
+
+  it('converts pixel positions using a custom hour height', () => {
+    expect(minutesToPixels(60, 200)).toBe(200)
+    expect(pixelsToMinutes(100, 200)).toBe(30)
+    expect(getWeeklyDayHeightPx(200)).toBe(4800)
+  })
+
+  it('clamps the resizable hour height to usable bounds', () => {
+    expect(clampWeeklyHourHeight(20)).toBe(80)
+    expect(clampWeeklyHourHeight(200)).toBe(200)
+    expect(clampWeeklyHourHeight(500)).toBe(320)
   })
 })
 

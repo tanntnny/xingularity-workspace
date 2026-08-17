@@ -1,25 +1,46 @@
-import { CheckCircle2, Circle, CircleAlert, CircleDashed, Inbox } from '../components/ui/icons'
 import type { TaskStatus } from '../../../shared/types'
 import type { UiTone } from './uiTone'
 
+export type TaskStatusVisual =
+  | 'pending-dash'
+  | 'backlog-ring'
+  | 'progress-half'
+  | 'blocked-cross'
+  | 'completed-check'
+
 export const TASK_STATUS_META: Record<
   TaskStatus,
-  { label: string; className: string; tone: UiTone; Icon: typeof Circle }
+  { label: string; className: string; tone: UiTone; visual: TaskStatusVisual }
 > = {
-  pending: { label: 'Pending', className: 'text-muted-foreground', tone: 'neutral', Icon: Circle },
-  backlog: { label: 'Backlog', className: 'text-warning', tone: 'warning', Icon: Inbox },
+  pending: {
+    label: 'Pending',
+    className: 'text-muted-foreground',
+    tone: 'neutral',
+    visual: 'pending-dash'
+  },
+  backlog: {
+    label: 'Backlog',
+    className: 'text-warning',
+    tone: 'warning',
+    visual: 'backlog-ring'
+  },
   'in-progress': {
     label: 'In progress',
     className: 'text-primary',
     tone: 'info',
-    Icon: CircleDashed
+    visual: 'progress-half'
   },
-  blocked: { label: 'Blocked', className: 'text-destructive', tone: 'danger', Icon: CircleAlert },
+  blocked: {
+    label: 'Blocked',
+    className: 'text-destructive',
+    tone: 'danger',
+    visual: 'blocked-cross'
+  },
   completed: {
     label: 'Completed',
     className: 'text-success',
     tone: 'success',
-    Icon: CheckCircle2
+    visual: 'completed-check'
   }
 }
 

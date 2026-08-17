@@ -415,22 +415,84 @@ async function sampleEditorInstanceCounts(
 }
 
 test.describe('note page block editor switching', () => {
-  test('shows recent files in the empty notebook state', async () => {
+  test('shows notebook cards in the center browser', async () => {
     const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'archive', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive', '2025'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'archive', '2025', 'january.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('January note\n')),
+      'utf-8'
+    )
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
+      await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:alpha.md')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:beta.md')).toBeVisible()
+      await page
+        .getByTestId('notebook-card:archive')
+        .getByRole('button', { name: 'Open folder archive' })
+        .click()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:root')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:current:archive')).toBeVisible()
+      await page
+        .getByTestId('notebook-card:archive/2025')
+        .getByRole('button', { name: 'Open folder 2025' })
+        .click()
+      await expect(page.getByTestId('notebook-card:archive/2025/january.md')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:ancestor:archive')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:current:archive/2025')).toBeVisible()
+      await page.getByTestId('notebook-breadcrumb:ancestor:archive').click()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toBeVisible()
+      await page.getByTestId('notebook-breadcrumb:root').click()
+      await expect(page.getByTestId('notebook-card:archive')).toBeVisible()
+      await openNote(page, 'alpha.md')
+      await expect(page.getByTestId('note-block-editor')).toBeVisible()
+      const noteRootBreadcrumb = page.getByTestId('notebook-breadcrumb:root')
+      await expect(noteRootBreadcrumb).toHaveAttribute('type', 'button')
+      await expect(noteRootBreadcrumb).toBeEnabled()
+      await expect(noteRootBreadcrumb).toHaveCSS('pointer-events', 'auto')
+      await expect(noteRootBreadcrumb).toHaveCSS('-webkit-app-region', 'no-drag')
+      await noteRootBreadcrumb.click()
+      await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:alpha.md')).toBeVisible()
+      await page
+        .getByTestId('notebook-card:archive')
+        .getByRole('button', { name: 'Open folder archive' })
+        .click()
+      await page
+        .getByTestId('notebook-card:archive/2025')
+        .getByRole('button', { name: 'Open folder 2025' })
+        .click()
+      await page
+        .getByTestId('notebook-card:archive/2025/january.md')
+        .getByRole('button', { name: 'Open january' })
+        .click()
+      await expect(page.getByTestId('note-block-editor')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:ancestor:archive')).toBeVisible()
+      await expect(page.getByTestId('notebook-breadcrumb:ancestor:archive/2025')).toBeVisible()
+      await page.getByTestId('notebook-breadcrumb:ancestor:archive').click()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toBeVisible()
+      await page.getByTestId('notebook-breadcrumb:root').click()
       await openNote(page, 'alpha.md')
       await openNote(page, 'beta.md')
 
       page.once('dialog', (dialog) => dialog.accept())
       await page.getByRole('button', { name: 'Delete Note' }).click()
 
-      await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Pick up where you left off' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Open alpha' })).toBeVisible()
-      await page.getByRole('button', { name: 'Open alpha' }).click()
+      await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:alpha.md')).toBeVisible()
+      await page
+        .getByTestId('notebook-card:alpha.md')
+        .getByRole('button', { name: 'Open alpha' })
+        .click()
       await expect(page.getByTestId('note-block-editor')).toBeVisible()
     } finally {
       await electronApp.close()
@@ -496,6 +558,33 @@ test.describe('note page block editor switching', () => {
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
+      await expect
+        .poll(async () =>
+          page.evaluate(() => {
+            const tab = document.querySelector<HTMLElement>(
+              '[data-toggle-group-indicator-target="true"][data-active="true"]'
+            )
+            const indicator = document.querySelector<HTMLElement>(
+              '[data-toggle-group-indicator="true"]'
+            )
+
+            if (!tab || !indicator) {
+              return null
+            }
+
+            return {
+              tabRadius: window.getComputedStyle(tab).borderRadius,
+              indicatorRadius: window.getComputedStyle(indicator).borderRadius,
+              tabOverflow: window.getComputedStyle(tab).overflow
+            }
+          })
+        )
+        .toEqual({
+          tabRadius: '9999px',
+          indicatorRadius: '9999px',
+          tabOverflow: 'hidden'
+        })
+
       await openNote(page, 'alpha.md')
       await replaceEditorContent(page, ['Tab one draft'])
 
@@ -510,13 +599,17 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
         .toMatchObject({ path: 'alpha.md', content: expect.stringContaining('Tab one draft') })
-      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toContainText('alpha')
+      const firstTab = page.getByTestId('workspace-tab:workspace-tab-1')
+      await expect(firstTab).toContainText('alpha')
+      await expect(firstTab).not.toContainText('Notebooks')
 
       await page.getByTestId('workspace-tab:workspace-tab-2').click()
       await expect
         .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
         .toMatchObject({ path: 'beta.md', content: expect.stringContaining('Tab two draft') })
-      await expect(page.getByTestId('workspace-tab:workspace-tab-2')).toContainText('beta')
+      const secondTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondTab).toContainText('beta')
+      await expect(secondTab).not.toContainText('Notebooks')
 
       await openNote(page, 'alpha.md')
       await replaceEditorContent(page, ['Duplicate note draft'])
@@ -1551,6 +1644,64 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('shows a rectangular block cursor in Vim normal mode', async () => {
+    const vaultRoot = await createFixtureVault('abc\n')
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await page.getByText('abc', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+
+      const cursor = page.locator('[data-testid="note-block-editor"] .note-vim-block-cursor-char')
+      await expect(cursor).toHaveCount(1)
+
+      const cursorMetrics = await cursor.evaluate((node) => {
+        const element = node as HTMLElement
+        const rect = element.getBoundingClientRect()
+        const styles = window.getComputedStyle(element)
+        const editor = element.closest('.ProseMirror')
+        const resolveColor = (property: 'backgroundColor' | 'color', token: string): string => {
+          const probe = document.createElement('span')
+          probe.style[property] = `var(${token})`
+          document.body.append(probe)
+          const value = window.getComputedStyle(probe)[property]
+          probe.remove()
+          return value
+        }
+
+        return {
+          display: styles.display,
+          backgroundColor: styles.backgroundColor,
+          color: styles.color,
+          expectedBackgroundColor: resolveColor('backgroundColor', '--accent'),
+          expectedColor: resolveColor('color', '--accent-foreground'),
+          borderRadius: styles.borderRadius,
+          width: rect.width,
+          height: rect.height,
+          caretColor: editor ? window.getComputedStyle(editor).caretColor : null
+        }
+      })
+
+      expect(cursorMetrics.display).toBe('inline-block')
+      expect(cursorMetrics.backgroundColor).toBe(cursorMetrics.expectedBackgroundColor)
+      expect(cursorMetrics.color).toBe(cursorMetrics.expectedColor)
+      expect(cursorMetrics.borderRadius).toBe('0px')
+      expect(cursorMetrics.width).toBeGreaterThan(0)
+      expect(cursorMetrics.height).toBeGreaterThan(cursorMetrics.width)
+      expect(cursorMetrics.caretColor).toBe('rgba(0, 0, 0, 0)')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('keeps normal-mode h and l inside the current logical line', async () => {
     const vaultRoot = await createFixtureVault('Alpha\nBeta\n')
     await fs.writeFile(
@@ -2271,6 +2422,133 @@ test.describe('note page block editor switching', () => {
         .toBe(JSON.stringify(visibleBlocksBeforeRestart))
     } finally {
       await electronApp?.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('reclaims note space when the title header hides on scroll', async () => {
+    const filler = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
+    const vaultRoot = await createFixtureVault(`# Alpha\n\n${filler}`, ['focus'])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    const readTitleMetrics = async (): Promise<{
+      clientHeight: number
+      position: string
+      scrollHeight: number
+      scrollHeightOnScreen: number
+      scrollTop: number
+      surfaceHeight: number
+      titleHeight: number
+    }> =>
+      page.evaluate(() => {
+        const surface = document.querySelector<HTMLElement>('.note-editor-surface')
+        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
+        if (!surface || !title) {
+          throw new Error('Note title area is not mounted')
+        }
+
+        let scrollContainer: HTMLElement | null = title.parentElement
+        while (scrollContainer && scrollContainer !== document.body) {
+          const styles = window.getComputedStyle(scrollContainer)
+          if (/(auto|scroll)/.test(styles.overflowY)) {
+            break
+          }
+          scrollContainer = scrollContainer.parentElement
+        }
+
+        if (!scrollContainer) {
+          throw new Error('Note editor scroll container is not mounted')
+        }
+
+        return {
+          clientHeight: scrollContainer.clientHeight,
+          position: window.getComputedStyle(title).position,
+          scrollHeight: scrollContainer.scrollHeight,
+          scrollHeightOnScreen: scrollContainer.getBoundingClientRect().height,
+          scrollTop: scrollContainer.scrollTop,
+          surfaceHeight: surface.getBoundingClientRect().height,
+          titleHeight: title.getBoundingClientRect().height
+        }
+      })
+
+    try {
+      await openNote(page, 'alpha.md')
+      await expect(page.getByTestId('note-block-editor')).toBeVisible({ timeout: 20_000 })
+
+      const titleArea = page.getByTestId('note-title-area')
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+
+      const initialMetrics = await readTitleMetrics()
+      expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.clientHeight)
+      expect(initialMetrics.scrollHeightOnScreen).toBeGreaterThanOrEqual(
+        initialMetrics.surfaceHeight - 8
+      )
+      expect(initialMetrics.position).toBe('sticky')
+
+      await page.evaluate(() => {
+        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
+        const scrollContainer = title?.parentElement
+        if (!scrollContainer) {
+          throw new Error('Note editor scroll container is not mounted')
+        }
+
+        scrollContainer.scrollTop = 260
+      })
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'hidden')
+      await expect(titleArea).toHaveAttribute('data-scroll-position', 'scrolled')
+
+      const hiddenMetrics = await readTitleMetrics()
+      expect(hiddenMetrics.scrollTop).toBe(260)
+      expect(hiddenMetrics.scrollHeightOnScreen).toBeGreaterThanOrEqual(
+        hiddenMetrics.surfaceHeight - 8
+      )
+
+      await page.evaluate(() => {
+        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
+        const scrollContainer = title?.parentElement
+        if (!scrollContainer) {
+          throw new Error('Note editor scroll container is not mounted')
+        }
+
+        scrollContainer.scrollTop = 120
+      })
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+      expect((await readTitleMetrics()).scrollTop).toBe(120)
+
+      await page.getByRole('button', { name: 'Add tag' }).click()
+      const tagInput = page.locator('input[placeholder="tag name"]')
+      await expect(tagInput).toBeFocused()
+
+      await page.evaluate(() => {
+        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
+        const scrollContainer = title?.parentElement
+        if (!scrollContainer) {
+          throw new Error('Note editor scroll container is not mounted')
+        }
+
+        scrollContainer.scrollTop = 420
+      })
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+      await tagInput.press('Escape')
+
+      await page.evaluate(() => {
+        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
+        const scrollContainer = title?.parentElement
+        if (!scrollContainer) {
+          throw new Error('Note editor scroll container is not mounted')
+        }
+
+        scrollContainer.scrollTop = 520
+      })
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'hidden')
+
+      await openNote(page, 'beta.md')
+      await expect(page.getByTestId('note-title-area')).toHaveAttribute(
+        'data-scroll-state',
+        'visible'
+      )
+    } finally {
+      await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
     }
   })

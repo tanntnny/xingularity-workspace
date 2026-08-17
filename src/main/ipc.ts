@@ -1,4 +1,10 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import {
+  BrowserWindow,
+  dialog,
+  Menu,
+  type MenuItemConstructorOptions,
+  type OpenDialogOptions
+} from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../shared/ipc'
 import {
@@ -6,9 +12,11 @@ import {
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES
 } from '../shared/types'
+import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
 import { loadMainWindowApp } from './window'
+import { listCondaEnvironments, validateCondaExecutable } from './pythonEnvironmentService'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -41,12 +49,16 @@ const notePdfExportInputSchema = z.object({
 const folderPdfExportInputSchema = z.object({
   folderPath: z.string().min(1).max(512)
 })
+const folderMarkdownExportInputSchema = z.object({
+  folderPath: z.string().min(1).max(512)
+})
 const querySchema = z.string().min(1).max(200)
 const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
 const directoryTitleSchema = z.string().trim().min(1).max(200)
 const fileExtensionSchema = z.string().min(1).max(10)
 const tagsArraySchema = z.array(z.string().min(1).max(100)).max(50)
+const taskTagsSchema = z.array(z.string().trim().min(1).max(129)).max(TASK_TAG_MAX_COUNT)
 const noteDocumentSchema = z.object({
   version: z.literal(1),
   tags: z.array(z.string()).max(200),
@@ -150,6 +162,8 @@ const calendarTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   projectId: z.string().min(1).max(120).optional(),
+  milestoneId: z.string().min(1).max(120).optional(),
+  tags: taskTagsSchema.default([]),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -179,6 +193,8 @@ const calendarTaskSchema = z.object({
 const taskCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   projectId: z.string().min(1).max(120).optional(),
+  milestoneId: z.string().min(1).max(120).optional(),
+  tags: taskTagsSchema.optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -247,6 +263,19 @@ const projectFavoriteInputSchema = z.object({
 const projectDeleteInputSchema = z.object({
   projectId: z.string().min(1).max(120),
   linkedTasks: z.enum(['delete', 'unassign'])
+})
+const projectMilestoneCreateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  title: z.string().trim().min(1).max(200)
+})
+const projectMilestoneUpdateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  milestoneId: z.string().min(1).max(120),
+  title: z.string().trim().min(1).max(200)
+})
+const projectMilestoneDeleteInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  milestoneId: z.string().min(1).max(120)
 })
 
 const nativeMenuItemSchema: z.ZodType<{
@@ -348,7 +377,9 @@ const settingsUpdateSchema = z.object({
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
-  favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional()
+  favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
+  pythonCondaEnvironmentPath: z.string().trim().min(1).max(1024).nullable().optional(),
+  pythonCondaExecutablePath: z.string().trim().min(1).max(1024).nullable().optional()
 })
 
 const settingsUpdateOptionsSchema = z
@@ -527,6 +558,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.migrateTaggedNoteBodyFrontmatter()
   })
 
+  handleIpc(IPC_CHANNELS.migrateNoteImagePaths, async () => {
+    return runtime.migrateNoteImagePaths()
+  })
+
   handleIpc(IPC_CHANNELS.renameNote, async (_event, oldRelPath: unknown, newRelPath: unknown) => {
     await runtime.renameNote(notePathSchema.parse(oldRelPath), notePathSchema.parse(newRelPath))
   })
@@ -560,6 +595,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.exportFolderPdf, async (_event, input: unknown) => {
     return runtime.exportFolderPdf(folderPdfExportInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.exportFolderMarkdown, async (_event, input: unknown) => {
+    return runtime.exportFolderMarkdown(folderMarkdownExportInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.exportProject, async (_event, projectName: unknown, content: unknown) => {
@@ -637,6 +676,28 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.updateSettings(parsedNext, settingsUpdateOptionsSchema.parse(options))
   })
 
+  handleIpc(IPC_CHANNELS.pythonListCondaEnvironments, async () => {
+    const settings = await runtime.getSettings()
+    return listCondaEnvironments(settings.pythonCondaExecutablePath)
+  })
+
+  handleIpc(IPC_CHANNELS.pythonChooseCondaExecutable, async (event) => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender)
+    const options: OpenDialogOptions = {
+      title: 'Select Conda executable',
+      properties: ['openFile']
+    }
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, options)
+      : await dialog.showOpenDialog(options)
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { path: null, error: null }
+    }
+
+    return validateCondaExecutable(result.filePaths[0])
+  })
+
   handleIpc(IPC_CHANNELS.createProject, async (_event, input: unknown) => {
     return runtime.createProject(projectCreateInputSchema.parse(input))
   })
@@ -662,6 +723,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.deleteProject, async (_event, input: unknown) => {
     return runtime.deleteProject(projectDeleteInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.createProjectMilestone, async (_event, input: unknown) => {
+    return runtime.createProjectMilestone(projectMilestoneCreateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.updateProjectMilestone, async (_event, input: unknown) => {
+    return runtime.updateProjectMilestone(projectMilestoneUpdateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.deleteProjectMilestone, async (_event, input: unknown) => {
+    return runtime.deleteProjectMilestone(projectMilestoneDeleteInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.createTask, async (_event, input: unknown) => {

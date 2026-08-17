@@ -2,36 +2,38 @@ import {
   DragEvent,
   MouseEvent as ReactMouseEvent,
   ReactElement,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
 } from 'react'
-import {
-  CalendarTask,
-  CalendarTaskType,
-  Project,
-  TaskPriority,
-  WeeklyHeightMode
-} from '../../../shared/types'
+import { CalendarTask, Project, WeeklyHeightMode } from '../../../shared/types'
 import {
   buildWeeklyCalendarEntries,
+  getWeeklyAllDaySurfaceHeightPx,
   layoutWeeklyAllDayItems,
+  WEEKLY_ALL_DAY_TASK_GAP_PX,
+  WEEKLY_ALL_DAY_TASK_MIN_HEIGHT_PX,
   type WeeklyCalendarAllDayLayout,
   normalizeCalendarTasks
 } from '../lib/calendarTasks'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
+import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
 import {
   buildResizedTimedRange,
+  clampWeeklyHourHeight,
   formatWeeklyTimeLabel,
+  getWeeklyDayHeightPx,
   layoutWeeklyTimedTasks,
   minutesToPixels,
   minutesToTime,
   normalizeTimedRange,
   pixelsToMinutes,
   snapMinutes,
-  WEEKLY_DAY_HEIGHT_PX,
   WEEKLY_HOUR_HEIGHT_PX,
+  WEEKLY_HOUR_HEIGHT_STEP_PX,
   WEEKLY_MAX_END_MINUTES,
   WEEKLY_MIN_DURATION_MINUTES,
   shouldShowWeeklyProject,
@@ -52,7 +54,6 @@ import {
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
-import { TaskEditDialog } from './TaskEditDialog'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 
@@ -67,13 +68,10 @@ interface CalendarWeekViewProps {
     time: string
     endTime: string
   }) => Promise<CalendarTask>
+  onOpenTask?: (taskId: string) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
-  onRenameTask?: (taskId: string, newTitle: string) => void
-  onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
-  onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
-  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
   onUpdateTaskSchedule?: (
     taskId: string,
     schedule: {
@@ -133,12 +131,9 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, hour) => ({
 const WEEKLY_TIME_GUTTER_WIDTH_PX = 72
 const WEEKLY_CELL_PADDING_X_PX = 2
 const WEEKLY_CELL_PADDING_Y_PX = 8
-const WEEKLY_ALL_DAY_ROW_HEIGHT_PX = 44
-const WEEKLY_ALL_DAY_ROW_GAP_PX = 8
 const WEEKLY_ALL_DAY_CELL_PADDING_X_PX = WEEKLY_CELL_PADDING_X_PX
 const WEEKLY_ALL_DAY_SURFACE_PADDING_PX = 8
 const WEEKLY_ALL_DAY_MIN_HEIGHT_PX = 92
-const WEEKLY_TIMED_SURFACE_HEIGHT_PX = WEEKLY_DAY_HEIGHT_PX + WEEKLY_CELL_PADDING_Y_PX * 2
 const WEEKLY_TASK_RESIZE_BAND_MAX_PX = 10
 const NOOP_UPDATE_TASK_SCHEDULE: NonNullable<CalendarWeekViewProps['onUpdateTaskSchedule']> = () =>
   undefined
@@ -154,19 +149,22 @@ export function CalendarWeekView({
   projects = [],
   onSelectDate,
   onCreateTask,
+  onOpenTask,
   onRescheduleTask,
   onDeleteTask,
   onUpdateTask,
-  onRenameTask,
-  onUpdateTaskPriority,
-  onUpdateTaskType,
-  onUpdateTaskProject,
   onUpdateTaskSchedule
 }: CalendarWeekViewProps): ReactElement {
+  const calendarRootRef = useRef<HTMLElement | null>(null)
+  const { start: startCalendarDragAutoScroll, stop: stopCalendarDragAutoScroll } =
+    useCalendarDragAutoScroll({ rootRef: calendarRootRef })
   const [currentDateTime, setCurrentDateTime] = useState(() => new Date())
+  const [weeklyHourHeightPx, setWeeklyHourHeightPx] = useState(WEEKLY_HOUR_HEIGHT_PX)
+  const weeklyDayHeightPx = getWeeklyDayHeightPx(weeklyHourHeightPx)
+  const weeklyTimedSurfaceHeightPx = weeklyDayHeightPx + WEEKLY_CELL_PADDING_Y_PX * 2
   const [timeScaleMetrics, setTimeScaleMetrics] = useState<WeeklyTimeScaleMetrics>(() => ({
     topPx: WEEKLY_CELL_PADDING_Y_PX,
-    heightPx: WEEKLY_DAY_HEIGHT_PX
+    heightPx: getWeeklyDayHeightPx()
   }))
   const selected = useMemo(() => parseIsoDate(selectedDate), [selectedDate])
   const weekStart = useMemo(() => startOfWeekIso(selected), [selected])
@@ -191,7 +189,6 @@ export function CalendarWeekView({
     () => Object.fromEntries(normalizedTasks.map((task) => [task.id, task])),
     [normalizedTasks]
   )
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [timedDropIndicator, setTimedDropIndicator] = useState<TimedDropIndicatorState | null>(null)
   const [allDayDropIndicator, setAllDayDropIndicator] = useState<AllDayDropIndicatorState | null>(
     null
@@ -203,6 +200,8 @@ export function CalendarWeekView({
   } | null>(null)
   const [timedInteraction, setTimedInteraction] = useState<TimedInteractionState | null>(null)
   const daySurfaceRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const allDayTaskElementsRef = useRef(new Map<string, HTMLDivElement>())
+  const timedScrollerRef = useRef<HTMLDivElement | null>(null)
   const timeScaleRef = useRef<HTMLDivElement | null>(null)
   const timedInteractionRef = useRef<TimedInteractionState | null>(null)
   const timedInteractionCleanupRef = useRef<(() => void) | null>(null)
@@ -240,6 +239,55 @@ export function CalendarWeekView({
     () => buildWeeklyCalendarEntries(effectiveTasks, weekStart),
     [effectiveTasks, weekStart]
   )
+  const registerAllDayTaskElement = useCallback(
+    (taskId: string, element: HTMLDivElement | null): void => {
+      if (element) {
+        allDayTaskElementsRef.current.set(taskId, element)
+      } else {
+        allDayTaskElementsRef.current.delete(taskId)
+      }
+    },
+    []
+  )
+  const [allDayTaskHeights, setAllDayTaskHeights] = useState<Record<string, number>>({})
+  useLayoutEffect(() => {
+    const elements = allDayTaskElementsRef.current
+    const updateHeights = (entries: readonly HTMLDivElement[]): void => {
+      setAllDayTaskHeights((current) => {
+        let changed = false
+        const next = { ...current }
+
+        for (const element of entries) {
+          const taskId = [...elements.entries()].find(([, node]) => node === element)?.[0]
+          if (!taskId) {
+            continue
+          }
+
+          const measuredHeight = Math.ceil(element.getBoundingClientRect().height)
+          const nextHeight = Math.max(WEEKLY_ALL_DAY_TASK_MIN_HEIGHT_PX, measuredHeight)
+          if (next[taskId] !== nextHeight) {
+            next[taskId] = nextHeight
+            changed = true
+          }
+        }
+
+        return changed ? next : current
+      })
+    }
+
+    const visibleElements = [...elements.values()]
+    updateHeights(visibleElements)
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            updateHeights(entries.map((entry) => entry.target as HTMLDivElement))
+          })
+    visibleElements.forEach((element) => resizeObserver?.observe(element))
+
+    return () => resizeObserver?.disconnect()
+  }, [allDayItems])
   const timedLayouts = useMemo(
     () =>
       layoutWeeklyTimedTasks(
@@ -249,9 +297,10 @@ export function CalendarWeekView({
           startMinutes: entry.startMinutes,
           endMinutes: entry.startMinutes + entry.durationMinutes,
           heightMode: entry.task.weeklyHeightMode
-        }))
+        })),
+        weeklyHourHeightPx
       ),
-    [timedTasks]
+    [timedTasks, weeklyHourHeightPx]
   )
   const timedLayoutsByDate = useMemo(() => {
     const grouped: Record<string, WeeklyTimedTaskLayout[]> = {}
@@ -266,25 +315,26 @@ export function CalendarWeekView({
     [timedTasks]
   )
   const allDayLayouts = useMemo(
-    () => layoutWeeklyAllDayItems(allDayItems, weekStart),
-    [allDayItems, weekStart]
+    () =>
+      layoutWeeklyAllDayItems(
+        allDayItems,
+        weekStart,
+        allDayTaskHeights,
+        WEEKLY_ALL_DAY_TASK_GAP_PX,
+        WEEKLY_ALL_DAY_TASK_MIN_HEIGHT_PX
+      ),
+    [allDayItems, allDayTaskHeights, weekStart]
   )
-  const allDayRowCount = useMemo(
-    () => allDayLayouts.reduce((max, item) => Math.max(max, item.row + 1), 0),
+  const allDaySurfaceHeightPx = useMemo(
+    () =>
+      getWeeklyAllDaySurfaceHeightPx(
+        allDayLayouts,
+        WEEKLY_ALL_DAY_MIN_HEIGHT_PX,
+        WEEKLY_ALL_DAY_SURFACE_PADDING_PX
+      ),
     [allDayLayouts]
   )
-  const allDaySurfaceMinHeightPx = useMemo(() => {
-    const occupiedHeight =
-      allDayRowCount > 0
-        ? WEEKLY_ALL_DAY_SURFACE_PADDING_PX * 2 +
-          allDayRowCount * WEEKLY_ALL_DAY_ROW_HEIGHT_PX +
-          (allDayRowCount - 1) * WEEKLY_ALL_DAY_ROW_GAP_PX
-        : WEEKLY_ALL_DAY_MIN_HEIGHT_PX
 
-    return Math.max(WEEKLY_ALL_DAY_MIN_HEIGHT_PX, occupiedHeight)
-  }, [allDayRowCount])
-
-  const editingTask = editingTaskId ? (tasksById[editingTaskId] ?? null) : null
   const currentTimeIndicator = useMemo(() => {
     if (!weekDays.some(({ date }) => date === todayIso)) {
       return null
@@ -304,11 +354,35 @@ export function CalendarWeekView({
     }
   }, [currentDateTime, timeScaleMetrics, todayIso, weekDays])
   const safeDeleteTask = onDeleteTask ?? (() => undefined)
-  const safeRenameTask = onRenameTask ?? (() => undefined)
-  const safeUpdateTaskPriority = onUpdateTaskPriority ?? (() => undefined)
-  const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
   const safeUpdateTaskStatus = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? NOOP_UPDATE_TASK_SCHEDULE
+
+  useEffect(() => {
+    const node = timedScrollerRef.current
+    if (!node) {
+      return
+    }
+
+    const handleWheel = (event: WheelEvent): void => {
+      if ((!event.metaKey && !event.ctrlKey) || event.deltaY === 0) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setTimedDropIndicator(null)
+
+      const direction = event.deltaY < 0 ? 1 : -1
+      setWeeklyHourHeightPx((current) =>
+        clampWeeklyHourHeight(current + direction * WEEKLY_HOUR_HEIGHT_STEP_PX)
+      )
+    }
+
+    node.addEventListener('wheel', handleWheel, { capture: true, passive: false })
+    return () => {
+      node.removeEventListener('wheel', handleWheel, true)
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -356,7 +430,7 @@ export function CalendarWeekView({
       resizeObserver?.disconnect()
       window.removeEventListener('resize', syncTimeScaleMetrics)
     }
-  }, [weekStart])
+  }, [weekStart, weeklyHourHeightPx])
 
   const setTimedInteractionState = (next: TimedInteractionState | null): void => {
     timedInteractionRef.current = next
@@ -403,7 +477,7 @@ export function CalendarWeekView({
         return
       }
 
-      const pointerMinutes = getPointerMinutesForClientY(event.clientY, column)
+      const pointerMinutes = getPointerMinutesForClientY(event.clientY, column, weeklyHourHeightPx)
       const nextRange =
         current.kind === 'resize-start'
           ? buildResizedTimedRange(
@@ -465,7 +539,8 @@ export function CalendarWeekView({
 
     const pointerMinutes = getPointerMinutesForClientY(
       event.clientY,
-      daySurfaceRefs.current[date] ?? event.currentTarget
+      daySurfaceRefs.current[date] ?? event.currentTarget,
+      weeklyHourHeightPx
     )
     const sourceTask = tasksById[taskId]
     const dragState = dragStateRef.current
@@ -503,10 +578,13 @@ export function CalendarWeekView({
     onSelectDate(date)
 
     void onCreateTask(
-      buildWeeklyTimedCreateSchedule(date, getPointerMinutesForClientY(event.clientY, daySurface))
+      buildWeeklyTimedCreateSchedule(
+        date,
+        getPointerMinutesForClientY(event.clientY, daySurface, weeklyHourHeightPx)
+      )
     )
       .then((task) => {
-        setEditingTaskId(task.id)
+        onOpenTask?.(task.id)
       })
       .catch((error) => {
         console.error('Failed to create weekly calendar task', error)
@@ -554,12 +632,16 @@ export function CalendarWeekView({
       pointerOffsetMinutes:
         source === 'timed'
           ? snapMinutes(
-              pixelsToMinutes(event.clientY - event.currentTarget.getBoundingClientRect().top)
+              pixelsToMinutes(
+                event.clientY - event.currentTarget.getBoundingClientRect().top,
+                weeklyHourHeightPx
+              )
             )
           : 0
     }
     dragStateRef.current = dragState
     setCalendarTaskDragSession(dragState)
+    startCalendarDragAutoScroll()
   }
 
   const startResizeInteraction = (
@@ -598,6 +680,7 @@ export function CalendarWeekView({
   }
 
   const handleTaskDragEnd = (): void => {
+    stopCalendarDragAutoScroll()
     dragStateRef.current = null
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
@@ -607,79 +690,89 @@ export function CalendarWeekView({
   const renderAllDayTask = (
     task: CalendarTask,
     layout: WeeklyCalendarAllDayLayout
-  ): ReactElement => (
-    <DragSource
-      as="article"
-      key={layout.id}
-      rotation={0}
-      preview="floating"
-      previewVariant="content"
-      previewSizing="fit-content"
-      tabIndex={0}
-      role="group"
-      aria-label={`Task ${task.title}`}
-      data-testid={`calendar-week-all-day-task:${task.id}`}
-      data-span-days={layout.columnSpan}
-      data-start-date={layout.startDate}
-      data-end-date={layout.endDate}
-      style={{
-        gridColumn: `${layout.columnStart + 1} / span ${layout.columnSpan}`,
-        gridRow: `${layout.row + 1}`,
-        marginLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
-        marginRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
-      }}
-      onDragStart={(event) => handleTaskDragStart(event, task, 'all-day')}
-      onDragEnd={handleTaskDragEnd}
-      onClick={(event) => {
-        event.stopPropagation()
-        setHoveredTaskCard(null)
-        setEditingTaskId(task.id)
-      }}
-      onMouseMove={(event) => {
-        const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
-        setHoveredTaskCard((current) => {
-          if (!current || current.task.id !== task.id) {
-            return { task, x, y }
-          }
-          return { ...current, x, y }
-        })
-      }}
-      onMouseLeave={() => setHoveredTaskCard(null)}
-      onKeyDown={(event) => {
-        if (isDeleteShortcut(event)) {
-          event.preventDefault()
-          safeDeleteTask(task.id)
-          return
-        }
+  ): ReactElement => {
+    const columnWidthPercent = 100 / 7
+    const leftPercent = layout.columnStart * columnWidthPercent
+    const widthPercent = layout.columnSpan * columnWidthPercent
+    const horizontalPadding = WEEKLY_ALL_DAY_CELL_PADDING_X_PX * 2
 
-        if (event.key !== 'Enter' && event.key !== ' ') {
-          return
-        }
-        if (event.target instanceof HTMLElement && event.target.closest('button')) {
-          return
-        }
+    return (
+      <div
+        key={layout.id}
+        className="pointer-events-none absolute"
+        style={{
+          top: `${WEEKLY_ALL_DAY_SURFACE_PADDING_PX + layout.topPx}px`,
+          left: `calc(${leftPercent}% + ${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px)`,
+          width: `calc(${widthPercent}% - ${horizontalPadding}px)`
+        }}
+      >
+        <DragSource
+          as="article"
+          rotation={0}
+          preview="floating"
+          previewVariant="content"
+          previewSizing="fit-content"
+          tabIndex={0}
+          role="group"
+          aria-label={`Task ${task.title}`}
+          data-testid={`calendar-week-all-day-task:${task.id}`}
+          data-span-days={layout.columnSpan}
+          data-start-date={layout.startDate}
+          data-end-date={layout.endDate}
+          onDragStart={(event) => handleTaskDragStart(event, task, 'all-day')}
+          onDragEnd={handleTaskDragEnd}
+          onClick={(event) => {
+            event.stopPropagation()
+            setHoveredTaskCard(null)
+            onOpenTask?.(task.id)
+          }}
+          onMouseMove={(event) => {
+            const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+            setHoveredTaskCard((current) => {
+              if (!current || current.task.id !== task.id) {
+                return { task, x, y }
+              }
+              return { ...current, x, y }
+            })
+          }}
+          onMouseLeave={() => setHoveredTaskCard(null)}
+          onKeyDown={(event) => {
+            if (isDeleteShortcut(event)) {
+              event.preventDefault()
+              safeDeleteTask(task.id)
+              return
+            }
 
-        event.preventDefault()
-        setHoveredTaskCard(null)
-        setEditingTaskId(task.id)
-      }}
-      className={`pointer-events-auto h-fit cursor-grab self-start rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
-    >
-      <CalendarTaskCard
-        task={task}
-        compact
-        showStatusValue
-        heightMode="content"
-        project={task.projectId ? projectsById.get(task.projectId) : undefined}
-        showProject={shouldShowWeeklyProject(WEEKLY_ALL_DAY_ROW_HEIGHT_PX)}
-        showTime={Boolean(task.time || task.endTime)}
-        onStatusChange={(taskId, status) =>
-          safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
-        }
-        className="min-h-0"
-      />
-    </DragSource>
-  )
+            if (event.key !== 'Enter' && event.key !== ' ') {
+              return
+            }
+            if (event.target instanceof HTMLElement && event.target.closest('button')) {
+              return
+            }
+
+            event.preventDefault()
+            setHoveredTaskCard(null)
+            onOpenTask?.(task.id)
+          }}
+          className={`pointer-events-auto w-full transition-colors ${task.completed ? 'line-through' : ''}`}
+        >
+          <CalendarTaskCard
+            ref={(element) => registerAllDayTaskElement(task.id, element)}
+            task={task}
+            compact
+            showStatusValue
+            heightMode="content"
+            project={task.projectId ? projectsById.get(task.projectId) : undefined}
+            showProject={Boolean(task.projectId)}
+            showTime={Boolean(task.time || task.endTime)}
+            onStatusChange={(taskId, status) =>
+              safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+            }
+          />
+        </DragSource>
+      </div>
+    )
+  }
 
   const renderTimedTask = (layout: WeeklyTimedTaskLayout): ReactElement => {
     const task = timedTasksById[layout.taskId]
@@ -689,7 +782,7 @@ export function CalendarWeekView({
 
     const isInteracting =
       timedInteraction?.taskId === task.id && timedInteraction.previewDate === layout.date
-    const blockStyle = buildTimedTaskStyle(layout)
+    const blockStyle = buildTimedTaskStyle(layout, weeklyHourHeightPx)
     const resizeBandPx = getWeeklyResizeBandPx(layout.heightPx)
     const contentStyle =
       layout.heightMode === 'content'
@@ -750,7 +843,7 @@ export function CalendarWeekView({
 
           event.preventDefault()
           setHoveredTaskCard(null)
-          setEditingTaskId(task.id)
+          onOpenTask?.(task.id)
         }}
         onClick={(event) => {
           if (event.target instanceof HTMLElement && event.target.closest('button')) {
@@ -761,7 +854,7 @@ export function CalendarWeekView({
             return
           }
           setHoveredTaskCard(null)
-          setEditingTaskId(task.id)
+          onOpenTask?.(task.id)
         }}
         className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
@@ -809,14 +902,15 @@ export function CalendarWeekView({
 
   return (
     <section
+      ref={calendarRootRef}
       data-testid="calendar-week-view"
-      className="flex min-h-full flex-1 flex-col overflow-hidden rounded-2xl border border-border"
+      className="flex min-h-full flex-1 flex-col overflow-hidden rounded-shell border border-panel-border"
     >
       <div
         data-testid="calendar-week-weekday-header"
-        className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-border bg-card"
+        className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-panel-border bg-card"
       >
-        <div className="border-r border-border bg-muted px-3 py-4" />
+        <div className="border-r border-panel-border bg-muted px-3 py-4" />
         {weekDays.map(({ date, value }) => {
           const isSelected = date === selectedDate
           const isToday = date === todayIso
@@ -855,8 +949,8 @@ export function CalendarWeekView({
       </div>
 
       <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-        <div className="border-r border-border bg-muted px-3 py-3" />
-        <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceMinHeightPx}px` }}>
+        <div className="border-r border-panel-border bg-muted px-3 py-3" />
+        <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceHeightPx}px` }}>
           <div className="absolute inset-0 grid grid-cols-7">
             {weekDays.map(({ date }) => {
               const isSelected = date === selectedDate
@@ -894,7 +988,7 @@ export function CalendarWeekView({
                     setAllDayDropIndicator(null)
                   }}
                   onDrop={(event) => handleAllDayDrop(event, date)}
-                  className={`h-full rounded-none border-r border-border px-2 py-2 transition-colors last:border-r-0 ${isHighlighted ? 'calendar-date-highlight' : 'bg-transparent'}`}
+                  className={`h-full rounded-none border-r border-panel-border px-2 py-2 transition-colors last:border-r-0 ${isHighlighted ? 'calendar-date-highlight' : 'bg-transparent'}`}
                   style={{
                     paddingLeft: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`,
                     paddingRight: `${WEEKLY_ALL_DAY_CELL_PADDING_X_PX}px`
@@ -923,12 +1017,8 @@ export function CalendarWeekView({
 
           {allDayLayouts.length > 0 ? (
             <div
-              className="pointer-events-none relative z-[2] grid h-full grid-cols-7 py-2"
-              style={{
-                gridAutoRows: `${WEEKLY_ALL_DAY_ROW_HEIGHT_PX}px`,
-                rowGap: `${WEEKLY_ALL_DAY_ROW_GAP_PX}px`,
-                minHeight: `${allDaySurfaceMinHeightPx}px`
-              }}
+              className="pointer-events-none absolute inset-0 z-[2]"
+              style={{ minHeight: `${allDaySurfaceHeightPx}px` }}
             >
               {allDayLayouts.map((item) => (item.task ? renderAllDayTask(item.task, item) : null))}
             </div>
@@ -936,25 +1026,30 @@ export function CalendarWeekView({
         </div>
       </div>
 
-      <div data-testid="calendar-week-timed-scroller" className="flex-1 overflow-visible">
+      <div
+        ref={timedScrollerRef}
+        data-testid="calendar-week-timed-scroller"
+        data-weekly-hour-height={weeklyHourHeightPx}
+        className="flex-1 overflow-visible"
+      >
         <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-          <div className="border-r border-border bg-muted">
-            <div className="relative" style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}>
+          <div className="border-r border-panel-border bg-muted">
+            <div className="relative" style={{ height: `${weeklyTimedSurfaceHeightPx}px` }}>
               <div
                 ref={timeScaleRef}
                 className="absolute inset-x-0"
                 style={{
                   top: `${WEEKLY_CELL_PADDING_Y_PX}px`,
-                  height: `${WEEKLY_DAY_HEIGHT_PX}px`
+                  height: `${weeklyDayHeightPx}px`
                 }}
               >
                 {TIME_SLOTS.map((slot, index) => (
                   <div
                     key={slot.hour}
                     className={`px-3 text-right text-xs font-medium text-muted-foreground ${
-                      index === 0 ? '' : 'border-t border-border'
+                      index === 0 ? '' : 'border-t border-panel-border'
                     }`}
-                    style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px`, paddingTop: '8px' }}
+                    style={{ height: `${weeklyHourHeightPx}px`, paddingTop: '8px' }}
                   >
                     {slot.label}
                   </div>
@@ -1004,7 +1099,8 @@ export function CalendarWeekView({
                   }
                   const pointerMinutes = getPointerMinutesForClientY(
                     event.clientY,
-                    daySurfaceRefs.current[date] ?? event.currentTarget
+                    daySurfaceRefs.current[date] ?? event.currentTarget,
+                    weeklyHourHeightPx
                   )
                   const sourceTask = tasksById[taskId]
                   const pointerOffsetMinutes =
@@ -1027,10 +1123,13 @@ export function CalendarWeekView({
 
                   setTimedDropIndicator({
                     date,
-                    topPx: minutesToPixels(nextRange.startMinutes),
+                    topPx: minutesToPixels(nextRange.startMinutes, weeklyHourHeightPx),
                     heightPx: Math.max(
-                      minutesToPixels(nextRange.endMinutes - nextRange.startMinutes),
-                      minutesToPixels(WEEKLY_MIN_DURATION_MINUTES)
+                      minutesToPixels(
+                        nextRange.endMinutes - nextRange.startMinutes,
+                        weeklyHourHeightPx
+                      ),
+                      minutesToPixels(WEEKLY_MIN_DURATION_MINUTES, weeklyHourHeightPx)
                     ),
                     heightMode: nextRange.heightMode,
                     task: previewTask
@@ -1046,8 +1145,8 @@ export function CalendarWeekView({
                   setTimedDropIndicator((current) => (current?.date === date ? null : current))
                 }}
                 onDrop={(event) => handleTimedDrop(event, date)}
-                className="relative border-r border-border bg-transparent last:border-r-0"
-                style={{ height: `${WEEKLY_TIMED_SURFACE_HEIGHT_PX}px` }}
+                className="relative border-r border-panel-border bg-transparent last:border-r-0"
+                style={{ height: `${weeklyTimedSurfaceHeightPx}px` }}
               >
                 {isHighlighted ? (
                   <div
@@ -1071,8 +1170,8 @@ export function CalendarWeekView({
                     {TIME_SLOTS.map((slot, index) => (
                       <div
                         key={slot.hour}
-                        className={`border-t border-border ${index === 0 ? 'border-t-0' : ''}`}
-                        style={{ height: `${WEEKLY_HOUR_HEIGHT_PX}px` }}
+                        className={`border-t border-panel-border ${index === 0 ? 'border-t-0' : ''}`}
+                        style={{ height: `${weeklyHourHeightPx}px` }}
                       />
                     ))}
                   </div>
@@ -1140,52 +1239,14 @@ export function CalendarWeekView({
           y={hoveredTaskCard.y}
         />
       ) : null}
-
-      {editingTask ? (
-        <TaskEditDialog
-          task={editingTask}
-          onClose={() => setEditingTaskId(null)}
-          onSave={(taskId, patch) => {
-            const scheduleMode =
-              'time' in patch || 'endTime' in patch
-                ? getWeeklyHeightModeForSchedule(patch.time, patch.endTime)
-                : undefined
-            if (onUpdateTask) {
-              onUpdateTask(
-                taskId,
-                scheduleMode ? { ...patch, weeklyHeightMode: scheduleMode } : patch
-              )
-              return
-            }
-            if (patch.title) safeRenameTask(taskId, patch.title)
-            if (patch.priority) safeUpdateTaskPriority(taskId, patch.priority)
-            if (patch.taskType) safeUpdateTaskType(taskId, patch.taskType)
-            if (patch.status) {
-              safeUpdateTaskStatus(taskId, {
-                status: patch.status,
-                completed: patch.status === 'completed'
-              })
-            }
-            if ('projectId' in patch) onUpdateTaskProject?.(taskId, patch.projectId)
-            if ('date' in patch || 'endDate' in patch || 'time' in patch || 'endTime' in patch) {
-              safeUpdateTaskSchedule(taskId, {
-                date: patch.date,
-                endDate: patch.endDate,
-                time: patch.time,
-                endTime: patch.endTime,
-                weeklyHeightMode: scheduleMode
-              })
-            }
-          }}
-          projects={projects}
-          onDelete={safeDeleteTask}
-        />
-      ) : null}
     </section>
   )
 }
 
-function buildTimedTaskStyle(layout: WeeklyTimedTaskLayout): {
+function buildTimedTaskStyle(
+  layout: WeeklyTimedTaskLayout,
+  hourHeightPx: number
+): {
   top: string
   height: string
   left: string
@@ -1196,17 +1257,10 @@ function buildTimedTaskStyle(layout: WeeklyTimedTaskLayout): {
     height:
       layout.heightMode === 'content'
         ? 'fit-content'
-        : `${Math.max(layout.heightPx, minutesToPixels(WEEKLY_MIN_DURATION_MINUTES))}px`,
+        : `${Math.max(layout.heightPx, minutesToPixels(WEEKLY_MIN_DURATION_MINUTES, hourHeightPx))}px`,
     left: `calc(${layout.leftPercent}% + 1px)`,
     width: `calc(${layout.widthPercent}% - 2px)`
   }
-}
-
-function getWeeklyHeightModeForSchedule(
-  time: string | undefined,
-  endTime: string | undefined
-): WeeklyHeightMode {
-  return !time && !endTime ? 'content' : 'duration'
 }
 
 function getWeeklyResizeBandPx(heightPx: number): number {
@@ -1239,10 +1293,14 @@ function hasTimedTaskScheduleChanged(
   )
 }
 
-function getPointerMinutesForClientY(clientY: number, element: HTMLElement): number {
+function getPointerMinutesForClientY(
+  clientY: number,
+  element: HTMLElement,
+  hourHeightPx: number
+): number {
   const rect = element.getBoundingClientRect()
   const relativeY = clampNumber(clientY - rect.top, 0, rect.height)
-  return clampNumber(pixelsToMinutes(relativeY), 0, WEEKLY_MAX_END_MINUTES)
+  return clampNumber(pixelsToMinutes(relativeY, hourHeightPx), 0, WEEKLY_MAX_END_MINUTES)
 }
 
 function clampNumber(value: number, min: number, max: number): number {

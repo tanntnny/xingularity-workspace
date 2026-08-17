@@ -13,6 +13,7 @@ function makeTask(overrides: Partial<CalendarTask> = {}): CalendarTask {
   return {
     id: 'task-1',
     title: 'Task',
+    tags: [],
     completed: false,
     createdAt: '2026-03-17T00:00:00.000Z',
     priority: 'medium',
@@ -113,6 +114,22 @@ describe('buildWeeklyTimedCreateSchedule', () => {
 })
 
 describe('buildWeeklyAllDayDropSchedule', () => {
+  it('moves a deadline-only task by changing its end date only', () => {
+    expect(
+      buildWeeklyAllDayDropSchedule(
+        makeTask({
+          endDate: '2026-04-16'
+        }),
+        '2026-04-20'
+      )
+    ).toEqual({
+      date: undefined,
+      endDate: '2026-04-20',
+      time: undefined,
+      endTime: undefined
+    })
+  })
+
   it('preserves multi-day span when dropping into the all-day lane', () => {
     expect(
       buildWeeklyAllDayDropSchedule(

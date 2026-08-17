@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { normalizeTaskTags } from '../shared/taskTags'
+import { normalizeCalendarEndDate } from '../shared/calendarTaskDates'
 import { upsertTagsInMarkdown } from '../shared/noteTags'
 import {
   AppSettings,
@@ -93,6 +95,8 @@ const calendarTaskCreateSchema = z.object({
   description: z.string().max(2000).optional(),
   projectId: z.string().trim().min(1).max(120).optional(),
   projectName: z.string().trim().min(1).max(200).optional(),
+  milestoneId: z.string().trim().min(1).max(120).optional(),
+  tags: z.array(z.string().trim().min(1).max(129)).max(50).optional(),
   date: isoDateSchema.optional(),
   endDate: isoDateSchema.optional(),
   time: timeSchema.optional(),
@@ -111,12 +115,14 @@ const calendarTaskUpdateSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
     projectId: z.string().trim().min(1).max(120).optional().nullable(),
+    milestoneId: z.string().trim().min(1).max(120).optional().nullable(),
     date: isoDateSchema.nullable().optional(),
     endDate: isoDateSchema.nullable().optional(),
     time: timeSchema.nullable().optional(),
     endTime: timeSchema.nullable().optional(),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
+    tags: z.array(z.string().trim().min(1).max(129)).max(50).optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
     status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
     completed: z.boolean().optional()
@@ -129,12 +135,14 @@ const calendarTaskUpdateSchema = z
       value.title !== undefined ||
       value.description !== undefined ||
       value.projectId !== undefined ||
+      value.milestoneId !== undefined ||
       value.date !== undefined ||
       value.endDate !== undefined ||
       value.time !== undefined ||
       value.endTime !== undefined ||
       value.priority !== undefined ||
       value.taskType !== undefined ||
+      value.tags !== undefined ||
       value.reminders !== undefined ||
       value.status !== undefined ||
       value.completed !== undefined,
@@ -336,12 +344,25 @@ export class AgentToolsService {
       const projectId =
         input.projectId ??
         (input.projectName ? resolveProject(settings, undefined, input.projectName).id : undefined)
+      const project = projectId ? resolveProject(settings, projectId) : undefined
+      if (input.milestoneId && !project) {
+        throw new Error('A milestone requires a project')
+      }
+      if (
+        input.milestoneId &&
+        project &&
+        !project.milestones?.some((item) => item.id === input.milestoneId)
+      ) {
+        throw new Error(`Milestone not found: ${input.milestoneId}`)
+      }
       const status = input.status ?? (input.completed ? 'completed' : 'pending')
       const task: CalendarTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         title: input.title.trim(),
         description: input.description?.trim(),
         projectId,
+        milestoneId: input.milestoneId,
+        tags: normalizeTaskTags(input.tags),
         date: input.date,
         endDate: normalizeCalendarEndDate(input.date, input.endDate),
         time: input.time,
@@ -376,12 +397,34 @@ export class AgentToolsService {
           : input.endDate === null
             ? undefined
             : input.endDate
+      const nextProjectId =
+        input.projectId === undefined ? task.projectId : (input.projectId ?? undefined)
+      const projectChanged = input.projectId !== undefined && nextProjectId !== task.projectId
+      const nextMilestoneId =
+        input.milestoneId === undefined
+          ? projectChanged
+            ? undefined
+            : task.milestoneId
+          : (input.milestoneId ?? undefined)
+      const project = nextProjectId ? resolveProject(settings, nextProjectId) : undefined
+      if (nextMilestoneId && !project) {
+        throw new Error('A milestone requires a project')
+      }
+      if (
+        nextMilestoneId &&
+        project &&
+        !project.milestones?.some((item) => item.id === nextMilestoneId)
+      ) {
+        throw new Error(`Milestone not found: ${nextMilestoneId}`)
+      }
 
       const updated: CalendarTask = {
         ...task,
         title: input.title?.trim() || task.title,
         description: input.description === undefined ? task.description : input.description.trim(),
-        projectId: input.projectId === undefined ? task.projectId : (input.projectId ?? undefined),
+        projectId: nextProjectId,
+        milestoneId: nextMilestoneId,
+        tags: input.tags === undefined ? task.tags : normalizeTaskTags(input.tags),
         date: nextDate,
         endDate: normalizeCalendarEndDate(nextDate, nextEndDate),
         time: input.time === undefined ? task.time : (input.time ?? undefined),
@@ -546,13 +589,6 @@ function resolveCalendarTask(
     throw new Error(`Multiple calendar tasks matched title: ${titleMatch}`)
   }
   throw new Error(`Calendar task not found: ${titleMatch}`)
-}
-
-function normalizeCalendarEndDate(date?: string, endDate?: string): string | undefined {
-  if (!date || !endDate) {
-    return undefined
-  }
-  return endDate >= date ? endDate : date
 }
 
 function findNewestByWeek<T extends { weekId: string; createdAt: string; updatedAt: string }>(

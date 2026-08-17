@@ -7,17 +7,9 @@ import {
   useRef,
   useState
 } from 'react'
-import {
-  CreditCard,
-  Clock,
-  FileText,
-  FolderKanban,
-  FolderOpen,
-  GitBranch,
-  Paintbrush,
-  Plus,
-  Terminal
-} from './ui/icons'
+import { Clock, FileText, Plus, Terminal } from './ui/icons'
+import { APP_PAGE_ICONS, VaultIcon } from '../lib/pageIcons'
+import type { AppPage } from '../navigation'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import warpLogo from '../assets/warp-logo.png'
@@ -45,15 +37,7 @@ export interface CommandPaletteSearchResult {
   updatedAt?: string
 }
 
-type CommandPalettePage =
-  | 'capture'
-  | 'knowledge'
-  | 'notes'
-  | 'projects'
-  | 'subscriptions'
-  | 'calendar'
-  | 'designAudit'
-  | 'settings'
+type CommandPalettePage = Exclude<AppPage, 'schedulingGuide'>
 
 interface CommandPaletteProps {
   open: boolean
@@ -276,7 +260,7 @@ export function CommandPalette({
         label: 'Go to Capture',
         onSelect: () => onOpenPage('capture'),
         keywords: ['inbox', 'fleeting', 'quick capture'],
-        icon: Clock
+        icon: APP_PAGE_ICONS.capture
       },
       {
         value: '>new note',
@@ -292,49 +276,56 @@ export function CommandPalette({
         shortcutKeys: ['cmd', 'K'] as CommandPaletteShortcutKey[],
         onSelect: () => onOpenPage('knowledge'),
         keywords: ['graph', 'knowledge base'],
-        icon: GitBranch
+        icon: APP_PAGE_ICONS.knowledge
       },
       {
         value: '>go notes',
         label: 'Go to Notebooks',
         onSelect: () => onOpenPage('notes'),
         keywords: ['notes', 'notebooks', 'docs'],
-        icon: FileText
+        icon: APP_PAGE_ICONS.notes
       },
       {
         value: '>go projects',
         label: 'Go to Projects',
         onSelect: () => onOpenPage('projects'),
         keywords: ['project', 'workspace'],
-        icon: FolderKanban
+        icon: APP_PAGE_ICONS.projects
       },
       {
         value: '>go subscriptions',
         label: 'Go to Subscriptions',
         onSelect: () => onOpenPage('subscriptions'),
         keywords: ['billing', 'payments'],
-        icon: CreditCard
+        icon: APP_PAGE_ICONS.subscriptions
       },
       {
         value: '>go calendar',
         label: 'Go to Calendar',
         onSelect: () => onOpenPage('calendar'),
         keywords: ['dates', 'events', 'schedule'],
-        icon: FolderKanban
+        icon: APP_PAGE_ICONS.calendar
+      },
+      {
+        value: '>go scheduling',
+        label: 'Go to Scheduling',
+        onSelect: () => onOpenPage('schedules'),
+        keywords: ['automation', 'jobs', 'schedules'],
+        icon: APP_PAGE_ICONS.schedules
       },
       {
         value: '>go design audit',
         label: 'Go to Design Audit',
         onSelect: () => onOpenPage('designAudit'),
         keywords: ['design system', 'components', 'colors', 'tokens', 'ui'],
-        icon: Paintbrush
+        icon: APP_PAGE_ICONS.designAudit
       },
       {
         value: '>go settings',
         label: 'Go to Settings',
         onSelect: () => onOpenPage('settings'),
         keywords: ['preferences', 'config'],
-        icon: FolderKanban
+        icon: APP_PAGE_ICONS.settings
       },
       {
         value: '>warp open current note folder',
@@ -354,7 +345,7 @@ export function CommandPalette({
               label: 'Manage Vaults',
               onSelect: () => onManageVaults(),
               keywords: ['vault', 'storage', 'folders'],
-              icon: FolderOpen
+              icon: VaultIcon
             }
           ]
         : [])
@@ -647,7 +638,7 @@ export function CommandPalette({
                             onSelect={handleSelect}
                           >
                             <div className={paletteItemIconClass}>
-                              <FolderKanban className="h-4 w-4" />
+                              <APP_PAGE_ICONS.projects className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{result.title}</div>
@@ -690,7 +681,7 @@ export function CommandPalette({
           <div className="hidden w-64 shrink-0 border-l bg-muted/30 p-4 md:block">
             <div className="mb-3 inline-flex size-10 items-center justify-center rounded-md border bg-card text-primary">
               {hoveredResult.kind === 'project' ? (
-                <FolderKanban className="h-4 w-4" />
+                <APP_PAGE_ICONS.projects className="h-4 w-4" />
               ) : (
                 <FileText className="h-4 w-4" />
               )}

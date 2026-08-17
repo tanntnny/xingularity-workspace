@@ -120,11 +120,20 @@ export function buildWeeklyAllDayDropSchedule(
   task: Pick<CalendarTask, 'date' | 'endDate'>,
   date: string
 ): {
-  date: string
+  date: string | undefined
   endDate: string | undefined
   time: undefined
   endTime: undefined
 } {
+  if (!task.date && task.endDate) {
+    return {
+      date: undefined,
+      endDate: date,
+      time: undefined,
+      endTime: undefined
+    }
+  }
+
   const taskEnd = task.date && task.endDate && task.endDate >= task.date ? task.endDate : task.date
   const durationDays = task.date && taskEnd ? diffIsoDays(task.date, taskEnd) : 0
 
@@ -153,8 +162,9 @@ export function buildWeeklyAllDayDropIndicator(
         endDate: undefined
       }
   const weekEnd = addIsoDays(weekStart, 6)
-  const startDate = schedule.date < weekStart ? weekStart : schedule.date
-  const rawEndDate = schedule.endDate ?? schedule.date
+  const projectedStartDate = schedule.date ?? schedule.endDate ?? date
+  const startDate = projectedStartDate < weekStart ? weekStart : projectedStartDate
+  const rawEndDate = schedule.endDate ?? projectedStartDate
   const endDate = rawEndDate > weekEnd ? weekEnd : rawEndDate
   const columnStart = diffIsoDays(weekStart, startDate)
   const columnSpan = diffIsoDays(startDate, endDate) + 1

@@ -19,7 +19,9 @@ describe('Scheduling page availability', () => {
     const pages = getAvailablePages(desktop)
 
     expect(pages).toContain('schedules')
+    expect(pages).toContain('schedulingGuide')
     expect(isPageAvailable(desktop, 'schedules')).toBe(true)
+    expect(isPageAvailable(desktop, 'schedulingGuide')).toBe(true)
   })
 
   it('keeps Scheduling desktop-only', () => {
@@ -27,7 +29,9 @@ describe('Scheduling page availability', () => {
     const web: AppPlatform = { kind: 'web', capabilities }
 
     expect(getAvailablePages(mobile)).not.toContain('schedules')
+    expect(getAvailablePages(mobile)).not.toContain('schedulingGuide')
     expect(getAvailablePages(web)).not.toContain('schedules')
+    expect(getAvailablePages(web)).not.toContain('schedulingGuide')
     expect(isPageAvailable(mobile, 'schedules')).toBe(false)
   })
 })

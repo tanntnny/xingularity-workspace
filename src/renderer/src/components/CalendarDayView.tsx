@@ -107,7 +107,7 @@ export function CalendarDayView({
 
       {/* All Day section */}
       {allDayTasks.length > 0 && (
-        <div className="border bg-card text-card-foreground shrink-0 rounded-lg p-3">
+        <div className="border border-panel-border bg-card text-card-foreground shrink-0 rounded-lg p-3">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             All Day / No Time Set
           </h3>
@@ -117,7 +117,9 @@ export function CalendarDayView({
                 key={task.id}
                 className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
               >
-                <span className="truncate font-medium text-foreground">{task.title}</span>
+                <span className="truncate text-base font-semibold text-foreground">
+                  {task.title}
+                </span>
               </div>
             ))}
           </div>
@@ -153,7 +155,7 @@ export function CalendarDayView({
             return (
               <div
                 key={slot.hour}
-                className="flex border-b border-border"
+                className="flex border-b border-panel-border"
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -171,7 +173,9 @@ export function CalendarDayView({
                       key={task.id}
                       className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
                     >
-                      <span className="truncate font-medium text-foreground">{task.title}</span>
+                      <span className="truncate text-base font-semibold text-foreground">
+                        {task.title}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {formatCalendarTaskTimeLabel(task)}
                       </span>

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import {
   CSSProperties,
+  FocusEvent,
   ReactElement,
   RefObject,
   MouseEvent,
@@ -28,7 +29,8 @@ import {
   TreeApi,
   NodeRendererProps,
   type DragPreviewProps,
-  type NodeApi
+  type NodeApi,
+  type RowRendererProps
 } from 'react-arborist'
 import { createPortal } from 'react-dom'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
@@ -38,6 +40,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger
 } from './ui/context-menu'
 import { DragSource } from './ui/drag-source'
@@ -46,7 +51,11 @@ import { EmptyState } from './ui/empty-state'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from './ui/dropdown-menu'
 import {
@@ -100,6 +109,7 @@ interface NotesTreeViewProps {
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
   onExportFolderPdf: (folderPath: string) => void
+  onExportFolderMarkdown: (folderPath: string) => void
   onRenamePath: (relPath: string, nextName: string, kind: 'note' | 'excalidraw' | 'folder') => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
@@ -120,6 +130,7 @@ export function NotesTreeView({
   onCreateExcalidraw,
   onCreateFolder,
   onExportFolderPdf,
+  onExportFolderMarkdown,
   onRenamePath,
   onDeleteEntries,
   onMoveEntries
@@ -129,12 +140,33 @@ export function NotesTreeView({
   const [treeContainer, setTreeContainer] = useState<HTMLDivElement | null>(null)
   const [treeContainerHeight, setTreeContainerHeight] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const editingRequestFrameRef = useRef<number | null>(null)
   const autoScrollFrameRef = useRef<number | null>(null)
   const dragClientYRef = useRef<number | null>(null)
   const stepAutoScrollRef = useRef<() => void>(() => {})
   const useNativeMenus = canUseNativeMenus()
   const treeHeight = treeContainerHeight > 8 ? treeContainerHeight - 8 : 320
   const deferredSearchTerm = useDeferredValue(searchTerm.trim().toLowerCase())
+
+  const cancelEditingRequest = useCallback((): void => {
+    if (editingRequestFrameRef.current !== null) {
+      window.cancelAnimationFrame(editingRequestFrameRef.current)
+      editingRequestFrameRef.current = null
+    }
+  }, [])
+
+  const requestEditing = useCallback((id: string): void => {
+    if (editingRequestFrameRef.current !== null) {
+      window.cancelAnimationFrame(editingRequestFrameRef.current)
+    }
+
+    editingRequestFrameRef.current = window.requestAnimationFrame(() => {
+      editingRequestFrameRef.current = null
+      setEditingId(id)
+    })
+  }, [])
+
+  useEffect(() => cancelEditingRequest, [cancelEditingRequest])
 
   useEffect(() => {
     if (!treeContainer) {
@@ -440,7 +472,7 @@ export function NotesTreeView({
 
         event.preventDefault()
         event.stopPropagation()
-        setEditingId(focusedNode.id)
+        requestEditing(focusedNode.id)
       }}
       onDragOver={handleTreeDragOver}
       onDragLeave={(event) => {
@@ -463,6 +495,7 @@ export function NotesTreeView({
           overscanCount={8}
           padding={4}
           openByDefault={false}
+          renderRow={MotionTreeRow}
           renderDragPreview={renderNoteTreeDragPreview}
           renderCursor={EmptyCursor}
           searchTerm={deferredSearchTerm}
@@ -528,12 +561,17 @@ export function NotesTreeView({
               onCreateExcalidraw={onCreateExcalidraw}
               onCreateFolder={onCreateFolder}
               onExportFolderPdf={onExportFolderPdf}
-              onCancelEditing={() => setEditingId(null)}
+              onExportFolderMarkdown={onExportFolderMarkdown}
+              onCancelEditing={() => {
+                cancelEditingRequest()
+                setEditingId(null)
+              }}
               onCommitRename={(value) => {
+                cancelEditingRequest()
                 setEditingId(null)
                 onRenamePath(props.node.data.relPath, value, props.node.data.kind)
               }}
-              onStartEditing={() => setEditingId(props.node.id)}
+              onStartEditing={() => requestEditing(props.node.id)}
               onDeleteEntries={onDeleteEntries}
               useNativeMenus={useNativeMenus}
               treeRef={treeRef}
@@ -554,6 +592,7 @@ function TreeNode({
   onCreateExcalidraw,
   onCreateFolder,
   onExportFolderPdf,
+  onExportFolderMarkdown,
   onCancelEditing,
   onCommitRename,
   onStartEditing,
@@ -566,6 +605,7 @@ function TreeNode({
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
   onExportFolderPdf: (folderPath: string) => void
+  onExportFolderMarkdown: (folderPath: string) => void
   onCancelEditing: () => void
   onCommitRename: (value: string) => void
   onStartEditing: () => void
@@ -584,6 +624,7 @@ function TreeNode({
   const canCreateChildren = !isProtected || node.data.protectionKind === 'project-folder'
   const isDropTarget = isFolder && node.willReceiveDrop
   const dropdownActionRef = useRef<string | null>(null)
+  const renameFocusHandoffRef = useRef(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const rowStyle = style as CSSProperties
   const rowIndent = rowStyle.paddingLeft
@@ -619,6 +660,12 @@ function TreeNode({
     }
   }, [isDropTarget, isFolder, node.id, node.isOpen, treeRef])
 
+  useEffect(() => {
+    if (isEditing) {
+      renameFocusHandoffRef.current = false
+    }
+  }, [isEditing])
+
   const getDeleteActionEntries = (): NoteTreeSelection => {
     const selectedNodes = treeRef.current?.selectedNodes ?? []
     if (node.isSelected && selectedNodes.length > 1) {
@@ -635,6 +682,7 @@ function TreeNode({
     if (isProtected) {
       return
     }
+    renameFocusHandoffRef.current = true
     onStartEditing()
   }
 
@@ -665,6 +713,13 @@ function TreeNode({
         return
       }
       onExportFolderPdf(node.data.relPath)
+      return
+    }
+    if (actionId === 'export-folder-markdown') {
+      if (!isFolder || isProtected) {
+        return
+      }
+      onExportFolderMarkdown(node.data.relPath)
       return
     }
     if (actionId === 'rename') {
@@ -784,9 +839,10 @@ function TreeNode({
         >
           <button
             type="button"
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground transition-colors motion-reduce:transition-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               isFolder ? 'opacity-100' : 'opacity-0'
             }`}
+            aria-expanded={isFolder ? node.isOpen : undefined}
             onClick={(event) => {
               event.stopPropagation()
               if (isFolder) {
@@ -799,7 +855,7 @@ function TreeNode({
               <ChevronRight
                 className={cn(
                   TREE_CHEVRON_CLASS,
-                  'transition-transform',
+                  'motion-state-chevron',
                   node.isOpen && 'rotate-90',
                   isDropTarget && 'text-primary'
                 )}
@@ -871,7 +927,9 @@ function TreeNode({
                 <DropdownMenuContent
                   align="end"
                   onCloseAutoFocus={(event) => {
-                    event.preventDefault()
+                    if (renameFocusHandoffRef.current) {
+                      event.preventDefault()
+                    }
                   }}
                 >
                   {canCreateChildren ? (
@@ -921,34 +979,41 @@ function TreeNode({
                   {isFolder && !isProtected ? (
                     <>
                       <DropdownMenuSeparator />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        data-testid={`note-tree-export-folder-pdf:${node.data.relPath}`}
-                        className={TREE_DROPDOWN_ITEM_CLASS}
-                        onPointerDownCapture={(event) =>
-                          handleDropdownMenuAction(event, 'export-folder-pdf')
-                        }
-                        onClick={(event) => handleDropdownMenuAction(event, 'export-folder-pdf')}
-                        onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'export-folder-pdf')}
-                      >
-                        <FileDown className="mr-2 h-4 w-4" />
-                        Export nested notes as PDF…
-                      </button>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger
+                          className={TREE_DROPDOWN_ITEM_CLASS}
+                          data-testid={`note-tree-export-folder-dropdown:${node.data.relPath}`}
+                        >
+                          <FileDown className="mr-2 h-4 w-4" />
+                          Export nested notes
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem
+                            data-testid={`note-tree-export-folder-pdf-dropdown:${node.data.relPath}`}
+                            onSelect={() => handleMenuAction('export-folder-pdf')}
+                          >
+                            <FileDown className="mr-2 h-4 w-4" />
+                            as PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            data-testid={`note-tree-export-folder-markdown-dropdown:${node.data.relPath}`}
+                            onSelect={() => handleMenuAction('export-folder-markdown')}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            as Markdown
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     </>
                   ) : null}
-                  <button
-                    type="button"
-                    role="menuitem"
+                  <DropdownMenuItem
                     data-testid={`note-tree-rename:${node.data.relPath}`}
                     className={TREE_DROPDOWN_ITEM_CLASS}
-                    onPointerDownCapture={(event) => handleDropdownMenuAction(event, 'rename')}
-                    onClick={(event) => handleDropdownMenuAction(event, 'rename')}
-                    onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'rename')}
+                    onSelect={() => handleMenuAction('rename')}
                   >
                     <Pencil className="mr-2 h-4 w-4" />
                     Rename
-                  </button>
+                  </DropdownMenuItem>
                   {isFolder ? <DropdownMenuSeparator /> : null}
                   <button
                     type="button"
@@ -977,7 +1042,13 @@ function TreeNode({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{treeNodeRow}</ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => {
+          if (renameFocusHandoffRef.current) {
+            event.preventDefault()
+          }
+        }}
+      >
         {canCreateChildren ? (
           <>
             <ContextMenuItem onSelect={() => handleMenuAction('create-note')}>
@@ -999,17 +1070,34 @@ function TreeNode({
             {isFolder ? (
               <>
                 <ContextMenuSeparator />
-                <ContextMenuItem onSelect={() => handleMenuAction('export-folder-pdf')}>
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Export nested notes as PDF…
-                </ContextMenuItem>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger
+                    data-testid={`note-tree-export-folder-context:${node.data.relPath}`}
+                  >
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Export nested notes
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    <ContextMenuItem
+                      data-testid={`note-tree-export-folder-pdf-context:${node.data.relPath}`}
+                      onSelect={() => handleMenuAction('export-folder-pdf')}
+                    >
+                      <FileDown className="mr-2 h-4 w-4" />
+                      as PDF
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      data-testid={`note-tree-export-folder-markdown-context:${node.data.relPath}`}
+                      onSelect={() => handleMenuAction('export-folder-markdown')}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      as Markdown
+                    </ContextMenuItem>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
                 <ContextMenuSeparator />
               </>
             ) : null}
-            <ContextMenuItem
-              onClick={handleRenameRequest}
-              onSelect={() => handleMenuAction('rename')}
-            >
+            <ContextMenuItem onSelect={() => handleMenuAction('rename')}>
               <Pencil className="mr-2 h-4 w-4" />
               Rename
             </ContextMenuItem>
@@ -1021,6 +1109,20 @@ function TreeNode({
         ) : null}
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+function MotionTreeRow<T>({ node, attrs, innerRef, children }: RowRendererProps<T>): ReactElement {
+  return (
+    <div
+      {...attrs}
+      ref={innerRef}
+      className={cn(attrs.className, 'motion-tree-row')}
+      onFocus={(event) => event.stopPropagation()}
+      onClick={node.handleClick}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -1049,6 +1151,30 @@ function TreeNodeInput({
   onCommit: (value: string) => void
 }): ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const blurFrameRef = useRef<number | null>(null)
+  const hasReceivedFocusRef = useRef(false)
+  const hasFinishedRef = useRef(false)
+
+  const commit = useCallback(
+    (value: string): void => {
+      if (hasFinishedRef.current) {
+        return
+      }
+
+      hasFinishedRef.current = true
+      onCommit(value)
+    },
+    [onCommit]
+  )
+
+  const cancel = useCallback((): void => {
+    if (hasFinishedRef.current) {
+      return
+    }
+
+    hasFinishedRef.current = true
+    onCancel()
+  }, [onCancel])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1058,8 +1184,38 @@ function TreeNodeInput({
 
     return () => {
       window.cancelAnimationFrame(frame)
+      if (blurFrameRef.current !== null) {
+        window.cancelAnimationFrame(blurFrameRef.current)
+      }
     }
   }, [])
+
+  const handleBlur = useCallback(
+    (event: FocusEvent<HTMLInputElement>): void => {
+      if (blurFrameRef.current !== null) {
+        window.cancelAnimationFrame(blurFrameRef.current)
+      }
+
+      const value = event.currentTarget.value
+      blurFrameRef.current = window.requestAnimationFrame(() => {
+        blurFrameRef.current = null
+        const input = inputRef.current
+
+        if (hasFinishedRef.current || (input && document.activeElement === input)) {
+          return
+        }
+
+        if (!hasReceivedFocusRef.current) {
+          input?.focus()
+          input?.select()
+          return
+        }
+
+        commit(value)
+      })
+    },
+    [commit]
+  )
 
   return (
     <input
@@ -1071,22 +1227,25 @@ function TreeNodeInput({
         node.data.kind === 'folder' ? node.data.name : stripNotebookFileExtension(node.data.name)
       }
       className="h-7 flex-1 border border-ring bg-card px-2 text-sm outline-none"
-      onFocus={(event) => event.currentTarget.select()}
+      onFocus={(event) => {
+        hasReceivedFocusRef.current = true
+        event.currentTarget.select()
+      }}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
-      onBlur={(event) => onCommit(event.currentTarget.value)}
+      onBlur={handleBlur}
       onKeyDown={(event) => {
         event.stopPropagation()
         if (event.key === 'Escape') {
           event.preventDefault()
-          onCancel()
+          cancel()
           return
         }
 
         if (event.key === 'Enter') {
           event.preventDefault()
-          onCommit(event.currentTarget.value)
+          commit(event.currentTarget.value)
         }
       }}
     />

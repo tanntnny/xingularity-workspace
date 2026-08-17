@@ -1,8 +1,15 @@
 import type { ReactElement } from 'react'
-import { Clock3 } from '../ui/icons'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '../ui'
+import { Clock3, Copy } from '../ui/icons'
+import {
+  Badge,
+  Button,
+  CollapsibleWorkspacePanelSection,
+  EmptyState,
+  WorkspaceListRail,
+  WorkspaceListRailItem
+} from '../ui'
 import type { RunStatus, ScheduleRunRecord, ScriptAction } from '../../../../shared/scheduleTypes'
-import type { ScheduleRunHistoryProps } from './types'
+import type { ScheduleRunHistoryListProps, ScheduleRunHistoryProps } from './types'
 
 function formatDateTime(value: string | undefined): string {
   if (!value) {
@@ -59,23 +66,53 @@ function RunListItem({
   onSelect: () => void
 }): ReactElement {
   return (
-    <button
-      type="button"
+    <WorkspaceListRailItem
       onClick={onSelect}
-      aria-pressed={selected}
+      active={selected}
       data-testid={`scheduling-run:${run.id}`}
-      className={`w-full rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        selected ? 'border-primary bg-accent' : 'border-border bg-card hover:bg-accent/60'
+      trailing={<Badge tone={statusTone(run.status)}>{run.status}</Badge>}
+      description={`${run.proposedActions.length} proposed · ${run.appliedActions.length} applied${
+        run.actionErrors && run.actionErrors.length > 0
+          ? ` · ${run.actionErrors.length} failed`
+          : ''
       }`}
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{formatDateTime(run.startedAt)}</span>
-        <Badge tone={statusTone(run.status)}>{run.status}</Badge>
-      </span>
-      <span className="mt-1 block text-xs text-muted-foreground">
-        {run.proposedActions.length} proposed · {run.appliedActions.length} applied
-      </span>
-    </button>
+      {formatDateTime(run.startedAt)}
+    </WorkspaceListRailItem>
+  )
+}
+
+export function ScheduleRunHistoryList({
+  runs,
+  selectedRunId,
+  onSelect
+}: ScheduleRunHistoryListProps): ReactElement {
+  return (
+    <CollapsibleWorkspacePanelSection
+      heading="Run history"
+      data-testid="scheduling-run-history-list"
+    >
+      <WorkspaceListRail
+        aria-label="Automation run history"
+        className="h-auto min-h-0 p-3"
+        emptyState={
+          <EmptyState
+            icon={Clock3}
+            title="No runs yet"
+            description="Run this automation to see its output and proposed actions here."
+          />
+        }
+      >
+        {runs.map((run) => (
+          <RunListItem
+            key={run.id}
+            run={run}
+            selected={run.id === selectedRunId}
+            onSelect={() => onSelect(run.id)}
+          />
+        ))}
+      </WorkspaceListRail>
+    </CollapsibleWorkspacePanelSection>
   )
 }
 
@@ -83,7 +120,6 @@ export function ScheduleRunHistory({
   runs,
   selectedRunId,
   actionBusyRunId,
-  onSelect,
   onApply,
   onDismiss
 }: ScheduleRunHistoryProps): ReactElement {
@@ -91,112 +127,142 @@ export function ScheduleRunHistory({
   const canReview = selectedRun?.status === 'review' && selectedRun.proposedActions.length > 0
 
   return (
-    <Card data-testid="scheduling-run-history">
-      <CardHeader>
-        <CardTitle>Run history</CardTitle>
-        <p className="text-sm text-muted-foreground">
+    <section
+      className="flex min-h-full min-w-0 flex-col gap-6 p-2"
+      data-testid="scheduling-run-history"
+      aria-labelledby="scheduling-run-history-heading"
+    >
+      <header className="shrink-0">
+        <h1
+          id="scheduling-run-history-heading"
+          className="text-2xl font-semibold tracking-tight text-foreground"
+        >
+          Run history
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Inspect output and approve proposed workspace changes.
         </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {runs.length === 0 ? (
-          <EmptyState
-            icon={Clock3}
-            title="No runs yet"
-            description="Run this automation to see its output and proposed actions here."
-          />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-[minmax(12rem,0.45fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              {runs.map((run) => (
-                <RunListItem
-                  key={run.id}
-                  run={run}
-                  selected={selectedRun?.id === run.id}
-                  onSelect={() => onSelect(run.id)}
-                />
-              ))}
+      </header>
+
+      {runs.length === 0 ? (
+        <EmptyState
+          icon={Clock3}
+          title="No runs yet"
+          description="Run this automation to see its output and proposed actions here."
+        />
+      ) : selectedRun ? (
+        <article className="min-w-0 space-y-6" aria-label={`${selectedRun.status} run details`}>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-panel-border pb-4">
+            <div>
+              <p className="text-sm font-semibold">{selectedRun.status} run</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Started {formatDateTime(selectedRun.startedAt)} · ended{' '}
+                {formatDateTime(selectedRun.endedAt)}
+              </p>
             </div>
-            {selectedRun ? (
-              <div className="min-w-0 space-y-4 rounded-md border border-border bg-muted/30 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">{selectedRun.status} run</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Started {formatDateTime(selectedRun.startedAt)} · ended{' '}
-                      {formatDateTime(selectedRun.endedAt)}
-                    </p>
-                  </div>
-                  {canReview ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => onApply(selectedRun.id)}
-                        disabled={actionBusyRunId === selectedRun.id}
-                      >
-                        Apply actions
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onDismiss(selectedRun.id)}
-                        disabled={actionBusyRunId === selectedRun.id}
-                      >
-                        Dismiss
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {selectedRun.errorMessage ? (
-                  <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                    {selectedRun.errorMessage}
-                  </p>
-                ) : null}
-
-                {selectedRun.proposedActions.length > 0 ? (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Proposed actions
-                    </p>
-                    <ul className="mt-2 space-y-1 text-sm">
-                      {selectedRun.proposedActions.map((action, index) => (
-                        <li
-                          key={`${action.type}:${index}`}
-                          className="rounded border border-border p-3"
-                        >
-                          {actionLabel(action)}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Standard output
-                    </p>
-                    <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 font-mono text-xs text-foreground">
-                      {selectedRun.stdout || 'No stdout'}
-                    </pre>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Error output
-                    </p>
-                    <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 font-mono text-xs text-foreground">
-                      {selectedRun.stderr || 'No stderr'}
-                    </pre>
-                  </div>
-                </div>
+            {canReview ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onApply(selectedRun.id)}
+                  disabled={actionBusyRunId === selectedRun.id}
+                >
+                  Apply actions
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onDismiss(selectedRun.id)}
+                  disabled={actionBusyRunId === selectedRun.id}
+                >
+                  Dismiss
+                </Button>
               </div>
             ) : null}
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {selectedRun.errorMessage ? (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {selectedRun.errorMessage}
+            </p>
+          ) : null}
+
+          {selectedRun.actionErrors && selectedRun.actionErrors.length > 0 ? (
+            <div className="rounded-md border border-warning-border bg-warning-muted p-3 text-sm text-warning-muted-foreground">
+              <p className="font-semibold">Action errors</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {selectedRun.actionErrors.map((error, index) => (
+                  <li key={`${error}:${index}`}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {selectedRun.proposedActions.length > 0 ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Proposed actions
+              </p>
+              <ul className="mt-2 divide-y divide-border border-y border-border text-sm">
+                {selectedRun.proposedActions.map((action, index) => (
+                  <li key={`${action.type}:${index}`} className="py-3">
+                    {actionLabel(action)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 border-t border-panel-border pt-4 md:grid-cols-2">
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Standard output
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 rounded-full"
+                  aria-label="Copy stdout"
+                  title="Copy stdout"
+                  data-testid="scheduling-copy-stdout"
+                  onClick={() => void navigator.clipboard.writeText(selectedRun.stdout)}
+                >
+                  <Copy aria-hidden="true" />
+                </Button>
+              </div>
+              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 font-mono text-xs text-foreground">
+                {selectedRun.stdout || 'No stdout'}
+              </pre>
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Error output
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 rounded-full"
+                  aria-label="Copy stderr"
+                  title="Copy stderr"
+                  data-testid="scheduling-copy-stderr"
+                  onClick={() => void navigator.clipboard.writeText(selectedRun.stderr)}
+                >
+                  <Copy aria-hidden="true" />
+                </Button>
+              </div>
+              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 font-mono text-xs text-foreground">
+                {selectedRun.stderr || 'No stderr'}
+              </pre>
+            </div>
+          </div>
+        </article>
+      ) : null}
+    </section>
   )
 }

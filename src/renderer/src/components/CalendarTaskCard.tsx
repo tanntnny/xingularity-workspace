@@ -9,6 +9,8 @@ import {
   getCalendarTaskBorderToken
 } from '../lib/calendarTaskTypeBackground'
 import { getTaskStatus, TASK_STATUS_META } from '../lib/taskStatus'
+import { TaskTagSummary } from './TaskTagSummary'
+import { Bell } from './ui/icons'
 
 interface CalendarTaskCardProps {
   task: CalendarTask
@@ -44,9 +46,21 @@ export const CalendarTaskCard = forwardRef<
   ref
 ): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
+  const isDeadlineOnly = !task.date && Boolean(task.endDate)
   const priorityMarker = task.priority === 'high' ? '!!' : task.priority === 'medium' ? '!' : null
   const priorityMarkerClass =
-    task.priority === 'high' ? 'text-destructive' : task.priority === 'medium' ? 'text-warning' : null
+    task.priority === 'high'
+      ? 'text-destructive'
+      : task.priority === 'medium'
+        ? 'text-warning'
+        : null
+  const priorityLabel =
+    task.priority === 'high'
+      ? 'High priority'
+      : task.priority === 'medium'
+        ? 'Medium priority'
+        : null
+  const hasEnabledReminder = (task.reminders || []).some((reminder) => reminder.enabled)
   const taskTypeStyle = {
     '--calendar-task-bg': getCalendarTaskBackgroundToken(task.taskType),
     '--calendar-task-border': getCalendarTaskBorderToken(task.taskType)
@@ -54,14 +68,14 @@ export const CalendarTaskCard = forwardRef<
   const statusOptions: readonly SelectiveChipOption[] = TASK_STATUS_OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
-    icon: <TaskStatusIcon status={option.value} size={14} />,
+    icon: <TaskStatusIcon status={option.value} size={18} />,
     tone: TASK_STATUS_META[option.value].tone
   }))
 
   return (
     <div
       ref={ref}
-      className={`group flex ${heightMode === 'content' ? 'h-fit' : 'h-full'} w-full flex-col justify-start overflow-hidden rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${status !== 'pending' ? 'opacity-60' : ''} ${className ?? ''}`}
+      className={`group flex ${heightMode === 'content' ? 'h-fit' : 'h-full'} w-full flex-col justify-start overflow-hidden rounded-md border border-[var(--calendar-task-border)] bg-[var(--calendar-task-bg)] px-1.5 py-1 transition-[filter] hover:brightness-110 ${isDeadlineOnly ? 'border-warning/70' : ''} ${status !== 'pending' ? 'opacity-60' : ''} ${className ?? ''}`}
       onMouseMove={onMouseMove}
       style={{ ...taskTypeStyle, ...style }}
       data-task-status={status}
@@ -89,31 +103,51 @@ export const CalendarTaskCard = forwardRef<
         ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
-        {priorityMarker && priorityMarkerClass ? (
-          <span
-            className={`pointer-events-none shrink-0 text-xs font-semibold leading-none ${priorityMarkerClass}`}
-            aria-hidden="true"
-          >
-            {priorityMarker}
-          </span>
-        ) : null}
         <span
-          className={`pointer-events-none min-w-0 flex-1 truncate text-xs font-semibold leading-tight text-foreground ${status === 'completed' ? 'line-through' : ''}`}
+          className={`pointer-events-none min-w-0 flex-1 truncate text-sm font-bold leading-tight text-foreground ${status === 'completed' ? 'line-through' : ''}`}
         >
           {task.title}
         </span>
-        {(task.reminders || []).some((reminder) => reminder.enabled) ? (
-          <span className="pointer-events-none shrink-0 text-xs text-muted-foreground">*</span>
-        ) : null}
       </div>
       {project && showProject ? (
         <div
-          className="mt-auto flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden pt-1 text-[10px] text-muted-foreground"
+          className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden text-[10px] text-muted-foreground"
           title={project.name}
           data-testid="calendar-task-project"
         >
           <NoteShapeIcon icon={project.icon} size={13} />
           <span className="min-w-0 truncate">{project.name}</span>
+        </div>
+      ) : null}
+      {task.tags.length > 0 || priorityMarker || hasEnabledReminder ? (
+        <div className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
+            {priorityMarker && priorityMarkerClass && priorityLabel ? (
+              <span
+                role="img"
+                aria-label={priorityLabel}
+                className={`pointer-events-none text-xs font-semibold leading-none ${priorityMarkerClass}`}
+                title={priorityLabel}
+              >
+                {priorityMarker}
+              </span>
+            ) : null}
+            {hasEnabledReminder ? (
+              <span
+                role="img"
+                aria-label="Reminder enabled"
+                className="pointer-events-none inline-flex items-center text-muted-foreground"
+                title="Reminder enabled"
+              >
+                <Bell size={12} aria-hidden="true" />
+              </span>
+            ) : null}
+          </div>
+          {task.tags.length > 0 ? (
+            <TaskTagSummary tags={task.tags} className="min-w-0 flex-1" />
+          ) : (
+            <span className="min-w-0 flex-1" aria-hidden="true" />
+          )}
         </div>
       ) : null}
     </div>

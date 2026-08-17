@@ -68,6 +68,7 @@ const api: RendererVaultApi = {
     migrateBlockNoteNotes: () => ipcRenderer.invoke(IPC_CHANNELS.migrateBlockNoteNotes),
     migrateTaggedNoteBodyFrontmatter: () =>
       ipcRenderer.invoke(IPC_CHANNELS.migrateTaggedNoteBodyFrontmatter),
+    migrateNoteImagePaths: () => ipcRenderer.invoke(IPC_CHANNELS.migrateNoteImagePaths),
     rename: (fromRelPath, toRelPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.renameNote, fromRelPath, toRelPath),
     renamePath: (fromRelPath, toRelPath) =>
@@ -78,6 +79,7 @@ const api: RendererVaultApi = {
     exportNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.exportNote, relPath, content),
     exportNotePdf: (input) => ipcRenderer.invoke(IPC_CHANNELS.exportNotePdf, input),
     exportFolderPdf: (input) => ipcRenderer.invoke(IPC_CHANNELS.exportFolderPdf, input),
+    exportFolderMarkdown: (input) => ipcRenderer.invoke(IPC_CHANNELS.exportFolderMarkdown, input),
     exportProject: (projectName, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportProject, projectName, content)
   },
@@ -127,13 +129,20 @@ const api: RendererVaultApi = {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (next, options) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, next, options)
   },
+  python: {
+    listCondaEnvironments: () => ipcRenderer.invoke(IPC_CHANNELS.pythonListCondaEnvironments),
+    chooseCondaExecutable: () => ipcRenderer.invoke(IPC_CHANNELS.pythonChooseCondaExecutable)
+  },
   projects: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createProject, input),
     select: (input) => ipcRenderer.invoke(IPC_CHANNELS.selectProject, input),
     update: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateProject, input),
     setState: (input) => ipcRenderer.invoke(IPC_CHANNELS.setProjectState, input),
     setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.setProjectFavorite, input),
-    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProject, input)
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProject, input),
+    createMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.createProjectMilestone, input),
+    updateMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateProjectMilestone, input),
+    deleteMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectMilestone, input)
   },
   tasks: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createTask, input)
@@ -150,7 +159,10 @@ const api: RendererVaultApi = {
     runNow: (id) => ipcRenderer.invoke(SCHEDULE_CHANNELS.runNow, id),
     listRuns: (jobId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.listRuns, jobId),
     applyActions: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.applyActions, runId),
-    dismissRun: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.dismissRun, runId)
+    dismissRun: (runId) => ipcRenderer.invoke(SCHEDULE_CHANNELS.dismissRun, runId),
+    listSecrets: () => ipcRenderer.invoke(SCHEDULE_CHANNELS.listSecrets),
+    saveSecret: (input) => ipcRenderer.invoke(SCHEDULE_CHANNELS.saveSecret, input),
+    deleteSecret: (name) => ipcRenderer.invoke(SCHEDULE_CHANNELS.deleteSecret, name)
   },
   subscriptions: {
     list: () => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.list),

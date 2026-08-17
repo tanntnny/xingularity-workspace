@@ -21,6 +21,7 @@ describe('TaskStore', () => {
       id: 'task/one',
       title: 'Plan release',
       projectId: 'project-1',
+      tags: [],
       completed: false,
       status: 'in-progress' as const,
       createdAt: '2026-07-29T00:00:00.000Z',
@@ -30,9 +31,9 @@ describe('TaskStore', () => {
 
     await store.writeAll([task])
 
-    await expect(fs.readFile(path.join(root, 'tasks', 'task%2Fone.json'), 'utf-8')).resolves.toContain(
-      'Plan release'
-    )
+    await expect(
+      fs.readFile(path.join(root, 'tasks', 'task%2Fone.json'), 'utf-8')
+    ).resolves.toContain('Plan release')
     await expect(store.read()).resolves.toEqual([task])
 
     await store.writeAll([])

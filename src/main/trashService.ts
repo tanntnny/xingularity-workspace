@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { assertSafeRelativePath, ensureWithinBase, joinSafe } from '../shared/pathSafety'
+import { isExcalidrawPath } from '../shared/excalidrawFile'
 import type { AppSettings, WeeklyPlanState } from '../shared/types'
 
 export interface TrashedEntry {
@@ -37,6 +38,9 @@ export class TrashService {
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true })
     await fs.rename(sourcePath, targetPath)
+    if (kind === 'file' && isExcalidrawPath(relPath)) {
+      await moveOptionalBackup(sourcePath, targetPath)
+    }
     await this.writeJson(path.join(this.trashRoot, 'files', entryId, 'metadata.json'), {
       type: 'file-delete',
       originalRelPath: relPath,
@@ -63,6 +67,9 @@ export class TrashService {
     const targetPath = joinSafe(this.notesRoot, restoreRelPath)
     await fs.mkdir(path.dirname(targetPath), { recursive: true })
     await fs.rename(sourcePath, targetPath)
+    if (entry.kind === 'file' && isExcalidrawPath(entry.originalRelPath)) {
+      await moveOptionalBackup(sourcePath, targetPath)
+    }
     return restoreRelPath
   }
 
@@ -225,6 +232,20 @@ export class TrashService {
 
 function formatTimestampForPath(input: string): string {
   return input.replace(/[:.]/g, '-')
+}
+
+async function moveOptionalBackup(from: string, to: string): Promise<void> {
+  const fromBackup = `${from}.bak`
+  const toBackup = `${to}.bak`
+
+  try {
+    await fs.rm(toBackup, { force: true })
+    await fs.rename(fromBackup, toBackup)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[TrashService] Failed to move Excalidraw backup', { from, to, error })
+    }
+  }
 }
 
 function safeName(input: string): string {

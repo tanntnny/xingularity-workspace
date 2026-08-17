@@ -1,38 +1,28 @@
 import type { ReactElement } from 'react'
-import { Clock3, Plus } from '../ui/icons'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '../ui'
+import { Plus } from '../ui/icons'
+import { APP_PAGE_ICONS } from '../../lib/pageIcons'
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '../ui'
 import type { RunStatus, ScheduleJob, TriggerConfig } from '../../../../shared/scheduleTypes'
 import { cn } from '../../lib/utils'
 import type { ScheduleJobListProps } from './types'
 
-function formatTrigger(trigger: TriggerConfig): string {
-  if (trigger.type === 'daily') {
-    return `Daily at ${trigger.time ?? '09:00'}`
-  }
-
-  if (trigger.type === 'every') {
-    const interval = trigger.intervalMinutes ?? 60
-    return `Every ${interval} minute${interval === 1 ? '' : 's'}`
-  }
-
-  if (trigger.type === 'on_app_start') {
-    return 'When app starts'
-  }
-
-  if (trigger.type === 'cron') {
-    return 'Cron schedule'
-  }
-
-  return 'Manual'
-}
-
-function formatDateTime(value: string | undefined): string {
+function formatLastRunDate(value: string | undefined): string {
   if (!value) {
     return 'Never run'
   }
 
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleDateString()
 }
 
 function getStatus(
@@ -61,7 +51,28 @@ function getStatus(
   return { label: 'Ready', tone: 'neutral' }
 }
 
-function JobListItem({
+function formatTrigger(trigger: TriggerConfig): string {
+  if (trigger.type === 'daily') {
+    return `Daily at ${trigger.time ?? '09:00'}`
+  }
+
+  if (trigger.type === 'every') {
+    const interval = trigger.intervalMinutes ?? 60
+    return interval === 1 ? 'Every minute' : `Every ${interval} minutes`
+  }
+
+  if (trigger.type === 'cron') {
+    return trigger.expression ? `Cron: ${trigger.expression}` : 'Cron'
+  }
+
+  if (trigger.type === 'on_app_start') {
+    return 'When app starts'
+  }
+
+  return 'Manually'
+}
+
+function JobListRow({
   job,
   selected,
   onSelect
@@ -73,28 +84,39 @@ function JobListItem({
   const status = getStatus(job.lastStatus, job.enabled)
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <TableRow
       data-testid={`scheduling-job:${job.id}`}
-      aria-pressed={selected}
-      className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        selected ? 'border-primary bg-accent' : 'border-border bg-card hover:bg-accent/60'
-      }`}
+      data-state={selected ? 'selected' : undefined}
+      onClick={onSelect}
+      className="cursor-pointer rounded-xl border-0 bg-card hover:bg-accent data-[state=selected]:bg-accent"
     >
-      <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">{job.name}</span>
+      <TableCell className="min-w-56 rounded-l-xl bg-inherit">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelect()
+          }}
+          className="h-auto max-w-full justify-start truncate rounded-none px-0 text-left font-medium text-foreground hover:bg-transparent hover:text-foreground"
+          aria-label={`Open automation ${job.name}`}
+        >
+          {job.name}
+        </Button>
+      </TableCell>
+      <TableCell className="bg-inherit">
         <Badge tone={status.tone}>{status.label}</Badge>
-      </span>
-      <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span>{formatTrigger(job.trigger)}</span>
-        <span aria-hidden="true">·</span>
-        <span>{job.runtime === 'python' ? 'Python' : 'JavaScript'}</span>
-      </span>
-      <span className="mt-2 block truncate text-xs text-muted-foreground">
-        Last run: {formatDateTime(job.lastRunAt)}
-      </span>
-    </button>
+      </TableCell>
+      <TableCell className="whitespace-nowrap bg-inherit text-muted-foreground">
+        {formatTrigger(job.trigger)}
+      </TableCell>
+      <TableCell className="whitespace-nowrap bg-inherit text-muted-foreground">
+        {job.runtime === 'javascript' ? 'JavaScript' : 'Python'}
+      </TableCell>
+      <TableCell className="whitespace-nowrap rounded-r-xl bg-inherit text-muted-foreground">
+        {formatLastRunDate(job.lastRunAt)}
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -107,56 +129,68 @@ export function ScheduleJobList({
   onCreate
 }: ScheduleJobListProps): ReactElement {
   return (
-    <Card
-      className={cn('flex min-h-0 flex-col lg:max-h-full', className)}
+    <section
+      className={cn('flex min-h-full min-w-0 flex-col gap-6 p-2', className)}
       data-testid="scheduling-job-list"
+      aria-labelledby="scheduling-job-list-heading"
     >
-      <CardHeader className="gap-3 pb-3">
-        <div>
-          <CardTitle>Automations</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Small scripts that keep your workspace moving.
-          </p>
+      <header className="flex shrink-0 items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1
+            id="scheduling-job-list-heading"
+            className="text-2xl font-semibold tracking-tight text-foreground"
+          >
+            Scheduling
+          </h1>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          className="self-start"
-          onClick={onCreate}
-          data-testid="scheduling-add-automation"
+      </header>
+
+      {loading ? (
+        <div
+          className="flex min-h-32 items-center justify-center text-sm text-muted-foreground"
+          aria-live="polite"
         >
-          <Plus aria-hidden="true" />
-          Add automation
-        </Button>
-      </CardHeader>
-      <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
-        {loading ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Loading automations…</p>
-        ) : jobs.length > 0 ? (
-          <div className="space-y-2">
+          Loading automations…
+        </div>
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          icon={APP_PAGE_ICONS.schedules}
+          title="No automations yet"
+          description="Create a Python automation to add tasks or notes on a schedule."
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+              <Plus aria-hidden="true" />
+              Create your first automation
+            </Button>
+          }
+        />
+      ) : (
+        <Table
+          aria-label="Automations"
+          data-testid="scheduling-job-list-items"
+          className="border-separate border-spacing-y-1"
+        >
+          <TableHeader className="[&_tr]:border-0">
+            <TableRow>
+              <TableHead>Automation</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Schedule</TableHead>
+              <TableHead>Runtime</TableHead>
+              <TableHead>Last run</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="[&_tr]:border-0">
             {jobs.map((job) => (
-              <JobListItem
+              <JobListRow
                 key={job.id}
                 job={job}
                 selected={selectedJobId === job.id}
                 onSelect={() => onSelect(job.id)}
               />
             ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={Clock3}
-            title="No automations yet"
-            description="Create a Python automation to add tasks or notes on a schedule."
-            action={
-              <Button type="button" variant="outline" size="sm" onClick={onCreate}>
-                <Plus aria-hidden="true" />
-                Create your first automation
-              </Button>
-            }
-          />
-        )}
-      </CardContent>
-    </Card>
+          </TableBody>
+        </Table>
+      )}
+    </section>
   )
 }

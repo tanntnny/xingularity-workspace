@@ -1,4 +1,12 @@
 import { CalendarTask, CalendarTaskType, TaskPriority, TaskStatus } from '../../../shared/types'
+import { normalizeTaskTags } from '../../../shared/taskTags'
+
+export type CalendarContentFilter = 'all' | 'projectTasks' | 'nonProjectTasks'
+
+export interface CalendarTaskTagOption {
+  value: string
+  count: number
+}
 
 export interface CalendarEventInput {
   id: string
@@ -16,6 +24,7 @@ export interface CalendarEventInput {
     priority?: TaskPriority
     status?: TaskStatus
     completed?: boolean
+    deadlineOnly?: boolean
     syncSignature?: string
   }
 }
@@ -33,14 +42,19 @@ export interface WeeklyCalendarAllDayItem {
   startDate: string
   endDate: string
   title: string
+  deadlineOnly?: boolean
   task?: CalendarTask
 }
 
 export interface WeeklyCalendarAllDayLayout extends WeeklyCalendarAllDayItem {
-  row: number
+  topPx: number
+  heightPx: number
   columnStart: number
   columnSpan: number
 }
+
+export const WEEKLY_ALL_DAY_TASK_MIN_HEIGHT_PX = 44
+export const WEEKLY_ALL_DAY_TASK_GAP_PX = 8
 
 export function normalizeCalendarTasks(tasks: CalendarTask[]): CalendarTask[] {
   const latestTaskById = new Map<string, CalendarTask>()
@@ -58,25 +72,76 @@ export function normalizeCalendarTasks(tasks: CalendarTask[]): CalendarTask[] {
     .filter((task): task is CalendarTask => Boolean(task))
 }
 
+export function filterCalendarTasks(
+  tasks: CalendarTask[],
+  filter: CalendarContentFilter
+): CalendarTask[] {
+  const normalizedTasks = normalizeCalendarTasks(tasks)
+
+  if (filter === 'projectTasks') {
+    return normalizedTasks.filter((task) => Boolean(task.projectId))
+  }
+
+  if (filter === 'nonProjectTasks') {
+    return normalizedTasks.filter((task) => !task.projectId)
+  }
+
+  return normalizedTasks
+}
+
+export function filterCalendarTasksByTags(
+  tasks: CalendarTask[],
+  selectedTags: readonly string[]
+): CalendarTask[] {
+  const normalizedSelectedTags = new Set(normalizeTaskTags(selectedTags))
+  const normalizedTasks = normalizeCalendarTasks(tasks)
+
+  if (normalizedSelectedTags.size === 0) {
+    return normalizedTasks
+  }
+
+  return normalizedTasks.filter((task) =>
+    normalizeTaskTags(task.tags).some((tag) => normalizedSelectedTags.has(tag))
+  )
+}
+
+export function getCalendarTaskTagOptions(tasks: CalendarTask[]): CalendarTaskTagOption[] {
+  const counts = new Map<string, number>()
+
+  for (const task of normalizeCalendarTasks(tasks)) {
+    for (const tag of normalizeTaskTags(task.tags)) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+  }
+
+  return Array.from(counts, ([value, count]) => ({ value, count })).sort((left, right) =>
+    left.value.localeCompare(right.value)
+  )
+}
+
 export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[] {
   return normalizeCalendarTasks(tasks)
-    .filter((task) => Boolean(task.date))
+    .filter((task) => Boolean(task.date || task.endDate))
     .map((task) => {
-      const startIso = task.date as string
-      const endIso = task.endDate && task.endDate >= startIso ? task.endDate : undefined
+      const deadlineOnly = !task.date && Boolean(task.endDate)
+      const startIso = (task.date ?? task.endDate) as string
+      const endIso =
+        !deadlineOnly && task.endDate && task.endDate >= startIso ? task.endDate : undefined
       return {
         id: task.id,
         title: task.title,
         start: startIso,
         end: endIso ? toIsoDate(addIsoDays(parseIsoDate(endIso), 1)) : undefined,
         allDay: true as const,
+        ...(deadlineOnly ? { durationEditable: false } : {}),
         extendedProps: {
           source: 'task',
           taskId: task.id,
           taskType: task.taskType,
           priority: task.priority,
           status: task.status,
-          completed: task.completed
+          completed: task.completed,
+          ...(deadlineOnly ? { deadlineOnly: true } : {})
         }
       }
     })
@@ -94,12 +159,15 @@ export function buildWeeklyCalendarEntries(
   const allDayItems: WeeklyCalendarAllDayItem[] = []
 
   for (const task of normalizeCalendarTasks(tasks)) {
-    if (!task.date) {
+    const taskDate = task.date ?? task.endDate
+    if (!taskDate) {
       continue
     }
 
-    const taskEnd = task.endDate && task.endDate >= task.date ? task.endDate : task.date
-    const overlapsWeek = task.date <= weekEnd && taskEnd >= weekStart
+    const deadlineOnly = !task.date && Boolean(task.endDate)
+    const taskEnd =
+      !deadlineOnly && task.endDate && task.endDate >= taskDate ? task.endDate : taskDate
+    const overlapsWeek = taskDate <= weekEnd && taskEnd >= weekStart
 
     if (!overlapsWeek) {
       continue
@@ -107,7 +175,7 @@ export function buildWeeklyCalendarEntries(
 
     const startMinutes = parseTimeToMinutes(task.time)
     const endMinutes = parseTimeToMinutes(task.endTime)
-    const isSingleDay = taskEnd === task.date
+    const isSingleDay = taskEnd === taskDate
 
     if (startMinutes !== null && isSingleDay) {
       const durationMinutes =
@@ -115,7 +183,7 @@ export function buildWeeklyCalendarEntries(
 
       timedTasks.push({
         task,
-        date: task.date,
+        date: taskDate,
         startMinutes,
         durationMinutes
       })
@@ -125,9 +193,10 @@ export function buildWeeklyCalendarEntries(
     allDayItems.push({
       id: task.id,
       source: 'task',
-      startDate: task.date < weekStart ? weekStart : task.date,
+      startDate: taskDate < weekStart ? weekStart : taskDate,
       endDate: taskEnd > weekEnd ? weekEnd : taskEnd,
       title: task.title,
+      ...(deadlineOnly ? { deadlineOnly: true } : {}),
       task
     })
   }
@@ -159,29 +228,49 @@ export function buildWeeklyCalendarEntries(
 
 export function layoutWeeklyAllDayItems(
   items: WeeklyCalendarAllDayItem[],
-  weekStart: string
+  weekStart: string,
+  measuredHeights: Readonly<Record<string, number>> = {},
+  gapPx = WEEKLY_ALL_DAY_TASK_GAP_PX,
+  minHeightPx = WEEKLY_ALL_DAY_TASK_MIN_HEIGHT_PX
 ): WeeklyCalendarAllDayLayout[] {
-  const laneEndByRow: number[] = []
+  const layouts: WeeklyCalendarAllDayLayout[] = []
 
-  return items.map((item) => {
+  for (const item of items) {
     const columnStart = clampNumber(diffIsoDays(weekStart, item.startDate), 0, 6)
     const columnEnd = clampNumber(diffIsoDays(weekStart, item.endDate), columnStart, 6)
-    let row = laneEndByRow.findIndex((laneEnd) => laneEnd < columnStart)
 
-    if (row === -1) {
-      row = laneEndByRow.length
-      laneEndByRow.push(columnEnd)
-    } else {
-      laneEndByRow[row] = columnEnd
-    }
+    const height = measuredHeights[item.id]
+    const heightPx = Number.isFinite(height) ? Math.max(minHeightPx, height) : minHeightPx
+    const topPx = layouts.reduce((maxTop, previous) => {
+      const previousColumnEnd = previous.columnStart + previous.columnSpan - 1
+      const overlaps = previous.columnStart <= columnEnd && previousColumnEnd >= columnStart
 
-    return {
+      return overlaps ? Math.max(maxTop, previous.topPx + previous.heightPx + gapPx) : maxTop
+    }, 0)
+
+    layouts.push({
       ...item,
-      row,
+      topPx,
+      heightPx,
       columnStart,
       columnSpan: columnEnd - columnStart + 1
-    }
-  })
+    })
+  }
+
+  return layouts
+}
+
+export function getWeeklyAllDaySurfaceHeightPx(
+  layouts: WeeklyCalendarAllDayLayout[],
+  minSurfaceHeightPx: number,
+  paddingPx: number
+): number {
+  const maxBottomPx = layouts.reduce(
+    (maxBottom, layout) => Math.max(maxBottom, layout.topPx + layout.heightPx),
+    0
+  )
+
+  return Math.max(minSurfaceHeightPx, maxBottomPx + paddingPx * 2)
 }
 
 function toIsoDate(date: Date): string {

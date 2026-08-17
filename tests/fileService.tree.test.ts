@@ -251,18 +251,82 @@ describe('FileService tree operations', () => {
     const relPath = await service.createExcalidrawFileAtPath('canvas.excalidraw')
     const initial = await service.readExcalidrawFileDocument(relPath)
 
-    expect(initial.scene.elements).toEqual([])
+    expect(initial.document.scene.elements).toEqual([])
 
     await service.writeExcalidrawFileDocument(relPath, {
       version: 1,
       scene: {
-        ...initial.scene,
+        ...initial.document.scene,
         elements: [{ id: 'shape-1', type: 'rectangle' }]
       }
     })
 
     const saved = await service.readExcalidrawFileDocument(relPath)
-    expect(saved.scene.elements).toEqual([{ id: 'shape-1', type: 'rectangle' }])
+    expect(saved.document.scene.elements).toEqual([{ id: 'shape-1', type: 'rectangle' }])
+  })
+
+  it('recovers a truncated drawing and carries its backup through rename', async () => {
+    const { notesDir, service } = await makeService()
+    const relPath = await service.createExcalidrawFileAtPath('canvas.excalidraw')
+    const initial = await service.readExcalidrawFileDocument(relPath)
+
+    await service.writeExcalidrawFileDocument(relPath, {
+      version: 1,
+      scene: {
+        ...initial.document.scene,
+        elements: [{ id: 'shape-1', type: 'rectangle' }]
+      }
+    })
+    await service.writeExcalidrawFileDocument(relPath, {
+      version: 1,
+      scene: {
+        ...initial.document.scene,
+        elements: [{ id: 'shape-2', type: 'ellipse' }]
+      }
+    })
+
+    const backupPath = path.join(notesDir, `${relPath}.bak`)
+    expect(JSON.parse(await fs.readFile(backupPath, 'utf-8')).scene.elements).toEqual([
+      { id: 'shape-1', type: 'rectangle' }
+    ])
+
+    await fs.writeFile(path.join(notesDir, relPath), '', 'utf-8')
+    const recovered = await service.readExcalidrawFileDocument(relPath)
+    expect(recovered.recovered).toBe(true)
+    expect(recovered.document.scene.elements).toEqual([{ id: 'shape-1', type: 'rectangle' }])
+
+    await service.renamePath(relPath, 'renamed.excalidraw')
+    const renamedBackupPath = path.join(notesDir, 'renamed.excalidraw.bak')
+    await fs.writeFile(path.join(notesDir, 'renamed.excalidraw'), '{', 'utf-8')
+    const recoveredAfterRename = await service.readExcalidrawFileDocument('renamed.excalidraw')
+    expect(recoveredAfterRename.recovered).toBe(true)
+    expect(recoveredAfterRename.document.scene.elements).toEqual([
+      { id: 'shape-1', type: 'rectangle' }
+    ])
+    await expect(fs.access(renamedBackupPath)).resolves.toBeUndefined()
+    await expect(fs.access(backupPath)).rejects.toThrow()
+  })
+
+  it('reports a contextual error when a drawing and its backup are both invalid', async () => {
+    const { notesDir, service } = await makeService()
+    const relPath = await service.createExcalidrawFileAtPath('broken.excalidraw')
+    await fs.writeFile(path.join(notesDir, relPath), '', 'utf-8')
+
+    await expect(service.readExcalidrawFileDocument(relPath)).rejects.toThrow(
+      'Unable to read Excalidraw drawing broken.excalidraw'
+    )
+  })
+
+  it('removes a drawing backup when directly deleting the drawing', async () => {
+    const { notesDir, service } = await makeService()
+    const relPath = await service.createExcalidrawFileAtPath('canvas.excalidraw')
+    const initial = await service.readExcalidrawFileDocument(relPath)
+    await service.writeExcalidrawFileDocument(relPath, initial.document)
+
+    const backupPath = path.join(notesDir, `${relPath}.bak`)
+    await expect(fs.access(backupPath)).resolves.toBeUndefined()
+    await service.deletePath(relPath)
+    await expect(fs.access(backupPath)).rejects.toThrow()
   })
 
   it('migrates legacy xnote JSON documents to markdown files', async () => {

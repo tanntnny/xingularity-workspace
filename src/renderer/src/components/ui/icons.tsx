@@ -8,13 +8,20 @@ import {
   IconArrowUpCircleFilled,
   IconBellFilled,
   IconBellRingingFilled,
+  IconBolt,
+  IconBox,
   IconBookFilled,
   IconBrandGithubFilled,
+  IconBrandJavascript,
+  IconBrandMastercard,
+  IconBrandPython,
   IconBriefcaseFilled,
   IconBulbFilled,
+  IconCalendarEvent,
   IconCalendarEventFilled,
   IconCalendarFilled,
   IconCameraFilled,
+  IconChartDots3,
   IconCaretDownFilled,
   IconCaretLeftFilled,
   IconCaretRightFilled,
@@ -37,6 +44,7 @@ import {
   IconDownloadFilled,
   IconEyeFilled,
   IconFileDownloadFilled,
+  IconFiles,
   IconFileTextFilled,
   IconFilterFilled,
   IconFlagFilled,
@@ -58,6 +66,7 @@ import {
   IconListCheckFilled,
   IconListDetailsFilled,
   IconLinkFilled,
+  IconMail,
   IconMessage2Filled,
   IconMessageChatbotFilled,
   IconMessageFilled,
@@ -66,7 +75,7 @@ import {
   IconPlayerPlayFilled,
   IconPlusFilled,
   IconSendFilled,
-  IconSearchFilled,
+  IconSearch,
   IconSettingsFilled,
   IconShieldFilled,
   IconSparklesFilled,
@@ -95,15 +104,20 @@ export const ArrowUpRight = IconCircleArrowUpRightFilled
 export const AtSign = IconCircleKeyFilled
 export const Bell = IconBellFilled
 export const BellRing = IconBellRingingFilled
+export const Bolt = IconBolt
+export const Box = IconBox
 export const BookOpen = IconBookFilled
 export const Bot = IconMessageChatbotFilled
 export const Briefcase = IconBriefcaseFilled
+export const BrandMastercard = IconBrandMastercard
 export const Calendar = IconCalendarFilled
+export const CalendarEvent = IconCalendarEvent
 export const CalendarClock = IconCalendarEventFilled
 export const CalendarDays = IconCalendarEventFilled
 export const CalendarIcon = IconCalendarFilled
 export const CalendarPlus = IconCalendarEventFilled
 export const Camera = IconCameraFilled
+export const ChartDots3 = IconChartDots3
 export const Check = IconCheckFilled
 export const CheckCircle2 = IconCircleCheckFilled
 export const ChevronDown = IconCaretDownFilled
@@ -121,6 +135,7 @@ export const CreditCard = IconCreditCardFilled
 export const Download = IconDownloadFilled
 export const Eye = IconEyeFilled
 export const FileDown = IconFileDownloadFilled
+export const Files = IconFiles
 export const FileText = IconFileTextFilled
 export const Flag = IconFlagFilled
 export const FlaskConical = IconFlaskFilled
@@ -137,6 +152,7 @@ export const Heart = IconHeartFilled
 export const Home = IconHomeFilled
 export const Inbox = IconInbox
 export const House = IconHomeFilled
+export const JavaScript = IconBrandJavascript
 export const Keyboard = IconKeyboardFilled
 export const Landmark = IconDeviceDesktopFilled
 export const Layers3 = IconLayout2Filled
@@ -148,6 +164,7 @@ export const Link2 = IconLinkFilled
 export const ListTodo = IconListCheckFilled
 export const Loader2 = IconHourglassFilled
 export const LoaderCircle = IconHourglassFilled
+export const Mail = IconMail
 export const Megaphone = IconDeviceSpeakerFilled
 export const MessageSquare = IconMessageFilled
 export const MessageSquarePlus = IconMessage2Filled
@@ -167,10 +184,11 @@ export const PenTool = IconPencilFilled
 export const Pencil = IconPencilFilled
 export const Play = IconPlayerPlayFilled
 export const Plus = IconPlusFilled
+export const Python = IconBrandPython
 export const Rocket = IconSendFilled
 export const Rows3 = IconListDetailsFilled
 export const Save = IconDeviceFloppyFilled
-export const Search = IconSearchFilled
+export const Search = IconSearch
 export const Settings2 = IconSettingsFilled
 export const Shield = IconShieldFilled
 export const SlidersHorizontal = IconAdjustmentsHorizontalFilled

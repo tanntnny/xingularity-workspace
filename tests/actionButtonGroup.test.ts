@@ -34,6 +34,7 @@ describe('ActionButtonGroup', () => {
   it('keeps semantic hover feedback across button variants', () => {
     expect(buttonVariants()).toContain('rounded-[var(--radius-button)]')
     expect(buttonVariants({ variant: 'default' })).toContain('hover:bg-primary/90')
+    expect(buttonVariants({ variant: 'outline' })).toContain('border-input')
     expect(buttonVariants({ variant: 'outline' })).toContain('hover:bg-accent')
     expect(buttonVariants({ variant: 'secondary' })).toContain('hover:bg-secondary/80')
     expect(buttonVariants({ variant: 'ghost' })).toContain('hover:bg-accent')

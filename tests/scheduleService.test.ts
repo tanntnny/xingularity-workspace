@@ -25,6 +25,8 @@ function createDefaultSettings(): AppSettings {
     profile: { name: '' },
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
+    pythonCondaEnvironmentPath: null,
+    pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
@@ -64,6 +66,16 @@ class MockRuntime {
       ai: next.ai ? { ...this.settings.ai, ...next.ai } : this.settings.ai
     }
     return this.settings
+  }
+
+  async mutateSettings<T>(
+    updater: (
+      settings: AppSettings
+    ) => Promise<{ next: AppSettingsUpdate; result: T }> | { next: AppSettingsUpdate; result: T }
+  ): Promise<T> {
+    const { next, result } = await updater(this.settings)
+    await this.updateSettings(next)
+    return result
   }
 
   listNotes(): ReturnType<FileService['listNotes']> {
@@ -113,6 +125,7 @@ describe('ScheduleService action application', () => {
           date: '2026-04-04',
           priority: 'high',
           taskType: 'assignment',
+          tags: ['mcv'],
           automationSource: 'test-schedule',
           automationSourceKey: '2026-04-04:planning'
         }
@@ -129,6 +142,7 @@ describe('ScheduleService action application', () => {
       date: '2026-04-04',
       priority: 'high',
       taskType: 'assignment',
+      tags: ['mcv'],
       automationSource: 'test-schedule',
       automationSourceKey: '2026-04-04:planning'
     })
@@ -187,6 +201,100 @@ describe('ScheduleService action application', () => {
     expect(content).toContain('This note was created by a schedule run.')
   })
 
+  it('applies an end-date-only task.create action as a deadline-only task', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Create deadline task',
+      enabled: true,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      outputMode: 'auto_apply',
+      permissions: ['createTasks'],
+      code: `beacon.emit({
+        type: 'task.create',
+        title: 'Submit final report',
+        endDate: '2026-04-08',
+        automationSource: 'test-schedule',
+        automationSourceKey: 'deadline-only'
+      })`
+    })
+
+    const run = await service.runNow(job.id)
+    const settings = await runtime.getSettings()
+
+    expect(run.status).toBe('success')
+    expect(settings.calendarTasks[0]).toMatchObject({
+      title: 'Submit final report',
+      date: undefined,
+      endDate: '2026-04-08'
+    })
+    expect(buildCalendarEvents(settings.calendarTasks)[0]).toMatchObject({
+      start: '2026-04-08',
+      end: undefined,
+      extendedProps: { deadlineOnly: true }
+    })
+  })
+
+  it('reconciles an existing task and marks the MCV assignment completed', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Reconcile MCV assignment',
+      enabled: true,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      outputMode: 'auto_apply',
+      permissions: ['createTasks', 'updateTasks'],
+      code: `beacon.emit([
+        {
+          type: 'task.create',
+          title: 'Submit MCV assignment',
+          date: '2026-04-06',
+          tags: ['mcv'],
+          automationSource: 'mcv',
+          automationSourceKey: 'assignment:abc-123'
+        },
+        {
+          type: 'task.update',
+          title: 'Submit MCV assignment',
+          endDate: '2026-04-08',
+          status: 'completed',
+          tags: ['mcv'],
+          automationSource: 'mcv',
+          automationSourceKey: 'assignment:abc-123'
+        }
+      ])`
+    })
+
+    const run = await service.runNow(job.id)
+    const settings = await runtime.getSettings()
+
+    expect(run.status).toBe('success')
+    expect(run.actionErrors).toEqual([])
+    expect(settings.calendarTasks).toHaveLength(1)
+    expect(settings.calendarTasks[0]).toMatchObject({
+      title: 'Submit MCV assignment',
+      status: 'completed',
+      completed: true,
+      endDate: '2026-04-08',
+      tags: ['mcv'],
+      automationSource: 'mcv',
+      automationSourceKey: 'assignment:abc-123'
+    })
+
+    const repeatRun = await service.runNow(job.id)
+    const repeatedSettings = await runtime.getSettings()
+
+    expect(repeatRun.status).toBe('success')
+    expect(repeatRun.actionErrors).toEqual([])
+    expect(repeatedSettings.calendarTasks).toHaveLength(1)
+  })
+
   it('runs Python jobs and applies their JSON action output', async () => {
     const runtime = new MockRuntime(tempRoot)
     const service = new ScheduleService(runtime as never)
@@ -218,5 +326,44 @@ print(json.dumps({"actions": [{
       date: '2026-04-05',
       automationSource: 'python-test'
     })
+  })
+
+  it('keeps the job review status synchronized after resolving runs', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Review scheduled task',
+      enabled: false,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      outputMode: 'review_before_apply',
+      permissions: ['createTasks'],
+      code: `beacon.emit({
+        type: 'task.create',
+        title: 'Review this task',
+        automationSource: 'review-test',
+        automationSourceKey: 'review-task'
+      })`
+    })
+
+    const firstRun = await service.runNow(job.id)
+    const secondRun = await service.runNow(job.id)
+
+    expect(firstRun.status).toBe('review')
+    expect(secondRun.status).toBe('review')
+    expect((await service.listJobs())[0]?.lastStatus).toBe('review')
+
+    await service.dismissRun(firstRun.id)
+    expect((await service.listJobs())[0]?.lastStatus).toBe('review')
+
+    await service.dismissRun(secondRun.id)
+    expect((await service.listJobs())[0]?.lastStatus).toBe('cancelled')
+
+    const appliedRun = await service.runNow(job.id)
+    expect(appliedRun.status).toBe('review')
+    await service.applyActions(appliedRun.id)
+    expect((await service.listJobs())[0]?.lastStatus).toBe('success')
   })
 })

@@ -1,5 +1,6 @@
 import type { VaultRuntime } from './runtime'
 import { ScheduleStore } from './scheduleStore'
+import { ScheduleSecretsStore } from './scheduleSecretsStore'
 import { runScript } from './scheduleRunner'
 import { stripNoteExtension } from '../shared/noteDocument'
 import type {
@@ -11,6 +12,8 @@ import type {
   TriggerConfig
 } from '../shared/scheduleTypes'
 import type { CalendarTask } from '../shared/types'
+import { normalizeTaskTags } from '../shared/taskTags'
+import { normalizeCalendarEndDate } from '../shared/calendarTaskDates'
 
 const TICK_INTERVAL_MS = 60_000 // check every minute
 
@@ -18,6 +21,7 @@ export class ScheduleService {
   private runtime: VaultRuntime
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private vaultRoot: string | null = null
+  private readonly runningJobs = new Set<string>()
 
   constructor(runtime: VaultRuntime) {
     this.runtime = runtime
@@ -33,6 +37,7 @@ export class ScheduleService {
       this.tickTimer = null
     }
     this.vaultRoot = null
+    this.runningJobs.clear()
   }
 
   async handleVaultChange(vaultRoot: string | null): Promise<void> {
@@ -51,7 +56,7 @@ export class ScheduleService {
     const jobs = await store.readJobs()
     for (const job of jobs) {
       if (job.enabled && job.trigger.type === 'on_app_start') {
-        void this.executeJob(job)
+        void this.executeScheduledJob(job)
       }
     }
 
@@ -79,6 +84,7 @@ export class ScheduleService {
       runtime: input.runtime,
       code: input.code,
       permissions: input.permissions,
+      secretRefs: input.secretRefs ?? existing?.secretRefs ?? [],
       outputMode: input.outputMode,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -109,6 +115,18 @@ export class ScheduleService {
     return this.createStore().readRunsForJob(jobId)
   }
 
+  async listSecrets(): Promise<string[]> {
+    return new ScheduleSecretsStore().listNames()
+  }
+
+  async saveSecret(name: string, value: string): Promise<void> {
+    await new ScheduleSecretsStore().save(name, value)
+  }
+
+  async deleteSecret(name: string): Promise<void> {
+    await new ScheduleSecretsStore().delete(name)
+  }
+
   async applyActions(runId: string): Promise<void> {
     const store = this.createStore()
     const run = await store.findRun(runId)
@@ -119,14 +137,16 @@ export class ScheduleService {
     const job = jobs.find((j) => j.id === run.jobId)
     if (!job) throw new Error(`Job not found for run ${runId}`)
 
-    const applied = await this.applyScriptActions(run.proposedActions, job)
+    const appliedResult = await this.applyScriptActions(run.proposedActions, job)
 
     const updatedRun: ScheduleRunRecord = {
       ...run,
-      status: 'success',
-      appliedActions: applied
+      status: appliedResult.errors.length > 0 ? 'error' : 'success',
+      appliedActions: appliedResult.applied,
+      actionErrors: appliedResult.errors
     }
     await store.upsertRun(updatedRun)
+    await this.syncJobStatusFromLatestRun(store, run.jobId)
   }
 
   async dismissRun(runId: string): Promise<void> {
@@ -135,6 +155,23 @@ export class ScheduleService {
     if (!run) throw new Error(`Run not found: ${runId}`)
 
     await store.upsertRun({ ...run, status: 'cancelled' })
+    await this.syncJobStatusFromLatestRun(store, run.jobId)
+  }
+
+  private async syncJobStatusFromLatestRun(store: ScheduleStore, jobId: string): Promise<void> {
+    const [jobs, runs] = await Promise.all([store.readJobs(), store.readRunsForJob(jobId)])
+    const job = jobs.find((item) => item.id === jobId)
+    const latestRun = runs[0]
+
+    if (!job || !latestRun) {
+      return
+    }
+
+    await store.upsertJob({
+      ...job,
+      lastStatus: latestRun.status,
+      lastRunAt: latestRun.startedAt
+    })
   }
 
   // ── Internal execution ─────────────────────────────────────────────────────
@@ -151,12 +188,37 @@ export class ScheduleService {
       if (job.trigger.type === 'manual' || job.trigger.type === 'on_app_start') continue
       if (!job.nextRunAt) continue
       if (new Date(job.nextRunAt) <= now) {
-        void this.executeJob(job)
+        void this.executeScheduledJob(job)
       }
     }
   }
 
+  private async executeScheduledJob(job: ScheduleJob): Promise<void> {
+    if (this.runningJobs.has(job.id)) {
+      return
+    }
+
+    try {
+      await this.executeJob(job)
+    } catch (error) {
+      console.error(`[ScheduleService] Scheduled job ${job.id} failed:`, error)
+    }
+  }
+
   private async executeJob(job: ScheduleJob): Promise<ScheduleRunRecord> {
+    if (this.runningJobs.has(job.id)) {
+      throw new Error(`Schedule job is already running: ${job.id}`)
+    }
+
+    this.runningJobs.add(job.id)
+    try {
+      return await this.executeJobInternal(job)
+    } finally {
+      this.runningJobs.delete(job.id)
+    }
+  }
+
+  private async executeJobInternal(job: ScheduleJob): Promise<ScheduleRunRecord> {
     const startedAt = new Date().toISOString()
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -177,16 +239,26 @@ export class ScheduleService {
       stdout: '',
       stderr: '',
       proposedActions: [],
-      appliedActions: []
+      appliedActions: [],
+      actionErrors: []
     }
     await store.upsertRun(run)
 
     try {
-      const result = await runScript(job)
+      const secretEnv =
+        job.permissions.includes('useSecrets') && job.secretRefs?.length
+          ? await new ScheduleSecretsStore().resolve(job.secretRefs)
+          : {}
+      const settings = await this.runtime.getSettings()
+      const result = await runScript(job, secretEnv, {
+        condaEnvironmentPath: settings.pythonCondaEnvironmentPath,
+        condaExecutablePath: settings.pythonCondaExecutablePath
+      })
       const endedAt = new Date().toISOString()
 
       let finalStatus: RunStatus = 'success'
       let appliedActions: ScriptAction[] = []
+      let actionErrors: string[] = []
 
       if (result.error) {
         finalStatus = 'error'
@@ -194,8 +266,10 @@ export class ScheduleService {
         finalStatus = result.actions.length > 0 ? 'review' : 'success'
       } else {
         // auto_apply
-        appliedActions = await this.applyScriptActions(result.actions, job)
-        finalStatus = 'success'
+        const appliedResult = await this.applyScriptActions(result.actions, job)
+        appliedActions = appliedResult.applied
+        actionErrors = appliedResult.errors
+        finalStatus = actionErrors.length > 0 ? 'error' : 'success'
       }
 
       run = {
@@ -206,7 +280,8 @@ export class ScheduleService {
         stderr: result.stderr,
         errorMessage: result.error,
         proposedActions: result.actions,
-        appliedActions
+        appliedActions,
+        actionErrors
       }
     } catch (err) {
       run = {
@@ -236,19 +311,27 @@ export class ScheduleService {
   private async applyScriptActions(
     actions: ScriptAction[],
     job: ScheduleJob
-  ): Promise<ScriptAction[]> {
+  ): Promise<{ applied: ScriptAction[]; errors: string[] }> {
     const applied: ScriptAction[] = []
+    const errors: string[] = []
 
     for (const action of actions) {
       try {
         const ok = await this.applyOneAction(action, job)
-        if (ok) applied.push(action)
+        if (ok) {
+          applied.push(action)
+        } else {
+          errors.push(describeActionFailure(action))
+        }
       } catch (err) {
         console.error(`[ScheduleService] Failed to apply action ${action.type}:`, err)
+        errors.push(
+          `${describeActionFailure(action)}: ${err instanceof Error ? err.message : String(err)}`
+        )
       }
     }
 
-    return applied
+    return { applied, errors }
   }
 
   private async applyOneAction(action: ScriptAction, job: ScheduleJob): Promise<boolean> {
@@ -275,35 +358,45 @@ export class ScheduleService {
   ): Promise<boolean> {
     if (!job.permissions.includes('createTasks')) return false
 
-    const settings = await this.runtime.getSettings()
-    const existing = settings.calendarTasks.find(
-      (t) =>
-        t.automationSource === action.automationSource &&
-        t.automationSourceKey === action.automationSourceKey
+    return this.runtime.mutateSettings(
+      (settings) => {
+        const existing = settings.calendarTasks.find(
+          (t) =>
+            t.automationSource === action.automationSource &&
+            t.automationSourceKey === action.automationSourceKey
+        )
+        if (existing) {
+          // Idempotent create: an existing automation-owned task is already
+          // in the desired collection, so treat the no-op as successful.
+          return { next: {}, result: true }
+        }
+
+        const newTask: CalendarTask = {
+          id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title: action.title,
+          description: action.description,
+          projectId: action.projectId,
+          tags: normalizeTaskTags(action.tags),
+          date: action.date,
+          endDate: normalizeCalendarEndDate(action.date, action.endDate),
+          time: action.time,
+          completed: action.status === 'completed',
+          status: action.status ?? 'pending',
+          createdAt: new Date().toISOString(),
+          priority: action.priority ?? 'low',
+          taskType: (action.taskType as CalendarTask['taskType']) ?? 'other',
+          reminders: [],
+          automationSource: action.automationSource,
+          automationSourceKey: action.automationSourceKey
+        }
+
+        return {
+          next: { calendarTasks: [...settings.calendarTasks, newTask] },
+          result: true
+        }
+      },
+      { label: 'Apply scheduled task' }
     )
-    if (existing) return false // dedup
-
-    const newTask: CalendarTask = {
-      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: action.title,
-      description: action.description,
-      projectId: action.projectId,
-      date: action.date,
-      time: action.time,
-      completed: action.status === 'completed',
-      status: action.status ?? 'pending',
-      createdAt: new Date().toISOString(),
-      priority: action.priority ?? 'low',
-      taskType: (action.taskType as CalendarTask['taskType']) ?? 'other',
-      reminders: [],
-      automationSource: action.automationSource,
-      automationSourceKey: action.automationSourceKey
-    }
-
-    await this.runtime.updateSettings({
-      calendarTasks: [...settings.calendarTasks, newTask]
-    })
-    return true
   }
 
   private async applyTaskUpdate(
@@ -312,27 +405,50 @@ export class ScheduleService {
   ): Promise<boolean> {
     if (!job.permissions.includes('updateTasks')) return false
 
-    const settings = await this.runtime.getSettings()
-    const idx = settings.calendarTasks.findIndex(
-      (t) =>
-        t.automationSource === action.automationSource &&
-        t.automationSourceKey === action.automationSourceKey
+    return this.runtime.mutateSettings(
+      (settings) => {
+        const idx = settings.calendarTasks.findIndex(
+          (t) =>
+            t.automationSource === action.automationSource &&
+            t.automationSourceKey === action.automationSourceKey
+        )
+        if (idx < 0) {
+          return { next: {}, result: false }
+        }
+
+        const updated = [...settings.calendarTasks]
+        const nextDate = action.date !== undefined ? action.date : updated[idx].date
+        const nextEndDate =
+          action.endDate !== undefined ? (action.endDate ?? undefined) : updated[idx].endDate
+        updated[idx] = {
+          ...updated[idx],
+          ...(action.title !== undefined ? { title: action.title } : {}),
+          ...(action.description !== undefined ? { description: action.description } : {}),
+          ...(action.projectId !== undefined ? { projectId: action.projectId || undefined } : {}),
+          ...(action.tags !== undefined
+            ? { tags: normalizeTaskTags([...(updated[idx].tags ?? []), ...action.tags]) }
+            : {}),
+          ...(action.date !== undefined || action.endDate !== undefined
+            ? {
+                date: nextDate,
+                endDate: normalizeCalendarEndDate(nextDate, nextEndDate)
+              }
+            : {}),
+          ...(action.completed !== undefined
+            ? { completed: action.completed, status: action.completed ? 'completed' : 'pending' }
+            : {}),
+          ...(action.status !== undefined
+            ? { status: action.status, completed: action.status === 'completed' }
+            : {})
+        }
+
+        return {
+          next: { calendarTasks: updated },
+          result: true
+        }
+      },
+      { label: 'Apply scheduled task update' }
     )
-    if (idx < 0) return false
-
-    const updated = [...settings.calendarTasks]
-    updated[idx] = {
-      ...updated[idx],
-      ...(action.title !== undefined ? { title: action.title } : {}),
-      ...(action.description !== undefined ? { description: action.description } : {}),
-      ...(action.projectId !== undefined ? { projectId: action.projectId || undefined } : {}),
-      ...(action.date !== undefined ? { date: action.date } : {}),
-      ...(action.completed !== undefined ? { completed: action.completed, status: action.completed ? 'completed' : 'pending' } : {}),
-      ...(action.status !== undefined ? { status: action.status, completed: action.status === 'completed' } : {})
-    }
-
-    await this.runtime.updateSettings({ calendarTasks: updated })
-    return true
   }
 
   private async applyNoteCreate(
@@ -397,36 +513,45 @@ export class ScheduleService {
   ): Promise<boolean> {
     if (!job.permissions.includes('createCalendarItems')) return false
 
-    const settings = await this.runtime.getSettings()
-    const existing = settings.calendarTasks.find(
-      (t) =>
-        t.automationSource === action.automationSource &&
-        t.automationSourceKey === action.automationSourceKey
+    return this.runtime.mutateSettings(
+      (settings) => {
+        const existing = settings.calendarTasks.find(
+          (t) =>
+            t.automationSource === action.automationSource &&
+            t.automationSourceKey === action.automationSourceKey
+        )
+        if (existing) {
+          // Idempotent create: an existing automation-owned event is already
+          // in the desired collection, so treat the no-op as successful.
+          return { next: {}, result: true }
+        }
+
+        const newTask: CalendarTask = {
+          id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title: action.title,
+          description: action.description,
+          projectId: action.projectId,
+          tags: normalizeTaskTags(action.tags),
+          date: action.date,
+          endDate: action.endDate,
+          time: action.time,
+          completed: action.status === 'completed',
+          status: action.status ?? 'pending',
+          createdAt: new Date().toISOString(),
+          priority: 'low',
+          taskType: (action.taskType as CalendarTask['taskType']) ?? 'meeting',
+          reminders: [],
+          automationSource: action.automationSource,
+          automationSourceKey: action.automationSourceKey
+        }
+
+        return {
+          next: { calendarTasks: [...settings.calendarTasks, newTask] },
+          result: true
+        }
+      },
+      { label: 'Apply scheduled calendar event' }
     )
-    if (existing) return false // dedup
-
-    const newTask: CalendarTask = {
-      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: action.title,
-      description: action.description,
-      projectId: action.projectId,
-      date: action.date,
-      endDate: action.endDate,
-      time: action.time,
-      completed: action.status === 'completed',
-      status: action.status ?? 'pending',
-      createdAt: new Date().toISOString(),
-      priority: 'low',
-      taskType: (action.taskType as CalendarTask['taskType']) ?? 'meeting',
-      reminders: [],
-      automationSource: action.automationSource,
-      automationSourceKey: action.automationSourceKey
-    }
-
-    await this.runtime.updateSettings({
-      calendarTasks: [...settings.calendarTasks, newTask]
-    })
-    return true
   }
 
   private createStore(): ScheduleStore {
@@ -527,4 +652,12 @@ function matchCronField(expr: string, value: number, min: number, max: number): 
 
   // Exact
   return parseInt(expr, 10) === value
+}
+
+function describeActionFailure(action: ScriptAction): string {
+  if ('automationSourceKey' in action) {
+    return `${action.type} was not applied (${action.automationSourceKey})`
+  }
+
+  return `${action.type} was not applied`
 }

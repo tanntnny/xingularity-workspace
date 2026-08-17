@@ -1,22 +1,9 @@
 import { useMemo, useState, type ReactElement } from 'react'
-import {
-  BookOpen,
-  CalendarDays,
-  ChevronDown,
-  CreditCard,
-  Clock3,
-  FolderKanban,
-  HardDrive,
-  Inbox,
-  NotebookTabs,
-  Search,
-  ChevronRight,
-  Settings2,
-  type FilledIcon
-} from './ui/icons'
+import { ChevronDown, Search, ChevronRight, type FilledIcon } from './ui/icons'
 
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
 import { cn } from '../lib/utils'
+import { APP_PAGE_ICONS, VaultIcon } from '../lib/pageIcons'
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,6 +35,7 @@ interface AppSidebarProps {
   notesCount: number
   projectsCount: number
   calendarUndoneCount: number
+  schedulingReviewCount?: number
   isLocked?: boolean
   availablePages?: readonly AppPage[]
   className?: string
@@ -72,32 +60,32 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   {
     id: 'inbox',
     label: 'Inbox',
-    items: [{ id: 'capture', label: 'Capture', icon: Inbox }]
+    items: [{ id: 'capture', label: 'Capture', icon: APP_PAGE_ICONS.capture }]
   },
   {
     id: 'view',
     label: 'View',
     items: [
-      { id: 'notes', label: 'Notebooks', icon: NotebookTabs },
-      { id: 'projects', label: 'Projects', icon: FolderKanban },
-      { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-      { id: 'knowledge', label: 'Knowledge', icon: BookOpen }
+      { id: 'notes', label: 'Notebooks', icon: APP_PAGE_ICONS.notes },
+      { id: 'projects', label: 'Projects', icon: APP_PAGE_ICONS.projects },
+      { id: 'calendar', label: 'Calendar', icon: APP_PAGE_ICONS.calendar },
+      { id: 'knowledge', label: 'Knowledge', icon: APP_PAGE_ICONS.knowledge }
     ]
   },
   {
     id: 'automation',
     label: 'Automation',
-    items: [{ id: 'schedules', label: 'Scheduling', icon: Clock3 }]
+    items: [{ id: 'schedules', label: 'Scheduling', icon: APP_PAGE_ICONS.schedules }]
   },
   {
     id: 'finance',
     label: 'Finance',
-    items: [{ id: 'subscriptions', label: 'Subscriptions', icon: CreditCard }]
+    items: [{ id: 'subscriptions', label: 'Subscriptions', icon: APP_PAGE_ICONS.subscriptions }]
   }
 ]
 
 const FOOTER_PAGES: readonly SidebarPageItem[] = [
-  { id: 'settings', label: 'Settings', icon: Settings2, shortcut: ['cmd', ','] }
+  { id: 'settings', label: 'Settings', icon: APP_PAGE_ICONS.settings, shortcut: ['cmd', ','] }
 ]
 
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
@@ -117,6 +105,7 @@ export function AppSidebar({
   notesCount,
   projectsCount,
   calendarUndoneCount,
+  schedulingReviewCount = 0,
   isLocked = false,
   availablePages = ALL_APP_PAGES,
   className,
@@ -137,9 +126,22 @@ export function AppSidebar({
           ? projectsCount
           : pageId === 'calendar'
             ? calendarUndoneCount
-            : 0
+            : pageId === 'schedules'
+              ? schedulingReviewCount
+              : 0
 
-    return count > 0 ? <SidebarMenuBadge>{toBadgeLabel(count)}</SidebarMenuBadge> : null
+    return count > 0 ? (
+      <SidebarMenuBadge
+        data-testid={pageId === 'schedules' ? 'sidebar-badge:schedules' : undefined}
+        aria-label={
+          pageId === 'schedules'
+            ? `${count} automation${count === 1 ? '' : 's'} need review`
+            : undefined
+        }
+      >
+        {toBadgeLabel(count)}
+      </SidebarMenuBadge>
+    ) : null
   }
 
   const renderItem = (page: SidebarPageItem): ReactElement => {
@@ -203,17 +205,16 @@ export function AppSidebar({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  variant="outline"
                   onClick={onOpenVaultManager}
                   tooltip="Manage vaults"
                   aria-label="Open vault manager"
                   data-testid="sidebar-vault-manager"
                 >
-                  <HardDrive aria-hidden="true" />
+                  <VaultIcon aria-hidden="true" />
                   <span className="min-w-0 truncate">{vaultName ?? 'Select a vault'}</span>
                   <ChevronRight
                     aria-hidden="true"
-                    className="ml-auto group-data-[collapsible=icon]:hidden"
+                    className="!size-3 ml-auto group-data-[collapsible=icon]:hidden"
                   />
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -228,7 +229,6 @@ export function AppSidebar({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  variant="outline"
                   onClick={onOpenSearchPalette}
                   disabled={isLocked}
                   tooltip="Command palette"
@@ -251,7 +251,6 @@ export function AppSidebar({
           section.items.some((item) => availablePageSet.has(item.id))
         ).map((section) => {
           const isOpen = openSections[section.id]
-          const activeInSection = section.items.some((item) => item.id === activePage)
 
           return (
             <Collapsible
@@ -267,19 +266,12 @@ export function AppSidebar({
               }}
             >
               <SidebarGroup className="group/collapsible">
-                <SidebarGroupLabel
-                  asChild
-                  className={cn(
-                    'cursor-pointer',
-                    activeInSection && 'text-sidebar-accent-foreground'
-                  )}
-                  title={section.label}
-                >
+                <SidebarGroupLabel asChild className="cursor-pointer" title={section.label}>
                   <CollapsibleTrigger className="w-full justify-between">
                     <span>{section.label}</span>
                     <ChevronDown
                       aria-hidden="true"
-                      className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
+                      className="!size-3 motion-state-chevron ml-auto group-data-[state=open]/collapsible:rotate-180"
                     />
                   </CollapsibleTrigger>
                 </SidebarGroupLabel>

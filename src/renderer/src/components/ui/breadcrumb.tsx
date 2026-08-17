@@ -58,7 +58,7 @@ const BreadcrumbButton = React.forwardRef<
   <button
     ref={ref}
     type={type}
-    className={cn('transition-colors hover:text-foreground', className)}
+    className={cn('app-no-drag transition-colors hover:text-foreground', className)}
     {...props}
   />
 ))

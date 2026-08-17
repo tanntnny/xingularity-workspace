@@ -6,6 +6,10 @@ export function formatCalendarTaskScheduleLabel(task: CalendarTaskSchedule): str
   const start = formatDateTime(task.date, task.time)
   const hasEnd = Boolean(task.endDate || task.endTime)
 
+  if (!task.date && task.endDate) {
+    return `Due ${formatDateTime(task.endDate, task.endTime)}`
+  }
+
   if (!hasEnd) {
     return start || 'Unscheduled'
   }

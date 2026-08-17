@@ -62,7 +62,17 @@ export function normalizeExcalidrawScene(scene: ExcalidrawSessionScene): Excalid
 }
 
 export function parseStoredExcalidrawFileDocument(raw: string): StoredExcalidrawFileDocument {
-  const parsed = JSON.parse(raw) as unknown
+  if (!raw.trim()) {
+    throw new Error('Excalidraw file is empty')
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw) as unknown
+  } catch {
+    throw new Error('Excalidraw file contains invalid JSON')
+  }
+
   if (!isRecord(parsed)) {
     throw new Error('Invalid Excalidraw file document')
   }
@@ -70,7 +80,10 @@ export function parseStoredExcalidrawFileDocument(raw: string): StoredExcalidraw
   return {
     version: EXCALIDRAW_FILE_VERSION,
     scene: normalizeExcalidrawScene({
-      type: typeof parsed.scene === 'object' && parsed.scene ? (parsed.scene as ExcalidrawSessionScene).type : undefined,
+      type:
+        typeof parsed.scene === 'object' && parsed.scene
+          ? (parsed.scene as ExcalidrawSessionScene).type
+          : undefined,
       version:
         typeof parsed.scene === 'object' && parsed.scene
           ? (parsed.scene as ExcalidrawSessionScene).version
@@ -80,7 +93,9 @@ export function parseStoredExcalidrawFileDocument(raw: string): StoredExcalidraw
           ? (parsed.scene as ExcalidrawSessionScene).source
           : undefined,
       elements:
-        typeof parsed.scene === 'object' && parsed.scene && Array.isArray((parsed.scene as ExcalidrawSessionScene).elements)
+        typeof parsed.scene === 'object' &&
+        parsed.scene &&
+        Array.isArray((parsed.scene as ExcalidrawSessionScene).elements)
           ? (parsed.scene as ExcalidrawSessionScene).elements
           : [],
       appState:

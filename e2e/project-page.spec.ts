@@ -65,6 +65,14 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   return { electronApp, page }
 }
 
+async function openTaskPageFromCenterDialog(page: Page): Promise<void> {
+  const taskDialog = page.getByTestId('task-center-dialog')
+  await expect(taskDialog).toBeVisible()
+  await expect(taskDialog.locator('.ProseMirror')).toHaveCount(0)
+  await taskDialog.getByRole('button', { name: 'Open full page', exact: true }).click()
+  await expect(page.getByTestId('task-page')).toBeVisible()
+}
+
 test.describe('projects workspace', () => {
   test('opens directly to the linked-task project detail view', async () => {
     const vaultRoot = await createFixtureVault([
@@ -77,6 +85,9 @@ test.describe('projects workspace', () => {
       await page.getByTestId('sidebar-page:projects').click()
 
       await expect(page.getByTestId('projects-workspace-sidebar')).toBeVisible()
+      const workspaceTab = page.getByTestId('workspace-tab:workspace-tab-1')
+      await expect(workspaceTab).toContainText('Alpha Project')
+      await expect(page.getByTestId('workspace-tab-icon:workspace-tab-1')).toBeVisible()
       await expect(page.getByTestId('projects-sidebar-item:project-1')).toBeVisible()
       await expect(page.getByTestId('projects-sidebar-item:project-2')).toBeVisible()
       await expect(page.getByLabel('Project name')).toHaveValue('Alpha Project')
@@ -113,8 +124,21 @@ test.describe('projects workspace', () => {
       await expect(page.getByText('Project Board')).toHaveCount(0)
       await expect(page.getByText('Task List')).toHaveCount(0)
 
+      await page.getByTestId('workspace-tab-add').click()
+      const secondWorkspaceTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondWorkspaceTab).toBeVisible()
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(secondWorkspaceTab).toContainText('Alpha Project')
+      await page.getByTestId('projects-sidebar-item:project-2').click()
+      await expect(secondWorkspaceTab).toContainText('Beta Project')
+
+      await workspaceTab.click()
+      await expect(page.getByLabel('Project name')).toHaveValue('Alpha Project')
+      await expect(workspaceTab).toContainText('Alpha Project')
+
       await page.getByTestId('projects-sidebar-item:project-2').click()
       await expect(page.getByLabel('Project name')).toHaveValue('Beta Project')
+      await expect(workspaceTab).toContainText('Beta Project')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -287,24 +311,55 @@ test.describe('projects workspace', () => {
       await expect(page.getByLabel('Name')).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Create', exact: true })).toHaveCount(0)
       await page.getByRole('button', { name: 'Add new task', exact: true }).click()
-      const taskDialog = page.getByRole('dialog', { name: 'Edit task' })
-      const newTaskTitle = taskDialog.getByLabel('Title')
-      await expect(taskDialog).toBeVisible()
-      await expect(newTaskTitle).toBeFocused()
-      await newTaskTitle.fill('Prepare launch notes')
+      await openTaskPageFromCenterDialog(page)
+      const taskPage = page.getByTestId('task-page')
+      const newTaskTitle = taskPage.getByRole('button', { name: 'New Task', exact: true })
+      await newTaskTitle.click()
+      const taskTitleInput = taskPage.locator('input[type="text"]').first()
+      await taskTitleInput.fill('Prepare launch notes')
+      await taskTitleInput.press('Enter')
 
-      await expect(newTaskTitle).toHaveValue('Prepare launch notes')
+      const taskTags = page.getByTestId('task-tags-editor')
+      await expect(taskTags).toBeVisible()
+      const titleBox = await taskPage
+        .getByRole('heading', { name: 'Prepare launch notes' })
+        .boundingBox()
+      const tagsBox = await taskTags.boundingBox()
+      const projectBox = await page.getByTestId('task-property-project').boundingBox()
+      if (!titleBox || !tagsBox || !projectBox) {
+        throw new Error('Expected task title, tags, and project fields to have layout boxes')
+      }
+      expect(tagsBox.y).toBeGreaterThan(titleBox.y)
+      expect(tagsBox.y).toBeLessThan(projectBox.y)
+
+      await taskTags.getByRole('button', { name: 'Add tag', exact: true }).click()
+      const tagInput = taskTags.getByLabel('Add tag')
+      await tagInput.fill('release')
+      await tagInput.press('Enter')
+      await tagInput.fill('project:alpha')
+      await tagInput.press('Enter')
+      await expect(taskTags).toContainText('release')
+      await expect(taskTags).toContainText('project:alpha')
+
       const settingsWhileEditing = await page.evaluate(() => window.vaultApi.settings.get())
       expect(
         settingsWhileEditing.calendarTasks.some((task) => task.title === 'Prepare launch notes')
-      ).toBe(false)
-      await taskDialog.getByRole('button', { name: 'Done' }).click()
+      ).toBe(true)
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
       const taskOpenButton = page.getByRole('button', { name: 'Open task: Prepare launch notes' })
       await expect(taskOpenButton).toBeVisible()
       await taskOpenButton.click()
-      await expect(page.getByRole('dialog', { name: 'Edit task' })).toBeVisible()
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('dialog', { name: 'Edit task' })).toHaveCount(0)
+      await openTaskPageFromCenterDialog(page)
+      const editTaskTags = page.getByTestId('task-tags-editor')
+      await expect(editTaskTags.getByRole('button', { name: 'Remove tag release' })).toBeVisible()
+      await editTaskTags.getByRole('button', { name: 'Remove tag release' }).click()
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
       await expect(page.getByLabel('Project name')).toHaveValue('Untitled Project')
 
       await page.getByTestId('new-project-button').click()
@@ -331,6 +386,10 @@ test.describe('projects workspace', () => {
       expect(persistedProject).toBeDefined()
       expect(persistedProject?.description).toBe('Add project details here.')
       expect(persistedProject?.startDate).toBe(today)
+      const persistedTask = persistedSettings.calendarTasks.find(
+        (task) => task.title === 'Prepare launch notes'
+      )
+      expect(persistedTask?.tags).toEqual(['project:alpha'])
       expect(
         persistedSettings.projects.some((project) => project.name === 'Untitled Project 2')
       ).toBe(true)
@@ -339,6 +398,222 @@ test.describe('projects workspace', () => {
           (task) => task.title === 'Prepare launch notes' && task.projectId === persistedProject?.id
         )
       ).toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('creates grouped milestones, derives completeness, and moves tasks on delete', async () => {
+    const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByRole('button', { name: 'Add new milestone', exact: true }).click()
+
+      const milestoneRow = page.locator('[data-testid^="project-milestone-row:"]').first()
+      await expect(milestoneRow).toBeVisible()
+      const milestoneInput = milestoneRow.locator('input')
+      await expect(milestoneInput).toBeVisible()
+      await milestoneInput.fill('Release')
+      await milestoneInput.press('Enter')
+      await expect(milestoneRow.getByRole('button', { name: 'Release', exact: true })).toBeVisible()
+      const milestoneTestId = await milestoneRow.getAttribute('data-testid')
+      if (!milestoneTestId) throw new Error('Expected milestone row test id')
+      const milestoneId = milestoneTestId.split(':')[1]
+      const milestoneChildren = page.getByTestId(`project-milestone-children:${milestoneId}`)
+      await expect(milestoneChildren).toBeVisible()
+
+      await milestoneRow.getByTestId(`project-milestone-icon:${milestoneId}`).click()
+      await expect(milestoneChildren).toBeHidden()
+      await milestoneRow.getByTestId(`project-milestone-icon:${milestoneId}`).click()
+      await expect(milestoneChildren).toBeVisible()
+
+      await milestoneRow.getByRole('button', { name: 'Release', exact: true }).click()
+      await milestoneRow.locator('input').fill('Release candidate')
+      await milestoneRow.locator('input').press('Enter')
+      await expect(
+        milestoneRow.getByRole('button', { name: 'Release candidate', exact: true })
+      ).toBeVisible()
+
+      await milestoneRow.getByTestId(`project-milestone-add-task-icon:${milestoneId}`).click()
+      await openTaskPageFromCenterDialog(page)
+      const taskPage = page.getByTestId('task-page')
+      await taskPage.getByRole('button', { name: 'New Task', exact: true }).click()
+      const taskTitleInput = taskPage.locator('input[type="text"]').first()
+      await taskTitleInput.fill('Prepare release')
+      await taskTitleInput.press('Enter')
+      await expect(page.getByTestId('task-property-milestone')).toContainText('Release candidate')
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
+
+      const taskOpenButton = page.getByRole('button', { name: 'Open task: Prepare release' })
+      await expect(taskOpenButton).toBeVisible()
+      const taskRow = page
+        .locator('[data-testid^="project-task-row:"]')
+        .filter({ hasText: 'Prepare release' })
+      await expect(taskRow.getByText('Prepare release', { exact: true }).last()).toHaveClass(
+        /text-base.*font-semibold/
+      )
+      await expect(milestoneRow).toContainText('1 Tasks')
+      await expect(milestoneRow).toContainText('0%')
+      await expect(milestoneRow.getByTestId(`project-milestone-delete:${milestoneId}`)).toHaveCount(
+        0
+      )
+      await expect(page.getByTestId(`project-milestone-icon:${milestoneId}`)).toHaveAttribute(
+        'data-completed',
+        'false'
+      )
+
+      await taskOpenButton.click()
+      await openTaskPageFromCenterDialog(page)
+      const taskStatus = page.getByTestId('task-property-status').getByRole('button')
+      await taskStatus.click()
+      await page.getByRole('option', { name: 'Completed' }).click()
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
+      await expect(page.getByTestId(`project-milestone-icon:${milestoneId}`)).toHaveAttribute(
+        'data-completed',
+        'true'
+      )
+
+      await expect(milestoneRow).toContainText('100%')
+      page.once('dialog', (dialog) => void dialog.accept())
+      await milestoneRow
+        .getByTestId(`project-milestone-open:${milestoneId}`)
+        .click({ button: 'right' })
+      await page
+        .getByTestId(`project-milestone-context-menu:${milestoneId}`)
+        .getByRole('menuitem', {
+          name: 'Delete milestone'
+        })
+        .click()
+      await expect(page.getByTestId(`project-milestone-row:${milestoneId}`)).toHaveCount(0)
+      await expect(page.locator('[data-testid^="project-task-row:"]')).toHaveCount(1)
+      await expect(page.getByRole('button', { name: 'Open task: Prepare release' })).toBeVisible()
+
+      const persistedSettings = await page.evaluate(() => window.vaultApi.settings.get())
+      expect(persistedSettings.projects[0]?.milestones).toEqual([])
+      expect(
+        persistedSettings.calendarTasks.find((task) => task.title === 'Prepare release')
+          ?.milestoneId
+      ).toBeUndefined()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('opens milestone and task context menus from project rows', async () => {
+    const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByRole('button', { name: 'Add new milestone', exact: true }).click()
+
+      const milestoneRow = page.locator('[data-testid^="project-milestone-row:"]').first()
+      const milestoneInput = milestoneRow.locator('input')
+      await expect(milestoneInput).toBeVisible()
+      await milestoneInput.fill('Release')
+      await milestoneInput.press('Enter')
+      await expect(milestoneRow.getByRole('button', { name: 'Release', exact: true })).toBeVisible()
+      const milestoneTestId = await milestoneRow.getAttribute('data-testid')
+      if (!milestoneTestId) throw new Error('Expected milestone row test id')
+      const milestoneId = milestoneTestId.split(':')[1]
+
+      await page.getByTestId(`project-milestone-open:${milestoneId}`).click({ button: 'right' })
+      const milestoneMenu = page.getByTestId(`project-milestone-context-menu:${milestoneId}`)
+      await expect(milestoneMenu).toBeVisible()
+      await expect(
+        milestoneMenu.getByRole('menuitem', { name: 'Add task to milestone', exact: true })
+      ).toBeVisible()
+      await expect(
+        milestoneMenu.getByRole('menuitem', { name: 'Edit milestone', exact: true })
+      ).toBeVisible()
+      await expect(
+        milestoneMenu.getByRole('menuitem', { name: 'Delete milestone', exact: true })
+      ).toBeVisible()
+
+      await milestoneMenu
+        .getByRole('menuitem', { name: 'Add task to milestone', exact: true })
+        .click()
+      await openTaskPageFromCenterDialog(page)
+      const taskPage = page.getByTestId('task-page')
+      await taskPage.getByRole('button', { name: 'New Task', exact: true }).click()
+      const taskTitleInput = taskPage.locator('input[type="text"]').first()
+      await taskTitleInput.fill('Prepare release')
+      await taskTitleInput.press('Enter')
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
+
+      const taskRow = page
+        .locator('[data-testid^="project-task-row:"]')
+        .filter({ hasText: 'Prepare release' })
+      const taskTestId = await taskRow.getAttribute('data-testid')
+      if (!taskTestId) throw new Error('Expected task row test id')
+      const taskId = taskTestId.split(':')[1]
+
+      await taskRow.getByTestId(`project-task-menu:${taskId}`).click()
+      const taskMenu = page.getByTestId(`task-context-menu:${taskId}`)
+      await expect(taskMenu).toBeVisible()
+      await expect(
+        taskMenu.getByRole('menuitem', { name: 'Set status', exact: true })
+      ).toBeVisible()
+      await expect(taskMenu.getByRole('menuitem', { name: /Mark as/ })).toHaveCount(0)
+      await expect(taskMenu.getByRole('menuitem', { name: 'Edit task', exact: true })).toHaveCount(
+        0
+      )
+      await expect(taskMenu.getByRole('menuitem', { name: 'Rename', exact: true })).toHaveCount(0)
+      await expect(taskMenu.getByRole('menuitem', { name: 'Set type', exact: true })).toBeVisible()
+      await expect(
+        taskMenu.getByRole('menuitem', { name: 'Set priority', exact: true })
+      ).toBeVisible()
+      await expect(taskMenu.getByRole('menuitem', { name: 'Set time', exact: true })).toBeVisible()
+      await expect(
+        taskMenu.getByRole('menuitem', { name: 'Manage reminders', exact: true })
+      ).toBeVisible()
+      await expect(taskMenu.getByRole('menuitem', { name: /Delete task/ })).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps task status popovers interactive after opening the context menu', async () => {
+    const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByRole('button', { name: 'Add new task', exact: true }).click()
+
+      const taskRow = page.locator('[data-testid^="project-task-row:"]').filter({
+        hasText: 'New Task'
+      })
+      await expect(taskRow).toBeVisible()
+      const taskTestId = await taskRow.getAttribute('data-testid')
+      if (!taskTestId) throw new Error('Expected task row test id')
+      const taskId = taskTestId.split(':')[1]
+
+      await taskRow.getByTestId(`project-task-menu:${taskId}`).click()
+      await expect(page.getByTestId(`task-context-menu:${taskId}`)).toBeVisible()
+
+      const statusChip = taskRow.getByTestId(`project-task-status-chip:${taskId}`)
+      await statusChip.click()
+      const statusPopover = page.getByRole('dialog', {
+        name: 'Status for New Task options'
+      })
+      await expect(statusPopover).toBeVisible()
+      await statusPopover.getByText('Completed', { exact: true }).click()
+      await expect(statusChip).toContainText('Completed')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -420,26 +695,41 @@ test.describe('projects workspace', () => {
     }
   })
 
-  test('opens task rows in a centered editor and saves the title on close', async () => {
+  test('opens task rows in the full-page editor and saves the title on close', async () => {
     const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       await page.getByTestId('sidebar-page:projects').click()
       await page.getByRole('button', { name: 'Add new task', exact: true }).click()
+      await openTaskPageFromCenterDialog(page)
 
-      const dialog = page.getByRole('dialog', { name: 'Edit task' })
-      await dialog.getByLabel('Title').fill('Close saved task')
-      const duringEdit = await page.evaluate(() => window.vaultApi.settings.get())
-      expect(duringEdit.calendarTasks.some((task) => task.title === 'Close saved task')).toBe(false)
+      const taskPage = page.getByTestId('task-page')
+      await taskPage.getByRole('button', { name: 'New Task', exact: true }).click()
+      const titleInput = taskPage.locator('input[type="text"]').first()
+      await titleInput.fill('Close saved task')
+      await titleInput.press('Enter')
 
-      await dialog.getByRole('button', { name: 'Done' }).click()
       const afterClose = await page.evaluate(() => window.vaultApi.settings.get())
       expect(afterClose.calendarTasks.some((task) => task.title === 'Close saved task')).toBe(true)
 
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
       const taskButton = page.getByRole('button', { name: 'Open task: Close saved task' })
       await taskButton.click()
-      await expect(page.getByRole('dialog', { name: 'Edit task' })).toBeVisible()
+      await openTaskPageFromCenterDialog(page)
+      const descriptionEditor = page.locator('.ProseMirror').first()
+      await expect(descriptionEditor).toBeVisible()
+      await descriptionEditor.fill('Description saved from the full task page')
+      await expect
+        .poll(async () => {
+          const settings = await page.evaluate(() => window.vaultApi.settings.get())
+          return settings.calendarTasks.find((task) => task.title === 'Close saved task')
+            ?.description
+        })
+        .toBe('Description saved from the full task page')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -456,11 +746,16 @@ test.describe('projects workspace', () => {
     try {
       await page.getByTestId('sidebar-page:projects').click()
       await page.getByRole('button', { name: 'Add new task', exact: true }).click()
-      const taskDialog = page.getByRole('dialog', { name: 'Edit task' })
-      const newTaskTitle = taskDialog.getByLabel('Title')
-      await expect(newTaskTitle).toBeFocused()
+      await openTaskPageFromCenterDialog(page)
+      const taskPage = page.getByTestId('task-page')
+      await taskPage.getByRole('button', { name: 'New Task', exact: true }).click()
+      const newTaskTitle = taskPage.locator('input[type="text"]').first()
       await newTaskTitle.fill('Shared task')
-      await taskDialog.getByRole('button', { name: 'Done' }).click()
+      await newTaskTitle.press('Enter')
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
       await expect(page.getByRole('button', { name: 'Open task: Shared task' })).toBeVisible()
 
       const statusChip = page.getByRole('button', { name: /Status for Shared task:/ })
@@ -477,11 +772,15 @@ test.describe('projects workspace', () => {
         .click()
 
       await page.getByRole('button', { name: 'Open task: Shared task' }).click()
-      const editTaskDialog = page.getByRole('dialog', { name: 'Edit task' })
-      await editTaskDialog.getByLabel('Project').click()
+      await openTaskPageFromCenterDialog(page)
+      const taskProject = page.getByTestId('task-property-project').getByRole('button')
+      await taskProject.click()
       await page.getByRole('option', { name: 'Beta Project', exact: true }).click()
-      await editTaskDialog.getByRole('button', { name: 'Done' }).click()
-      await expect(page.getByRole('heading', { name: 'No tasks in this project' })).toBeVisible()
+      await page
+        .getByRole('navigation', { name: 'breadcrumb' })
+        .getByRole('button', { name: 'Projects', exact: true })
+        .click()
+      await expect(page.getByRole('heading', { name: 'No tasks in this project' })).toHaveCount(0)
 
       await page.getByTestId('projects-sidebar-item:project-2').click()
       await expect(page.getByRole('button', { name: 'Open task: Shared task' })).toBeVisible()

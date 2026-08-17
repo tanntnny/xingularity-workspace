@@ -29,7 +29,7 @@ import {
 import { toIsoDate } from '../lib/calendarDate'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { setCalendarTaskUnscheduledDragOver } from '../lib/calendarTaskDragSession'
-import { TaskEditDialog } from './TaskEditDialog'
+import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
 
 interface CalendarMonthViewProps {
   selectedDate: string
@@ -37,26 +37,15 @@ interface CalendarMonthViewProps {
   projects?: Project[]
   onSelectDate: (date: string) => void
   onCreateTask?: (date: string) => Promise<CalendarTask>
+  onOpenTask?: (taskId: string) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onResizeTaskStart?: (taskId: string, newStartDate: string) => void
   onResizeTaskEnd?: (taskId: string, newEndDate: string) => void
-  onToggleTask?: (taskId: string) => void
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
-  onRenameTask?: (taskId: string, newTitle: string) => void
   onUpdateTaskPriority?: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType?: (taskId: string, taskType: CalendarTaskType) => void
-  onUpdateTaskProject?: (taskId: string, projectId: string | undefined) => void
   onUpdateTaskTime?: (taskId: string, time: string | undefined) => void
-  onUpdateTaskSchedule?: (
-    taskId: string,
-    schedule: {
-      date: string | undefined
-      endDate: string | undefined
-      time: string | undefined
-      endTime: string | undefined
-    }
-  ) => void
   onUpdateTaskReminders?: (taskId: string, reminders: TaskReminder[]) => void
 }
 
@@ -66,20 +55,20 @@ export function CalendarMonthView({
   projects = [],
   onSelectDate,
   onCreateTask,
+  onOpenTask,
   onRescheduleTask,
   onResizeTaskStart,
   onResizeTaskEnd,
-  onToggleTask,
   onDeleteTask,
   onUpdateTask,
-  onRenameTask,
   onUpdateTaskPriority,
   onUpdateTaskType,
-  onUpdateTaskProject,
   onUpdateTaskTime,
-  onUpdateTaskSchedule,
   onUpdateTaskReminders
 }: CalendarMonthViewProps): ReactElement {
+  const calendarRootRef = useRef<HTMLElement | null>(null)
+  const { start: startCalendarDragAutoScroll, stop: stopCalendarDragAutoScroll } =
+    useCalendarDragAutoScroll({ rootRef: calendarRootRef })
   const calendarRef = useRef<FullCalendar | null>(null)
   const mirrorParent = typeof document === 'undefined' ? undefined : document.body
   const todayIso = toIsoDate(new Date())
@@ -95,7 +84,6 @@ export function CalendarMonthView({
     nonce: number
   } | null>(null)
   const [isInteracting, setIsInteracting] = useState(false)
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const contextMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const contextMenuNonceRef = useRef(0)
   const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
@@ -262,6 +250,7 @@ export function CalendarMonthView({
     const handleExternalDragStart = (event: MonthlyExternalDragEvent): void => {
       activeSource = event.subjectEl
       activeSource.dataset.dragging = 'true'
+      startCalendarDragAutoScroll()
     }
 
     const handleExternalDragMove = (event: MonthlyExternalDragEvent): void => {
@@ -282,6 +271,7 @@ export function CalendarMonthView({
         activeSource = null
       }
       setActiveDropCell(null)
+      stopCalendarDragAutoScroll()
     }
 
     draggable.dragging.emitter.on('dragstart', handleExternalDragStart)
@@ -295,7 +285,7 @@ export function CalendarMonthView({
       handleExternalDragEnd()
       draggable.destroy()
     }
-  }, [])
+  }, [startCalendarDragAutoScroll, stopCalendarDragAutoScroll])
 
   const handleEventDrop = (dropInfo: EventDropArg): void => {
     if (!dropInfo.event.start) {
@@ -335,6 +325,7 @@ export function CalendarMonthView({
   const handleEventDragStop = (dragInfo: EventDragStopArg): void => {
     unscheduledDragCleanupRef.current?.()
     unscheduledDragCleanupRef.current = null
+    stopCalendarDragAutoScroll()
     setIsInteracting(false)
 
     const unscheduledContainer = document.querySelector<HTMLElement>(
@@ -357,6 +348,7 @@ export function CalendarMonthView({
   const handleEventDragStart = (): void => {
     unscheduledDragCleanupRef.current?.()
     unscheduledDragCleanupRef.current = trackUnscheduledDragHover()
+    startCalendarDragAutoScroll()
     setIsInteracting(true)
     setHoveredTaskCard(null)
   }
@@ -460,16 +452,11 @@ export function CalendarMonthView({
     })
   }
 
-  const editingTask = editingTaskId ? (tasksById[editingTaskId] ?? null) : null
-  const handleCloseEditor = (): void => setEditingTaskId(null)
-  const safeToggleTask = onToggleTask ?? (() => undefined)
   const safeDeleteTask = onDeleteTask ?? (() => undefined)
-  const safeRenameTask = onRenameTask ?? (() => undefined)
   const safeUpdateTaskPriority = onUpdateTaskPriority ?? (() => undefined)
   const safeUpdateTaskType = onUpdateTaskType ?? (() => undefined)
   const safeUpdateTaskStatus = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskTime = onUpdateTaskTime ?? (() => undefined)
-  const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? (() => undefined)
   const safeRescheduleTask = onRescheduleTask ?? (() => undefined)
 
   const handleEventWillUnmount = (mountInfo: EventMountArg): void => {
@@ -502,7 +489,7 @@ export function CalendarMonthView({
       void onCreateTask(iso)
         .then((task) => {
           if (task) {
-            setEditingTaskId(task.id)
+            onOpenTask?.(task.id)
           }
         })
         .catch((error) => {
@@ -525,7 +512,11 @@ export function CalendarMonthView({
   }
 
   return (
-    <section className="min-h-full overflow-hidden rounded-b-2xl" data-testid="calendar-month-view">
+    <section
+      ref={calendarRootRef}
+      className="min-h-full overflow-hidden rounded-b-2xl"
+      data-testid="calendar-month-view"
+    >
       <div className="calendar-full relative overflow-hidden rounded-b-2xl">
         <FullCalendar
           ref={calendarRef}
@@ -609,7 +600,7 @@ export function CalendarMonthView({
             setHoveredTaskCard(null)
             setCalendarContextMenu(null)
             onSelectDate(date)
-            setEditingTaskId(info.event.id)
+            onOpenTask?.(info.event.id)
           }}
           eventClassNames={(arg) => {
             const task = tasksById[arg.event.id]
@@ -619,6 +610,7 @@ export function CalendarMonthView({
             return [
               'calendar-task-event',
               'rounded-md',
+              ...(!task.date && task.endDate ? ['calendar-task-deadline-only'] : []),
               ...(arg.isMirror ? ['calendar-task-drag-preview'] : [])
             ]
           }}
@@ -657,9 +649,10 @@ export function CalendarMonthView({
           key={`${calendarContextMenu.taskId}-${calendarContextMenu.nonce}`}
           task={tasksById[calendarContextMenu.taskId]}
           selectedDate={selectedDate}
-          onToggle={safeToggleTask}
           onDelete={safeDeleteTask}
-          onRename={safeRenameTask}
+          onUpdateStatus={(taskId, status) =>
+            safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+          }
           onUpdatePriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}
           onUpdateTime={safeUpdateTaskTime}
@@ -688,39 +681,6 @@ export function CalendarMonthView({
           }
           x={hoveredTaskCard.x}
           y={hoveredTaskCard.y}
-        />
-      ) : null}
-      {editingTask ? (
-        <TaskEditDialog
-          key={editingTask.id}
-          task={editingTask}
-          onSave={(taskId, patch) => {
-            if (onUpdateTask) {
-              onUpdateTask(taskId, patch)
-              return
-            }
-            if (patch.title) safeRenameTask(taskId, patch.title)
-            if (patch.priority) safeUpdateTaskPriority(taskId, patch.priority)
-            if (patch.taskType) safeUpdateTaskType(taskId, patch.taskType)
-            if (patch.status) {
-              safeUpdateTaskStatus(taskId, {
-                status: patch.status,
-                completed: patch.status === 'completed'
-              })
-            }
-            if ('projectId' in patch) onUpdateTaskProject?.(taskId, patch.projectId)
-            if ('date' in patch || 'endDate' in patch || 'time' in patch || 'endTime' in patch) {
-              safeUpdateTaskSchedule(taskId, {
-                date: patch.date,
-                endDate: patch.endDate,
-                time: patch.time,
-                endTime: patch.endTime
-              })
-            }
-          }}
-          onClose={handleCloseEditor}
-          projects={projects}
-          onDelete={safeDeleteTask}
         />
       ) : null}
     </section>
@@ -818,7 +778,8 @@ function buildCalendarSyncSignature(
     projectName: project?.name ?? '',
     projectIcon: project?.icon ?? null,
     completed: event.extendedProps.completed ?? false,
-    status: event.extendedProps.status ?? ''
+    status: event.extendedProps.status ?? '',
+    deadlineOnly: event.extendedProps.deadlineOnly ?? false
   })
 }
 

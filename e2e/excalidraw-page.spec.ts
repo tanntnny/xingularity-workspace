@@ -115,16 +115,29 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
     await expect(page.getByText('Drawing created', { exact: true })).toBeVisible()
     await expect(fs.access(path.join(vaultRoot, 'notebooks', createdPath))).resolves.toBeUndefined()
 
+    const canvas = page.locator('.excalidraw canvas').last()
+    await expect(canvas).toBeVisible()
+    const canvasBounds = await canvas.boundingBox()
+    if (!canvasBounds) {
+      throw new Error('Expected the Excalidraw canvas to have a bounding box')
+    }
+    await page.mouse.move(canvasBounds.x + 120, canvasBounds.y + 120)
+    await page.mouse.down()
+    await page.mouse.move(canvasBounds.x + 240, canvasBounds.y + 180, { steps: 4 })
+    await page.mouse.up()
+
     await page.getByTestId(`note-tree-menu:${createdPath}`).click()
     await page.getByRole('menuitem', { name: 'Rename', exact: true }).click()
     const escapeRenameInput = page.getByTestId(`note-tree-input:${createdPath}`)
     await expect(escapeRenameInput).toBeVisible()
+    await expect(escapeRenameInput).toBeFocused()
     await escapeRenameInput.press('Escape')
     await expect(createdRow).toBeVisible()
 
     await page.getByTestId(`note-tree-menu:${createdPath}`).click()
     await page.getByRole('menuitem', { name: 'Rename', exact: true }).click()
     const blankRenameInput = page.getByTestId(`note-tree-input:${createdPath}`)
+    await expect(blankRenameInput).toBeFocused()
     await blankRenameInput.fill('   ')
     await blankRenameInput.press('Enter')
     await expect(createdRow).toBeVisible()
@@ -133,6 +146,7 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
     await page.getByRole('menuitem', { name: 'Rename', exact: true }).click()
     const renameInput = page.getByTestId(`note-tree-input:${createdPath}`)
     await expect(renameInput).toBeVisible()
+    await expect(renameInput).toBeFocused()
     await renameInput.fill('renamed-drawing.excalidraw')
     await renameInput.press('Enter')
 
@@ -140,6 +154,10 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
     await expect(page.getByTestId(`note-tree-row:${renamedPath}`)).toBeVisible({ timeout: 20_000 })
     await expect(page.getByTestId(`note-tree-row:${createdPath}`)).toHaveCount(0)
     await expect(page.locator('.excalidraw')).toBeVisible({ timeout: 20_000 })
+    const renamedContent = JSON.parse(
+      await fs.readFile(path.join(vaultRoot, 'notebooks', renamedPath), 'utf-8')
+    ) as { scene?: { elements?: unknown[] } }
+    expect(renamedContent.scene?.elements?.length ?? 0).toBeGreaterThan(0)
     await expect(fs.access(path.join(vaultRoot, 'notebooks', renamedPath))).resolves.toBeUndefined()
     await expect(fs.access(path.join(vaultRoot, 'notebooks', createdPath))).rejects.toThrow()
     await expect(page.getByText('Drawing renamed', { exact: true })).toBeVisible()
@@ -150,7 +168,7 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
 
     await expect(page.getByTestId(`note-tree-row:${renamedPath}`)).toHaveCount(0)
     await expect(page.locator('.excalidraw')).toHaveCount(0)
-    await expect(page.getByTestId('notebook-empty-state')).toBeVisible()
+    await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
     await expect(fs.access(path.join(vaultRoot, 'notebooks', renamedPath))).rejects.toThrow()
     await expect(page.getByText('Drawing deleted', { exact: true })).toBeVisible()
 
@@ -162,7 +180,9 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
       timeout: 20_000
     })
     await expect(page.locator('.excalidraw')).toBeVisible({ timeout: 20_000 })
-    await expect(fs.access(path.join(vaultRoot, 'notebooks', recreatedPath))).resolves.toBeUndefined()
+    await expect(
+      fs.access(path.join(vaultRoot, 'notebooks', recreatedPath))
+    ).resolves.toBeUndefined()
 
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByTestId(`note-tree-menu:${recreatedPath}`).click()

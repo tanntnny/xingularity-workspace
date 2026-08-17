@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { normalizeTaskTags } from '../shared/taskTags'
 import {
   AppSettings,
   AppSettingsUpdate,
@@ -10,7 +11,8 @@ import {
   NOTE_VIM_MAPPING_ACTION_VALUES,
   NOTE_VIM_MAPPING_MODE_VALUES,
   NoteVimKeyMapping,
-  Project
+  Project,
+  ProjectMilestone
 } from '../shared/types'
 import {
   deleteLegacyVaultPath,
@@ -67,6 +69,7 @@ function normalizeCalendarTasks(tasks: CalendarTask[]): CalendarTask[] {
     const status = task.status ?? (task.completed ? 'completed' : 'pending')
     return {
       ...task,
+      tags: normalizeTaskTags(task.tags),
       taskType: taskType === 'call' ? 'follow-up' : task.taskType,
       status,
       completed: status === 'completed',
@@ -152,6 +155,8 @@ export function createDefaultAppSettings(): AppSettings {
       mistralApiKey: ''
     },
     fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    pythonCondaEnvironmentPath: null,
+    pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
@@ -191,6 +196,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   const normalizedProjects = Array.isArray(parsed.projects)
     ? parsed.projects.flatMap((project) => normalizeProject(project))
     : defaults.projects
+  const normalizedTaskLinks = normalizeTaskMilestoneLinks(normalizedTasks, normalizedProjects)
 
   return {
     ...defaults,
@@ -207,17 +213,27 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsed.ai.mistralApiKey
           : defaults.ai.mistralApiKey
     },
+    pythonCondaEnvironmentPath:
+      typeof parsed.pythonCondaEnvironmentPath === 'string' &&
+      parsed.pythonCondaEnvironmentPath.trim().length > 0
+        ? parsed.pythonCondaEnvironmentPath.trim()
+        : null,
+    pythonCondaExecutablePath:
+      typeof parsed.pythonCondaExecutablePath === 'string' &&
+      parsed.pythonCondaExecutablePath.trim().length > 0
+        ? parsed.pythonCondaExecutablePath.trim()
+        : null,
     editorVimModeEnabled:
       typeof parsed.editorVimModeEnabled === 'boolean'
         ? parsed.editorVimModeEnabled
         : defaults.editorVimModeEnabled,
     editorVimKeyMappings: normalizeEditorVimKeyMappings(parsed.editorVimKeyMappings),
-    calendarTasks: normalizedTasks,
-    tasks: normalizedTasks,
+    calendarTasks: normalizedTaskLinks,
+    tasks: normalizedTaskLinks,
     projectIcons: normalizeProjectIcons(parsed.projectIcons),
     projects: normalizedProjects.map((project) => ({
       ...project,
-      tasks: normalizedTasks.filter((task) => task.projectId === project.id)
+      tasks: normalizedTaskLinks.filter((task) => task.projectId === project.id)
     })),
     gridBoard:
       parsedGridBoard &&
@@ -320,6 +336,7 @@ function normalizeProject(input: unknown): Project[] {
       endDate: normalizeProjectDate(candidate.endDate),
       tags: normalizeProjectValues(candidate.tags),
       resources: normalizeProjectValues(candidate.resources),
+      milestones: normalizeProjectMilestones(candidate.milestones),
       updatedAt:
         typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
           ? candidate.updatedAt
@@ -332,6 +349,56 @@ function normalizeProject(input: unknown): Project[] {
       )
     }
   ]
+}
+
+function normalizeProjectMilestones(value: unknown): ProjectMilestone[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) {
+      return []
+    }
+
+    const candidate = item as Partial<ProjectMilestone>
+    const id = typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id : null
+    const title =
+      typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : null
+    if (!id || !title || seen.has(id)) {
+      return []
+    }
+
+    seen.add(id)
+    const now = new Date().toISOString()
+    return [
+      {
+        id,
+        title,
+        createdAt:
+          typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
+            ? candidate.createdAt
+            : now,
+        updatedAt:
+          typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+            ? candidate.updatedAt
+            : now
+      }
+    ]
+  })
+}
+
+function normalizeTaskMilestoneLinks(tasks: CalendarTask[], projects: Project[]): CalendarTask[] {
+  return tasks.map((task) => {
+    if (!task.milestoneId) {
+      return task
+    }
+
+    const project = projects.find((item) => item.id === task.projectId)
+    const hasMilestone = project?.milestones?.some((milestone) => milestone.id === task.milestoneId)
+    return hasMilestone ? task : { ...task, milestoneId: undefined }
+  })
 }
 
 function normalizeProjectDate(value: unknown): string | undefined {
@@ -842,6 +909,8 @@ export class SettingsStore {
       profile: settings.profile,
       ai: settings.ai,
       fontFamily: settings.fontFamily,
+      pythonCondaEnvironmentPath: settings.pythonCondaEnvironmentPath,
+      pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
       gridBoard: settings.gridBoard

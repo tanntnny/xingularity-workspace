@@ -1,5 +1,5 @@
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FolderOpen, HardDrive, Plus, Search, Star, X } from './ui/icons'
+import { FolderOpen, Plus, Search, Star, X } from './ui/icons'
 import {
   type RendererVaultApi,
   type SavedVaultState,
@@ -9,6 +9,7 @@ import { Pallete, PalleteInput, PalleteSearchBar } from './ui/pallete'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
 import { cn } from '../lib/utils'
+import { VaultIcon } from '../lib/pageIcons'
 
 interface VaultSwapperDialogProps {
   open: boolean
@@ -371,7 +372,7 @@ export function VaultSwapperDialog({
           {showNoSavedVaultsHint ? (
             <EmptyState
               className="border-0 bg-transparent px-3 py-6"
-              icon={FolderOpen}
+              icon={VaultIcon}
               title="No saved vaults yet"
               description="Add an existing vault or create a new one to start switching."
             />
@@ -421,7 +422,7 @@ export function VaultSwapperDialog({
                   }
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center text-primary">
-                    <HardDrive size={16} />
+                    <VaultIcon size={16} />
                   </div>
                   <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
                     <span className="shrink-0 font-medium text-foreground">{vault.name}</span>

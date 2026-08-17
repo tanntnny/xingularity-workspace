@@ -73,6 +73,7 @@ type ToggleGroupIndicatorBounds = {
   y: number
   width: number
   height: number
+  borderRadius: string
 }
 
 function setForwardedRef<T>(ref: React.ForwardedRef<T>, value: T | null): void {
@@ -132,7 +133,8 @@ function ToggleGroupSelectionIndicator({
         x: targetBounds.left - rootBounds.left,
         y: targetBounds.top - rootBounds.top,
         width: targetBounds.width,
-        height: targetBounds.height
+        height: targetBounds.height,
+        borderRadius: window.getComputedStyle(target).borderRadius
       })
     }
 
@@ -191,7 +193,8 @@ function ToggleGroupSelectionIndicator({
       style={{
         width: bounds?.width ?? 0,
         height: bounds?.height ?? 0,
-        transform: `translate3d(${bounds?.x ?? 0}px, ${bounds?.y ?? 0}px, 0)`
+        transform: `translate3d(${bounds?.x ?? 0}px, ${bounds?.y ?? 0}px, 0)`,
+        borderRadius: bounds?.borderRadius ?? 'inherit'
       }}
     />
   )

@@ -11,7 +11,7 @@ const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectio
     <section
       ref={ref}
       className={cn(
-        'flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground',
+        'flex flex-col gap-3 rounded-lg border border-panel-border bg-card p-4 text-card-foreground',
         className
       )}
       {...props}
@@ -65,12 +65,12 @@ const CollapsibleWorkspacePanelSection = React.forwardRef<
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="group flex min-h-[var(--control-height)] w-full items-center justify-between gap-3 bg-transparent px-4 py-3 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="group flex min-h-[var(--control-height)] w-full items-center justify-between gap-3 bg-transparent px-4 py-3 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:bg-transparent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
           <span className="min-w-0 truncate">{heading}</span>
           <ChevronDown
             aria-hidden="true"
-            className="size-[var(--control-icon-size)] shrink-0 text-muted-foreground transition-colors transition-transform duration-200 ease-out group-hover:text-foreground group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+            className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"
           />
         </button>
       </CollapsibleTrigger>
