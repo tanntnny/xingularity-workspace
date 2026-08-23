@@ -10,12 +10,16 @@ import { registerSubscriptionsIpcHandlers } from './subscriptionsIpc'
 import { SubscriptionsService } from './subscriptionsService'
 import { registerAgentToolIpcHandlers } from './agentToolsIpc'
 import { AgentToolsService } from './agentToolsService'
+import { registerCalendarIpcHandlers } from './calendarIpc'
+import { CalendarService, type CalendarGoogleAdapter } from './calendarService'
+import { CalendarStore } from './calendarStore'
+import { GoogleCalendarAdapter } from './googleCalendarAdapter'
+import { CredentialStore } from './credentialStore'
 import { createMainWindow } from './window'
+import { createVaultFileProtocolHandler } from './vaultFileProtocol'
 import { IPC_CHANNELS } from '../shared/ipc'
 import { HistoryService } from './historyService'
 import { broadcastMainProcessError } from './errorReporting'
-import * as fs from 'fs/promises'
-import * as path from 'path'
 
 const historyService = new HistoryService()
 const runtime = new VaultRuntime(historyService)
@@ -23,16 +27,26 @@ const scheduleService = new ScheduleService(runtime)
 const weeklyPlanService = new WeeklyPlanService(historyService)
 const subscriptionsService = new SubscriptionsService()
 const agentToolsService = new AgentToolsService(runtime, weeklyPlanService)
+const credentialStore = new CredentialStore()
+let calendarService: CalendarService | null = null
 runtime.setAgentToolInvoker((name, input) => agentToolsService.invoke(name as never, input))
 runtime.onVaultChange((paths) => {
   void scheduleService.handleVaultChange(paths ? paths.rootPath : null)
   weeklyPlanService.handleVaultChange(paths ? paths.rootPath : null)
   subscriptionsService.handleVaultChange(paths ? paths.rootPath : null)
+  calendarService = paths ? createCalendarService(paths.rootPath) : null
 })
 runtime.onTreeChange(() => {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.filesTreeChanged)
+    }
+  }
+})
+runtime.onReminderClick((target) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.reminderClicked, target)
     }
   }
 })
@@ -61,41 +75,10 @@ app.whenReady().then(() => {
   }
 
   // Register vault-file:// protocol to serve images from vault
-  protocol.handle('vault-file', async (request) => {
-    try {
-      const parsedUrl = new URL(request.url)
-      const rawPath = parsedUrl.host
-        ? `/${parsedUrl.host}${parsedUrl.pathname}`
-        : parsedUrl.pathname
-      const decodedPath = decodeURIComponent(rawPath)
-
-      // Security: only allow access to files within vault directories
-      const absolutePath = path.normalize(decodedPath)
-
-      // Read the file
-      const data = await fs.readFile(absolutePath)
-
-      // Determine MIME type based on file extension
-      const ext = path.extname(absolutePath).toLowerCase()
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.svg': 'image/svg+xml',
-        '.bmp': 'image/bmp'
-      }
-      const mimeType = mimeTypes[ext] || 'application/octet-stream'
-
-      return new Response(data, {
-        headers: { 'Content-Type': mimeType }
-      })
-    } catch (error) {
-      console.error('Failed to load vault file:', error)
-      return new Response('File not found', { status: 404 })
-    }
-  })
+  protocol.handle(
+    'vault-file',
+    createVaultFileProtocolHandler(() => runtime.getVaultFileProtocolScope())
+  )
 
   electronApp.setAppUserModelId('com.beacon.vault')
 
@@ -108,6 +91,7 @@ app.whenReady().then(() => {
   registerWeeklyPlanIpcHandlers(weeklyPlanService)
   registerSubscriptionsIpcHandlers(subscriptionsService)
   registerAgentToolIpcHandlers(agentToolsService)
+  registerCalendarIpcHandlers(() => calendarService)
   void scheduleService.init()
   createMainWindow()
 
@@ -117,6 +101,57 @@ app.whenReady().then(() => {
     }
   })
 })
+
+function createCalendarService(vaultRoot: string): CalendarService {
+  const clientId = process.env.XINGULARITY_GOOGLE_CLIENT_ID?.trim()
+  const redirectUri = process.env.XINGULARITY_GOOGLE_REDIRECT_URI?.trim()
+  const googleAdapter: CalendarGoogleAdapter =
+    clientId && redirectUri
+      ? new GoogleCalendarAdapter({
+          clientId,
+          redirectUri,
+          vaultRoot,
+          credentialStore
+        })
+      : new UnavailableGoogleCalendarAdapter()
+  return new CalendarService(new CalendarStore(vaultRoot), googleAdapter, {
+    defaultTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  })
+}
+
+class UnavailableGoogleCalendarAdapter implements CalendarGoogleAdapter {
+  createAuthorizationRequest(): never {
+    throw new Error(
+      'Google Calendar is not configured. Set XINGULARITY_GOOGLE_CLIENT_ID and XINGULARITY_GOOGLE_REDIRECT_URI before connecting.'
+    )
+  }
+
+  completeAuthorization(): Promise<never> {
+    return Promise.reject(this.configurationError())
+  }
+
+  listCalendars(): Promise<never> {
+    return Promise.reject(this.configurationError())
+  }
+
+  syncEvents(): Promise<never> {
+    return Promise.reject(this.configurationError())
+  }
+
+  disconnect(): Promise<never> {
+    return Promise.reject(this.configurationError())
+  }
+
+  revoke(): Promise<never> {
+    return Promise.reject(this.configurationError())
+  }
+
+  private configurationError(): Error {
+    return new Error(
+      'Google Calendar is not configured. Set XINGULARITY_GOOGLE_CLIENT_ID and XINGULARITY_GOOGLE_REDIRECT_URI before connecting.'
+    )
+  }
+}
 
 app.on('window-all-closed', () => {
   scheduleService.destroy()

@@ -8,7 +8,7 @@ workspace_shell:
     behavior:
       - The workspace always uses opaque neutral surfaces with no native vibrancy, backdrop blur, or filter blur.
       - Performance mode and color-theme controls are not user-selectable or persisted.
-      - Monotone accents resolve to dark neutrals in light mode and white neutrals in dark mode.
+      - Monotone accents use dark neutrals consistently across operating systems.
       - Shared dialogs, alert dialogs, drawers, command palette, popovers, and Excalidraw chrome use opaque surfaces.
       - On the Schedules page, clicking a schedule card in the right panel selects it only; the edit drawer opens from the icon-only workspace header action.
       - The FullCalendar month grid keeps header and day cell backgrounds transparent so the workspace glass shell remains visible behind the calendar lattice.
@@ -41,10 +41,11 @@ workspace_shell:
       - Calendar drag/drop highlights should fill the entire visible target area with square edges and an accent-tone fill: month-cell drop highlights stretch across the full day cell, and the unscheduled-task right-panel drop state stretches across the full task list area instead of only the current content height.
       - The calendar task edit dialog hides the default top-right close control and does not render any close action in the footer; delete is the only footer action.
       - Calendar scheduled tasks and right-panel unscheduled tasks share the `calendar-task-card-shell` visual contract for task surfaces and drag previews; keep the floating drag mirror/card consistent across both areas.
-      - Calendar task priority no longer changes the card surface tint. Instead, task rows show a colored `!` marker before the title for medium/high priority only, and task context menus expose priority changes. Low priority is the default and shows no marker.
+      - Calendar task cards keep their per-task-type tinted surface and border. Priority values render through the shared `StatusChip` contract with a colored icon, normal foreground text, no default background/border, and an accent hover surface.
       - Calendar scheduled tasks and right-panel unscheduled tasks share hover-card details and click-to-edit task dialog behavior.
       - The shared calendar task edit dialog exposes title, priority, type, date, and time editing for both scheduled and unscheduled tasks.
-      - Calendar task type selectors share the same source of truth from `src/shared/types.ts`; current supported types are `meeting`, `assignment`, `review`, `personal`, `call`, `deep-work`, `errand`, `follow-up`, and `other`, each with matching calendar/day-view color styling.
+      - Calendar task type selectors share the same source of truth from `src/shared/types.ts`; current supported types are `meeting`, `assignment`, `review`, `personal`, `deep-work`, `errand`, `follow-up`, and `other`, each with matching calendar/day-view color styling.
+      - Semantic status, priority, task type, tag, project, capture, subscription, resource, and scheduling values use the shared `StatusChip`/`StatusChipSelect` primitives; utility counts and dates remain `Badge` metadata.
       - Calendar task hover cards clamp like the subscriptions page hover cards: 288px width, 168px estimated height, 16px viewport margin, and 18px cursor offset.
       - Calendar task moves update renderer state optimistically before vault persistence, so cross-area drops should not wait for disk writes or FullCalendar revert animation.
       - Note editor tables use accent-colored cell borders, rounded outer corners, and translucent accent-soft table headers; note editor code blocks, callouts, and embedded buttons use tighter 4px rounding.

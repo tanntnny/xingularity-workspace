@@ -77,7 +77,7 @@ export function ProjectIconPicker({
           title="Change project icon"
           data-testid={testId}
         >
-          <NoteShapeIcon icon={icon} size={36} />
+          <NoteShapeIcon icon={icon} size={40} surface="subtle" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -143,7 +143,7 @@ export function ProjectIconPicker({
                     data-current={isCurrent}
                     className={cn(
                       'flex size-10 cursor-pointer items-center justify-center rounded-md p-0 [&_svg]:size-5',
-                      isCurrent && 'bg-accent text-accent-foreground ring-1 ring-ring'
+                      isCurrent && 'bg-muted text-foreground ring-1 ring-ring'
                     )}
                   >
                     <Icon aria-hidden="true" />

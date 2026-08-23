@@ -334,7 +334,7 @@ const Sidebar = React.forwardRef<
           <div
             data-sidebar="sidebar"
             className={cn(
-              'flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow'
+              'flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-shell group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow'
             )}
           >
             {children}
@@ -395,6 +395,7 @@ const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'bu
       maxSidebarWidth,
       setOpen,
       setIsResizing,
+      isResizing,
       toggleSidebar
     } = useSidebar()
     const resizeStartRef = React.useRef<{
@@ -433,6 +434,8 @@ const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'bu
         ref={ref}
         type="button"
         data-sidebar="rail"
+        data-resize-direction="x"
+        data-resizing={isResizing ? 'true' : undefined}
         role="separator"
         aria-label="Resize or toggle Sidebar"
         aria-orientation="vertical"
@@ -527,7 +530,7 @@ const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'bu
         onPointerUp={(event) => finishResize(event, onPointerUp)}
         onPointerCancel={(event) => finishResize(event, onPointerCancel)}
         className={cn(
-          'absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 rounded-none border-0 bg-transparent p-0 transition-all duration-200 ease-linear motion-reduce:transition-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex',
+          'resize-affordance absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 rounded-none border-0 bg-transparent p-0 transition-all duration-200 ease-linear motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex',
           '[[data-side=left]_&]:cursor-ew-resize [[data-side=right]_&]:cursor-ew-resize',
           'group-data-[collapsible=offcanvas]:pointer-events-none group-data-[collapsible=offcanvas]:opacity-0',
           '[[data-side=left][data-collapsible=offcanvas]_&]:-right-2',
@@ -548,7 +551,7 @@ const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<'main
         ref={ref}
         className={cn(
           'relative flex min-h-svh flex-1 flex-col bg-sidebar',
-          'peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-lg md:peer-data-[variant=inset]:shadow',
+          'peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-shell md:peer-data-[variant=inset]:shadow',
           className
         )}
         {...props}
@@ -610,7 +613,7 @@ const SidebarSeparator = React.forwardRef<HTMLDivElement, React.ComponentProps<'
       <div
         ref={ref}
         data-sidebar="separator"
-        className={cn('mx-2 h-px w-auto bg-sidebar-border', className)}
+        className={cn('mx-2 h-[var(--border-width)] w-auto bg-sidebar-border', className)}
         {...props}
       />
     )

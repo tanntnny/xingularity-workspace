@@ -4,13 +4,11 @@ import {
   Dialog,
   DialogActionButton,
   DialogBody,
-  DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogShell,
-  DialogShellFooter,
-  DialogTitle
+  DialogShellHeader,
+  DialogShellFooter
 } from './ui/dialog'
 import { buttonVariants } from './ui/button'
 import { cn } from '../lib/utils'
@@ -56,14 +54,20 @@ export function NoteExportDialog({
 }: NoteExportDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl" data-testid="note-export-dialog" showCloseButton={false}>
+      <DialogContent data-testid="note-export-dialog" showCloseButton={false}>
         <DialogShell>
-          <DialogHeader>
-            <DialogTitle>Export note</DialogTitle>
-            <DialogDescription>Choose a file format for the current note.</DialogDescription>
-          </DialogHeader>
+          <DialogShellHeader
+            context="Note"
+            title="Export note"
+            closeLabel="Close export dialog"
+            closeDisabled={isExporting}
+            onClose={() => onOpenChange(false)}
+          />
 
           <DialogBody>
+            <DialogDescription className="mb-3">
+              Choose a file format for the current note.
+            </DialogDescription>
             <fieldset className="grid gap-3 sm:grid-cols-2">
               <legend className="sr-only">Export format</legend>
               {EXPORT_OPTIONS.map(({ format: optionFormat, title, description, Icon }) => {
@@ -95,13 +99,11 @@ export function NoteExportDialog({
             </fieldset>
           </DialogBody>
 
-          <DialogShellFooter
-            closeAction={<DialogCloseAction label="Close export dialog" disabled={isExporting} />}
-          >
+          <DialogShellFooter withDivider>
             <DialogActionButton
               icon={<FileDown />}
               label={isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}
-              tone="primary"
+              tone="accent"
               onClick={onExport}
               disabled={isExporting}
             />

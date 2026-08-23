@@ -1,19 +1,31 @@
-import { KeyboardEvent, ReactElement, useMemo, useState } from 'react'
-import { FileText, Folder, FolderOpen, MoreHorizontal, PenTool, Plus } from './ui/icons'
+import { KeyboardEvent, ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FileDown,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  PenTool,
+  Plus,
+  Trash2
+} from './ui/icons'
 import type { NoteTreeNode } from '../../../shared/types'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import { normalizeNoteTreeSelection, type NoteTreeSelection } from '../lib/noteTreeSelection'
 import { getNotebookFolderContents } from '../lib/notebookFolderContents'
 import { cn } from '../lib/utils'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import { Card } from './ui/card'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from './ui/dropdown-menu'
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger
+} from './ui/context-menu'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
@@ -56,6 +68,9 @@ export function NotebookCardBrowser({
     () => getNotebookFolderContents(tree, folderPath),
     [folderPath, tree]
   )
+  const canCreateInCurrentFolder =
+    !folderContents.folder?.isProtected || folderContents.folder.protectionKind === 'project-folder'
+  const currentFolderPath = folderContents.path ?? ''
 
   const handleBrowseFolder = (nextPath: string | null): void => {
     onBrowseFolder(nextPath)
@@ -83,39 +98,54 @@ export function NotebookCardBrowser({
       data-testid="notebook-card-browser"
       onKeyDownCapture={handleCardKeyDown}
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl text-card-foreground">
-        {folderContents.children.length === 0 ? (
-          <EmptyFolderState
-            parentDir={folderContents.path ?? ''}
+      <ContextMenu>
+        <ContextMenuTrigger asChild disabled={!canCreateInCurrentFolder}>
+          <div
+            className="flex min-h-0 flex-1 flex-col overflow-hidden text-card-foreground"
+            data-testid="notebook-card-content"
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {folderContents.children.length === 0 ? (
+                <EmptyFolderState
+                  parentDir={currentFolderPath}
+                  onCreateNote={onCreateNote}
+                  onCreateExcalidraw={onCreateExcalidraw}
+                  onCreateFolder={onCreateFolder}
+                />
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] justify-items-center gap-1">
+                  {folderContents.children.map((node) => (
+                    <NotebookCard
+                      key={`${node.kind}:${node.relPath}`}
+                      node={node}
+                      selectedEntries={selectedEntries}
+                      onBrowseFolder={handleBrowseFolder}
+                      onSelectionChange={onSelectionChange}
+                      onOpenPath={onOpenPath}
+                      onCreateNote={onCreateNote}
+                      onCreateExcalidraw={onCreateExcalidraw}
+                      onCreateFolder={onCreateFolder}
+                      onExportFolderPdf={onExportFolderPdf}
+                      onExportFolderMarkdown={onExportFolderMarkdown}
+                      onRenamePath={onRenamePath}
+                      onDeleteEntries={onDeleteEntries}
+                      onMoveEntries={onMoveEntries}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent data-testid="notebook-browser-context-menu">
+          <NotebookCreateContextMenuItems
+            parentDir={currentFolderPath}
             onCreateNote={onCreateNote}
             onCreateExcalidraw={onCreateExcalidraw}
             onCreateFolder={onCreateFolder}
           />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {folderContents.children.map((node) => (
-                <NotebookCard
-                  key={`${node.kind}:${node.relPath}`}
-                  node={node}
-                  selectedEntries={selectedEntries}
-                  onBrowseFolder={handleBrowseFolder}
-                  onSelectionChange={onSelectionChange}
-                  onOpenPath={onOpenPath}
-                  onCreateNote={onCreateNote}
-                  onCreateExcalidraw={onCreateExcalidraw}
-                  onCreateFolder={onCreateFolder}
-                  onExportFolderPdf={onExportFolderPdf}
-                  onExportFolderMarkdown={onExportFolderMarkdown}
-                  onRenamePath={onRenamePath}
-                  onDeleteEntries={onDeleteEntries}
-                  onMoveEntries={onMoveEntries}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        </ContextMenuContent>
+      </ContextMenu>
     </section>
   )
 }
@@ -208,16 +238,34 @@ function NotebookCard({
   const [isEditing, setIsEditing] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const [draftName, setDraftName] = useState(getDisplayName(node))
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const renameFocusHandoffRef = useRef(false)
+  const renameFinalizedRef = useRef(false)
   const isSelected = selectedEntries.some(
     (entry) => entry.kind === node.kind && entry.relPath === node.relPath
   )
-  const canCreateChildren =
-    node.kind !== 'folder' || !node.isProtected || node.protectionKind === 'project-folder'
-  const isDropTarget = node.kind === 'folder' && !node.isProtected
+  const isFolder = node.kind === 'folder'
+  const isProtected = Boolean(node.isProtected)
+  const canCreateChildren = !isProtected || node.protectionKind === 'project-folder'
+  const hasContextMenu = canCreateChildren || !isProtected
+  const isDropTarget = isFolder && !node.isProtected
   const displayName = getDisplayName(node)
+  const parentDir = isFolder ? node.relPath : (getParentPath(node.relPath) ?? '')
+  const entry = { kind: node.kind, relPath: node.relPath }
+
+  useEffect(() => {
+    if (!isEditing) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      renameInputRef.current?.focus()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isEditing])
 
   const selectEntry = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    const entry = { kind: node.kind, relPath: node.relPath }
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       const alreadySelected = selectedEntries.some(
         (selectedEntry) =>
@@ -244,9 +292,11 @@ function NotebookCard({
 
   const getDragEntries = (): NoteTreeSelection => {
     const selected = selectedEntries
-    return selected.some((entry) => entry.kind === node.kind && entry.relPath === node.relPath)
+    return selected.some(
+      (selectedEntry) => selectedEntry.kind === node.kind && selectedEntry.relPath === node.relPath
+    )
       ? normalizeNoteTreeSelection(selected)
-      : [{ kind: node.kind, relPath: node.relPath }]
+      : [entry]
   }
 
   const canDropEntries = (entries: NoteTreeSelection): boolean => {
@@ -255,12 +305,38 @@ function NotebookCard({
     }
 
     return entries.every(
-      (entry) => entry.relPath !== node.relPath && !node.relPath.startsWith(`${entry.relPath}/`)
+      (draggedEntry) =>
+        draggedEntry.relPath !== node.relPath &&
+        !node.relPath.startsWith(`${draggedEntry.relPath}/`)
     )
   }
 
+  const startRename = (): void => {
+    renameFocusHandoffRef.current = true
+    renameFinalizedRef.current = false
+    setDraftName(displayName)
+    setIsEditing(true)
+  }
+
+  const cancelRename = (): void => {
+    if (renameFinalizedRef.current) {
+      return
+    }
+
+    renameFinalizedRef.current = true
+    renameFocusHandoffRef.current = false
+    setIsEditing(false)
+    setDraftName(displayName)
+  }
+
   const commitRename = (): void => {
+    if (renameFinalizedRef.current) {
+      return
+    }
+
+    renameFinalizedRef.current = true
     const nextName = draftName.trim()
+    renameFocusHandoffRef.current = false
     setIsEditing(false)
     if (!nextName || nextName === displayName) {
       setDraftName(displayName)
@@ -269,219 +345,272 @@ function NotebookCard({
     onRenamePath(node.relPath, nextName, node.kind)
   }
 
-  return (
-    <DropZone
-      as="div"
-      variant="surface"
-      active={isDragOver}
-      className="min-w-0"
-      onDragEnter={(event) => {
-        if (isDropTarget) {
-          event.preventDefault()
-          setIsDragOver(true)
-        }
-      }}
-      onDragOver={(event) => {
-        if (isDropTarget) {
-          event.preventDefault()
-        }
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setIsDragOver(false)
-        }
-      }}
-      onDrop={(event) => {
-        event.preventDefault()
-        setIsDragOver(false)
-        const entries = readDraggedEntries(event.dataTransfer) ?? getDragEntries()
-        if (canDropEntries(entries)) {
-          void onMoveEntries(entries, node.relPath)
-        }
-      }}
-    >
-      <DragSource
-        as={Card}
-        draggable={!node.isProtected}
-        data-testid={`notebook-card:${node.relPath}`}
-        className={cn(
-          'group flex min-h-40 min-w-0 flex-col overflow-hidden transition-[background-color,border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-ring hover:shadow-md',
-          isSelected && 'border-ring bg-accent/60 ring-2 ring-ring/40'
-        )}
-        onDragStart={(event) => {
-          const entries = getDragEntries()
-          event.dataTransfer.effectAllowed = 'move'
-          event.dataTransfer.setData('application/x-xingularity-note-tree', JSON.stringify(entries))
-        }}
-        onDragEnd={() => setIsDragOver(false)}
-      >
-        <button
-          type="button"
-          className="flex min-h-32 flex-1 flex-col items-start gap-4 p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          aria-label={`${node.kind === 'folder' ? 'Open folder' : 'Open'} ${displayName}`}
-          onClick={selectEntry}
-        >
-          <span
-            className={cn(
-              'flex size-12 items-center justify-center rounded-xl bg-accent text-primary',
-              node.kind !== 'folder' && 'text-muted-foreground'
-            )}
-            aria-hidden="true"
-          >
-            {node.kind === 'folder' ? (
-              <Folder size={28} strokeWidth={1.8} />
-            ) : node.kind === 'excalidraw' ? (
-              <PenTool size={27} strokeWidth={1.8} />
-            ) : (
-              <FileText size={27} strokeWidth={1.8} />
-            )}
-          </span>
-          <span className="min-w-0">
-            {isEditing ? (
-              <input
-                autoFocus
-                value={draftName}
-                aria-label={`Rename ${displayName}`}
-                className="h-8 w-full rounded-md border border-ring bg-card px-2 text-sm font-semibold text-foreground outline-none"
-                onChange={(event) => setDraftName(event.target.value)}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => {
-                  event.stopPropagation()
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    commitRename()
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    setIsEditing(false)
-                    setDraftName(displayName)
-                  }
-                }}
-                onBlur={commitRename}
-              />
-            ) : (
-              <span className="block truncate text-base font-semibold text-foreground">
-                {displayName}
-              </span>
-            )}
-            <span className="mt-1 block text-sm text-muted-foreground">
-              {node.kind === 'folder'
-                ? `${node.children.length} ${node.children.length === 1 ? 'item' : 'items'}`
-                : node.kind === 'excalidraw'
-                  ? 'Drawing'
-                  : 'Notebook'}
-            </span>
-          </span>
-        </button>
-        {!node.isProtected ? (
-          <NotebookCardMenu
-            node={node}
-            canCreateChildren={canCreateChildren}
-            onCreateNote={onCreateNote}
-            onCreateExcalidraw={onCreateExcalidraw}
-            onCreateFolder={onCreateFolder}
-            onExportFolderPdf={onExportFolderPdf}
-            onExportFolderMarkdown={onExportFolderMarkdown}
-            onStartRename={() => setIsEditing(true)}
-            onDelete={() => onDeleteEntries([{ kind: node.kind, relPath: node.relPath }])}
-          />
-        ) : null}
-      </DragSource>
-    </DropZone>
-  )
-}
+  const getDeleteEntries = (): NoteTreeSelection => {
+    if (isSelected && selectedEntries.length > 1) {
+      return normalizeNoteTreeSelection(selectedEntries)
+    }
 
-interface NotebookCardMenuProps {
-  node: NoteTreeNode
-  canCreateChildren: boolean
-  onCreateNote: (parentDir: string) => void
-  onCreateExcalidraw: (parentDir: string) => void
-  onCreateFolder: (parentDir: string) => void
-  onExportFolderPdf: (folderPath: string) => void
-  onExportFolderMarkdown: (folderPath: string) => void
-  onStartRename: () => void
-  onDelete: () => void
-}
+    return [entry]
+  }
 
-function NotebookCardMenu({
-  node,
-  canCreateChildren,
-  onCreateNote,
-  onCreateExcalidraw,
-  onCreateFolder,
-  onExportFolderPdf,
-  onExportFolderMarkdown,
-  onStartRename,
-  onDelete
-}: NotebookCardMenuProps): ReactElement {
-  const parentDir = node.kind === 'folder' ? node.relPath : (getParentPath(node.relPath) ?? '')
-  const [open, setOpen] = useState(false)
-
-  const stopCardInteraction = (event: React.SyntheticEvent): void => {
+  const handleCardContextMenu = (event: React.MouseEvent<HTMLElement>): void => {
     event.stopPropagation()
+    if (isEditing || !hasContextMenu) {
+      event.preventDefault()
+      return
+    }
+
+    if (!isSelected) {
+      onSelectionChange([entry])
+    }
   }
 
   return (
-    <div className="flex items-center justify-end border-t border-panel-border px-3 py-2">
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            data-testid={`notebook-card-menu:${node.relPath}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`Open ${getKindLabel(node.kind)} menu for ${getDisplayName(node)}`}
-            title={`Open ${getKindLabel(node.kind)} menu`}
-            onPointerDown={stopCardInteraction}
-            onClick={stopCardInteraction}
+    <ContextMenu>
+      <ContextMenuTrigger
+        asChild
+        disabled={isEditing || !hasContextMenu}
+        onContextMenu={handleCardContextMenu}
+      >
+        <DropZone
+          as="div"
+          variant="content"
+          active={isDragOver}
+          className="w-36 max-w-full min-w-0"
+          onDragEnter={(event) => {
+            if (isDropTarget) {
+              event.preventDefault()
+              setIsDragOver(true)
+            }
+          }}
+          onDragOver={(event) => {
+            if (isDropTarget) {
+              event.preventDefault()
+            }
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setIsDragOver(false)
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setIsDragOver(false)
+            const entries = readDraggedEntries(event.dataTransfer) ?? getDragEntries()
+            if (canDropEntries(entries)) {
+              void onMoveEntries(entries, node.relPath)
+            }
+          }}
+        >
+          <DragSource
+            as="div"
+            draggable={!node.isProtected}
+            preview="floating"
+            previewVariant="content"
+            rotation={-2}
+            data-testid={`notebook-card:${node.relPath}`}
+            className="flex min-h-28 w-36 max-w-full min-w-0 flex-col overflow-hidden rounded-xl"
+            onDragStart={(event) => {
+              const entries = getDragEntries()
+              event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData(
+                'application/x-xingularity-note-tree',
+                JSON.stringify(entries)
+              )
+            }}
+            onDragEnd={() => setIsDragOver(false)}
           >
-            <MoreHorizontal size={18} aria-hidden="true" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={stopCardInteraction}>
-          {node.kind === 'folder' && canCreateChildren ? (
-            <>
-              <DropdownMenuItem onSelect={() => onCreateNote(parentDir)}>
-                <FileText className="mr-2 h-4 w-4" />
-                New note
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onCreateExcalidraw(parentDir)}>
-                <PenTool className="mr-2 h-4 w-4" />
-                New drawing
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onCreateFolder(parentDir)}>
-                <Folder className="mr-2 h-4 w-4" />
-                New folder
-              </DropdownMenuItem>
-            </>
-          ) : null}
-          {node.kind === 'folder' ? (
-            <>
-              {canCreateChildren ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuItem onSelect={() => onExportFolderPdf(node.relPath)}>
-                Export PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onExportFolderMarkdown(node.relPath)}>
-                Export Markdown
-              </DropdownMenuItem>
-            </>
-          ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onStartRename}>Rename</DropdownMenuItem>
-          <DropdownMenuItem className="text-destructive" onSelect={onDelete}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+            {isEditing ? (
+              <div className="flex min-h-24 flex-1 flex-col items-center gap-1.5 rounded-xl p-1.5 text-center">
+                <NotebookCardIcon node={node} isSelected={isSelected} />
+                <span className="min-w-0 max-w-full">
+                  <input
+                    ref={renameInputRef}
+                    autoFocus
+                    value={draftName}
+                    aria-label={`Rename ${displayName}`}
+                    className="h-7 w-full min-w-0 max-w-32 rounded-md border border-ring bg-card px-1.5 text-center text-sm font-semibold text-foreground outline-none"
+                    onChange={(event) => setDraftName(event.target.value)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        commitRename()
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        cancelRename()
+                      }
+                    }}
+                    onBlur={commitRename}
+                  />
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {getNotebookCardSubtitle(node)}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="flex min-h-24 flex-1 flex-col items-center gap-1.5 rounded-xl p-1.5 text-center transition-colors duration-200 hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+                aria-label={`${node.kind === 'folder' ? 'Open folder' : 'Open'} ${displayName}`}
+                aria-pressed={isSelected}
+                onClick={selectEntry}
+              >
+                <NotebookCardIcon node={node} isSelected={isSelected} />
+                <span className="min-w-0 max-w-full">
+                  <span
+                    className={cn(
+                      'block truncate text-sm font-semibold',
+                      isSelected ? 'text-primary' : 'text-foreground'
+                    )}
+                  >
+                    {displayName}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {getNotebookCardSubtitle(node)}
+                  </span>
+                </span>
+              </button>
+            )}
+          </DragSource>
+        </DropZone>
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        data-testid={`notebook-card-context-menu:${node.relPath}`}
+        onCloseAutoFocus={(event) => {
+          if (renameFocusHandoffRef.current) {
+            event.preventDefault()
+            renameFocusHandoffRef.current = false
+          }
+        }}
+      >
+        {canCreateChildren ? (
+          <NotebookCreateContextMenuItems
+            parentDir={parentDir}
+            onCreateNote={onCreateNote}
+            onCreateExcalidraw={onCreateExcalidraw}
+            onCreateFolder={onCreateFolder}
+          />
+        ) : null}
+        {isFolder && !isProtected ? (
+          <>
+            {canCreateChildren ? <ContextMenuSeparator /> : null}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger
+                data-testid={`notebook-card-export-folder-context:${node.relPath}`}
+              >
+                <FileDown className="mr-2 h-4 w-4" />
+                Export nested notes
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <ContextMenuItem
+                  data-testid={`notebook-card-export-folder-pdf-context:${node.relPath}`}
+                  onSelect={() => onExportFolderPdf(node.relPath)}
+                >
+                  <FileDown className="mr-2 h-4 w-4" />
+                  as PDF
+                </ContextMenuItem>
+                <ContextMenuItem
+                  data-testid={`notebook-card-export-folder-markdown-context:${node.relPath}`}
+                  onSelect={() => onExportFolderMarkdown(node.relPath)}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  as Markdown
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        ) : null}
+        {!isProtected ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={startRename}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Rename
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => onDeleteEntries(getDeleteEntries())}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </ContextMenuItem>
+          </>
+        ) : null}
+      </ContextMenuContent>
+    </ContextMenu>
   )
+}
+
+interface NotebookCreateContextMenuItemsProps {
+  parentDir: string
+  onCreateNote: (parentDir: string) => void
+  onCreateExcalidraw: (parentDir: string) => void
+  onCreateFolder: (parentDir: string) => void
+}
+
+function NotebookCreateContextMenuItems({
+  parentDir,
+  onCreateNote,
+  onCreateExcalidraw,
+  onCreateFolder
+}: NotebookCreateContextMenuItemsProps): ReactElement {
+  return (
+    <>
+      <ContextMenuItem onSelect={() => onCreateNote(parentDir)}>
+        <FileText className="mr-2 h-4 w-4" />
+        New note
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onCreateExcalidraw(parentDir)}>
+        <PenTool className="mr-2 h-4 w-4" />
+        New drawing
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onCreateFolder(parentDir)}>
+        <FolderPlus className="mr-2 h-4 w-4" />
+        New folder
+      </ContextMenuItem>
+    </>
+  )
+}
+
+function NotebookCardIcon({
+  node,
+  isSelected
+}: {
+  node: NoteTreeNode
+  isSelected: boolean
+}): ReactElement {
+  return (
+    <span
+      className={cn(
+        'flex size-14 items-center justify-center rounded-xl text-primary',
+        isSelected && 'ring-2 ring-ring/60 ring-offset-2 ring-offset-workspace',
+        node.kind !== 'folder' && 'text-muted-foreground'
+      )}
+      aria-hidden="true"
+    >
+      {node.kind === 'folder' ? (
+        <Folder size={48} strokeWidth={1.8} />
+      ) : node.kind === 'excalidraw' ? (
+        <PenTool size={48} strokeWidth={1.8} />
+      ) : (
+        <FileText size={48} strokeWidth={1.8} />
+      )}
+    </span>
+  )
+}
+
+function getNotebookCardSubtitle(node: NoteTreeNode): string {
+  if (node.kind === 'folder') {
+    return `${node.children.length} ${node.children.length === 1 ? 'item' : 'items'}`
+  }
+
+  return node.kind === 'excalidraw' ? 'Drawing' : 'Notebook'
 }
 
 function getDisplayName(node: NoteTreeNode): string {
   return node.kind === 'folder' ? node.name : stripNotebookFileExtension(node.name)
-}
-
-function getKindLabel(kind: NoteTreeNode['kind']): string {
-  return kind === 'folder' ? 'folder' : kind === 'excalidraw' ? 'drawing' : 'notebook'
 }
 
 function getParentPath(relPath: string): string | null {

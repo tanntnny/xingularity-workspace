@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -31,14 +31,6 @@ function addIsoDays(iso: string, days: number): string {
 function getAdjacentWeekDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`)
   return addIsoDays(iso, date.getDay() === 6 ? -1 : 1)
-}
-
-async function openTaskPageFromCenterDialog(page: Page): Promise<void> {
-  const taskDialog = page.getByTestId('task-center-dialog')
-  await expect(taskDialog).toBeVisible()
-  await expect(taskDialog.locator('.ProseMirror')).toHaveCount(0)
-  await taskDialog.getByRole('button', { name: 'Open full page', exact: true }).click()
-  await expect(page.getByTestId('task-page')).toBeVisible()
 }
 
 async function createFixtureVault(
@@ -319,6 +311,24 @@ async function openWeeklyCalendar(page: Page): Promise<void> {
   await expect(page.getByTestId('calendar-week-view')).toBeVisible()
 }
 
+async function getResizeAffordanceStyles(locator: Locator): Promise<{
+  cursor: string
+  lineBackgroundImage: string
+  lineHeight: string
+  lineOpacity: string
+}> {
+  return locator.evaluate((element) => {
+    const line = getComputedStyle(element, '::after')
+
+    return {
+      cursor: getComputedStyle(element).cursor,
+      lineBackgroundImage: line.backgroundImage,
+      lineHeight: line.height,
+      lineOpacity: line.opacity
+    }
+  })
+}
+
 test.describe('calendar weekly drag preview', () => {
   test('keeps weekday headers visible while scrolling the time grid', async () => {
     const { rootPath } = await createFixtureVault()
@@ -410,6 +420,34 @@ test.describe('calendar weekly drag preview', () => {
     }
   })
 
+  test('shows the expanded vertical resize affordance on timed task handles', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+
+      const task = page.getByTestId('calendar-week-task:task-weekly-preview')
+      await task.hover()
+      const handle = task.locator('[data-weekly-resize-handle="true"]').first()
+      await expect(handle).toBeVisible()
+      await expect.poll(async () => (await getResizeAffordanceStyles(handle)).lineOpacity).toBe('0')
+      await handle.hover()
+
+      await expect
+        .poll(async () => (await getResizeAffordanceStyles(handle)).lineOpacity, { timeout: 2_000 })
+        .toBe('1')
+      const affordanceStyles = await getResizeAffordanceStyles(handle)
+      expect(affordanceStyles.cursor).toBe('ns-resize')
+      expect(affordanceStyles.lineHeight).toBe('1px')
+      expect(affordanceStyles.lineBackgroundImage).toContain('linear-gradient')
+      expect(affordanceStyles.lineOpacity).toBe('1')
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   test('creates and opens a timed task when double-clicking an empty weekly cell', async () => {
     const { rootPath, todayIso } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
@@ -436,10 +474,21 @@ test.describe('calendar weekly drag preview', () => {
         )
       }, todayIso)
 
-      await openTaskPageFromCenterDialog(page)
-      await expect(page.getByLabel('Task start time')).toHaveValue('06:20')
-      await expect(page.getByLabel('Task end time')).toHaveValue('07:20')
-      await expect(page.getByLabel('Task start date')).toBeVisible()
+      const taskDialog = page.getByTestId('task-center-dialog')
+      const taskTitleInput = taskDialog.getByLabel('Task name')
+      await expect(taskTitleInput).toHaveValue('')
+      await expect(taskTitleInput).toHaveAttribute('placeholder', 'Task name')
+      await expect(taskTitleInput).toBeFocused()
+      await taskTitleInput.fill('Weekly focus task')
+      await taskDialog.getByRole('button', { name: 'Open full page', exact: true }).click()
+      await expect(page.getByTestId('task-page')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Task start time', exact: true })).toHaveText(
+        /\d{1,2}:\d{2} (AM|PM)/
+      )
+      await expect(page.getByRole('button', { name: 'Task end time', exact: true })).toHaveText(
+        /\d{1,2}:\d{2} (AM|PM)/
+      )
+      await expect(page.getByRole('button', { name: 'Task start date', exact: true })).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

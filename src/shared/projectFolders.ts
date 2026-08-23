@@ -8,10 +8,24 @@ function normalizePathSeparators(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
 }
 
+export function isVaultRelativePath(value: string): boolean {
+  const normalized = value.trim().replace(/\\/g, '/')
+  if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) {
+    return false
+  }
+
+  return normalized
+    .split('/')
+    .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+}
+
 export function sanitizeProjectFolderName(projectName: string): string {
   const trimmed = projectName.trim()
-  const sanitized = trimmed
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+  const withoutControlCharacters = Array.from(trimmed)
+    .filter((character) => character.charCodeAt(0) >= 0x20)
+    .join('')
+  const sanitized = withoutControlCharacters
+    .replace(/[<>:"/\\|?*]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120)
@@ -53,19 +67,14 @@ export function isInsideProjectFolder(relPath: string): boolean {
   return segments.length >= 2 && segments[0] === PROJECTS_ROOT_FOLDER_NAME
 }
 
-export function resolveProjectByFolderPath(
-  relPath: string,
-  projects: Project[]
-): Project | null {
+export function resolveProjectByFolderPath(relPath: string, projects: Project[]): Project | null {
   const segments = getProjectFolderSegments(relPath)
   if (segments.length < 2 || segments[0] !== PROJECTS_ROOT_FOLDER_NAME) {
     return null
   }
 
   const projectFolderPath = `${PROJECTS_ROOT_FOLDER_NAME}/${segments[1]}`
-  return (
-    projects.find((project) => getProjectFolderPath(project) === projectFolderPath) ?? null
-  )
+  return projects.find((project) => getProjectFolderPath(project) === projectFolderPath) ?? null
 }
 
 export function getProjectTagForPath(relPath: string, projects: Project[]): string | null {

@@ -17,6 +17,7 @@ import {
   TaskPriority,
   TaskReminder
 } from '../../../shared/types'
+import { isTaskStatusDone } from '../../../shared/taskStatus'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
@@ -30,6 +31,7 @@ import { toIsoDate } from '../lib/calendarDate'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { setCalendarTaskUnscheduledDragOver } from '../lib/calendarTaskDragSession'
 import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 
 interface CalendarMonthViewProps {
   selectedDate: string
@@ -37,7 +39,7 @@ interface CalendarMonthViewProps {
   projects?: Project[]
   onSelectDate: (date: string) => void
   onCreateTask?: (date: string) => Promise<CalendarTask>
-  onOpenTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onResizeTaskStart?: (taskId: string, newStartDate: string) => void
   onResizeTaskEnd?: (taskId: string, newEndDate: string) => void
@@ -489,7 +491,7 @@ export function CalendarMonthView({
       void onCreateTask(iso)
         .then((task) => {
           if (task) {
-            onOpenTask?.(task.id)
+            onOpenTask?.(task.id, { isNewTask: true })
           }
         })
         .catch((error) => {
@@ -514,7 +516,7 @@ export function CalendarMonthView({
   return (
     <section
       ref={calendarRootRef}
-      className="min-h-full overflow-hidden rounded-b-2xl"
+      className="min-h-full overflow-hidden rounded-b-2xl bg-[var(--calendar-surface)]"
       data-testid="calendar-month-view"
     >
       <div className="calendar-full relative overflow-hidden rounded-b-2xl">
@@ -636,7 +638,7 @@ export function CalendarMonthView({
                   task={task}
                   project={task.projectId ? projectsById.get(task.projectId) : undefined}
                   onStatusChange={(taskId, status) =>
-                    safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+                    safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
                   }
                 />
               </DragSource>
@@ -651,7 +653,7 @@ export function CalendarMonthView({
           selectedDate={selectedDate}
           onDelete={safeDeleteTask}
           onUpdateStatus={(taskId, status) =>
-            safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+            safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
           }
           onUpdatePriority={safeUpdateTaskPriority}
           onUpdateTaskType={safeUpdateTaskType}

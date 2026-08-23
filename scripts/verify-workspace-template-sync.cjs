@@ -10,8 +10,8 @@ const packageUiRoot = path.join(packageRoot, 'src', 'ui')
 function readNormalized(filePath) {
   return fs
     .readFileSync(filePath, 'utf8')
-    .replaceAll("../../lib/utils", "../lib/utils")
-    .replaceAll("../../lib/uiTone", "../lib/uiTone")
+    .replaceAll('../../lib/utils', '../lib/utils')
+    .replaceAll('../../lib/uiTone', '../lib/uiTone')
     .trimEnd()
 }
 
@@ -35,7 +35,9 @@ for (const fileName of fs.readdirSync(rendererUiRoot)) {
   }
 }
 
-const rendererStyles = fs.readFileSync(path.join(rendererRoot, 'assets', 'main.css'), 'utf8').trimEnd()
+const rendererStyles = fs
+  .readFileSync(path.join(rendererRoot, 'assets', 'main.css'), 'utf8')
+  .trimEnd()
 const packageStyles = fs
   .readFileSync(path.join(packageRoot, 'styles', 'workspace.css'), 'utf8')
   .trimEnd()
@@ -44,8 +46,12 @@ if (rendererStyles !== packageStyles) {
   mismatches.push('stylesheet differs: styles/workspace.css')
 }
 
-const rendererUiTone = fs.readFileSync(path.join(rendererRoot, 'lib', 'uiTone.ts'), 'utf8').trimEnd()
-const packageUiTone = fs.readFileSync(path.join(packageRoot, 'src', 'lib', 'uiTone.ts'), 'utf8').trimEnd()
+const rendererUiTone = fs
+  .readFileSync(path.join(rendererRoot, 'lib', 'uiTone.ts'), 'utf8')
+  .trimEnd()
+const packageUiTone = fs
+  .readFileSync(path.join(packageRoot, 'src', 'lib', 'uiTone.ts'), 'utf8')
+  .trimEnd()
 
 if (rendererUiTone !== packageUiTone) {
   mismatches.push('shared tone helper differs: src/lib/uiTone.ts')

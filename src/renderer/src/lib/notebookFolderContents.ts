@@ -1,10 +1,13 @@
 import type { NoteTreeNode } from '../../../shared/types'
 
+type NotebookFolderNode = Extract<NoteTreeNode, { kind: 'folder' }>
+
 export interface NotebookFolderContents {
   path: string | null
   name: string
   parentPath: string | null
   children: NoteTreeNode[]
+  folder: NotebookFolderNode | null
 }
 
 function findNodeByPath(nodes: NoteTreeNode[], relPath: string): NoteTreeNode | null {
@@ -57,7 +60,8 @@ export function getNotebookFolderContents(
       path: null,
       name: 'Notebooks',
       parentPath: null,
-      children: tree
+      children: tree,
+      folder: null
     }
   }
 
@@ -67,7 +71,8 @@ export function getNotebookFolderContents(
       path: null,
       name: 'Notebooks',
       parentPath: null,
-      children: tree
+      children: tree,
+      folder: null
     }
   }
 
@@ -75,6 +80,7 @@ export function getNotebookFolderContents(
     path,
     name: node.name,
     parentPath: getParentPath(path),
-    children: node.children
+    children: node.children,
+    folder: node
   }
 }

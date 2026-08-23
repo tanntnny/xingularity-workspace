@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+
 - `src/main/`: Electron main-process code, IPC handlers, vault services, schedules, and persistence.
 - `src/preload/`: secure renderer bridge exposed to the UI.
 - `src/renderer/src/`: React app shell, pages, hooks, renderer utilities, and UI primitives.
@@ -10,6 +11,7 @@
 - `docs/`, `assets/`, `build/`, and `resources/`: product notes, images, icons, and packaging assets.
 
 ## Build, Test, and Development Commands
+
 - `npm install`: install dependencies and native bindings.
 - `npm run dev`: start the Electron + Vite dev environment.
 - `npm run build`: run type checks, then produce a production build.
@@ -20,6 +22,7 @@
 - `npm run test:e2e`: build the app and run Playwright tests.
 
 ## Coding Style & Naming Conventions
+
 - Use TypeScript throughout. Follow existing style: 2-space indentation, single quotes, and no semicolons.
 - Prefer React function components and hooks. Components/pages use PascalCase filenames like `SettingsPage.tsx`; utilities use camelCase like `calendarTasks.ts`.
 - For UI work, prefer available primitive components first before creating custom ones.
@@ -28,6 +31,7 @@
 - Keep comments sparse. Favor descriptive names over explanatory comments.
 
 ## Testing Guidelines
+
 - Unit coverage uses Vitest in `tests/`; end-to-end coverage uses Playwright in `e2e/`.
 - Name unit tests `*.test.ts` and e2e specs `*.spec.ts`.
 - When changing a page or workflow, add or update the nearest targeted test instead of relying only on broad manual checks.
@@ -37,20 +41,25 @@
 - Before opening a PR, run the most relevant commands for your change, for example: `npm run lint`, `npm run test:run`, or a targeted Playwright spec such as `npm run test:e2e -- e2e/grid-page.spec.ts` when explicitly needed.
 
 ## Commit & Pull Request Guidelines
+
 - Recent history uses very short subjects (`Update`, `update`). Keep commits short and imperative, but make them more specific when possible, for example: `renderer: move grid controls into sidebar`.
 - PRs should include a concise summary, affected areas, test evidence, and UI screenshots.
 - Link the relevant issue or task when one exists, and note any follow-up work or known limitations.
 
 ## Security & Runtime Boundaries
+
 - Keep filesystem, shell, and OS access in `src/main/` or `src/preload/`; do not call Node APIs directly from renderer components.
 - Respect Electron’s isolation model (`contextIsolation: true`, `nodeIntegration: false`) when adding new capabilities.
 
 # Implementation Rules
+
 ## 1. Fixing and Editing UI
+
 - DO NOT fix the UI adhoc, fix at the primitive components
 - Keep the design consistent
 - Use design system principles like always use component-based UI, semantic HTML
 
 ## 2. Application UI Styles
+
 - Panel Style: The fronter components always have ligher bg color
 - Consistency: The buttons, selection buttons, action buttons, and toggle group buttons, have to have consistent design like roundedness, height, font-size, border color, etc.

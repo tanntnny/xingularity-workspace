@@ -54,12 +54,9 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SelectionPopover,
   Shortcut,
+  StatusChip,
   Switch,
   Table,
   TableBody,
@@ -76,6 +73,11 @@ import {
   TooltipTrigger
 } from '../components/ui'
 import { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard } from '../components/workspace'
+import {
+  getCalendarTaskTypeChipItem,
+  getTaskPriorityChipItem,
+  getTaskStatusChipItem
+} from '../lib/statusChipMeta'
 
 type AuditCategory = 'all' | 'foundations' | 'actions' | 'forms' | 'display' | 'overlays'
 
@@ -120,6 +122,8 @@ const TOKEN_GROUPS: TokenGroup[] = [
       { name: '--primary', label: 'Primary' },
       { name: '--secondary', label: 'Secondary' },
       { name: '--accent', label: 'Accent' },
+      { name: '--surface-subtle', label: 'Subtle surface' },
+      { name: '--surface-subtle-hover', label: 'Subtle surface hover' },
       { name: '--ring', label: 'Focus ring' },
       { name: '--destructive', label: 'Destructive' },
       { name: '--success', label: 'Success' },
@@ -131,8 +135,18 @@ const TOKEN_GROUPS: TokenGroup[] = [
 
 const COMPONENT_INVENTORY = [
   ['Actions', 'Button', 'ButtonGroup', 'ToggleGroup'],
-  ['Forms', 'Field', 'Input', 'Select', 'Textarea', 'Switch', 'Calendar'],
-  ['Display', 'Badge', 'Card', 'Table', 'Kbd', 'Shortcut', 'Breadcrumb'],
+  ['Forms', 'Field', 'Input', 'SelectionPopover', 'Textarea', 'Switch', 'Calendar'],
+  [
+    'Display',
+    'Badge',
+    'StatusChip',
+    'StatusChipSelect',
+    'Card',
+    'Table',
+    'Kbd',
+    'Shortcut',
+    'Breadcrumb'
+  ],
   ['Overlays', 'Dialog', 'AlertDialog', 'Drawer', 'DropdownMenu', 'Popover', 'Tooltip'],
   ['Shell', 'Sidebar', 'DocumentWorkspace', 'WorkspacePage', 'WorkspaceSectionCard']
 ] as const
@@ -200,6 +214,8 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
   const [selectedButtonGroup, setSelectedButtonGroup] = useState('grid')
   const [selectedToggle, setSelectedToggle] = useState('comfortable')
   const [selectedTab, setSelectedTab] = useState('overview')
+  const [selectedWorkspace, setSelectedWorkspace] = useState('workspace')
+  const [selectedAuditStatus, setSelectedAuditStatus] = useState('review')
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
 
   useEffect(() => {
@@ -238,7 +254,7 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
           <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
             <WorkspaceSectionCard>
               <div className="flex items-start gap-3">
-                <div className="rounded-lg border border-ring bg-accent p-3 text-primary">
+                <div className="rounded-lg border border-ring bg-muted p-3 text-foreground">
                   <Palette size={18} aria-hidden="true" />
                 </div>
                 <div>
@@ -396,17 +412,23 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                 >
                   <Input id="design-audit-input" defaultValue="A design-system value" />
                 </Field>
-                <Field label="Select" htmlFor="design-audit-select">
-                  <Select defaultValue="workspace">
-                    <SelectTrigger id="design-audit-select">
-                      <SelectValue placeholder="Choose a workspace" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="workspace">Workspace</SelectItem>
-                      <SelectItem value="project">Project</SelectItem>
-                      <SelectItem value="note">Notebook</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Field label="Selection popover" htmlFor="design-audit-select">
+                  <SelectionPopover
+                    selectionMode="single"
+                    value={selectedWorkspace}
+                    options={[
+                      { value: 'workspace', label: 'Workspace' },
+                      { value: 'project', label: 'Project' },
+                      { value: 'note', label: 'Notebook' }
+                    ]}
+                    onValueChange={setSelectedWorkspace}
+                    label="Workspace"
+                    searchPlaceholder="Search workspaces"
+                    triggerProps={{
+                      id: 'design-audit-select',
+                      'aria-label': 'Workspace'
+                    }}
+                  />
                 </Field>
                 <Field label="Textarea" htmlFor="design-audit-textarea">
                   <Textarea
@@ -420,20 +442,26 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
             <WorkspaceSectionCard>
               <div className="grid gap-5">
                 <Field
-                  label="Select"
+                  label="Selection popover"
                   htmlFor="design-audit-status"
-                  description="Standard shadcn single-selection control."
+                  description="Searchable single-selection control with keyboard focus."
                 >
-                  <Select defaultValue="review">
-                    <SelectTrigger id="design-audit-status">
-                      <SelectValue placeholder="Choose a status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="review">Review</SelectItem>
-                      <SelectItem value="ready">Ready</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SelectionPopover
+                    selectionMode="single"
+                    value={selectedAuditStatus}
+                    options={[
+                      { value: 'review', label: 'Review' },
+                      { value: 'ready', label: 'Ready' },
+                      { value: 'archived', label: 'Archived' }
+                    ]}
+                    onValueChange={setSelectedAuditStatus}
+                    label="Status"
+                    searchPlaceholder="Search statuses"
+                    triggerProps={{
+                      id: 'design-audit-status',
+                      'aria-label': 'Status'
+                    }}
+                  />
                 </Field>
                 <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
                   <div>
@@ -472,8 +500,20 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
               <div className="mt-4 flex flex-wrap gap-2">
                 <Badge>Default</Badge>
                 <Badge variant="secondary">Secondary</Badge>
+                <Badge variant="pill">Pill</Badge>
                 <Badge variant="outline">Outline</Badge>
                 <Badge variant="destructive">Destructive</Badge>
+              </div>
+              <h3 className="mt-6 font-semibold text-foreground">Status chips</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Semantic values use a colored icon and normal foreground text. Chips are transparent
+                by default, with an opt-in pill surface for grouped controls.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <StatusChip item={getTaskStatusChipItem('in-progress')} />
+                <StatusChip item={getTaskPriorityChipItem('high')} />
+                <StatusChip item={getCalendarTaskTypeChipItem('meeting')} />
+                <StatusChip item={getTaskStatusChipItem('completed')} surface="pill" />
               </div>
               <Card className="mt-5 border-border bg-card">
                 <CardHeader>
@@ -538,7 +578,11 @@ export function DesignAuditPage({ themeVersion }: { themeVersion: string }): Rea
                   <DialogTrigger asChild>
                     <Button variant="outline">Open dialog</Button>
                   </DialogTrigger>
-                  <DialogContent data-testid="design-audit-dialog" showCloseButton={false}>
+                  <DialogContent
+                    className="max-w-lg"
+                    data-testid="design-audit-dialog"
+                    showCloseButton={false}
+                  >
                     <DialogShell>
                       <DialogHeader>
                         <DialogTitle>Dialog specimen</DialogTitle>

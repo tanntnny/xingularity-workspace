@@ -2,11 +2,13 @@ import type { ReactElement } from 'react'
 import {
   Breadcrumb,
   BreadcrumbButton,
+  BreadcrumbIconLabel,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator
 } from '../ui'
+import { Bolt } from '../ui/icons'
 import type { SchedulingView } from './types'
 
 interface SchedulingBreadcrumbProps {
@@ -27,14 +29,20 @@ export function SchedulingBreadcrumb({
       <BreadcrumbList className="text-muted-foreground">
         <BreadcrumbItem>
           {value === 'list' ? (
-            <BreadcrumbPage className="text-sm text-foreground">Scheduling</BreadcrumbPage>
+            <BreadcrumbPage className="text-sm text-foreground">
+              <BreadcrumbIconLabel icon={<Bolt size={14} aria-hidden="true" />}>
+                Scheduling
+              </BreadcrumbIconLabel>
+            </BreadcrumbPage>
           ) : (
             <BreadcrumbButton
               onClick={() => onNavigate('list')}
               className="text-sm text-muted-foreground"
               data-testid="scheduling-breadcrumb:scheduling"
             >
-              Scheduling
+              <BreadcrumbIconLabel icon={<Bolt size={14} aria-hidden="true" />}>
+                Scheduling
+              </BreadcrumbIconLabel>
             </BreadcrumbButton>
           )}
         </BreadcrumbItem>
@@ -43,7 +51,9 @@ export function SchedulingBreadcrumb({
             <BreadcrumbSeparator className="text-muted-foreground" />
             <BreadcrumbItem>
               <BreadcrumbPage className="max-w-[260px] truncate text-sm font-semibold text-foreground">
-                {currentLabel}
+                <BreadcrumbIconLabel icon={<Bolt size={14} aria-hidden="true" />}>
+                  {currentLabel}
+                </BreadcrumbIconLabel>
               </BreadcrumbPage>
             </BreadcrumbItem>
           </>

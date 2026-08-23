@@ -16,7 +16,7 @@ async function createFixtureVault(): Promise<string> {
     path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(
       createStoredNoteDocumentFromText(
-        'Inline `const value = 42` code\n\n```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n\n---\n\n> A consistent quote\n\n> [!INFO] Informational callout\n> Details\n\nBroken inline $2^{\n'
+        '# Heading 1\n\n## Heading 2\n\n### Heading 3\n\n#### Heading 4\n\n##### Heading 5\n\n###### Heading 6\n\nInline `const value = 42` code\n\n```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n\n---\n\n> A consistent quote\n\n> [!INFO] Informational callout\n> Details\n\nBroken inline $2^{\n'
       )
     ),
     'utf-8'
@@ -24,8 +24,8 @@ async function createFixtureVault(): Promise<string> {
   return rootPath
 }
 
-for (const colorScheme of ['light', 'dark'] as const) {
-  test(`renders major markdown blocks with the ${colorScheme} editor palette`, async () => {
+for (const colorScheme of ['light'] as const) {
+  test('renders the dark editor palette when the OS requests light mode', async () => {
     const vaultRoot = await createFixtureVault()
     const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-code-style-user-'))
     await fs.writeFile(
@@ -93,6 +93,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
       const editor = editorRoot.locator('.milkdown').first()
       await expect(editor).toBeVisible({ timeout: 20_000 })
 
+      const headingWeights = await editorRoot.locator('.ProseMirror').evaluate((element) => {
+        const headings = Array.from(element.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'))
+        return headings.map((heading) => Number.parseInt(getComputedStyle(heading).fontWeight, 10))
+      })
+      expect(headingWeights).toEqual([650, 625, 600, 575, 550, 500])
+
       const editorThemeStyles = await editor.evaluate((element) => {
         const resolveColor = (
           property: 'backgroundColor' | 'borderTopColor' | 'color',
@@ -117,15 +123,17 @@ for (const colorScheme of ['light', 'dark'] as const) {
             ? getComputedStyle(paragraph, '::selection').backgroundColor
             : null,
           selectionColor: paragraph ? getComputedStyle(paragraph, '::selection').color : null,
-          expectedSelectionBackground: resolveColor('backgroundColor', '--accent'),
-          expectedSelectionColor: resolveColor('color', '--accent-foreground'),
+          expectedSelectionBackground: resolveColor('backgroundColor', '--note-editor-selection'),
+          expectedSelectionColor: resolveColor('color', '--note-editor-selection-foreground'),
           toolbarBackground: toolbar ? getComputedStyle(toolbar).backgroundColor : null,
           toolbarBorderColor: toolbar ? getComputedStyle(toolbar).borderTopColor : null,
           toolbarIconColor: toolbarIcon ? getComputedStyle(toolbarIcon).color : null,
           linkPreviewBackground: linkPreview ? getComputedStyle(linkPreview).backgroundColor : null,
           expectedSurface: resolveColor('backgroundColor', '--popover'),
           expectedPopupBorder: resolveColor('borderTopColor', '--note-editor-popup-border'),
-          expectedMutedForeground: resolveColor('color', '--note-editor-muted-foreground')
+          expectedOverlayForeground: resolveColor('color', '--popover-foreground'),
+          expectedOverlayHover: resolveColor('backgroundColor', '--surface-subtle-hover'),
+          expectedBorderWidth: getComputedStyle(element).getPropertyValue('--border-width').trim()
         }
       })
 
@@ -135,8 +143,42 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(editorThemeStyles.selectionColor).toBe(editorThemeStyles.expectedSelectionColor)
       expect(editorThemeStyles.toolbarBackground).toBe(editorThemeStyles.expectedSurface)
       expect(editorThemeStyles.toolbarBorderColor).toBe(editorThemeStyles.expectedPopupBorder)
-      expect(editorThemeStyles.toolbarIconColor).toBe(editorThemeStyles.expectedMutedForeground)
+      expect(editorThemeStyles.toolbarIconColor).toBe(editorThemeStyles.expectedOverlayForeground)
       expect(editorThemeStyles.linkPreviewBackground).toBe(editorThemeStyles.expectedSurface)
+
+      const selectableParagraph = editorRoot
+        .locator('.ProseMirror p')
+        .filter({ hasText: 'Inline' })
+        .first()
+      await selectableParagraph.selectText()
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ''))
+        .toContain('Inline')
+
+      const selectedTextStyles = await selectableParagraph.evaluate((element) => {
+        const selection = getComputedStyle(element, '::selection')
+        return {
+          backgroundColor: selection.backgroundColor,
+          color: selection.color
+        }
+      })
+      expect(selectedTextStyles.backgroundColor).toBe(editorThemeStyles.expectedSelectionBackground)
+      expect(selectedTextStyles.color).toBe(editorThemeStyles.expectedSelectionColor)
+
+      const toolbar = editor.locator('.milkdown-toolbar')
+      await expect(toolbar).toHaveAttribute('data-show', 'true')
+      const visibleToolbarStyles = await toolbar.evaluate((element) => {
+        const toolbarIcon = element.querySelector<SVGElement>('.toolbar-item:not(.active) svg')
+        const computed = getComputedStyle(element)
+        return {
+          backgroundColor: computed.backgroundColor,
+          color: computed.color,
+          iconColor: toolbarIcon ? getComputedStyle(toolbarIcon).color : null
+        }
+      })
+      expect(visibleToolbarStyles.backgroundColor).toBe(editorThemeStyles.expectedSurface)
+      expect(visibleToolbarStyles.color).toBe(editorThemeStyles.expectedOverlayForeground)
+      expect(visibleToolbarStyles.iconColor).toBe(editorThemeStyles.expectedOverlayForeground)
 
       const callout = editorRoot.locator('.note-callout-info').first()
       await expect(callout).toBeVisible({ timeout: 20_000 })
@@ -176,7 +218,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(styles).toMatchObject({
         backgroundColor: 'rgba(0, 0, 0, 0)',
         borderTopStyle: 'solid',
-        borderTopWidth: '1px',
+        borderTopWidth: editorThemeStyles.expectedBorderWidth,
         codeBackgroundColor: 'rgba(0, 0, 0, 0)'
       })
       expect(styles.borderTopColor).not.toBe('rgba(0, 0, 0, 0)')
@@ -198,11 +240,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
       })
 
       expect(inlineCodeStyles).toMatchObject({
-        backgroundColor: colorScheme === 'dark' ? 'rgb(34, 34, 34)' : 'rgb(238, 238, 238)',
-        borderTopColor: colorScheme === 'dark' ? 'rgb(74, 74, 74)' : 'rgb(199, 199, 199)',
+        backgroundColor: 'rgb(34, 34, 34)',
+        borderTopColor: 'rgb(74, 74, 74)',
         borderTopStyle: 'solid',
-        borderTopWidth: '1px',
-        color: colorScheme === 'dark' ? 'rgb(238, 238, 238)' : 'rgb(26, 26, 26)'
+        borderTopWidth: editorThemeStyles.expectedBorderWidth,
+        color: 'rgb(238, 238, 238)'
       })
       expect(inlineCodeStyles.fontFamily).toContain('JetBrains Mono')
 
@@ -221,7 +263,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
       expect(tableBlockStyles.borderTopColor).toBe(styles.borderTopColor)
       expect(tableBlockStyles.borderTopStyle).toBe('solid')
-      expect(tableBlockStyles.borderTopWidth).toBe('1px')
+      expect(tableBlockStyles.borderTopWidth).toBe(editorThemeStyles.expectedBorderWidth)
       expect(tableBlockStyles.borderTopLeftRadius).toBe(styles.borderTopLeftRadius)
 
       const table = editorRoot.locator('.ProseMirror .milkdown-table-block table').first()
@@ -256,7 +298,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(separator).toHaveCount(1, { timeout: 20_000 })
       await expect(separator).toHaveCSS('border-top-color', styles.borderTopColor)
       await expect(separator).toHaveCSS('border-top-style', 'solid')
-      await expect(separator).toHaveCSS('border-top-width', '1px')
+      await expect(separator).toHaveCSS('border-top-width', editorThemeStyles.expectedBorderWidth)
 
       const quote = editorRoot.locator('.ProseMirror blockquote').first()
       await expect(quote).toHaveCount(1, { timeout: 20_000 })
@@ -268,11 +310,65 @@ for (const colorScheme of ['light', 'dark'] as const) {
         probe.remove()
 
         return {
+          backgroundColor: getComputedStyle(element).backgroundColor,
+          borderTopWidth: getComputedStyle(element).borderTopWidth,
+          borderTopLeftRadius: getComputedStyle(element).borderTopLeftRadius,
           actual: getComputedStyle(element, '::before').backgroundColor,
           expected
         }
       })
+      expect(quoteAccentColors.backgroundColor).toBe('rgba(0, 0, 0, 0)')
+      expect(quoteAccentColors.borderTopWidth).toBe('0px')
+      expect(quoteAccentColors.borderTopLeftRadius).toBe('0px')
       expect(quoteAccentColors.actual).toBe(quoteAccentColors.expected)
+
+      await editorRoot.locator('.ProseMirror').click()
+      await page.keyboard.press('Control+End')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('/')
+
+      const slashPopover = page.getByTestId('note-slash-completion')
+      await expect(slashPopover).toBeVisible()
+      await page.keyboard.press('ArrowDown')
+      const selectedSlashItem = slashPopover.locator('[cmdk-item][data-selected="true"]').first()
+      await expect(selectedSlashItem).toBeVisible()
+      await expect
+        .poll(
+          () => selectedSlashItem.evaluate((element) => getComputedStyle(element).backgroundColor),
+          {
+            timeout: 2_000
+          }
+        )
+        .toBe(editorThemeStyles.expectedOverlayHover)
+
+      const slashPopoverStyles = await slashPopover.evaluate((element) => {
+        const root = element.querySelector<HTMLElement>('[cmdk-root]')
+        const item = element.querySelector<HTMLElement>('[cmdk-item][data-selected="true"]')
+        if (!root || !item) {
+          throw new Error(
+            `Expected slash command content. HTML: ${element.outerHTML.slice(0, 2000)}`
+          )
+        }
+
+        return {
+          backgroundColor: getComputedStyle(element).backgroundColor,
+          color: getComputedStyle(element).color,
+          borderTopColor: getComputedStyle(element).borderTopColor,
+          commandBackgroundColor: getComputedStyle(root).backgroundColor,
+          commandColor: getComputedStyle(root).color,
+          selectedBackgroundColor: getComputedStyle(item).backgroundColor,
+          selectedColor: getComputedStyle(item).color
+        }
+      })
+      expect(slashPopoverStyles.backgroundColor).toBe(editorThemeStyles.expectedSurface)
+      expect(slashPopoverStyles.color).toBe(editorThemeStyles.expectedOverlayForeground)
+      expect(slashPopoverStyles.borderTopColor).toBe(editorThemeStyles.expectedPopupBorder)
+      expect(slashPopoverStyles.commandBackgroundColor).toBe(editorThemeStyles.expectedSurface)
+      expect(slashPopoverStyles.commandColor).toBe(editorThemeStyles.expectedOverlayForeground)
+      expect(slashPopoverStyles.selectedBackgroundColor).toBe(
+        editorThemeStyles.expectedOverlayHover
+      )
+      expect(slashPopoverStyles.selectedColor).toBe(editorThemeStyles.expectedOverlayForeground)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

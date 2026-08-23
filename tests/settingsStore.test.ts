@@ -71,7 +71,19 @@ describe('SettingsStore', () => {
               name: 'Migration',
               summary: 'Legacy project',
               updatedAt: '2026-05-01T00:00:00.000Z',
-              icon: { shape: 'circle', variant: 'filled', color: '#000000' }
+              icon: { shape: 'circle', variant: 'filled', color: '#000000' },
+              updates: [
+                {
+                  id: 'legacy-update',
+                  projectId: 'project-1',
+                  title: 'Legacy title is ignored',
+                  markdown: 'Legacy update content',
+                  status: 'published',
+                  createdAt: '2026-04-30T00:00:00.000Z',
+                  updatedAt: '2026-05-01T00:00:00.000Z',
+                  publishedAt: '2026-05-01T00:00:00.000Z'
+                }
+              ]
             }
           ],
           projectIcons: {}
@@ -125,9 +137,19 @@ describe('SettingsStore', () => {
     expect(settings.projects).toHaveLength(1)
     expect(settings.projects[0].state).toBe('active')
     expect(settings.projects[0].tags).toEqual([])
-    expect(settings.projects[0].resources).toEqual([])
+    expect(settings.projects[0].resourceRefs ?? []).toEqual([])
     expect(settings.projects[0].startDate).toBeUndefined()
     expect(settings.projects[0].endDate).toBeUndefined()
+    expect(settings.projects[0].updates).toEqual([
+      {
+        id: 'legacy-update',
+        projectId: 'project-1',
+        markdown: 'Legacy update content',
+        status: 'on-track',
+        createdAt: '2026-04-30T00:00:00.000Z',
+        updatedAt: '2026-05-01T00:00:00.000Z'
+      }
+    ])
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0].taskType).toBe('follow-up')
     expect(settings.calendarTasks[0].status).toBe('pending')
@@ -463,5 +485,39 @@ describe('SettingsStore', () => {
     await expect(
       fs.readFile(path.join(root, 'projects', 'project-1.json'), 'utf-8')
     ).resolves.toContain('"title": "Launch"')
+  })
+
+  it('normalizes canceled tasks as completed for persistence compatibility', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const canceledTask = {
+      id: 'task-canceled',
+      title: 'Canceled task',
+      tags: [],
+      completed: false,
+      status: 'canceled' as const,
+      createdAt: '2026-08-13T00:00:00.000Z',
+      priority: 'low' as const,
+      taskType: 'assignment' as const,
+      reminders: []
+    }
+
+    const settings = await store.updateVault(root, {
+      tasks: [canceledTask],
+      calendarTasks: [canceledTask]
+    })
+
+    expect(settings.calendarTasks[0]).toMatchObject({
+      status: 'canceled',
+      completed: true
+    })
+    await expect(
+      fs.readFile(path.join(root, 'tasks', 'task-canceled.json'), 'utf-8')
+    ).resolves.toMatch(/"status": "canceled"/)
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({
+        calendarTasks: [expect.objectContaining({ status: 'canceled', completed: true })]
+      })
+    )
   })
 })

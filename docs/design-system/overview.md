@@ -32,7 +32,10 @@ For Tailwind applications, include the installed package in the content scan so 
 classes are emitted:
 
 ```ts
-content: ['./src/**/*.{ts,tsx}', './node_modules/@xingularity/workspace-template/dist/**/*.{js,mjs}']
+content: [
+  './src/**/*.{ts,tsx}',
+  './node_modules/@xingularity/workspace-template/dist/**/*.{js,mjs}'
+]
 ```
 
 ## Current Canonical Patterns
@@ -42,6 +45,11 @@ content: ['./src/**/*.{ts,tsx}', './node_modules/@xingularity/workspace-template
 - Page cards: `WorkspaceSectionCard`
 - Empty states: `WorkspaceEmptyState`
 - Settings/forms: `Field` + `Input`/`Select`/`Switch`/`Textarea`
+- Semantic values: `StatusChip` for read-only values and `StatusChipSelect` for compact selection;
+  all chip labels use the compact 12px (`text-xs`) size, icons carry the semantic color, and labels
+  stay `text-foreground`, with only the accent hover surface visible by default.
+- `Badge` remains for utility metadata such as counts, dates, and error details—not semantic
+  status, priority, type, tag, health, or resource-state values.
 - Shell shortcuts: `useWorkspaceShellShortcuts`
 - Cross-app shell: `WorkspaceAppShell` + `WorkspaceSidebar` + `WorkspaceCommandPalette` +
   `WorkspaceTabManager`

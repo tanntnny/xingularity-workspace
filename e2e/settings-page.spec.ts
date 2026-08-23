@@ -76,18 +76,26 @@ test.describe('settings page', () => {
 
     try {
       await page.getByRole('button', { name: 'Settings' }).first().click()
-      await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Settings' })).toHaveCount(0)
+      const settingsTabs = page.getByTestId('settings-tabs')
+      await expect(settingsTabs).toBeVisible()
+      const themeStyles = await page.evaluate(() => ({
+        colorScheme: getComputedStyle(document.documentElement).colorScheme,
+        bodyBackground: getComputedStyle(document.body).backgroundColor
+      }))
+      expect(themeStyles.colorScheme).toBe('dark')
+      expect(themeStyles.bodyBackground).toBe('rgb(8, 8, 8)')
       await expect(page.getByText('Editor Defaults', { exact: true })).toHaveCount(0)
       await expect(page.getByText('Shortcuts', { exact: true })).toHaveCount(0)
 
-      await expect(page.getByRole('radio', { name: 'Profile' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: 'Workspace' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: 'Appearance' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: 'Editor' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: 'Agent' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: 'Notification' })).toHaveCount(0)
+      await expect(settingsTabs.getByRole('tab', { name: 'Profile' })).toBeVisible()
+      await expect(settingsTabs.getByRole('tab', { name: 'Workspace' })).toBeVisible()
+      await expect(settingsTabs.getByRole('tab', { name: 'Appearance' })).toBeVisible()
+      await expect(settingsTabs.getByRole('tab', { name: 'Editor' })).toBeVisible()
+      await expect(settingsTabs.getByRole('tab', { name: 'Agent' })).toBeVisible()
+      await expect(settingsTabs.getByRole('tab', { name: 'Notification' })).toHaveCount(0)
 
-      await page.getByRole('radio', { name: 'Workspace' }).click()
+      await settingsTabs.getByRole('tab', { name: 'Workspace' }).click()
       await expect(page.getByRole('heading', { name: 'Workspace' })).toBeVisible()
       await expect(page.getByText('Active Vault', { exact: true })).toBeVisible()
       await expect(page.locator('[aria-label="Vault storage"]').getByText(vaultRoot)).toBeVisible()
@@ -107,18 +115,18 @@ test.describe('settings page', () => {
       await expect(page.getByRole('dialog', { name: 'Manage vaults' })).toHaveCount(0)
       await expect(page.getByText('App Font')).toHaveCount(0)
 
-      await page.getByRole('radio', { name: 'Appearance' }).click()
+      await settingsTabs.getByRole('tab', { name: 'Appearance' }).click()
       await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
       await expect(page.getByText('App Font', { exact: true })).toBeVisible()
       await expect(page.getByText('Color Theme', { exact: true })).toBeVisible()
-      await expect(page.getByText('Monotone', { exact: true })).toBeVisible()
+      await expect(page.getByText('Dark', { exact: true })).toBeVisible()
       await expect(page.getByText('Performance Mode', { exact: true })).toHaveCount(0)
       await expect(page.getByRole('switch', { name: 'Enable performance mode' })).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Atmosphere' })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: 'Monotone' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Dark' })).toHaveCount(0)
       await expect(page.getByText('Active Vault')).toHaveCount(0)
 
-      await page.getByRole('radio', { name: 'Editor' }).click()
+      await settingsTabs.getByRole('tab', { name: 'Editor' }).click()
       await expect(page.getByRole('heading', { name: 'Editor' })).toBeVisible()
       await expect(page.getByText('Vim Mode', { exact: true })).toBeVisible()
       await expect(page.getByTestId('vim-mode-setting-icon')).toBeVisible()
@@ -142,9 +150,15 @@ test.describe('settings page', () => {
           }
         ])
       await page.getByRole('button', { name: 'Add Mapping' }).click()
-      await page.getByLabel('Mode').nth(1).selectOption('visual')
+      await page.getByLabel('Mode').nth(1).click()
+      const modePopover = page.getByRole('dialog', { name: 'Mode options' })
+      await modePopover.getByRole('textbox', { name: 'Search modes' }).fill('visual')
+      await modePopover.getByText('Visual', { exact: true }).click()
       await page.getByPlaceholder('ij').nth(1).fill('Y')
-      await page.getByLabel('Action').nth(1).selectOption('yankSelection')
+      await page.getByLabel('Action').nth(1).click()
+      const actionPopover = page.getByRole('dialog', { name: 'Action options' })
+      await actionPopover.getByRole('textbox', { name: 'Search actions' }).fill('yank')
+      await actionPopover.getByText('Yank selection', { exact: true }).click()
       await expect
         .poll(async () => (await readVaultSettings(vaultRoot)).editorVimKeyMappings)
         .toEqual([
@@ -162,7 +176,7 @@ test.describe('settings page', () => {
           }
         ])
 
-      await page.getByRole('radio', { name: 'Agent' }).click()
+      await settingsTabs.getByRole('tab', { name: 'Agent' }).click()
       await expect(page.getByRole('heading', { name: 'Agent' })).toBeVisible()
       await expect(page.getByText('Mistral API Key')).toBeVisible()
     } finally {

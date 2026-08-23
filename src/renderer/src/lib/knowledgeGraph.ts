@@ -1,6 +1,16 @@
 import { getNoteDisplayName } from '../../../shared/noteDocument'
 import { createNoteMentionResolver } from '../../../shared/noteMentions'
-import type { NoteListItem } from '../../../shared/types'
+import type { CalendarTask, NoteListItem, Project, ResourceRef } from '../../../shared/types'
+
+export type KnowledgeEntityKind = 'project' | 'task' | 'resource'
+
+export interface KnowledgeGraphEntity {
+  kind: KnowledgeEntityKind
+  id: string
+  label: string
+  projectId?: string
+  dependencyIds?: string[]
+}
 
 export interface KnowledgeGraphNode {
   id: string
@@ -8,11 +18,14 @@ export interface KnowledgeGraphNode {
   label: string
   degree: number
   isOrphan: boolean
+  kind?: 'note' | KnowledgeEntityKind
+  entityId?: string
 }
 
 export interface KnowledgeGraphLink {
   source: string
   target: string
+  relationType?: 'mention' | 'project-task' | 'project-resource' | 'task-dependency'
 }
 
 export interface KnowledgeGraphData {
@@ -20,7 +33,10 @@ export interface KnowledgeGraphData {
   links: KnowledgeGraphLink[]
 }
 
-export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
+export function buildKnowledgeGraph(
+  notes: NoteListItem[],
+  entities: KnowledgeGraphEntity[] = []
+): KnowledgeGraphData {
   const resolveNoteMentionTarget = createNoteMentionResolver(notes)
   const degreeByPath = new Map<string, number>()
   const links: KnowledgeGraphLink[] = []
@@ -47,6 +63,45 @@ export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
     })
   })
 
+  const entityNodes = entities.map((entity) => ({
+    id: `${entity.kind}:${entity.id}`,
+    relPath: `${entity.kind}:${entity.id}`,
+    label: entity.label,
+    degree: 0,
+    isOrphan: true,
+    kind: entity.kind,
+    entityId: entity.id
+  }))
+  const entityById = new Map(entities.map((entity) => [`${entity.kind}:${entity.id}`, entity]))
+  const addEntityLink = (
+    source: string,
+    target: string,
+    relationType: KnowledgeGraphLink['relationType']
+  ): void => {
+    if (!entityById.has(source) || !entityById.has(target)) return
+    const linkKey = `${source}::${target}::${relationType}`
+    if (linkKeys.has(linkKey)) return
+    linkKeys.add(linkKey)
+    links.push({ source, target, relationType })
+    degreeByPath.set(source, (degreeByPath.get(source) ?? 0) + 1)
+    degreeByPath.set(target, (degreeByPath.get(target) ?? 0) + 1)
+  }
+
+  for (const entity of entities) {
+    const entityId = `${entity.kind}:${entity.id}`
+    if (entity.kind === 'task' && entity.projectId) {
+      addEntityLink(entityId, `project:${entity.projectId}`, 'project-task')
+    }
+    if (entity.kind === 'task') {
+      for (const dependencyId of entity.dependencyIds ?? []) {
+        addEntityLink(entityId, `task:${dependencyId}`, 'task-dependency')
+      }
+    }
+    if (entity.kind === 'resource' && entity.projectId) {
+      addEntityLink(entityId, `project:${entity.projectId}`, 'project-resource')
+    }
+  }
+
   const nodes = notes
     .map((note) => ({
       id: note.relPath,
@@ -62,7 +117,39 @@ export function buildKnowledgeGraph(notes: NoteListItem[]): KnowledgeGraphData {
         left.label.localeCompare(right.label)
     )
 
-  return { nodes, links }
+  for (const node of entityNodes) {
+    node.degree = degreeByPath.get(node.id) ?? 0
+    node.isOrphan = node.degree === 0
+  }
+
+  return { nodes: [...nodes, ...entityNodes], links }
+}
+
+export function createKnowledgeGraphEntities(
+  projects: Project[],
+  tasks: CalendarTask[],
+  resources: ResourceRef[] = []
+): KnowledgeGraphEntity[] {
+  return [
+    ...projects.map((project) => ({
+      kind: 'project' as const,
+      id: project.id,
+      label: project.name
+    })),
+    ...tasks.map((task) => ({
+      kind: 'task' as const,
+      id: task.id,
+      label: task.title,
+      projectId: task.projectId,
+      dependencyIds: task.dependencyIds
+    })),
+    ...resources.map((resource) => ({
+      kind: 'resource' as const,
+      id: resource.id,
+      label: resource.title,
+      projectId: resource.projectIds?.[0]
+    }))
+  ]
 }
 
 export function filterKnowledgeGraph(

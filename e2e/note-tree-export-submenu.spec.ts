@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -191,7 +191,45 @@ async function expectMenuItemOnTop(
   expect(hitTest.element?.testId, JSON.stringify({ box, hitTest })).toBe(expectedTestId)
 }
 
-test('opens folder export submenus when hovering the parent item', async () => {
+async function expectMenuItemsToHighlightOnHover(page: Page, menu: Locator): Promise<void> {
+  const items = menu.locator('[role="menuitem"]:visible:not([data-disabled="true"])')
+  const count = await items.count()
+  expect(count).toBeGreaterThan(0)
+
+  for (let index = 0; index < count; index += 1) {
+    const item = items.nth(index)
+    const before = await item.evaluate((element) => getComputedStyle(element).backgroundColor)
+    await item.hover()
+    await expect
+      .poll(async () => item.evaluate((element) => getComputedStyle(element).backgroundColor), {
+        timeout: 2_000
+      })
+      .not.toBe(before)
+  }
+}
+
+async function expectVisibleMenuLayersToHighlightOnHover(page: Page): Promise<void> {
+  const menus = page.locator('[role="menu"]:visible')
+  let checkedMenuCount = 0
+  const count = await menus.count()
+  expect(count).toBeGreaterThan(0)
+
+  for (let index = 0; index < count; index += 1) {
+    const menu = menus.nth(index)
+    const items = menu.locator('[role="menuitem"]:visible:not([data-disabled="true"])')
+
+    if ((await items.count()) === 0) {
+      continue
+    }
+
+    await expectMenuItemsToHighlightOnHover(page, menu)
+    checkedMenuCount += 1
+  }
+
+  expect(checkedMenuCount).toBeGreaterThan(0)
+}
+
+test('highlights every folder context-menu option on hover', async () => {
   const vaultRoot = await createFixtureVault()
   const { electronApp, page, userDataPath } = await launchWithFixture(vaultRoot)
 
@@ -209,12 +247,14 @@ test('opens folder export submenus when hovering the parent item', async () => {
     await expect(dropdownPdf).not.toBeVisible()
     await expect(dropdownMarkdown).not.toBeVisible()
 
+    await expectVisibleMenuLayersToHighlightOnHover(page)
     await dropdownParent.hover()
     await expect(dropdownParent).toHaveAttribute('data-state', 'open')
     await expect(dropdownPdf).toBeVisible()
     await expect(dropdownMarkdown).toBeVisible()
     await expectMenuItemOnTop(page, dropdownPdf)
     await expectMenuItemOnTop(page, dropdownMarkdown)
+    await expectMenuItemsToHighlightOnHover(page, page.locator('[role="menu"]:visible').last())
 
     await page.keyboard.press('Escape')
     await archiveRow.click({ button: 'right' })
@@ -226,12 +266,14 @@ test('opens folder export submenus when hovering the parent item', async () => {
     await expect(contextPdf).not.toBeVisible()
     await expect(contextMarkdown).not.toBeVisible()
 
+    await expectVisibleMenuLayersToHighlightOnHover(page)
     await contextParent.hover()
     await expect(contextParent).toHaveAttribute('data-state', 'open')
     await expect(contextPdf).toBeVisible()
     await expect(contextMarkdown).toBeVisible()
     await expectMenuItemOnTop(page, contextPdf)
     await expectMenuItemOnTop(page, contextMarkdown)
+    await expectMenuItemsToHighlightOnHover(page, page.locator('[role="menu"]:visible').last())
   } finally {
     await electronApp.close()
     await fs.rm(vaultRoot, { recursive: true, force: true })

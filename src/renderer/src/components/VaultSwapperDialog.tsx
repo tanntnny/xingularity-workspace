@@ -24,9 +24,9 @@ interface VaultSwapperDialogProps {
 const paletteRowClassName =
   'relative flex min-w-0 items-center gap-2 select-none rounded-lg px-2 py-1.5 text-sm outline-none transition-[background-color,color,box-shadow] disabled:pointer-events-none disabled:opacity-50'
 
-const paletteRowHoverClassName = 'hover:bg-accent'
+const paletteRowHoverClassName = 'hover:bg-muted'
 
-const paletteRowSelectedClassName = 'bg-accent'
+const paletteRowSelectedClassName = 'bg-muted'
 
 type VaultPaletteSelectionItem =
   | {
@@ -435,7 +435,7 @@ export function VaultSwapperDialog({
 
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="rowAction"
                   size="icon"
                   className={cn(
                     paletteRowClassName,
@@ -464,7 +464,7 @@ export function VaultSwapperDialog({
 
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="rowAction"
                   size="icon"
                   className={cn(
                     paletteRowClassName,
@@ -484,7 +484,7 @@ export function VaultSwapperDialog({
           })}
 
           {filteredVaults.length > 0 && filteredActions.length > 0 ? (
-            <div className="mx-1 my-1 h-px bg-border" />
+            <div className="mx-1 my-1 h-[var(--border-width)] bg-border" />
           ) : null}
 
           {filteredActions.map((action) => {

@@ -10,7 +10,8 @@ const dropZoneVariants = cva(
         surface: 'rounded-md',
         indicator: 'pointer-events-none',
         timed: 'rounded-none',
-        row: 'rounded-md'
+        row: 'rounded-md data-[drag-over=true]:shadow-sm',
+        content: 'rounded-none'
       }
     },
     defaultVariants: {
@@ -59,7 +60,7 @@ const DropZoneImpl = <T extends React.ElementType = 'div'>(
       aria-disabled={disabled || undefined}
       className={cn(
         dropZoneVariants({ variant }),
-        isCalendarTone
+        variant === 'content' || variant === 'row' || isCalendarTone
           ? 'border-0'
           : 'border border-[var(--drop-zone-border)] data-[drag-over=true]:border-[var(--drop-zone-active-border)]',
         className

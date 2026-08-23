@@ -3,13 +3,22 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { assertSafeRelativePath, ensureWithinBase, joinSafe } from '../shared/pathSafety'
 import { isExcalidrawPath } from '../shared/excalidrawFile'
-import type { AppSettings, WeeklyPlanState } from '../shared/types'
+import type { AppSettings, MutationEnvelope, WeeklyPlanState } from '../shared/types'
 
 export interface TrashedEntry {
   originalRelPath: string
   trashRelPath: string
   kind: 'file' | 'folder'
   deletedAt: string
+  operationId?: string
+}
+
+export interface TrashRecord {
+  id: string
+  type: string
+  deletedAt: string
+  operationId?: string
+  payload: unknown
 }
 
 export class TrashService {
@@ -33,6 +42,7 @@ export class TrashService {
     const kind = stats.isDirectory() ? 'folder' : 'file'
     const deletedAt = new Date().toISOString()
     const entryId = `${formatTimestampForPath(deletedAt)}-${safeName(path.basename(relPath))}-${randomUUID().slice(0, 8)}`
+    const operationId = randomUUID()
     const trashRelPath = path.posix.join('files', entryId, relPath)
     const targetPath = this.resolveTrashPath(trashRelPath)
 
@@ -46,14 +56,16 @@ export class TrashService {
       originalRelPath: relPath,
       trashRelPath,
       kind,
-      deletedAt
+      deletedAt,
+      operationId
     })
 
     return {
       originalRelPath: relPath,
       trashRelPath,
       kind,
-      deletedAt
+      deletedAt,
+      operationId
     }
   }
 
@@ -73,7 +85,11 @@ export class TrashService {
     return restoreRelPath
   }
 
-  async archiveSettingsDeletes(previous: AppSettings, next: AppSettings): Promise<void> {
+  async archiveSettingsDeletes(
+    previous: AppSettings,
+    next: AppSettings,
+    operation?: MutationEnvelope
+  ): Promise<void> {
     const records: Array<{ type: string; payload: unknown }> = []
     const nextProjectsById = new Map(next.projects.map((project) => [project.id, project]))
 
@@ -117,10 +133,16 @@ export class TrashService {
       }
     })
 
-    await Promise.all(records.map((record) => this.archiveRecord(record.type, record.payload)))
+    await Promise.all(
+      records.map((record) => this.archiveRecord(record.type, record.payload, operation?.id))
+    )
   }
 
-  async archiveWeeklyPlanDeletes(previous: WeeklyPlanState, next: WeeklyPlanState): Promise<void> {
+  async archiveWeeklyPlanDeletes(
+    previous: WeeklyPlanState,
+    next: WeeklyPlanState,
+    operation?: MutationEnvelope
+  ): Promise<void> {
     const records: Array<{ type: string; payload: unknown }> = []
     const nextWeekIds = new Set(next.weeks.map((week) => week.id))
     const nextPriorityIds = new Set(next.priorities.map((priority) => priority.id))
@@ -164,16 +186,58 @@ export class TrashService {
       }
     })
 
-    await Promise.all(records.map((record) => this.archiveRecord(record.type, record.payload)))
+    await Promise.all(
+      records.map((record) => this.archiveRecord(record.type, record.payload, operation?.id))
+    )
   }
 
-  private async archiveRecord(type: string, payload: unknown): Promise<void> {
+  async listRecords(): Promise<TrashRecord[]> {
+    const recordsRoot = path.join(this.trashRoot, 'records')
+    let entries: string[]
+    try {
+      entries = await fs.readdir(recordsRoot)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return []
+      }
+      throw error
+    }
+
+    const records: TrashRecord[] = []
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue
+      try {
+        const raw = JSON.parse(
+          await fs.readFile(path.join(recordsRoot, entry), 'utf-8')
+        ) as Partial<TrashRecord>
+        if (
+          typeof raw.type === 'string' &&
+          typeof raw.deletedAt === 'string' &&
+          raw.payload !== undefined
+        ) {
+          records.push({
+            id: entry.slice(0, -'.json'.length),
+            type: raw.type,
+            deletedAt: raw.deletedAt,
+            ...(typeof raw.operationId === 'string' ? { operationId: raw.operationId } : {}),
+            payload: raw.payload
+          })
+        }
+      } catch {
+        // A malformed trash record should not hide recoverable records.
+      }
+    }
+    return records.sort((left, right) => right.deletedAt.localeCompare(left.deletedAt))
+  }
+
+  private async archiveRecord(type: string, payload: unknown, operationId?: string): Promise<void> {
     const deletedAt = new Date().toISOString()
     const fileName = `${formatTimestampForPath(deletedAt)}-${safeName(type)}-${randomUUID().slice(0, 8)}.json`
     await this.writeJson(path.join(this.trashRoot, 'records', fileName), {
       type,
       deletedAt,
-      payload
+      payload,
+      ...(operationId ? { operationId } : {})
     })
   }
 

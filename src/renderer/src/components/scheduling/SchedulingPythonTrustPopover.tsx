@@ -1,5 +1,13 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { AlertCircle, Popover, PopoverContent, PopoverTrigger, WorkspaceIconButton, X } from '../ui'
+import {
+  AlertCircle,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  StatusChip,
+  WorkspaceIconButton,
+  X
+} from '../ui'
 
 export const PYTHON_TRUST_TITLE = 'Local Python trust boundary'
 export const PYTHON_TRUST_DESCRIPTION =
@@ -69,14 +77,15 @@ export function SchedulingPythonTrustPopover({
           <div
             role="status"
             data-testid="scheduling-python-trust-attention"
-            className="relative inline-flex h-8 items-center gap-1.5 rounded-full border border-warning-border bg-warning-muted px-2.5 text-xs font-semibold text-warning-muted-foreground shadow-sm"
+            className="inline-flex items-center gap-1"
           >
-            <span
-              aria-hidden="true"
-              className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rotate-45 border-b border-l border-warning-border bg-warning-muted"
+            <StatusChip
+              item={{
+                label: 'Review Python safety',
+                icon: <AlertCircle aria-hidden="true" />,
+                iconColorToken: 'var(--warning)'
+              }}
             />
-            <AlertCircle size={14} aria-hidden="true" />
-            <span>Review Python safety</span>
             <button
               type="button"
               onClick={dismissNotice}

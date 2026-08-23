@@ -42,19 +42,20 @@ describe('calendar task type colors', () => {
     expect(getCalendarTaskBorderToken()).toBe(CALENDAR_TASK_TYPE_BORDER_TOKENS.assignment)
   })
 
-  it('renders every task type with its matching label and colors', () => {
+  it('renders every task type through the shared semantic chip metadata', () => {
     for (const taskType of CALENDAR_TASK_TYPE_VALUES) {
       const element = CalendarTaskTypeBadge({ taskType })
       const props = element.props as {
-        children?: unknown
-        style?: Record<string, string>
+        item?: {
+          label?: unknown
+          iconColorToken?: string
+        }
       }
 
-      expect(props.children).toBe(formatCalendarTaskType(taskType))
-      expect(props.style).toMatchObject({
-        backgroundColor: CALENDAR_TASK_TYPE_BACKGROUND_TOKENS[taskType],
-        borderColor: CALENDAR_TASK_TYPE_BORDER_TOKENS[taskType]
-      })
+      expect(props.item?.label).toBe(formatCalendarTaskType(taskType))
+      expect(props.item?.iconColorToken).toBe(
+        `var(--status-chip-calendar-task-type-${taskType}-icon)`
+      )
     }
   })
 })

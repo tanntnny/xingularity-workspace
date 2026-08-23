@@ -55,6 +55,7 @@ test.describe('design audit page', () => {
       await expect(page.getByTestId('design-audit-section:foundations')).toBeVisible()
       await expect(page.getByTestId('design-audit-component:button')).toBeVisible()
       await expect(page.getByTestId('design-audit-token:accent')).toBeVisible()
+      await expect(page.getByTestId('design-audit-token:surface-subtle')).toBeVisible()
 
       await page.getByRole('radio', { name: 'Forms' }).click()
       await expect(page.getByTestId('design-audit-section:forms')).toBeVisible()

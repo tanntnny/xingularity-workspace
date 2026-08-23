@@ -177,8 +177,8 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
 function getNotePanelToggle(page: Page): Locator {
   return page
-    .getByTestId('note-panel-toggle:tree')
-    .or(page.getByTestId('note-panel-toggle'))
+    .getByTestId('note-file-tree-panel')
+    .getByRole('button', { name: 'File tree', exact: true })
     .or(page.getByTestId('notes-tree-view'))
     .or(page.getByTestId('notebook-empty-state'))
     .first()
@@ -435,6 +435,7 @@ test.describe('note page block editor switching', () => {
       await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
       await expect(page.getByTestId('notebook-card:alpha.md')).toBeVisible()
       await expect(page.getByTestId('notebook-card:beta.md')).toBeVisible()
+      await expect(page.getByTestId('notebook-card-menu:alpha.md')).toHaveCount(0)
       await page
         .getByTestId('notebook-card:archive')
         .getByRole('button', { name: 'Open folder archive' })
@@ -500,24 +501,243 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('opens context menus from notebook cards and unused browser space', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const browser = page.getByTestId('notebook-card-browser')
+      const content = page.getByTestId('notebook-card-content')
+      const alphaCard = page.getByTestId('notebook-card:alpha.md')
+      const betaCard = page.getByTestId('notebook-card:beta.md')
+      const archiveCard = page.getByTestId('notebook-card:archive')
+
+      await alphaCard.click({ button: 'right' })
+      const alphaMenu = page.getByTestId('notebook-card-context-menu:alpha.md')
+      await expect(alphaMenu).toBeVisible()
+      await expect(alphaMenu.getByRole('menuitem', { name: 'New note', exact: true })).toBeVisible()
+      await expect(alphaMenu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeVisible()
+      await expect(alphaCard.getByRole('button', { name: 'Open alpha' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      await page.keyboard.press('Escape')
+
+      await betaCard.click({ button: 'right' })
+      await expect(page.getByTestId('notebook-card-context-menu:beta.md')).toBeVisible()
+      await expect(betaCard.getByRole('button', { name: 'Open beta' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      await expect(alphaCard.getByRole('button', { name: 'Open alpha' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
+      await page.keyboard.press('Escape')
+
+      await archiveCard.click({ button: 'right' })
+      const archiveMenu = page.getByTestId('notebook-card-context-menu:archive')
+      await expect(archiveMenu).toBeVisible()
+      await expect(
+        archiveMenu.getByRole('menuitem', { name: 'Export nested notes', exact: true })
+      ).toBeVisible()
+      await archiveMenu.getByRole('menuitem', { name: 'Export nested notes', exact: true }).hover()
+      await expect(page.getByRole('menuitem', { name: 'as PDF', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+
+      const contentBox = await content.boundingBox()
+      if (!contentBox) {
+        throw new Error('Notebook browser content bounds are unavailable')
+      }
+
+      await page.mouse.click(
+        contentBox.x + Math.max(40, contentBox.width - 40),
+        contentBox.y + Math.max(40, contentBox.height - 40),
+        { button: 'right' }
+      )
+      const browserMenu = page.getByTestId('notebook-browser-context-menu')
+      await expect(browserMenu).toBeVisible()
+      await expect(
+        browserMenu.getByRole('menuitem', { name: 'New folder', exact: true })
+      ).toBeVisible()
+      await page.keyboard.press('Escape')
+
+      await archiveCard.getByRole('button', { name: 'Open folder archive' }).click()
+      await expect(browser.getByTestId('notebook-card-empty-state')).toBeVisible()
+
+      const emptyContentBox = await content.boundingBox()
+      if (!emptyContentBox) {
+        throw new Error('Empty notebook browser content bounds are unavailable')
+      }
+
+      await page.mouse.click(emptyContentBox.x + 16, emptyContentBox.y + 16, { button: 'right' })
+      await expect(browserMenu).toBeVisible()
+      await expect(
+        browserMenu.getByRole('menuitem', { name: 'New note', exact: true })
+      ).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('shows a rotated floating preview while dragging a notebook card', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('notebook-card-browser').getByTestId('notebook-card:alpha.md')
+      await expect(source).toBeVisible()
+
+      await page.evaluate(() => {
+        const source = document.querySelector<HTMLElement>('[data-testid="notebook-card:alpha.md"]')
+        if (!source) {
+          throw new Error('Notebook card drag fixture is missing')
+        }
+
+        const rect = source.getBoundingClientRect()
+        const dataTransfer = new DataTransfer()
+        source.dispatchEvent(
+          new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2
+          })
+        )
+      })
+
+      const floatingPreview = page.locator('[data-floating-drag-preview="true"]')
+      await expect(floatingPreview).toBeVisible()
+      await expect
+        .poll(() =>
+          floatingPreview.evaluate((element) => {
+            const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
+            return Math.abs(matrix.b) > 0.01 || Math.abs(matrix.c) > 0.01
+          })
+        )
+        .toBe(true)
+      await expect(source).toHaveAttribute('data-dragging', 'true')
+
+      await page.evaluate(() => {
+        const source = document.querySelector<HTMLElement>('[data-testid="notebook-card:alpha.md"]')
+        source?.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+      })
+
+      await expect(floatingPreview).toHaveCount(0)
+      await expect(source).toHaveAttribute('data-dragging', 'false')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves a notebook card into a folder by drag and drop', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('notebook-card:alpha.md')
+      const target = page.getByTestId('notebook-card:archive')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await page.evaluate(() => {
+        const source = document.querySelector<HTMLElement>('[data-testid="notebook-card:alpha.md"]')
+        const target = document.querySelector<HTMLElement>('[data-testid="notebook-card:archive"]')
+        if (!source || !target) {
+          throw new Error('Notebook card folder-drop fixtures are missing')
+        }
+
+        const sourceRect = source.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const dataTransfer = new DataTransfer()
+        const clientX = targetRect.left + targetRect.width / 2
+        const clientY = targetRect.top + targetRect.height / 2
+
+        source.dispatchEvent(
+          new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: sourceRect.left + sourceRect.width / 2,
+            clientY: sourceRect.top + sourceRect.height / 2
+          })
+        )
+        target.dispatchEvent(
+          new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX,
+            clientY
+          })
+        )
+        target.dispatchEvent(
+          new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX,
+            clientY
+          })
+        )
+        source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+      })
+
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'archive', 'alpha.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(true)
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'alpha.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(false)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('opens the note export dialog and selects PDF', async () => {
     const vaultRoot = await createFixtureVault('Export me\n')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await page.getByLabel('Export Note').click()
+      await openNote(page, 'alpha.md')
+      await expect(page.getByTestId('note-block-editor')).toBeVisible()
+      await page.getByTestId('workspace-page-context-menu-trigger').click()
+      await expect(page.getByTestId('workspace-page-context-menu')).toBeVisible()
+      await page.getByTestId('workspace-page-context-menu-item:export-note').click()
       const dialog = page.getByTestId('note-export-dialog')
       await expect(dialog).toBeVisible()
-      await expect(page.getByTestId('note-export-format:markdown')).toHaveAttribute(
-        'aria-checked',
-        'true'
-      )
+      await expect(
+        page.getByTestId('note-export-format:markdown').locator('input[type="radio"]')
+      ).toBeChecked()
 
       await page.getByTestId('note-export-format:pdf').click()
-      await expect(page.getByTestId('note-export-format:pdf')).toHaveAttribute(
-        'aria-checked',
-        'true'
-      )
+      await expect(
+        page.getByTestId('note-export-format:pdf').locator('input[type="radio"]')
+      ).toBeChecked()
+      await expect(
+        dialog.getByRole('button', { name: 'Close export dialog', exact: true })
+      ).toBeVisible()
       await expect(dialog.getByRole('button', { name: 'Export PDF' })).toBeVisible()
     } finally {
       await electronApp.close()
@@ -580,10 +800,62 @@ test.describe('note page block editor switching', () => {
           })
         )
         .toEqual({
-          tabRadius: '9999px',
-          indicatorRadius: '9999px',
+          tabRadius: '8px',
+          indicatorRadius: '8px',
           tabOverflow: 'hidden'
         })
+
+      const tabCard = page.locator('.workspace-tab-card').first()
+      const tabCloseButton = page.getByTestId('workspace-tab-close:workspace-tab-1')
+      const readTabAffordanceState = async (): Promise<{
+        closeOpacity: string
+        shortcutOpacity: string
+        hasMaskImage: boolean
+      }> =>
+        page.evaluate(() => {
+          const close = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-close:workspace-tab-1"]'
+          )
+          const shortcut = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-shortcut:workspace-tab-1"]'
+          )
+          const label = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-label:workspace-tab-1"]'
+          )
+          if (!close || !shortcut || !label) {
+            throw new Error('Expected workspace tab affordances')
+          }
+          const labelStyles = window.getComputedStyle(label)
+          return {
+            closeOpacity: window.getComputedStyle(close).opacity,
+            shortcutOpacity: window.getComputedStyle(shortcut).opacity,
+            hasMaskImage: labelStyles.maskImage !== 'none' || labelStyles.webkitMaskImage !== 'none'
+          }
+        })
+
+      await expect.poll(readTabAffordanceState).toEqual({
+        closeOpacity: '0',
+        shortcutOpacity: '0',
+        hasMaskImage: false
+      })
+      await tabCard.hover()
+      await expect.poll(readTabAffordanceState).toEqual({
+        closeOpacity: '1',
+        shortcutOpacity: '1',
+        hasMaskImage: true
+      })
+      await tabCloseButton.hover()
+      await expect
+        .poll(() =>
+          tabCloseButton.evaluate((element) => window.getComputedStyle(element).backgroundColor)
+        )
+        .not.toBe('rgba(0, 0, 0, 0)')
+      await page.getByTestId('workspace-tab:workspace-tab-1').focus()
+      await expect.poll(readTabAffordanceState).toEqual({
+        closeOpacity: '1',
+        shortcutOpacity: '1',
+        hasMaskImage: true
+      })
 
       await openNote(page, 'alpha.md')
       await replaceEditorContent(page, ['Tab one draft'])
@@ -865,7 +1137,9 @@ test.describe('note page block editor switching', () => {
       await openNote(page, 'alpha.md')
       await replaceEditorContent(page, ['> [!NOTE] Tag search keeps callout save'])
 
-      await page.getByRole('button', { name: 'Search tag alpha' }).click()
+      await page.getByRole('button', { name: 'Note tags selection', exact: true }).click()
+      const tagPopover = page.getByTestId('note-tags-editor-popover')
+      await tagPopover.getByRole('button', { name: 'Search tag alpha', exact: true }).click()
       await expect(page.getByText('alpha.md')).toBeVisible({ timeout: 15_000 })
 
       await page
@@ -1090,6 +1364,70 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(() => readNoteFromDisk(page, 'alpha.md'), { timeout: 15_000 })
         .toContain('Numbered item')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('uses a compact heading hierarchy in the Milkdown editor', async () => {
+    const vaultRoot = await createFixtureVault(
+      [
+        '# Heading 1',
+        'Body text',
+        '## Heading 2',
+        '### Heading 3',
+        '#### Heading 4',
+        '##### Heading 5',
+        '###### Heading 6'
+      ].join('\n\n')
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const typography = await page
+        .locator('[data-testid="note-block-editor"] .ProseMirror')
+        .evaluate((editor) => {
+          const readStyle = (
+            selector: string
+          ): { fontSize: string; lineHeight: string; marginTop: string } => {
+            const element = editor.querySelector<HTMLElement>(selector)
+            if (!element) {
+              throw new Error(`Missing editor element: ${selector}`)
+            }
+
+            const styles = window.getComputedStyle(element)
+            return {
+              fontSize: styles.fontSize,
+              lineHeight: styles.lineHeight,
+              marginTop: styles.marginTop
+            }
+          }
+
+          return {
+            paragraph: readStyle('p'),
+            h1: readStyle('h1'),
+            h2: readStyle('h2'),
+            h3: readStyle('h3'),
+            h4: readStyle('h4'),
+            h5: readStyle('h5'),
+            h6: readStyle('h6')
+          }
+        })
+
+      expect(typography).toEqual({
+        paragraph: { fontSize: '15px', lineHeight: '22px', marginTop: '0px' },
+        h1: { fontSize: '26px', lineHeight: '32px', marginTop: '24px' },
+        h2: { fontSize: '23px', lineHeight: '29px', marginTop: '20px' },
+        h3: { fontSize: '20px', lineHeight: '26px', marginTop: '16px' },
+        h4: { fontSize: '18px', lineHeight: '24px', marginTop: '14px' },
+        h5: { fontSize: '17px', lineHeight: '22px', marginTop: '12px' },
+        h6: { fontSize: '16px', lineHeight: '21px', marginTop: '10px' }
+      })
+      expect(Number.parseFloat(typography.h6.fontSize)).toBeGreaterThan(
+        Number.parseFloat(typography.paragraph.fontSize)
+      )
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -1425,8 +1763,10 @@ test.describe('note page block editor switching', () => {
 
       await page.keyboard.type('/h2')
       await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByPlaceholder('Search commands')).toBeVisible()
+      await expect(page.getByTestId('note-slash-completion').getByText('Heading 2')).toBeVisible()
       await page.keyboard.press('Escape')
-      await expect(page.getByTestId('note-slash-completion')).toHaveCount(0)
+      await expect(page.getByTestId('note-slash-completion')).toBeHidden()
       await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('')
 
       await page.keyboard.type('/h2')
@@ -1446,6 +1786,111 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
         .toContain('- Bullet from slash')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps slash and note-link popovers navigable and dismissible', async () => {
+    const vaultRoot = await createFixtureVault('')
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'gamma.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Third note\n')),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+
+      await page.keyboard.type('/')
+      const slashPopover = page.getByTestId('note-slash-completion')
+      await expect(slashPopover).toBeVisible({ timeout: 10_000 })
+      const slashItems = slashPopover.locator('[cmdk-item]')
+      await expect(slashItems.first()).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('ArrowDown')
+      await expect(slashItems.nth(1)).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('ArrowUp')
+      await expect(slashItems.first()).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('Escape')
+      await expect(slashPopover).toBeHidden()
+
+      await editor.click()
+      await page.keyboard.type('[[')
+      const notePopover = page.getByTestId('note-link-completion')
+      await expect(notePopover).toBeVisible({ timeout: 10_000 })
+      const noteItems = notePopover.locator('[cmdk-item]')
+      await expect(noteItems).toHaveCount(2)
+      await expect(noteItems.first()).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('ArrowDown')
+      await expect(noteItems.nth(1)).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('ArrowUp')
+      await expect(noteItems.first()).toHaveAttribute('data-selected', 'true')
+      await page.keyboard.press('Escape')
+      await expect(notePopover).toBeHidden()
+      await expect
+        .poll(async () =>
+          page.evaluate(() => document.activeElement?.closest('[contenteditable="true"]') !== null)
+        )
+        .toBe(true)
+
+      await page.keyboard.type('x')
+      await expect(notePopover).toBeVisible({ timeout: 10_000 })
+      await editor.click()
+      await expect(notePopover).toBeHidden()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps note selection popovers open while an autosave settles', async () => {
+    const vaultRoot = await createFixtureVault('', ['alpha'])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await delayNoteDocumentWrites(page, 800)
+      await openNote(page, 'alpha.md')
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+
+      await editor.click()
+      await page.keyboard.type('Draft before slash')
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(1_300)
+      await page.keyboard.type('/')
+      const slashPopover = page.getByTestId('note-slash-completion')
+      await expect(slashPopover).toBeVisible({ timeout: 10_000 })
+      await page.waitForTimeout(1_600)
+      await expect(slashPopover).toBeVisible()
+
+      await page.keyboard.press('Escape')
+      await expect(slashPopover).toBeHidden()
+      await page.keyboard.type('Draft before link')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('[[')
+      const linkPopover = page.getByTestId('note-link-completion')
+      await expect(linkPopover).toBeVisible({ timeout: 10_000 })
+      await page.waitForTimeout(1_600)
+      await expect(linkPopover).toBeVisible()
+
+      await page.keyboard.press('Escape')
+      await expect(linkPopover).toBeHidden()
+      await editor.click()
+      await page.keyboard.type('Draft before tags')
+      const tagTrigger = page.getByRole('button', { name: 'Note tags selection', exact: true })
+      await tagTrigger.click()
+      const tagPopover = page.getByTestId('note-tags-editor-popover')
+      await expect(tagPopover).toBeVisible({ timeout: 10_000 })
+      await page.waitForTimeout(1_600)
+      await expect(tagPopover).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -1636,7 +2081,7 @@ test.describe('note page block editor switching', () => {
       await page.keyboard.type('/h2')
       await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
       await page.keyboard.press('Escape')
-      await expect(page.getByTestId('note-slash-completion')).toHaveCount(0)
+      await expect(page.getByTestId('note-slash-completion')).toBeHidden()
       await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('insert')
     } finally {
       await electronApp.close()
@@ -1680,8 +2125,8 @@ test.describe('note page block editor switching', () => {
           display: styles.display,
           backgroundColor: styles.backgroundColor,
           color: styles.color,
-          expectedBackgroundColor: resolveColor('backgroundColor', '--accent'),
-          expectedColor: resolveColor('color', '--accent-foreground'),
+          expectedBackgroundColor: resolveColor('backgroundColor', '--primary'),
+          expectedColor: resolveColor('color', '--primary-foreground'),
           borderRadius: styles.borderRadius,
           width: rect.width,
           height: rect.height,
@@ -2426,6 +2871,41 @@ test.describe('note page block editor switching', () => {
     }
   })
 
+  test('matches project title styling while renaming a notebook title', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const titleArea = page.getByTestId('note-title-area')
+      await titleArea.getByRole('button', { name: 'alpha', exact: true }).click()
+      const titleInput = titleArea.locator('input[type="text"]')
+      await expect(titleInput).toBeFocused()
+      await expect
+        .poll(() =>
+          titleInput.evaluate((element) => {
+            const styles = window.getComputedStyle(element)
+            return {
+              backgroundColor: styles.backgroundColor,
+              borderTopWidth: styles.borderTopWidth,
+              fontSize: styles.fontSize,
+              fontWeight: styles.fontWeight
+            }
+          })
+        )
+        .toEqual({
+          backgroundColor: 'rgba(0, 0, 0, 0)',
+          borderTopWidth: '0px',
+          fontSize: '30px',
+          fontWeight: '700'
+        })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('reclaims note space when the title header hides on scroll', async () => {
     const filler = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
     const vaultRoot = await createFixtureVault(`# Alpha\n\n${filler}`, ['focus'])
@@ -2515,8 +2995,13 @@ test.describe('note page block editor switching', () => {
       await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
       expect((await readTitleMetrics()).scrollTop).toBe(120)
 
-      await page.getByRole('button', { name: 'Add tag' }).click()
-      const tagInput = page.locator('input[placeholder="tag name"]')
+      await page.getByRole('button', { name: 'Note tags selection', exact: true }).click()
+      const tagPopover = page.getByTestId('note-tags-editor-popover')
+      const tagInput = tagPopover.getByRole('textbox', {
+        name: 'Search or add tags',
+        exact: true
+      })
+      await expect(tagPopover).toBeVisible()
       await expect(tagInput).toBeFocused()
 
       await page.evaluate(() => {
@@ -2530,6 +3015,7 @@ test.describe('note page block editor switching', () => {
       })
       await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
       await tagInput.press('Escape')
+      await expect(tagPopover).toBeHidden()
 
       await page.evaluate(() => {
         const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')

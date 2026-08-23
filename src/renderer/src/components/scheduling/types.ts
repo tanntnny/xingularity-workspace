@@ -27,10 +27,13 @@ export interface ScheduleEditorProps {
 
 export interface SchedulePropertiesPanelProps {
   draft: ScheduleDraft
+  secretNames: readonly string[]
   onChange: (patch: Partial<ScheduleDraft>) => void
   onEnabledChange: (enabled: boolean) => void
   onTriggerChange: (trigger: TriggerConfig) => void
   onTogglePermission: (permission: SchedulePermission, enabled: boolean) => void
+  onSaveSecret: (name: string, value: string) => Promise<void>
+  onDeleteSecret: (name: string) => Promise<void>
 }
 
 export interface ScheduleRunHistoryProps {

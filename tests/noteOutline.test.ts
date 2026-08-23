@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { extractNoteOutline, extractNoteOutlineFromMarkdown } from '../src/renderer/src/lib/noteOutline'
+import {
+  extractNoteOutline,
+  extractNoteOutlineFromMarkdown
+} from '../src/renderer/src/lib/noteOutline'
 
 describe('extractNoteOutlineFromMarkdown', () => {
   it('preserves heading order and line-based ids', () => {

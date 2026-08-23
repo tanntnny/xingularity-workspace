@@ -6,12 +6,15 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
     --background: #ffffff;
     --foreground: #09090b;
     --card: #ffffff;
+    --card-hover: #f4f4f5;
+    --panel: #f8f8f8;
     --card-foreground: #09090b;
     --popover: #ffffff;
+    --popover-hover: color-mix(in srgb, var(--popover) 90%, #ffffff);
     --popover-foreground: #09090b;
     --primary: #18181b;
     --primary-foreground: #fafafa;
@@ -23,10 +26,12 @@
     --accent-foreground: #18181b;
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
+    --border-width: 0.5px;
     --border: #e4e4e7;
     --input: #e4e4e7;
     --ring: #18181b;
     --radius: 0.5rem;
+    --radius-dialog: 2rem;
     --sidebar-background: #fafafa;
     --sidebar-foreground: #3f3f46;
     --sidebar-primary: #18181b;
@@ -35,45 +40,74 @@
     --sidebar-accent-foreground: #18181b;
     --sidebar-border: #e4e4e7;
     --sidebar-ring: #2563eb;
+    --resize-handle-edge: #a3a3a3;
+    --resize-handle-center: #ffffff;
 
     --app-font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
     --radius-button: calc(var(--radius) - 2px);
     --radius-button-pill: 9999px;
+    --radius-control: 9999px;
+    --control-height: 2rem;
+    --control-font-size: 0.875rem;
+    --control-icon-size: 1rem;
+    --control-padding-x: 1rem;
+    --warning: #d97706;
+    --success: #16a34a;
+    --destructive-muted-foreground: #991b1b;
+    --destructive-strong: #dc2626;
+    --status-chip-task-status-pending-icon: var(--muted-foreground);
+    --status-chip-task-status-backlog-icon: var(--warning);
+    --status-chip-task-status-in-progress-icon: var(--warning);
+    --status-chip-task-status-blocked-icon: var(--destructive-strong);
+    --status-chip-task-status-completed-icon: var(--success);
     --drawer-width: 640px;
     --workspace-pane-width: 300px;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --background: #09090b;
-      --foreground: #fafafa;
-      --card: #09090b;
-      --card-foreground: #fafafa;
-      --popover: #09090b;
-      --popover-foreground: #fafafa;
-      --primary: #fafafa;
-      --primary-foreground: #18181b;
-      --secondary: #27272a;
-      --secondary-foreground: #fafafa;
-      --muted: #27272a;
-      --muted-foreground: #a1a1aa;
-      --accent: #27272a;
-      --accent-foreground: #fafafa;
-      --destructive: #7f1d1d;
-      --destructive-foreground: #fafafa;
-      --border: #27272a;
-      --input: #27272a;
-      --ring: #d4d4d8;
-      --sidebar-background: #18181b;
-      --sidebar-foreground: #f4f4f5;
-      --sidebar-primary: #2563eb;
-      --sidebar-primary-foreground: #ffffff;
-      --sidebar-accent: #27272a;
-      --sidebar-accent-foreground: #f4f4f5;
-      --sidebar-border: #27272a;
-      --sidebar-ring: #2563eb;
-    }
+  :root {
+    color-scheme: dark;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #09090b;
+    --card-hover: #27272a;
+    --panel: #1a1a1b;
+    --card-foreground: #fafafa;
+    --popover: #09090b;
+    --popover-hover: color-mix(in srgb, var(--popover) 90%, #ffffff);
+    --popover-foreground: #fafafa;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --secondary: #27272a;
+    --secondary-foreground: #fafafa;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #fafafa;
+    --destructive: #7f1d1d;
+    --destructive-foreground: #fafafa;
+    --border-width: 0.5px;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #d4d4d8;
+    --sidebar-background: #18181b;
+    --sidebar-foreground: #f4f4f5;
+    --sidebar-primary: #2563eb;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #27272a;
+    --sidebar-accent-foreground: #f4f4f5;
+    --sidebar-border: #27272a;
+    --sidebar-ring: #2563eb;
+    --resize-handle-edge: #71717a;
+    --resize-handle-center: #fafafa;
+    --warning: #f59e0b;
+    --success: #22c55e;
+    --destructive-muted-foreground: #fecaca;
+    --destructive-strong: #ef4444;
+    --status-chip-task-status-pending-icon: var(--muted-foreground);
+    --status-chip-task-status-backlog-icon: var(--warning);
+    --status-chip-task-status-in-progress-icon: var(--warning);
+    --status-chip-task-status-blocked-icon: var(--destructive-strong);
+    --status-chip-task-status-completed-icon: var(--success);
   }
 
   * {
@@ -100,11 +134,109 @@
 }
 
 @layer utilities {
+  .ui-control {
+    height: var(--control-height);
+    font-size: var(--control-font-size);
+  }
+
+  .ui-control svg {
+    height: var(--control-icon-size);
+    width: var(--control-icon-size);
+  }
+
   .app-drag-region {
     -webkit-app-region: drag;
   }
 
   .app-no-drag {
     -webkit-app-region: no-drag;
+  }
+
+  .resize-affordance::after {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+    content: '';
+    transition: opacity 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .resize-affordance::after {
+    opacity: 0;
+  }
+
+  .resize-affordance[data-resize-direction='x']::after {
+    inset-block: 0;
+    left: 50%;
+    width: var(--border-width);
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--resize-handle-center) 50%,
+      transparent 100%
+    );
+  }
+
+  .resize-affordance[data-resize-direction='y']::after {
+    inset-inline: 0;
+    top: 50%;
+    height: var(--border-width);
+    transform: translateY(-50%);
+    background: linear-gradient(
+      to right,
+      var(--resize-handle-edge),
+      var(--resize-handle-center) 50%,
+      var(--resize-handle-edge)
+    );
+  }
+
+  .resize-affordance:is(
+      :hover,
+      :focus-visible,
+      [data-resizing='true'],
+      [data-separator='active']
+    )::after {
+    opacity: 1;
+  }
+
+  .workspace-text-fade {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0,
+      black calc(100% - 4rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+  }
+
+  .workspace-tab-label-fade {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .workspace-tab-card:hover .workspace-tab-label-fade,
+  .workspace-tab-card:focus-within .workspace-tab-label-fade {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0,
+      black calc(100% - 4rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      black 0,
+      black calc(100% - 4rem),
+      transparent 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resize-affordance::after {
+    transition: none;
   }
 }

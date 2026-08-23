@@ -1,7 +1,13 @@
-import CodeMirror from "@uiw/react-codemirror";
-import { json } from "@codemirror/lang-json";
+import CodeMirror from '@uiw/react-codemirror'
+import { json } from '@codemirror/lang-json'
 
-export function JsonEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function JsonEditor({
+  value,
+  onChange
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
   return (
     <CodeMirror
       value={value}
@@ -11,9 +17,9 @@ export function JsonEditor({ value, onChange }: { value: string; onChange: (valu
         foldGutter: true,
         lineNumbers: true,
         highlightActiveLine: true,
-        autocompletion: true,
+        autocompletion: true
       }}
       onChange={onChange}
     />
-  );
+  )
 }

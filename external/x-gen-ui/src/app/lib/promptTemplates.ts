@@ -1,28 +1,30 @@
-import { PROMPT_COMPONENT_TYPES } from "./schema";
+import { PROMPT_COMPONENT_TYPES } from './schema'
 
 export const artifactTypes = [
-  "Study UI",
-  "Dashboard",
-  "Comparison UI",
-  "Interactive Explainer",
-  "Flow Diagram",
-  "Quiz",
-  "Simulator",
-] as const;
+  'Study UI',
+  'Dashboard',
+  'Comparison UI',
+  'Interactive Explainer',
+  'Flow Diagram',
+  'Quiz',
+  'Simulator'
+] as const
 
-export const styles = ["Clean", "Academic", "Dense", "Playful", "Minimal"] as const;
+export const styles = ['Clean', 'Academic', 'Dense', 'Playful', 'Minimal'] as const
 
-export type ArtifactType = (typeof artifactTypes)[number];
-export type ArtifactStyle = (typeof styles)[number];
+export type ArtifactType = (typeof artifactTypes)[number]
+export type ArtifactStyle = (typeof styles)[number]
 
 export function buildPrompt(options: {
-  artifactType: ArtifactType;
-  style: ArtifactStyle;
-  allowedComponents: string[];
-  topic: string;
+  artifactType: ArtifactType
+  style: ArtifactStyle
+  allowedComponents: string[]
+  topic: string
 }): string {
-  const allowed = options.allowedComponents.length ? options.allowedComponents : PROMPT_COMPONENT_TYPES;
-  const topic = options.topic.trim() || "a useful interactive learning artifact";
+  const allowed = options.allowedComponents.length
+    ? options.allowedComponents
+    : PROMPT_COMPONENT_TYPES
+  const topic = options.topic.trim() || 'a useful interactive learning artifact'
 
   return `Create a ${options.style.toLowerCase()} ${options.artifactType.toLowerCase()} about: ${topic}.
 
@@ -31,7 +33,7 @@ Do not include explanation outside the codeblock.
 Do not generate React code.
 Do not generate JavaScript functions.
 Do not include raw HTML.
-Use only these component types inside layout children: ${allowed.join(", ")}.
+Use only these component types inside layout children: ${allowed.join(', ')}.
 The top-level layout type must be "page".
 Output valid JSON matching this schema:
 
@@ -77,9 +79,9 @@ For sliderSimulator formulas, use only numbers, input variable IDs, +, -, *, /, 
 Return exactly:
 \`\`\`json
 { ...valid artifact JSON... }
-\`\`\``;
+\`\`\``
 }
 
 export function buildCorrectionPrompt(errorMessage: string): string {
-  return `The JSON artifact failed validation. Fix the JSON to match the schema. Return only one fenced json codeblock. Error: ${errorMessage}. Unsupported component types must be replaced with one of: ${PROMPT_COMPONENT_TYPES.join(", ")}. Do not generate React code, JavaScript functions, or raw HTML.`;
+  return `The JSON artifact failed validation. Fix the JSON to match the schema. Return only one fenced json codeblock. Error: ${errorMessage}. Unsupported component types must be replaced with one of: ${PROMPT_COMPONENT_TYPES.join(', ')}. Do not generate React code, JavaScript functions, or raw HTML.`
 }

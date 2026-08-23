@@ -1,13 +1,16 @@
-import { ReactElement, useMemo, useState, DragEvent } from 'react'
+import { DragEvent, ReactElement, useMemo, useState } from 'react'
 import { CalendarTask } from '../../../shared/types'
+import { isTaskDone } from '../../../shared/taskStatus'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { getTaskStatus } from '../lib/taskStatus'
+import { ChevronLeft, ChevronRight, WorkspaceIconButton } from './ui'
 
 interface CalendarDayViewProps {
   selectedDate: string
   tasks: CalendarTask[]
   onSelectDate: (date: string) => void
   onRescheduleTask?: (taskId: string, newDate: string) => void
+  onOpenTask?: (taskId: string) => void
 }
 
 // Time slots from 6 AM to 11 PM
@@ -24,7 +27,8 @@ export function CalendarDayView({
   selectedDate,
   tasks,
   onSelectDate,
-  onRescheduleTask
+  onRescheduleTask,
+  onOpenTask
 }: CalendarDayViewProps): ReactElement {
   const selected = useMemo(() => parseIsoDate(selectedDate), [selectedDate])
   const todayIso = toIsoDate(new Date())
@@ -74,16 +78,15 @@ export function CalendarDayView({
   }
 
   return (
-    <section className="flex h-full flex-col gap-3 overflow-hidden p-4">
+    <section className="flex h-full flex-col gap-3 overflow-hidden bg-[var(--calendar-surface)] p-4">
       <div className="flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <WorkspaceIconButton
             onClick={goToPrevDay}
-            className="border border-input bg-card text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            &lt;
-          </button>
+            title="Previous day"
+            aria-label="Previous day"
+            icon={<ChevronLeft size={16} />}
+          />
           <h2 className="text-lg font-semibold text-foreground">
             {dateLabel}
             {isToday && (
@@ -92,13 +95,12 @@ export function CalendarDayView({
               </span>
             )}
           </h2>
-          <button
-            type="button"
+          <WorkspaceIconButton
             onClick={goToNextDay}
-            className="border border-input bg-card text-foreground flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            &gt;
-          </button>
+            title="Next day"
+            aria-label="Next day"
+            icon={<ChevronRight size={16} />}
+          />
         </div>
         <span className="inline-flex items-center rounded-md border border-border bg-muted px-2 py-0.5 text-xs leading-[1.2] text-muted-foreground">
           {tasks.length} task{tasks.length !== 1 ? 's' : ''}
@@ -113,14 +115,16 @@ export function CalendarDayView({
           </h3>
           <div className="flex flex-wrap gap-2">
             {allDayTasks.map((task) => (
-              <div
+              <button
+                type="button"
                 key={task.id}
-                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
+                onClick={() => onOpenTask?.(task.id)}
+                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
               >
                 <span className="truncate text-base font-semibold text-foreground">
                   {task.title}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -165,13 +169,15 @@ export function CalendarDayView({
                 </div>
                 <div
                   className={`min-h-[50px] flex-1 py-1 pl-2 transition-colors ${
-                    isDragOver ? 'bg-accent' : ''
+                    isDragOver ? 'bg-muted' : ''
                   }`}
                 >
                   {slotTasks.map((task) => (
-                    <div
+                    <button
+                      type="button"
                       key={task.id}
-                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${task.completed ? 'line-through' : ''}`}
+                      onClick={() => onOpenTask?.(task.id)}
+                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
                     >
                       <span className="truncate text-base font-semibold text-foreground">
                         {task.title}
@@ -179,7 +185,7 @@ export function CalendarDayView({
                       <span className="text-xs text-muted-foreground">
                         {formatCalendarTaskTimeLabel(task)}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

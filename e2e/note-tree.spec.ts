@@ -101,7 +101,12 @@ async function launchWithFixture(vaultRoot: string): Promise<{
     await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
   }
   await page.getByTestId('sidebar-page:notes').click()
-  await expect(page.getByTestId('note-panel-toggle:tree')).toBeVisible({ timeout: 20_000 })
+  await expect(
+    page.getByTestId('note-file-tree-panel').getByRole('button', {
+      name: 'File tree',
+      exact: true
+    })
+  ).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
 }
@@ -125,7 +130,12 @@ test.describe('notes tree view', () => {
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await expect(page.getByTestId('note-panel-toggle:tree')).toHaveAttribute('data-state', 'on')
+      await expect(
+        page.getByTestId('note-file-tree-panel').getByRole('button', {
+          name: 'File tree',
+          exact: true
+        })
+      ).toHaveAttribute('aria-expanded', 'true')
       await expect
         .poll(async () =>
           page.evaluate(() => window.vaultApi.files.listTree().then((tree) => tree.length))
@@ -189,6 +199,7 @@ test.describe('notes tree view', () => {
 
       await archiveRow.click()
       await expect(nestedRow).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('note-tree-indent-guide:archive/nested.md:0')).toBeVisible()
 
       await archiveRow.click()
       await expect(nestedRow).toHaveCount(0)
@@ -357,7 +368,15 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content)
         .toContain('Alpha note survives move')
-      await expect(page.getByLabel('Search tag alpha')).toBeVisible()
+      const tagEditor = page.getByTestId('note-tags-editor')
+      await tagEditor.getByRole('button', { name: 'Note tags selection', exact: true }).click()
+      const tagPopover = page.getByTestId('note-tags-editor-popover')
+      await expect(
+        tagPopover.getByRole('button', { name: 'Search tag alpha', exact: true })
+      ).toBeVisible()
+      await tagPopover
+        .getByRole('textbox', { name: 'Search or add tags', exact: true })
+        .press('Escape')
 
       await page.getByTestId('note-tree-row:alpha.md').dragTo(archiveRow)
 
@@ -367,7 +386,10 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content)
         .toContain('Alpha note survives move')
-      await expect(page.getByLabel('Search tag alpha')).toBeVisible()
+      await tagEditor.getByRole('button', { name: 'Note tags selection', exact: true }).click()
+      await expect(
+        tagPopover.getByRole('button', { name: 'Search tag alpha', exact: true })
+      ).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

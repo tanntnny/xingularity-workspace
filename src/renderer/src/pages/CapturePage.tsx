@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, ReactElement, useMemo, useState } from 'react'
-import { FileText, ListTodo, MoreHorizontal, Trash2 } from '../components/ui/icons'
+import { FileText, ListTodo, MoreHorizontal, Trash2, Link, Loader2 } from '../components/ui/icons'
 import {
   Badge,
   Card,
@@ -13,15 +13,18 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  Button,
   Input,
-  Shortcut
+  Shortcut,
+  StatusChip
 } from '../components/ui'
 import { ActionButtonGroup } from '../components/ui/button-group'
 import { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard } from '../components/workspace'
 import type {
   FleetingConversionResult,
   FleetingConversionTarget,
-  FleetingNote
+  FleetingNote,
+  ResourceRef
 } from '../../../shared/types'
 import {
   FLEETING_NOTE_GROUPS,
@@ -29,16 +32,28 @@ import {
   groupFleetingNotes,
   type FleetingNoteGroup
 } from '../lib/fleetingNoteGroups'
+import {
+  FLEETING_NOTE_TRIAGE_CHIP_ITEMS,
+  getTaskPriorityChipItem,
+  RESOURCE_STATE_CHIP_ITEMS
+} from '../lib/statusChipMeta'
 
 interface CapturePageProps {
   notes: FleetingNote[]
   isLoading: boolean
   onCapture: (content: string) => Promise<void>
   onRemove: (relPath: string) => Promise<void>
+  onUpdate: (
+    relPath: string,
+    patch: Partial<Pick<FleetingNote, 'priority' | 'triageState'>>
+  ) => Promise<void>
   onConvert: (
     relPath: string,
     target: FleetingConversionTarget
   ) => Promise<FleetingConversionResult>
+  resources: ResourceRef[]
+  onCaptureResource: (canonicalUri: string) => Promise<void>
+  onOpenResource: (resourceId: string) => Promise<void>
 }
 
 export function CapturePage({
@@ -46,11 +61,17 @@ export function CapturePage({
   isLoading,
   onCapture,
   onRemove,
-  onConvert
+  onUpdate,
+  onConvert,
+  resources,
+  onCaptureResource,
+  onOpenResource
 }: CapturePageProps): ReactElement {
   const [draft, setDraft] = useState('')
   const [isCapturing, setIsCapturing] = useState(false)
   const [convertingPath, setConvertingPath] = useState<string | null>(null)
+  const [resourceDraft, setResourceDraft] = useState('')
+  const [resourceBusy, setResourceBusy] = useState(false)
   const groupedNotes = useMemo(() => groupFleetingNotes(notes), [notes])
   const isBusy = isCapturing || convertingPath !== null
 
@@ -72,6 +93,29 @@ export function CapturePage({
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     void submitCapture()
+  }
+
+  const submitResourceCapture = async (): Promise<void> => {
+    const value = resourceDraft.trim()
+    if (!value || resourceBusy) return
+    setResourceBusy(true)
+    try {
+      await onCaptureResource(value)
+      setResourceDraft('')
+    } finally {
+      setResourceBusy(false)
+    }
+  }
+
+  const captureFileResource = async (file: File | undefined): Promise<void> => {
+    const selectedPath = (file as (File & { path?: string }) | undefined)?.path
+    if (!selectedPath || resourceBusy) return
+    setResourceBusy(true)
+    try {
+      await onCaptureResource(selectedPath)
+    } finally {
+      setResourceBusy(false)
+    }
   }
 
   const handleConvert = async (
@@ -145,6 +189,78 @@ export function CapturePage({
         </ActionButtonGroup>
       </WorkspaceSectionCard>
 
+      <WorkspaceSectionCard
+        className="mx-auto w-full max-w-3xl border-dashed bg-transparent p-4"
+        data-testid="capture-resource-inbox"
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <Link size={16} className="text-muted-foreground" aria-hidden="true" />
+          <div>
+            <h2 className="text-sm font-semibold">Source-preserving resource capture</h2>
+            <p className="text-xs text-muted-foreground">
+              Save a path or URL now; decide where it belongs during review.
+            </p>
+          </div>
+        </div>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void submitResourceCapture()
+          }}
+        >
+          <label htmlFor="capture-resource-input" className="sr-only">
+            Capture a file path or URL
+          </label>
+          <Input
+            id="capture-resource-input"
+            value={resourceDraft}
+            onChange={(event) => setResourceDraft(event.target.value)}
+            placeholder="/Users/you/Documents/brief.pdf or https://…"
+            className="h-9"
+            disabled={resourceBusy}
+          />
+          <Button type="submit" size="sm" disabled={!resourceDraft.trim() || resourceBusy}>
+            {resourceBusy ? <Loader2 size={14} className="mr-1 animate-pulse" /> : null}
+            Save source
+          </Button>
+          <label htmlFor="capture-resource-file" className="shrink-0">
+            <Button type="button" variant="outline" size="sm" asChild disabled={resourceBusy}>
+              <span>
+                <FileText size={14} />
+                Choose file
+              </span>
+            </Button>
+            <Input
+              id="capture-resource-file"
+              type="file"
+              className="sr-only"
+              onChange={(event) => {
+                void captureFileResource(event.target.files?.[0])
+                event.currentTarget.value = ''
+              }}
+              disabled={resourceBusy}
+            />
+          </label>
+        </form>
+        {resources.length > 0 ? (
+          <div className="mt-3 space-y-1" aria-label="Captured sources">
+            {resources.slice(0, 5).map((resource) => (
+              <button
+                key={resource.id}
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
+                onClick={() => void onOpenResource(resource.id)}
+              >
+                <Link size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{resource.title}</span>
+                <StatusChip item={RESOURCE_STATE_CHIP_ITEMS[resource.state]} />
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </WorkspaceSectionCard>
+
       <section className="space-y-3" data-testid="capture-review-zone" aria-label="Fleeting notes">
         <div className="flex items-center gap-3">
           <hr className="flex-1 border-border" aria-hidden="true" />
@@ -192,6 +308,7 @@ export function CapturePage({
                     isBusy={isBusy}
                     onConvert={handleConvert}
                     onRemove={handleRemove}
+                    onUpdate={onUpdate}
                   />
                 ))}
               </div>
@@ -207,12 +324,17 @@ function FleetingNoteColumn({
   group,
   isBusy,
   onConvert,
-  onRemove
+  onRemove,
+  onUpdate
 }: {
   group: FleetingNoteGroup
   isBusy: boolean
   onConvert: (relPath: string, target: FleetingConversionTarget) => Promise<void>
   onRemove: (relPath: string) => Promise<void>
+  onUpdate: (
+    relPath: string,
+    patch: Partial<Pick<FleetingNote, 'priority' | 'triageState'>>
+  ) => Promise<void>
 }): ReactElement {
   const groupColorStyles = getFleetingNoteGroupColorStyles(group)
 
@@ -245,6 +367,7 @@ function FleetingNoteColumn({
                 isBusy={isBusy}
                 onConvert={onConvert}
                 onRemove={onRemove}
+                onUpdate={onUpdate}
               />
             ))
           ) : (
@@ -262,12 +385,17 @@ function FleetingNoteCard({
   note,
   isBusy,
   onConvert,
-  onRemove
+  onRemove,
+  onUpdate
 }: {
   note: FleetingNote
   isBusy: boolean
   onConvert: (relPath: string, target: FleetingConversionTarget) => Promise<void>
   onRemove: (relPath: string) => Promise<void>
+  onUpdate: (
+    relPath: string,
+    patch: Partial<Pick<FleetingNote, 'priority' | 'triageState'>>
+  ) => Promise<void>
 }): ReactElement {
   const createdAt = new Date(note.createdAt)
   const createdLabel = Number.isNaN(createdAt.getTime())
@@ -325,19 +453,37 @@ function FleetingNoteCard({
             >
               {createdLabel}
             </time>
+            <span className="flex flex-wrap gap-1 px-3 pb-2">
+              <StatusChip item={FLEETING_NOTE_TRIAGE_CHIP_ITEMS[note.triageState ?? 'inbox']} />
+              {note.priority ? (
+                <StatusChip
+                  item={{
+                    ...getTaskPriorityChipItem(note.priority),
+                    label: `${note.priority} priority`
+                  }}
+                />
+              ) : null}
+              {note.dueDate ? (
+                <Badge variant="outline" className="text-[10px]">
+                  due {note.dueDate}
+                </Badge>
+              ) : null}
+            </span>
             <span className="mx-3 block border-b border-border" aria-hidden="true" />
           </button>
           <div className="absolute right-3 top-3 z-10">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button
+                <Button
                   type="button"
+                  variant="rowAction"
+                  size="icon"
                   aria-label={`Open actions for capture ${note.id}`}
                   data-testid={`fleeting-menu:${note.id}`}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-7 w-7 shrink-0 rounded-md"
                 >
                   <MoreHorizontal size={16} aria-hidden="true" />
-                </button>
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
@@ -357,9 +503,43 @@ function FleetingNoteCard({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   disabled={isBusy}
-                  destructive
-                  onSelect={() => void onRemove(note.relPath)}
+                  onSelect={() => void onUpdate(note.relPath, { triageState: 'in-progress' })}
                 >
+                  Mark in progress
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onSelect={() => void onUpdate(note.relPath, { triageState: 'inbox' })}
+                >
+                  Return to inbox
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onSelect={() => void onUpdate(note.relPath, { triageState: 'archived' })}
+                >
+                  Archive
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onSelect={() => void onUpdate(note.relPath, { priority: 'high' })}
+                >
+                  Set high priority
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onSelect={() => void onUpdate(note.relPath, { priority: 'medium' })}
+                >
+                  Set medium priority
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onSelect={() => void onUpdate(note.relPath, { priority: 'low' })}
+                >
+                  Set low priority
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={isBusy} onSelect={() => void onRemove(note.relPath)}>
                   <Trash2 aria-hidden="true" />
                   Remove
                 </DropdownMenuItem>
@@ -377,8 +557,20 @@ function FleetingNoteCard({
           <ListTodo aria-hidden="true" />
           To Task
         </ContextMenuItem>
+        <ContextMenuItem
+          disabled={isBusy}
+          onSelect={() => void onUpdate(note.relPath, { triageState: 'in-progress' })}
+        >
+          Mark in progress
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={isBusy}
+          onSelect={() => void onUpdate(note.relPath, { triageState: 'archived' })}
+        >
+          Archive
+        </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem disabled={isBusy} destructive onSelect={() => void onRemove(note.relPath)}>
+        <ContextMenuItem disabled={isBusy} onSelect={() => void onRemove(note.relPath)}>
           <Trash2 aria-hidden="true" />
           Remove
         </ContextMenuItem>

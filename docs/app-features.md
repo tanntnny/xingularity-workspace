@@ -77,7 +77,7 @@ Project management features include:
 - create, open, favorite, rename, and delete projects
 - editable project description
 - linked task list with reassignment between projects
-- task statuses: `pending`, `in-progress`, `blocked`, `completed`
+- task statuses: `pending`, `in-progress`, `blocked`, `canceled`, `completed`
 - project icon customization using shape, variant, and color
 - export project summaries
 - notebooks remain independent of project records

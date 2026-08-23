@@ -4,13 +4,22 @@ import '@xyflow/react/dist/style.css'
 import * as d3 from 'd3'
 import { EmptyState } from '../components/ui/empty-state'
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3'
-import type { NoteListItem } from '../../../shared/types'
-import { buildKnowledgeGraph, filterKnowledgeGraph } from '../lib/knowledgeGraph'
+import type { CalendarTask, NoteListItem, Project, ResourceRef } from '../../../shared/types'
+import {
+  buildKnowledgeGraph,
+  createKnowledgeGraphEntities,
+  filterKnowledgeGraph,
+  type KnowledgeEntityKind
+} from '../lib/knowledgeGraph'
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
 
 interface KnowledgePageProps {
   notes: NoteListItem[]
   onOpenNote: (relPath: string) => void
+  projects?: Project[]
+  tasks?: CalendarTask[]
+  resources?: ResourceRef[]
+  onOpenEntity?: (kind: KnowledgeEntityKind, id: string) => void
   orphanRingRadiusPx?: number | null
   showOrphans?: boolean
 }
@@ -21,6 +30,8 @@ interface GraphNodeDatum extends SimulationNodeDatum {
   label: string
   degree: number
   isOrphan: boolean
+  kind?: 'note' | KnowledgeEntityKind
+  entityId?: string
   x?: number
   y?: number
   fx?: number | null
@@ -37,6 +48,10 @@ interface GraphLinkDatum extends SimulationLinkDatum<GraphNodeDatum> {
 export function KnowledgePage({
   notes,
   onOpenNote,
+  projects = [],
+  tasks = [],
+  resources = [],
+  onOpenEntity,
   orphanRingRadiusPx = null,
   showOrphans = true
 }: KnowledgePageProps): ReactElement {
@@ -45,6 +60,10 @@ export function KnowledgePage({
       <KnowledgeCanvas
         notes={notes}
         onOpenNote={onOpenNote}
+        projects={projects}
+        tasks={tasks}
+        resources={resources}
+        onOpenEntity={onOpenEntity}
         orphanRingRadiusPx={orphanRingRadiusPx}
         showOrphans={showOrphans}
       />
@@ -55,13 +74,20 @@ export function KnowledgePage({
 function KnowledgeCanvas({
   notes,
   onOpenNote,
+  projects = [],
+  tasks = [],
+  resources = [],
+  onOpenEntity,
   orphanRingRadiusPx = null,
   showOrphans = true
 }: KnowledgePageProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const graph = useMemo(() => buildKnowledgeGraph(notes), [notes])
+  const graph = useMemo(
+    () => buildKnowledgeGraph(notes, createKnowledgeGraphEntities(projects, tasks, resources)),
+    [notes, projects, resources, tasks]
+  )
   const visibleGraph = useMemo(() => filterKnowledgeGraph(graph, showOrphans), [graph, showOrphans])
   const viewport = useViewport()
 
@@ -155,7 +181,11 @@ function KnowledgeCanvas({
       .style('cursor', 'pointer')
       .style('pointer-events', 'all')
       .on('click', (_event, node) => {
-        onOpenNote(node.relPath)
+        if (node.kind && node.entityId) {
+          onOpenEntity?.(node.kind, node.entityId)
+        } else {
+          onOpenNote(node.relPath)
+        }
       })
 
     nodeSelection.append('title').text((node) => `${node.label}\n${node.relPath}`)
@@ -244,7 +274,7 @@ function KnowledgeCanvas({
     return () => {
       simulation.stop()
     }
-  }, [onOpenNote, orphanRingRadiusPx, size.height, size.width, visibleGraph])
+  }, [onOpenEntity, onOpenNote, orphanRingRadiusPx, size.height, size.width, visibleGraph])
 
   useEffect(() => {
     if (!svgRef.current) {

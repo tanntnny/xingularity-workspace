@@ -5,6 +5,7 @@ import {
   getProjectProtectionKind,
   getProjectTagForPath,
   getProjectsRootPath,
+  isVaultRelativePath,
   isDirectProjectFolderPath,
   isProtectedProjectTreePath,
   resolveProjectByFolderPath
@@ -46,5 +47,15 @@ describe('project folder helpers', () => {
   it('does not reserve Projects when there are no managed projects', () => {
     expect(isProtectedProjectTreePath('Projects', [])).toBe(false)
     expect(getProjectProtectionKind('Projects', [])).toBeNull()
+  })
+
+  it('accepts only portable vault-relative paths', () => {
+    expect(isVaultRelativePath('Projects/Alpha Project')).toBe(true)
+    expect(isVaultRelativePath('  Projects/Alpha Project  ')).toBe(true)
+    expect(isVaultRelativePath('/Projects/Alpha Project')).toBe(false)
+    expect(isVaultRelativePath('../Projects/Alpha Project')).toBe(false)
+    expect(isVaultRelativePath('Projects/../Secrets')).toBe(false)
+    expect(isVaultRelativePath('C:/Users/Amy/Notebook')).toBe(false)
+    expect(isVaultRelativePath('Projects//Alpha Project')).toBe(false)
   })
 })

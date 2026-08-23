@@ -52,7 +52,7 @@ export interface TaskCreateAction {
   time?: string
   priority?: 'low' | 'medium' | 'high'
   taskType?: string
-  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'canceled' | 'completed'
   automationSource: string
   automationSourceKey: string
 }
@@ -68,7 +68,7 @@ export interface TaskUpdateAction {
   date?: string
   endDate?: string | null
   completed?: boolean
-  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'canceled' | 'completed'
 }
 
 export interface NoteCreateAction {
@@ -96,7 +96,7 @@ export interface CalendarEventCreateAction {
   taskType?: string
   projectId?: string
   tags?: string[]
-  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
+  status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'canceled' | 'completed'
   automationSource: string
   automationSourceKey: string
 }
@@ -165,6 +165,7 @@ export interface RendererScheduleApi {
   saveJob: (input: ScheduleJobInput) => Promise<ScheduleJob>
   deleteJob: (id: string) => Promise<void>
   runNow: (id: string) => Promise<ScheduleRunRecord>
+  cancelRun: (id: string) => Promise<boolean>
   listRuns: (jobId: string) => Promise<ScheduleRunRecord[]>
   applyActions: (runId: string) => Promise<void>
   dismissRun: (runId: string) => Promise<void>

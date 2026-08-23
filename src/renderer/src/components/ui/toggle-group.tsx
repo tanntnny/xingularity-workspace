@@ -22,7 +22,7 @@ const toggleGroupIndicatorVariants = cva(
     variants: {
       variant: {
         default: 'bg-card shadow-sm',
-        outline: 'border border-input bg-accent'
+        outline: 'border border-input bg-muted'
       }
     },
     defaultVariants: {
@@ -36,10 +36,9 @@ const toggleGroupItemVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          'hover:bg-accent hover:text-accent-foreground',
+        default: 'hover:bg-muted hover:text-foreground',
         outline:
-          'border border-transparent hover:bg-accent hover:text-accent-foreground data-[state=on]:text-accent-foreground'
+          'border border-transparent hover:bg-muted hover:text-foreground data-[state=on]:text-foreground'
       },
       size: {
         default: '',
@@ -147,9 +146,7 @@ function ToggleGroupSelectionIndicator({
     }
 
     const mutationObserver =
-      typeof MutationObserver === 'undefined'
-        ? null
-        : new MutationObserver(scheduleMeasure)
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(scheduleMeasure)
     mutationObserver?.observe(root, {
       attributes: true,
       attributeFilter: ['data-state'],
@@ -249,7 +246,7 @@ const ToggleGroupItem = React.forwardRef<
   const activeStateClass =
     context.type === 'multiple'
       ? itemVariant === 'outline'
-        ? 'data-[state=on]:border-input data-[state=on]:bg-accent'
+        ? 'data-[state=on]:border-input data-[state=on]:bg-muted'
         : 'data-[state=on]:bg-card data-[state=on]:shadow-sm'
       : 'data-[state=on]:border-transparent data-[state=on]:bg-transparent data-[state=on]:hover:bg-transparent data-[state=on]:shadow-none'
 

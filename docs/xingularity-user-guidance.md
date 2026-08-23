@@ -45,11 +45,11 @@ On startup, the app attempts to restore the last opened vault automatically.
 
 If you open an older vault, Xingularity migrates it forward in place:
 
-* `notes/` is copied into `notebooks/`
+- `notes/` is copied into `notebooks/`
 
-* legacy `.appmeta/` and `.xingularity/` metadata files are promoted to root-level canonical files
+- legacy `.appmeta/` and `.xingularity/` metadata files are promoted to root-level canonical files
 
-* older page-folder JSON stores are rewritten into canonical page folders
+- older page-folder JSON stores are rewritten into canonical page folders
 
 If both `notes/` and `notebooks/` already exist before migration, the app stops and reports a conflict instead of guessing which copy is canonical.
 
@@ -57,29 +57,29 @@ If both `notes/` and `notebooks/` already exist before migration, the app stops 
 
 The sidebar currently includes:
 
-* `Notes`
+- `Notes`
 
-* `Projects`
+- `Projects`
 
-* `Subscriptions`
+- `Subscriptions`
 
-* `Calendar`
+- `Calendar`
 
-* `Weekly Plan`
+- `Weekly Plan`
 
-* `Schedules`
+- `Schedules`
 
-* `Agent Chat`
+- `Agent Chat`
 
-* `Settings`
+- `Settings`
 
 The sidebar also provides:
 
-* a search palette entry point
+- a search palette entry point
 
-* keyboard shortcut hints
+- keyboard shortcut hints
 
-* badges for note, project, and incomplete task counts
+- badges for note, project, and incomplete task counts
 
 ## Notebooks Workflow
 
@@ -87,31 +87,31 @@ Use the Notebooks page when you want to write, search, or organize Markdown cont
 
 Available actions:
 
-* create a note
+- create a note
 
-* rename a note
+- rename a note
 
-* delete a note
+- delete a note
 
-* edit and preview Markdown
+- edit and preview Markdown
 
-* add and remove tags
+- add and remove tags
 
-* favorite a note
+- favorite a note
 
-* export a note
+- export a note
 
 Notes support:
 
-* frontmatter-backed title and tags
+- frontmatter-backed title and tags
 
-* inline `#tags`
+- inline `#tags`
 
-* `[note](note-mention://note)` mentions
+- `[note](note-mention://note)` mentions
 
-* drag-and-drop file import into `attachments/`
+- drag-and-drop file import into `attachments/`
 
-* pasted image import into the vault
+- pasted image import into the vault
 
 Search is local and indexes note title, body, and tags.
 
@@ -121,15 +121,15 @@ Use the Projects page to manage active work streams.
 
 Available actions:
 
-* create a project
+- create a project
 
-* edit project name and description
+- edit project name and description
 
-* favorite or delete a project
+- favorite or delete a project
 
-* customize the project icon
+- customize the project icon
 
-* add, edit, assign, and delete tasks
+- add, edit, assign, and delete tasks
 
 Projects remain independent records; notebook files and tags are created and managed by the user. Tasks are shared across Projects, Calendar, automation, and weekly planning through their `projectId`.
 
@@ -139,63 +139,63 @@ Use Subscriptions to track recurring spend across tools, vendors, and services.
 
 Available actions:
 
-* add a subscription
+- add a subscription
 
-* edit subscription details
+- edit subscription details
 
-* archive a subscription
+- archive a subscription
 
-* delete a subscription
+- delete a subscription
 
-* filter by status or category
+- filter by status or category
 
-* sort the list by subscription, category, monthly amount, next renewal, or status
+- sort the list by subscription, category, monthly amount, next renewal, or status
 
-* inspect recurring spend by category in the treemap
+- inspect recurring spend by category in the treemap
 
 Each subscription can store:
 
-* name and provider
+- name and provider
 
-* category
+- category
 
-* amount and billing cycle
+- amount and billing cycle
 
-* next renewal date
+- next renewal date
 
-* status
+- status
 
-* review flag
+- review flag
 
-* last-used date
+- last-used date
 
-* tags
+- tags
 
-* notes
+- notes
 
 Billing cycles can be monthly, quarterly, yearly, or custom. Xingularity normalizes each record into monthly recurring spend so totals, renewal summaries, and the spend treemap are comparable.
 
 Subscription status values are:
 
-* `active`
+- `active`
 
-* `paused`
+- `paused`
 
-* `cancelled`
+- `cancelled`
 
-* `archived`
+- `archived`
 
 Review flags are:
 
-* `none`
+- `none`
 
-* `review`
+- `review`
 
-* `unused`
+- `unused`
 
-* `duplicate`
+- `duplicate`
 
-* `expensive`
+- `expensive`
 
 ## Calendar Workflow
 
@@ -203,19 +203,19 @@ Use the Calendar page to plan dated work.
 
 Available actions:
 
-* create tasks on specific dates
+- create tasks on specific dates
 
-* keep tasks unscheduled until ready
+- keep tasks unscheduled until ready
 
-* edit task title
+- edit task title
 
-* set priority and task type
+- set priority and task type
 
-* assign reminders
+- assign reminders
 
-* mark tasks complete
+- mark tasks complete
 
-* delete tasks
+- delete tasks
 
 Calendar views show the unified task collection, including each task's project assignment.
 
@@ -225,19 +225,19 @@ Use Weekly Plan to organize a single week around priorities instead of just date
 
 Available actions:
 
-* create a new week plan
+- create a new week plan
 
-* edit the focus statement
+- edit the focus statement
 
-* adjust start and end dates
+- adjust start and end dates
 
-* add ordered priorities
+- add ordered priorities
 
-* move priorities up or down
+- move priorities up or down
 
-* link priorities to a project or task
+- link priorities to a project or task
 
-* record wins, misses, blockers, and next-week notes
+- record wins, misses, blockers, and next-week notes
 
 ## Schedules Workflow
 
@@ -245,43 +245,40 @@ Use Schedules to create automations that generate or update workspace data.
 
 Each schedule can define:
 
-* a trigger:
+- a trigger:
+  - manual
 
-  * manual
+  - daily
 
-  * daily
+  - every N minutes
 
-  * every N minutes
+  - cron
 
-  * cron
+  - on app start
 
-  * on app start
+- a runtime:
+  - JavaScript
 
-* a runtime:
+  - Python
 
-  * JavaScript
+- a permission set
 
-  * Python
+- an output mode:
+  - auto-apply
 
-* a permission set
-
-* an output mode:
-
-  * auto-apply
-
-  * review before apply
+  - review before apply
 
 Current automation actions include:
 
-* create task
+- create task
 
-* update task
+- update task
 
-* create note
+- create note
 
-* append to note
+- append to note
 
-* create calendar event
+- create calendar event
 
 Each run stores logs and result details so you can inspect or review what happened.
 
@@ -291,15 +288,15 @@ Use Agent Chat for assistant-style workflows inside the workspace.
 
 Current behavior includes:
 
-* persistent chat sessions
+- persistent chat sessions
 
-* `@` mentions for notes and projects
+- `@` mentions for notes and projects
 
-* attached workspace context passed into prompts
+- attached workspace context passed into prompts
 
-* recent run history beside the conversation
+- recent run history beside the conversation
 
-* inline tool-step rendering while a response is being produced
+- inline tool-step rendering while a response is being produced
 
 The current settings page stores a Mistral API key used for these agent-related flows.
 
@@ -307,71 +304,70 @@ The current settings page stores a Mistral API key used for these agent-related 
 
 Settings is split into four tabs:
 
-* `Profile`: profile name
+- `Profile`: profile name
 
-* `Workspace`: vault location
+- `Workspace`: vault location
 
-* `Appearance`: font family
+- `Appearance`: font family
 
-* `Agent`: Mistral API key
+- `Agent`: Mistral API key
 
 ## Keyboard Shortcuts
 
-* `Cmd/Ctrl + P`: open the search or command palette
+- `Cmd/Ctrl + P`: open the search or command palette
 
-* `Cmd + B`: toggle the right panel when available
+- `Cmd + B`: toggle the right panel when available
 
-* `Cmd + 1`: Notes
+- `Cmd + 1`: Notes
 
-* `Cmd + 2`: Projects
+- `Cmd + 2`: Projects
 
-* `Cmd + 3`: Calendar
+- `Cmd + 3`: Calendar
 
-* `Cmd + 4`: Weekly Plan
+- `Cmd + 4`: Weekly Plan
 
-* `Cmd + 5`: Schedules
+- `Cmd + 5`: Schedules
 
-* `Cmd + D`: Dashboard
+- `Cmd + D`: Dashboard
 
-* `Cmd + K`: Knowledge
+- `Cmd + K`: Knowledge
 
-* `Cmd + G`: Grid, when enabled
+- `Cmd + G`: Grid, when enabled
 
-* `Cmd + I`: Agent Chat
+- `Cmd + I`: Agent Chat
 
-* `Cmd + ,`: Settings
+- `Cmd + ,`: Settings
 
 ## Where Data Lives
 
 Vault-backed files:
 
-* notebooks: `notebooks/**/*.md`
+- notebooks: `notebooks/**/*.md`
 
-* attachments: `attachments/**`
+- attachments: `attachments/**`
 
-* vault-scoped settings: `settings.json`
+- vault-scoped settings: `settings.json`
 
-* projects: `projects/<project-id>.json`
+- projects: `projects/<project-id>.json`
 
-* calendar tasks: `calendar/tasks.json`
+- calendar tasks: `calendar/tasks.json`
 
-* weekly plans: `weekly-plan/state.json`
+- weekly plans: `weekly-plan/state.json`
 
-* subscriptions: `subscriptions/data.json`
+- subscriptions: `subscriptions/data.json`
 
-* schedules: `schedules/jobs.json`, `schedules/runs.json`
+- schedules: `schedules/jobs.json`, `schedules/runs.json`
 
-* agent data: `agent/chats.json`, `agent/runs.json`
+- agent data: `agent/chats.json`, `agent/runs.json`
 
-* Excalidraw sessions: `excalidraw/sessions.json`
+- Excalidraw sessions: `excalidraw/sessions.json`
 
-* local index and vault metadata: `vault.json`, `migrations.json`, `filemap.json`, `index.sqlite`
+- local index and vault metadata: `vault.json`, `migrations.json`, `filemap.json`, `index.sqlite`
 
 ## Current Caveats
 
-* The app is local-first and does not provide cloud sync in this build.
+- The app is local-first and does not provide cloud sync in this build.
 
-* Notes are Markdown files; projects, schedules, and planning data are app-managed.
+- Notes are Markdown files; projects, schedules, and planning data are app-managed.
 
-* Agent and schedule capabilities depend on local configuration and granted permissions.
-
+- Agent and schedule capabilities depend on local configuration and granted permissions.

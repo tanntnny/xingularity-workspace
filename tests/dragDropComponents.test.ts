@@ -18,6 +18,10 @@ describe('DragSource', () => {
     expect(markup).toContain('draggable="true"')
     expect(markup).toContain('data-dragging="true"')
     expect(markup).toContain('data-drag-visual="source"')
+    expect(markup).toContain('data-drag-preview-target="source"')
+    expect(markup).toContain('data-drag-preview-axis="both"')
+    expect(markup).toContain('data-drag-preview-motion="none"')
+    expect(markup).toContain('data-drag-preview-elevation="default"')
     expect(markup).toContain('data-[dragging=true]:opacity-0')
     expect(markup).not.toContain('data-[dragging=true]:rotate-[var(--drag-preview-rotation)]')
     expect(markup).toContain('--drag-preview-rotation:-2deg')
@@ -56,6 +60,31 @@ describe('DragSource', () => {
     expect(markup).toContain('data-[drag-visual=preview]:opacity-100')
     expect(markup).not.toContain('data-[drag-visual=preview]:bg-[var(--drag-preview-bg)]')
   })
+
+  it('supports axis-locked, smoothly moving, elevated custom previews', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(
+        DragSource,
+        {
+          as: 'button',
+          preview: 'floating',
+          previewAxis: 'y',
+          previewMotion: 'smooth',
+          previewElevation: 'strong',
+          hideFromPreview: true,
+          previewTargetRef: { current: null }
+        },
+        'Milestone handle'
+      )
+    )
+
+    expect(markup).toContain('data-drag-preview-target="custom"')
+    expect(markup).toContain('data-drag-preview-axis="y"')
+    expect(markup).toContain('data-drag-preview-motion="smooth"')
+    expect(markup).toContain('data-drag-preview-elevation="strong"')
+    expect(markup).toContain('data-drag-preview-ignore="true"')
+    expect(markup).toContain('data-[drag-visual=preview]:shadow-2xl')
+  })
 })
 
 describe('DropZone', () => {
@@ -85,7 +114,14 @@ describe('DropZone', () => {
 
       expect(markup).toContain(`data-drop-zone-variant="${variant}"`)
       expect(markup).toContain('bg-[var(--drop-zone-active-bg)]')
-      expect(markup).toContain('border-[var(--drop-zone-active-border)]')
+      if (variant === 'row') {
+        expect(markup).toContain('data-[drag-over=true]:shadow-sm')
+        expect(markup).not.toContain(
+          'data-[drag-over=true]:border-[var(--drop-zone-active-border)]'
+        )
+      } else {
+        expect(markup).toContain('border-[var(--drop-zone-active-border)]')
+      }
     }
 
     const timedMarkup = renderToStaticMarkup(

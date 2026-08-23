@@ -64,6 +64,25 @@ const BreadcrumbButton = React.forwardRef<
 ))
 BreadcrumbButton.displayName = 'BreadcrumbButton'
 
+const BreadcrumbIconLabel = React.forwardRef<
+  HTMLSpanElement,
+  React.ComponentPropsWithoutRef<'span'> & {
+    icon: React.ReactNode
+  }
+>(({ children, className, icon, ...props }, ref) => (
+  <span
+    ref={ref}
+    className={cn('inline-flex min-w-0 max-w-full items-center gap-1.5', className)}
+    {...props}
+  >
+    <span aria-hidden="true" className="inline-flex shrink-0 items-center justify-center">
+      {icon}
+    </span>
+    <span className="min-w-0 truncate">{children}</span>
+  </span>
+))
+BreadcrumbIconLabel.displayName = 'BreadcrumbIconLabel'
+
 const BreadcrumbLabel = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
   ({ className, ...props }, ref) => (
     <span ref={ref} className={cn('font-normal text-muted-foreground', className)} {...props} />
@@ -121,6 +140,7 @@ export {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbButton,
+  BreadcrumbIconLabel,
   BreadcrumbLabel,
   BreadcrumbPage,
   BreadcrumbSeparator,

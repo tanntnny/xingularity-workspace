@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FileService } from '../src/main/fileService'
-import { ScheduleService } from '../src/main/scheduleService'
+import { computeNextRunAt, ScheduleService } from '../src/main/scheduleService'
 import { buildCalendarEvents } from '../src/renderer/src/lib/calendarTasks'
 import type { AppSettings, AppSettingsUpdate } from '../src/shared/types'
 
@@ -133,9 +133,12 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
-    expect(run.status).toBe('success')
+    expect(resolvedRun.status).toBe('success')
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0]).toMatchObject({
       title: 'Scheduled planning task',
@@ -166,6 +169,39 @@ describe('ScheduleService action application', () => {
     ])
   })
 
+  it('applies canceled task actions as done tasks', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Cancel scheduled task',
+      enabled: true,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      outputMode: 'auto_apply',
+      permissions: ['createTasks'],
+      code: `beacon.emit({
+        type: 'task.create',
+        title: 'Canceled scheduled task',
+        status: 'canceled',
+        automationSource: 'test-schedule',
+        automationSourceKey: 'canceled-task'
+      })`
+    })
+
+    const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const settings = await runtime.getSettings()
+
+    expect(settings.calendarTasks[0]).toMatchObject({
+      title: 'Canceled scheduled task',
+      status: 'canceled',
+      completed: true
+    })
+  })
+
   it('applies note.create by creating a readable note in the vault', async () => {
     const runtime = new MockRuntime(tempRoot)
     const service = new ScheduleService(runtime as never)
@@ -191,9 +227,12 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const resolvedRun = (await service.listRuns(job.id))[0]!
     const notes = await runtime.listNotes()
 
-    expect(run.status).toBe('success')
+    expect(resolvedRun.status).toBe('success')
     expect(notes).toHaveLength(1)
     expect(notes[0]?.name).toBe('schedule-test-note.md')
 
@@ -223,9 +262,12 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
-    expect(run.status).toBe('success')
+    expect(resolvedRun.status).toBe('success')
     expect(settings.calendarTasks[0]).toMatchObject({
       title: 'Submit final report',
       date: undefined,
@@ -272,10 +314,13 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
-    expect(run.status).toBe('success')
-    expect(run.actionErrors).toEqual([])
+    expect(resolvedRun.status).toBe('success')
+    expect(resolvedRun.actionErrors).toEqual([])
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0]).toMatchObject({
       title: 'Submit MCV assignment',
@@ -288,10 +333,13 @@ describe('ScheduleService action application', () => {
     })
 
     const repeatRun = await service.runNow(job.id)
+    expect(repeatRun.status).toBe('review')
+    await service.applyActions(repeatRun.id)
+    const resolvedRepeatRun = (await service.listRuns(job.id))[0]!
     const repeatedSettings = await runtime.getSettings()
 
-    expect(repeatRun.status).toBe('success')
-    expect(repeatRun.actionErrors).toEqual([])
+    expect(resolvedRepeatRun.status).toBe('success')
+    expect(resolvedRepeatRun.actionErrors).toEqual([])
     expect(repeatedSettings.calendarTasks).toHaveLength(1)
   })
 
@@ -318,9 +366,12 @@ print(json.dumps({"actions": [{
     })
 
     const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+    const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
-    expect(run.status).toBe('success')
+    expect(resolvedRun.status).toBe('success')
     expect(settings.calendarTasks[0]).toMatchObject({
       title: 'Python planning task',
       date: '2026-04-05',
@@ -365,5 +416,20 @@ print(json.dumps({"actions": [{
     expect(appliedRun.status).toBe('review')
     await service.applyActions(appliedRun.id)
     expect((await service.listJobs())[0]?.lastStatus).toBe('success')
+  })
+})
+
+describe('computeNextRunAt', () => {
+  it('uses the selected timezone for daily triggers', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-18T12:00:00.000Z'))
+
+    try {
+      expect(computeNextRunAt({ type: 'daily', time: '09:00', timezone: 'Asia/Bangkok' })).toBe(
+        '2026-08-19T02:00:00.000Z'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

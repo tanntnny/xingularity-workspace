@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import { normalizeTaskTags } from '../shared/taskTags'
 import { normalizeCalendarEndDate } from '../shared/calendarTaskDates'
+import { isTaskStatusDone } from '../shared/taskStatus'
 import { upsertTagsInMarkdown } from '../shared/noteTags'
 import {
   AppSettings,
@@ -104,7 +105,9 @@ const calendarTaskCreateSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
   reminders: z.array(reminderSchema).max(10).optional(),
-  status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
+  status: z
+    .enum(['pending', 'backlog', 'in-progress', 'blocked', 'canceled', 'completed'])
+    .optional(),
   completed: z.boolean().optional()
 })
 
@@ -124,7 +127,9 @@ const calendarTaskUpdateSchema = z
     taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).nullable().optional(),
     tags: z.array(z.string().trim().min(1).max(129)).max(50).optional(),
     reminders: z.array(reminderSchema).max(10).optional(),
-    status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
+    status: z
+      .enum(['pending', 'backlog', 'in-progress', 'blocked', 'canceled', 'completed'])
+      .optional(),
     completed: z.boolean().optional()
   })
   .refine((value) => value.taskId || value.titleMatch, {
@@ -367,7 +372,7 @@ export class AgentToolsService {
         endDate: normalizeCalendarEndDate(input.date, input.endDate),
         time: input.time,
         endTime: input.endTime,
-        completed: status === 'completed',
+        completed: isTaskStatusDone(status),
         status,
         createdAt: new Date().toISOString(),
         priority: input.priority ?? 'low',
@@ -434,7 +439,7 @@ export class AgentToolsService {
         reminders: input.reminders ?? task.reminders,
         completed:
           input.status !== undefined
-            ? input.status === 'completed'
+            ? isTaskStatusDone(input.status)
             : (input.completed ?? task.completed),
         status:
           input.status ??

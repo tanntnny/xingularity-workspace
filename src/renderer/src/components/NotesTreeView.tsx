@@ -48,6 +48,7 @@ import {
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
+import { Button, rowActionButtonClassName } from './ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,7 +71,7 @@ import { cn } from '../lib/utils'
 const TREE_ICON_CLASS = 'h-4 w-4 shrink-0'
 const TREE_CHEVRON_CLASS = 'h-3.5 w-3.5 shrink-0'
 const TREE_DROPDOWN_ITEM_CLASS =
-  'relative flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground'
+  'relative flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors focus:bg-surface-subtle-hover focus:text-foreground hover:bg-surface-subtle-hover hover:text-foreground'
 const TREE_INDENT = 18
 const TREE_ROW_HEIGHT = 28
 const AUTO_EXPAND_DELAY_MS = 400
@@ -627,7 +628,7 @@ function TreeNode({
   const renameFocusHandoffRef = useRef(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const rowStyle = style as CSSProperties
-  const rowIndent = rowStyle.paddingLeft
+  const rowIndent = typeof rowStyle.paddingLeft === 'number' ? rowStyle.paddingLeft : 0
   const fullWidthRowStyle: CSSProperties = {
     ...rowStyle,
     width: '100%',
@@ -826,22 +827,38 @@ function TreeNode({
         data-testid={`note-tree-row:${node.data.relPath}`}
         className={cn(
           'relative flex h-full w-full min-w-0 items-center rounded-md text-sm transition-[background-color,color,box-shadow] duration-150 ease-out',
-          node.isSelected ? 'bg-accent text-foreground' : 'text-foreground hover:bg-muted'
+          node.isSelected ? 'bg-muted text-foreground' : 'text-foreground hover:bg-muted'
         )}
         onContextMenu={
           useNativeMenus && !isEditing ? (event) => void handleNativeContextMenu(event) : undefined
         }
         ref={(element) => handleRowDragRef(element as HTMLDivElement | null)}
       >
+        {node.level > 0 ? (
+          <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
+            {Array.from({ length: node.level }, (_, guideIndex) => (
+              <span
+                key={guideIndex}
+                data-testid={`note-tree-indent-guide:${node.data.relPath}:${guideIndex}`}
+                className="absolute inset-y-0 w-[var(--border-width)] bg-border opacity-80"
+                style={{
+                  left: rowIndent - TREE_INDENT / 2 - guideIndex * TREE_INDENT
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
         <div
           className="relative z-10 flex h-full w-full min-w-0 items-center gap-2 px-2"
           style={{ paddingLeft: rowIndent }}
         >
           <button
             type="button"
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground transition-colors motion-reduce:transition-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={cn(
+              rowActionButtonClassName,
+              'flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               isFolder ? 'opacity-100' : 'opacity-0'
-            }`}
+            )}
             aria-expanded={isFolder ? node.isOpen : undefined}
             onClick={(event) => {
               event.stopPropagation()
@@ -892,10 +909,12 @@ function TreeNode({
           ) : null}
           {!isEditing && !isProtected ? (
             useNativeMenus ? (
-              <button
+              <Button
                 type="button"
+                variant="rowAction"
+                size="icon"
                 data-testid={`note-tree-menu:${node.data.relPath}`}
-                className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-card hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+                className="ml-auto h-5 w-5 shrink-0 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
                 onPointerDown={(event) => {
                   event.stopPropagation()
                 }}
@@ -904,14 +923,16 @@ function TreeNode({
                 aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
               >
                 <MoreHorizontal className="h-4 w-4" />
-              </button>
+              </Button>
             ) : (
               <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
                 <DropdownMenuTrigger asChild>
-                  <button
+                  <Button
                     type="button"
+                    variant="rowAction"
+                    size="icon"
                     data-testid={`note-tree-menu:${node.data.relPath}`}
-                    className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-card hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+                    className="ml-auto h-5 w-5 shrink-0 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
                     onPointerDown={(event) => {
                       event.stopPropagation()
                     }}
@@ -922,7 +943,7 @@ function TreeNode({
                     aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
@@ -1018,7 +1039,7 @@ function TreeNode({
                   <button
                     type="button"
                     role="menuitem"
-                    className={`${TREE_DROPDOWN_ITEM_CLASS} text-destructive focus:bg-destructive/10 focus:text-destructive`}
+                    className={TREE_DROPDOWN_ITEM_CLASS}
                     onPointerDownCapture={(event) => handleDropdownMenuAction(event, 'delete')}
                     onClick={(event) => handleDropdownMenuAction(event, 'delete')}
                     onKeyDown={(event) => handleDropdownMenuKeyDown(event, 'delete')}
@@ -1101,7 +1122,7 @@ function TreeNode({
               <Pencil className="mr-2 h-4 w-4" />
               Rename
             </ContextMenuItem>
-            <ContextMenuItem destructive onSelect={() => handleMenuAction('delete')}>
+            <ContextMenuItem onSelect={() => handleMenuAction('delete')}>
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </ContextMenuItem>

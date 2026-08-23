@@ -41,6 +41,17 @@ describe('task page composition', () => {
     expect(markup).not.toContain('A private task description')
   })
 
+  it('renders calendar task property chips with muted bare styling', () => {
+    const markup = renderToStaticMarkup(
+      createElement(CalendarTaskCard, { task: { ...task, tags: [] } })
+    )
+
+    expect(markup).toContain('group/status-chip')
+    expect(markup).toContain('text-muted-foreground')
+    expect(markup).toContain('hover:bg-transparent')
+    expect(markup).not.toContain('ui-control')
+  })
+
   it('renders the task properties using the shared project property-row layout', () => {
     const markup = renderToStaticMarkup(
       createElement(TaskPropertiesPanel, {
@@ -56,18 +67,23 @@ describe('task page composition', () => {
     expect(markup).toContain('data-testid="task-property-tags"')
     expect(markup).toContain('data-testid="task-property-reminders"')
     expect(markup).toContain('Launch project')
+    expect(markup).toContain('aria-label="Task project for Prepare release: Launch project"')
+    expect(markup).toContain('aria-haspopup="dialog"')
   })
 
   it('provides a full-page task surface with a description character contract', () => {
     const markup = renderToStaticMarkup(
       createElement(TaskPage, {
         task,
-        onUpdateTask: () => undefined
+        onUpdateTask: () => undefined,
+        vimModeEnabled: true,
+        vimKeyMappings: []
       })
     )
 
     expect(markup).toContain('data-testid="task-page"')
     expect(markup).toContain('data-testid="note-block-editor"')
+    expect(markup).toContain('data-vim-mode="insert"')
     expect(markup).toContain('Description saved')
   })
 })

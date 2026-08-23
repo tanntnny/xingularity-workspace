@@ -1,66 +1,64 @@
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
+import { useId, useMemo, type ReactElement } from 'react'
 import { normalizeTag } from '../../../shared/noteTags'
-import { TagChip } from './TagChip'
-import { Plus } from './ui/icons'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
 import { cn } from '../lib/utils'
+import { TagChip } from './TagChip'
+import { Search, TagOutline } from './ui/icons'
+import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
+import { StatusChip, type StatusChipSurface } from './ui/status-chip'
 
 export interface TagEditorProps {
   value: string[]
+  availableTags?: readonly string[]
   onChange: (tags: string[]) => void
   onFind?: (tag: string) => void
   label?: string
-  inputPlaceholder?: string
+  searchPlaceholder?: string
   testId?: string
   className?: string
+  surface?: StatusChipSurface
 }
+
+const TAG_CREATE_ERROR = 'Use letters, numbers, dash, underscore, or a namespace colon.'
 
 export function TagEditor({
   value,
+  availableTags = [],
   onChange,
   onFind,
   label = 'Tags',
-  inputPlaceholder = 'tag name',
+  searchPlaceholder = 'Search or add tags',
   testId,
-  className
+  className,
+  surface = 'pill'
 }: TagEditorProps): ReactElement {
-  const [isAdding, setIsAdding] = useState(false)
-  const [inputValue, setInputValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
   const labelId = useId()
-  const errorId = useId()
+  const options = useMemo<SelectionPopoverOption[]>(() => {
+    const values = new Set<string>()
 
-  useEffect(() => {
-    if (!isAdding) return
-
-    const frameId = window.requestAnimationFrame(() => inputRef.current?.focus())
-    return () => window.cancelAnimationFrame(frameId)
-  }, [isAdding])
-
-  const closeInput = (): void => {
-    setIsAdding(false)
-    setInputValue('')
-    setError(null)
-  }
-
-  const handleAdd = (): void => {
-    const normalized = normalizeTag(inputValue)
-    if (!normalized) {
-      setError('Use letters, numbers, dash, underscore, or a namespace colon.')
-      return
+    for (const tag of [...availableTags, ...value]) {
+      const normalized = normalizeTag(tag)
+      if (normalized) values.add(normalized)
     }
 
-    if (value.includes(normalized)) {
-      setError(`Tag #${normalized} already exists.`)
-      return
-    }
+    return Array.from(values)
+      .sort((left, right) => left.localeCompare(right))
+      .map((tag) => ({
+        value: tag,
+        searchText: `#${tag}`,
+        label: <TagChip tag={tag} className="w-full max-w-full" labelOverflow="fade" />,
+        action: onFind
+          ? {
+              label: `Search tag ${tag}`,
+              icon: <Search size={14} aria-hidden="true" />,
+              onSelect: () => onFind(tag)
+            }
+          : undefined
+      }))
+  }, [availableTags, onFind, value])
 
-    onChange([...value, normalized])
-    setInputValue('')
-    setError(null)
-    setIsAdding(true)
+  const handleCreate = (tag: string): void => {
+    if (value.includes(tag)) return
+    onChange([...value, tag])
   }
 
   return (
@@ -73,63 +71,32 @@ export function TagEditor({
       <span id={labelId} className="sr-only">
         {label}
       </span>
-      {value.map((tag) => (
-        <TagChip
-          key={tag}
-          tag={tag}
-          onClick={onFind}
-          onRemove={(nextTag) => onChange(value.filter((item) => item !== nextTag))}
-        />
-      ))}
-      {isAdding ? (
-        <div className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
-          <Input
-            ref={inputRef}
-            value={inputValue}
-            onChange={(event) => {
-              setInputValue(event.target.value)
-              if (error) setError(null)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                event.stopPropagation()
-                handleAdd()
-              } else if (event.key === 'Escape') {
-                event.preventDefault()
-                closeInput()
-              }
-            }}
-            onBlur={closeInput}
-            placeholder={inputPlaceholder}
-            aria-label="Add tag"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? errorId : undefined}
-            autoFocus
-            className="h-7 w-32 rounded-md border-primary px-2.5 py-1 text-sm caret-primary"
-          />
-          {error ? (
-            <span id={errorId} role="alert" className="basis-full text-xs text-destructive">
-              {error}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            setError(null)
-            setIsAdding(true)
+      <SelectionPopover
+        selectionMode="multiple"
+        value={value}
+        options={options}
+        onValueChange={onChange}
+        onCreate={handleCreate}
+        getCreateValue={normalizeTag}
+        createError={TAG_CREATE_ERROR}
+        label={`${label} selection`}
+        searchPlaceholder={searchPlaceholder}
+        testId={testId ? `${testId}-popover` : undefined}
+      >
+        <StatusChip
+          as="button"
+          item={{
+            label: 'Tags',
+            icon: <TagOutline aria-hidden="true" />,
+            iconColorToken: 'var(--muted-foreground)'
           }}
-          title="Add tag"
-          aria-label="Add tag"
-          className="h-7 w-7 rounded-md border border-dashed border-border bg-card p-1 text-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          <Plus size={16} aria-hidden="true" />
-        </Button>
-      )}
+          type="button"
+          surface={surface}
+          title={label}
+          aria-label={`${label} selection`}
+          data-testid={testId ? `${testId}-trigger` : undefined}
+        />
+      </SelectionPopover>
     </div>
   )
 }

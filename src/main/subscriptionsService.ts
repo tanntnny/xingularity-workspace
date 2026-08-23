@@ -6,6 +6,7 @@ import {
 } from '../shared/subscriptions'
 import type {
   CreateSubscriptionInput,
+  AddSubscriptionPaymentInput,
   Maybe,
   SubscriptionAnalytics,
   SubscriptionAnalyticsFilters,
@@ -82,6 +83,35 @@ export class SubscriptionsService {
 
   async archive(id: string): Promise<SubscriptionRecord> {
     return this.update({ id, status: 'archived' })
+  }
+
+  async addPayment(input: AddSubscriptionPaymentInput): Promise<SubscriptionRecord> {
+    return this.enqueueMutation(async () => {
+      const nowIso = new Date().toISOString()
+      let updatedRecord: SubscriptionRecord | null = null
+      await this.assertStore().update((records) =>
+        records.map((record) => {
+          if (record.id !== input.subscriptionId) return record
+          updatedRecord = {
+            ...record,
+            paymentHistory: [
+              ...(record.paymentHistory ?? []),
+              {
+                id: randomUUID(),
+                paidAt: input.paidAt,
+                amount: Math.max(0, input.amount),
+                currency: (input.currency ?? record.currency).trim().toUpperCase(),
+                ...(input.note?.trim() ? { note: input.note.trim() } : {})
+              }
+            ].sort((left, right) => right.paidAt.localeCompare(left.paidAt)),
+            updatedAt: nowIso
+          }
+          return updatedRecord
+        })
+      )
+      if (!updatedRecord) throw new Error(`Subscription not found: ${input.subscriptionId}`)
+      return updatedRecord
+    })
   }
 
   async getAnalytics(filters: SubscriptionAnalyticsFilters = {}): Promise<SubscriptionAnalytics> {

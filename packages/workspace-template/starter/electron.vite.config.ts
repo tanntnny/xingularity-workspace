@@ -9,9 +9,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
-        '@xingularity/workspace-template/styles/workspace.css': resolve(
-          '../styles/workspace.css'
-        ),
+        '@xingularity/workspace-template/styles/workspace.css': resolve('../styles/workspace.css'),
         '@xingularity/workspace-template': resolve('../src/index.ts')
       }
     },

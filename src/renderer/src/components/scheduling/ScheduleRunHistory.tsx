@@ -1,14 +1,15 @@
 import type { ReactElement } from 'react'
 import { Clock3, Copy } from '../ui/icons'
 import {
-  Badge,
   Button,
   CollapsibleWorkspacePanelSection,
   EmptyState,
   WorkspaceListRail,
   WorkspaceListRailItem
 } from '../ui'
-import type { RunStatus, ScheduleRunRecord, ScriptAction } from '../../../../shared/scheduleTypes'
+import type { ScheduleRunRecord, ScriptAction } from '../../../../shared/scheduleTypes'
+import { RUN_STATUS_CHIP_ITEMS } from '../../lib/statusChipMeta'
+import { StatusChip } from '../ui/status-chip'
 import type { ScheduleRunHistoryListProps, ScheduleRunHistoryProps } from './types'
 
 function formatDateTime(value: string | undefined): string {
@@ -18,22 +19,6 @@ function formatDateTime(value: string | undefined): string {
 
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString()
-}
-
-function statusTone(status: RunStatus): 'neutral' | 'success' | 'warning' | 'danger' {
-  if (status === 'success') {
-    return 'success'
-  }
-
-  if (status === 'review') {
-    return 'warning'
-  }
-
-  if (status === 'error' || status === 'cancelled') {
-    return 'danger'
-  }
-
-  return 'neutral'
 }
 
 function actionLabel(action: ScriptAction): string {
@@ -70,7 +55,7 @@ function RunListItem({
       onClick={onSelect}
       active={selected}
       data-testid={`scheduling-run:${run.id}`}
-      trailing={<Badge tone={statusTone(run.status)}>{run.status}</Badge>}
+      trailing={<StatusChip item={RUN_STATUS_CHIP_ITEMS[run.status]} />}
       description={`${run.proposedActions.length} proposed · ${run.appliedActions.length} applied${
         run.actionErrors && run.actionErrors.length > 0
           ? ` · ${run.actionErrors.length} failed`
@@ -128,7 +113,7 @@ export function ScheduleRunHistory({
 
   return (
     <section
-      className="flex min-h-full min-w-0 flex-col gap-6 p-2"
+      className="flex min-h-full min-w-0 flex-col gap-6"
       data-testid="scheduling-run-history"
       aria-labelledby="scheduling-run-history-heading"
     >
@@ -154,7 +139,7 @@ export function ScheduleRunHistory({
         <article className="min-w-0 space-y-6" aria-label={`${selectedRun.status} run details`}>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-panel-border pb-4">
             <div>
-              <p className="text-sm font-semibold">{selectedRun.status} run</p>
+              <StatusChip item={RUN_STATUS_CHIP_ITEMS[selectedRun.status]} />
               <p className="mt-1 text-xs text-muted-foreground">
                 Started {formatDateTime(selectedRun.startedAt)} · ended{' '}
                 {formatDateTime(selectedRun.endedAt)}

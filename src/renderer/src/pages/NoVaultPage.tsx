@@ -45,7 +45,7 @@ export function NoVaultPage({
       <div className="flex flex-1 items-center justify-center px-3 py-12 sm:px-8">
         <Card className="w-full max-w-2xl">
           <CardHeader className="items-center text-center">
-            <div className="flex size-16 items-center justify-center rounded-lg border border-ring bg-accent text-primary">
+            <div className="flex size-16 items-center justify-center rounded-lg border border-ring bg-muted text-foreground">
               <FolderOpen size={26} aria-hidden="true" />
             </div>
             <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight">
@@ -81,7 +81,7 @@ export function NoVaultPage({
                 </Button>
               </div>
             ) : (
-              <div className="rounded-lg border border-ring bg-accent px-4 py-3 text-left text-sm text-primary">
+              <div className="rounded-lg border border-ring bg-muted px-4 py-3 text-left text-sm text-foreground">
                 {isMobileShell
                   ? 'Mobile/web mode now shares the app shell and page system, but still needs a managed local workspace adapter.'
                   : 'A platform workspace adapter must be connected before this build can open local data.'}

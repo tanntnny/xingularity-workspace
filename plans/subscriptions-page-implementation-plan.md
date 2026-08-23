@@ -5,6 +5,7 @@
 Design and implement the **Subscriptions** page as the first page inside the new Finance section.
 
 This page should:
+
 - fit naturally inside the existing Xingularity app shell
 - respect the persistent **left global sidebar**
 - prioritize a **treemap** as the main visual for recurring spend
@@ -16,6 +17,7 @@ This page should:
 ## 1) Context and constraints from the current app
 
 The current app already has:
+
 - a persistent set of top-level pages in the main navigation
 - renderer-side page routing
 - a preload bridge (`window.vaultApi`) that proxies to validated IPC handlers
@@ -27,11 +29,13 @@ The new page should therefore behave like a **native app page**, not like an emb
 ### Important design consequence
 
 Do **not** build the page as:
+
 - a full-bleed standalone dashboard
 - a right-sidebar-heavy analytics screen
 - a page that assumes no surrounding navigation chrome
 
 Instead, build it for a layout where:
+
 - the **left global sidebar is always present**
 - the content area must remain readable even with reduced width
 - the main information hierarchy is visible without needing multiple side panels
@@ -51,6 +55,7 @@ It should answer these questions quickly:
 5. **What should I cancel, downgrade, or review?**
 
 That means the page needs both:
+
 - **analysis**
 - **actionability**
 
@@ -61,7 +66,9 @@ That means the page needs both:
 ## Primary layout zones
 
 ### A. Header row
+
 Contains:
+
 - page title: `Subscriptions`
 - optional breadcrumb or Finance section label
 - search input
@@ -70,7 +77,9 @@ Contains:
 - import button (later phase)
 
 ### B. KPI summary row
+
 4 compact cards:
+
 - **Monthly recurring**
 - **Yearly recurring**
 - **Renewing in 30 days**
@@ -79,6 +88,7 @@ Contains:
 These cards should stay small and dense. They are support context, not the hero.
 
 ### C. Main analytics area
+
 Two-column layout:
 
 - **Main column (dominant width):** Treemap
@@ -87,7 +97,9 @@ Two-column layout:
 This gives the page a clear focal point and avoids crowding the treemap.
 
 ### D. Supporting list area
+
 Below analytics:
+
 - subscriptions table/list
 - sortable and filterable
 - serves as precise operational view after the treemap gives context
@@ -99,12 +111,14 @@ Below analytics:
 Because the left global sidebar already consumes horizontal space, use a **content-maximizing center layout**.
 
 ### Width strategy
+
 - global sidebar remains fixed on the far left
 - page content uses the rest of the viewport
 - keep page content padded, but not over-padded
 - avoid giant margins; the page must work on laptop widths
 
 ### Suggested page shell
+
 - outer content padding: `px-5` to `px-6`
 - vertical spacing: moderate, not airy
 - content max width: optional, but do **not** clamp too narrowly
@@ -115,22 +129,28 @@ Because the left global sidebar already consumes horizontal space, use a **conte
 ## 5) UX behavior principles
 
 ## Principle 1: Treemap first, but not treemap only
+
 The treemap is the primary visual because it answers:
+
 - where recurring spend is concentrated
 - category-to-service relationships
 - relative weight quickly
 
 But the user must also have:
+
 - a precise list/table
 - a renewal timeline or queue
 - clear row-level actions
 
 ## Principle 2: Category → service hierarchy
+
 Treemap should reflect hierarchy:
+
 - level 1: category
 - level 2: service/provider
 
 Example:
+
 - AI Tools
   - ChatGPT
   - Claude
@@ -146,7 +166,9 @@ Example:
 This makes the chart far more useful than a flat “all subscriptions” view.
 
 ## Principle 3: Use color for status, not decoration
+
 Treemap colors should carry meaning:
+
 - normal / active
 - renewing soon
 - flagged for review
@@ -156,7 +178,9 @@ Treemap colors should carry meaning:
 Avoid overusing many unrelated category colors if they make status harder to perceive.
 
 ## Principle 4: Actionable right rail, not a generic details panel
+
 The secondary panel should focus on:
+
 - upcoming renewals
 - suspected waste
 - duplicate tools
@@ -166,6 +190,7 @@ The secondary panel should focus on:
 This panel should feel operational.
 
 ## Principle 5: Table is where real work happens
+
 Treemap shows patterns.
 Table is where the user edits, sorts, filters, and makes decisions.
 
@@ -176,10 +201,12 @@ Table is where the user edits, sorts, filters, and makes decisions.
 ## 6.1 Header
 
 ### Left side
+
 - `Subscriptions` title
 - optional muted sublabel: `Recurring services and renewals`
 
 ### Right side actions
+
 - search field
 - category/status filters
 - `Add subscription`
@@ -190,6 +217,7 @@ Table is where the user edits, sorts, filters, and makes decisions.
   - show archived
 
 ### Why this matters
+
 Header actions should be enough to manage the whole page without introducing a second top toolbar.
 
 ---
@@ -199,35 +227,48 @@ Header actions should be enough to manage the whole page without introducing a s
 Use 4 horizontally aligned cards.
 
 ### Card 1 — Monthly recurring
+
 Primary number:
+
 - normalized monthly spend
 
 Secondary text:
+
 - `% change vs last month` (future)
 - or `X active subscriptions`
 
 ### Card 2 — Yearly recurring
+
 Primary number:
+
 - estimated yearly recurring total
 
 Secondary text:
+
 - count of annual plans
 
 ### Card 3 — Renewing in 30 days
+
 Primary number:
+
 - count of subscriptions renewing soon
 
 Secondary text:
+
 - total amount at risk
 
 ### Card 4 — Needs review
+
 Primary number:
+
 - count flagged as review / unused / duplicated
 
 Secondary text:
+
 - potential monthly savings
 
 ### Card style
+
 - compact
 - low visual weight
 - not overly decorative
@@ -240,29 +281,36 @@ Secondary text:
 This is the hero component.
 
 ### Chart behavior
+
 Each rectangle represents a subscription.
 Grouped within a category block.
 
 ### Size encoding
+
 - rectangle size = monthly-equivalent spend
 
 ### Color encoding
+
 Recommended:
+
 - neutral/default for active
 - warning for renew soon
 - muted-danger for flagged waste
 - subdued for paused/cancelled
 
 Alternative:
+
 - category hue + status border/accent
 
 ### Interactions
+
 - hover → tooltip
 - click → select service and populate right panel
 - click category header/block → filter table to that category
 - double click optional → isolate category
 
 ### Tooltip fields
+
 - service name
 - category
 - billing cycle
@@ -272,7 +320,9 @@ Alternative:
 - notes count if any
 
 ### Empty state
+
 If there are no subscriptions:
+
 - show an empty chart placeholder
 - CTA to add first subscription
 - optional sample diagram ghost layout
@@ -285,12 +335,16 @@ This should not be a permanent generic inspector.
 It should switch between focused modes.
 
 ### Default mode
+
 Show 2 stacked blocks:
+
 1. **Renewing soon**
 2. **Review / savings opportunities**
 
 ### Selected-item mode
+
 When a treemap item or table row is selected, show:
+
 - service name
 - category
 - amount
@@ -308,6 +362,7 @@ When a treemap item or table row is selected, show:
   - duplicate check
 
 ### Why this is good
+
 The page stays useful even without a selection, but becomes inspectable when the user drills down.
 
 ---
@@ -317,6 +372,7 @@ The page stays useful even without a selection, but becomes inspectable when the
 Place below the chart area.
 
 ### Recommended columns
+
 - Name
 - Category
 - Status
@@ -329,6 +385,7 @@ Place below the chart area.
 - Actions
 
 ### Behavior
+
 - sortable by cost, next renewal, category, status
 - searchable
 - filterable
@@ -336,6 +393,7 @@ Place below the chart area.
 - inline quick actions optional for later
 
 ### Default sort
+
 - flagged items first
 - then nearest renewal date
 - then highest normalized monthly cost
@@ -349,6 +407,7 @@ That default makes the page operational immediately.
 Use lightweight filters above chart/table or in a filter popover.
 
 ### Core filters
+
 - Active / Paused / Cancelled / Archived
 - Renewing in 7 / 30 / 90 days
 - Category
@@ -358,6 +417,7 @@ Use lightweight filters above chart/table or in a filter popover.
 - High cost only
 
 ### Useful toggle
+
 - `Normalize yearly to monthly`
 
 This is important because the treemap becomes misleading if annual and monthly plans are shown without normalization.
@@ -367,32 +427,42 @@ This is important because the treemap becomes misleading if annual and monthly p
 ## 8) Page states
 
 ## Empty state
+
 Show:
+
 - simple explanation
 - add subscription CTA
 - optional CSV import CTA
 - maybe 2–3 example categories visually ghosted
 
 ## Populated default state
+
 Show:
+
 - KPI cards
 - treemap
 - right panel with renewals/review
 - table
 
 ## Selected state
+
 Show:
+
 - selected treemap tile highlighted
 - right panel with item details
 - table filtered or highlighted
 
 ## Filtered state
+
 Show:
+
 - active filters as chips
 - one-click clear all
 
 ## Narrow-width / compact state
+
 If available width is reduced because of window size + sidebar:
+
 - KPI cards wrap to 2x2
 - treemap remains first
 - right panel moves below treemap
@@ -413,6 +483,7 @@ Order of attention should be:
 5. subscription table
 
 This order keeps the page balanced:
+
 - summary first
 - pattern detection second
 - action execution third
@@ -456,6 +527,7 @@ This order keeps the page balanced:
 ## Primary flows
 
 ### Flow A — Review recurring spend
+
 1. User opens page
 2. Scans KPI cards
 3. Reads treemap concentration
@@ -464,6 +536,7 @@ This order keeps the page balanced:
 6. Sees details in right panel and matching row in table
 
 ### Flow B — Review upcoming renewals
+
 1. User looks at right panel
 2. Sees upcoming renewals
 3. Clicks one item
@@ -471,12 +544,14 @@ This order keeps the page balanced:
 5. User edits plan, flags review, or archives/cancels later
 
 ### Flow C — Find waste
+
 1. User applies filter `Needs review`
 2. Treemap and table both update
 3. Right panel shows potential savings
 4. User marks some entries as keep/cancel/archive
 
 ### Flow D — Add a subscription
+
 1. Click `Add subscription`
 2. Modal or side sheet opens
 3. User enters details
@@ -490,6 +565,7 @@ This order keeps the page balanced:
 Use a **modal** first, not a dedicated full page.
 
 ### Fields
+
 - Name
 - Category
 - Provider
@@ -506,6 +582,7 @@ Use a **modal** first, not a dedicated full page.
 - Review flag
 
 ### Form behavior
+
 - validate required fields
 - derive normalized monthly cost automatically
 - if yearly selected, show small helper text:
@@ -521,32 +598,34 @@ Store finance subscriptions as app-managed local state, similar to other structu
 ## Entity: `SubscriptionRecord`
 
 ```ts
-type SubscriptionStatus = "active" | "paused" | "cancelled" | "archived";
-type BillingCycle = "monthly" | "yearly" | "quarterly" | "custom";
+type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'archived'
+type BillingCycle = 'monthly' | 'yearly' | 'quarterly' | 'custom'
 
 type SubscriptionRecord = {
-  id: string;
-  name: string;
-  provider?: string;
-  category: string;
-  amount: number;
-  currency: string;
-  billingCycle: BillingCycle;
-  billingIntervalMonths: number; // derived or explicit for custom cycles
-  normalizedMonthlyAmount: number;
-  nextRenewalAt?: string; // ISO date
-  status: SubscriptionStatus;
-  reviewFlag?: "none" | "review" | "unused" | "duplicate" | "expensive";
-  lastUsedAt?: string; // ISO date
-  tags?: string[];
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-};
+  id: string
+  name: string
+  provider?: string
+  category: string
+  amount: number
+  currency: string
+  billingCycle: BillingCycle
+  billingIntervalMonths: number // derived or explicit for custom cycles
+  normalizedMonthlyAmount: number
+  nextRenewalAt?: string // ISO date
+  status: SubscriptionStatus
+  reviewFlag?: 'none' | 'review' | 'unused' | 'duplicate' | 'expensive'
+  lastUsedAt?: string // ISO date
+  tags?: string[]
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
 ```
 
 ### Storage suggestion
+
 Use:
+
 - `.xingularity/subscriptions.json`
 
 This aligns with the current pattern of app-managed JSON state.
@@ -559,24 +638,25 @@ The renderer should consume precomputed or memoized derived values such as:
 
 ```ts
 type SubscriptionAnalytics = {
-  totalMonthlyRecurring: number;
-  totalYearlyRecurring: number;
-  renewingSoonCount: number;
-  renewingSoonAmount: number;
-  reviewCount: number;
-  potentialSavingsMonthly: number;
+  totalMonthlyRecurring: number
+  totalYearlyRecurring: number
+  renewingSoonCount: number
+  renewingSoonAmount: number
+  reviewCount: number
+  potentialSavingsMonthly: number
   treemapNodes: Array<{
-    id: string;
-    name: string;
-    value: number;
-    category: string;
-    status: string;
-    renewalBucket?: "soon" | "later";
-  }>;
-};
+    id: string
+    name: string
+    value: number
+    category: string
+    status: string
+    renewalBucket?: 'soon' | 'later'
+  }>
+}
 ```
 
 ### Recommendation
+
 Keep raw CRUD separate from analytics derivation.
 This makes UI logic cleaner and easier to test.
 
@@ -588,9 +668,11 @@ The app currently uses preload domains and validated IPC boundaries.
 For subscriptions, add a dedicated domain instead of overloading settings.
 
 ## New preload domain
+
 `subscriptions`
 
 ### Proposed methods
+
 - `list()`
 - `get(id)`
 - `create(input)`
@@ -600,6 +682,7 @@ For subscriptions, add a dedicated domain instead of overloading settings.
 - `getAnalytics(filters?)`
 
 ### Why a dedicated domain is better
+
 - clearer than stuffing finance records inside generic settings
 - easier to evolve later into portfolio/cashflow domains
 - matches the current app architecture style
@@ -609,6 +692,7 @@ For subscriptions, add a dedicated domain instead of overloading settings.
 ## 16) Component architecture
 
 ## Page-level components
+
 - `SubscriptionsPage`
 - `SubscriptionsHeader`
 - `SubscriptionsKpiRow`
@@ -619,12 +703,14 @@ For subscriptions, add a dedicated domain instead of overloading settings.
 - `SubscriptionFilterBar`
 
 ## Hooks / view model
+
 - `useSubscriptionsPageState`
 - `useSubscriptionFilters`
 - `useSubscriptionAnalytics`
 - `useSubscriptionSelection`
 
 ## Utility helpers
+
 - `normalizeSubscriptionAmount`
 - `getRenewalBucket`
 - `buildTreemapNodes`
@@ -637,19 +723,23 @@ For subscriptions, add a dedicated domain instead of overloading settings.
 Choose a React-friendly chart library that supports hierarchical rectangles and responsive layout.
 
 ### Good fit
+
 - `@nivo/treemap`
 
 Why:
+
 - React-native API style
 - good support for hierarchical data
 - easy tooltip customization
 - strong fit for dashboard-style charting
 
 ### Alternative
+
 - `recharts` does not provide as strong a treemap experience for this use case
 - custom D3 is possible but heavier than needed for v1
 
 ### Recommendation
+
 Use `@nivo/treemap` for v1.
 
 ---
@@ -657,10 +747,12 @@ Use `@nivo/treemap` for v1.
 ## 18) State management guidance
 
 For first version:
+
 - page-local state + React Query style fetch pattern if already used
 - or simple custom hooks if the app uses direct preload calls without a data cache library
 
 Keep it simple:
+
 - fetch subscriptions
 - derive analytics in memoized selectors
 - keep filters/selection local to page state
@@ -685,22 +777,26 @@ Do **not** introduce heavy global state unless the rest of the app already relie
 ## 20) Responsive behavior
 
 ### Large desktop
+
 - KPI row in 4 columns
 - treemap and right rail side by side
 - full table below
 
 ### Medium desktop / laptop
+
 - KPI cards wrap if needed
 - treemap remains above
 - right rail narrows but stays usable
 - table below full width
 
 ### Narrow width
+
 - right rail collapses below treemap
 - actions remain in header
 - table becomes horizontally scrollable if necessary
 
 Avoid:
+
 - shrinking the treemap too much
 - keeping a thin unusable right rail
 - forcing too many columns in one row
@@ -710,6 +806,7 @@ Avoid:
 ## 21) Suggested implementation phases
 
 ## Phase 1 — Core page shell
+
 - route and page registration
 - static page layout
 - header
@@ -719,12 +816,14 @@ Avoid:
 - right rail placeholder
 
 ## Phase 2 — Data layer
+
 - add subscription data store
 - preload + IPC methods
 - CRUD operations
 - JSON persistence
 
 ## Phase 3 — Working analytics UI
+
 - derive KPI values
 - render treemap
 - render renewal list
@@ -732,12 +831,14 @@ Avoid:
 - selection sync between chart/table/right panel
 
 ## Phase 4 — Add/edit workflows
+
 - modal form
 - validation
 - create/update/delete/archive
 - optimistic refresh
 
 ## Phase 5 — Polish
+
 - empty states
 - keyboard polish
 - import/export
@@ -766,17 +867,22 @@ The page is complete enough for v1 when:
 ## 23) Recommended route + nav behavior
 
 ## Global sidebar
+
 Add:
+
 - `Finance`
 
 ## Finance local nav
+
 Inside Finance section:
+
 - Overview
 - Portfolio
 - **Subscriptions**
 - Cashflow
 
 If v1 only has one finance page, route directly to:
+
 - `/finance/subscriptions`
 
 Later, add Finance section tabs/subnav without redesigning the page.

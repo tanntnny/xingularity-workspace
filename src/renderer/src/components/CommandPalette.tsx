@@ -438,7 +438,7 @@ export function CommandPalette({
         <Command
           shouldFilter={false}
           filter={passthroughCommandFilter}
-          className="flex-1"
+          className="flex-1 bg-panel text-foreground"
           onValueChange={(value) => {
             const result = allSelectableResults.find((item) => item.value === value) ?? null
             setHoveredResult(result)
@@ -693,7 +693,7 @@ export function CommandPalette({
                 {hoveredResult.tags.slice(0, 5).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-md border border-border bg-accent px-2 py-0.5 text-xs text-primary"
+                    className="rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
                   >
                     {tag}
                   </span>

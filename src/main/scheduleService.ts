@@ -14,6 +14,17 @@ import type {
 import type { CalendarTask } from '../shared/types'
 import { normalizeTaskTags } from '../shared/taskTags'
 import { normalizeCalendarEndDate } from '../shared/calendarTaskDates'
+import { isTaskStatusDone } from '../shared/taskStatus'
+import {
+  addDateOnlyDays,
+  localDateTimeToInstant,
+  resolveDefaultCalendarTimezone
+} from '../shared/calendarDomain'
+import {
+  evaluateScheduleCapabilities,
+  normalizeScheduleOutputMode,
+  normalizeSchedulePermissions
+} from '../shared/schedulePolicy'
 
 const TICK_INTERVAL_MS = 60_000 // check every minute
 
@@ -22,6 +33,7 @@ export class ScheduleService {
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private vaultRoot: string | null = null
   private readonly runningJobs = new Set<string>()
+  private readonly cancellationControllers = new Map<string, AbortController>()
 
   constructor(runtime: VaultRuntime) {
     this.runtime = runtime
@@ -37,6 +49,10 @@ export class ScheduleService {
       this.tickTimer = null
     }
     this.vaultRoot = null
+    for (const controller of this.cancellationControllers.values()) {
+      controller.abort()
+    }
+    this.cancellationControllers.clear()
     this.runningJobs.clear()
   }
 
@@ -76,6 +92,17 @@ export class ScheduleService {
     const store = this.createStore()
     const existing = input.id ? (await store.readJobs()).find((j) => j.id === input.id) : null
 
+    const permissions = normalizeSchedulePermissions(input.permissions)
+    const secretRefs = input.secretRefs ?? existing?.secretRefs ?? []
+    const capabilityDecision = evaluateScheduleCapabilities({
+      ...input,
+      permissions,
+      secretRefs
+    })
+    if (!capabilityDecision.allowed) {
+      throw new Error(capabilityDecision.errors.join('; '))
+    }
+
     const job: ScheduleJob = {
       id: input.id ?? `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: input.name.trim() || 'Untitled Job',
@@ -83,9 +110,9 @@ export class ScheduleService {
       trigger: input.trigger,
       runtime: input.runtime,
       code: input.code,
-      permissions: input.permissions,
-      secretRefs: input.secretRefs ?? existing?.secretRefs ?? [],
-      outputMode: input.outputMode,
+      permissions,
+      secretRefs,
+      outputMode: normalizeScheduleOutputMode(input.outputMode, capabilityDecision),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       lastRunAt: existing?.lastRunAt,
@@ -109,6 +136,15 @@ export class ScheduleService {
       throw new Error(`Schedule job not found: ${id}`)
     }
     return this.executeJob(job)
+  }
+
+  async cancelRun(jobId: string): Promise<boolean> {
+    const controller = this.cancellationControllers.get(jobId)
+    if (!controller) {
+      return false
+    }
+    controller.abort()
+    return true
   }
 
   async listRuns(jobId: string): Promise<ScheduleRunRecord[]> {
@@ -211,14 +247,20 @@ export class ScheduleService {
     }
 
     this.runningJobs.add(job.id)
+    const controller = new AbortController()
+    this.cancellationControllers.set(job.id, controller)
     try {
-      return await this.executeJobInternal(job)
+      return await this.executeJobInternal(job, controller.signal)
     } finally {
+      this.cancellationControllers.delete(job.id)
       this.runningJobs.delete(job.id)
     }
   }
 
-  private async executeJobInternal(job: ScheduleJob): Promise<ScheduleRunRecord> {
+  private async executeJobInternal(
+    job: ScheduleJob,
+    signal: AbortSignal
+  ): Promise<ScheduleRunRecord> {
     const startedAt = new Date().toISOString()
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -252,16 +294,19 @@ export class ScheduleService {
       const settings = await this.runtime.getSettings()
       const result = await runScript(job, secretEnv, {
         condaEnvironmentPath: settings.pythonCondaEnvironmentPath,
-        condaExecutablePath: settings.pythonCondaExecutablePath
+        condaExecutablePath: settings.pythonCondaExecutablePath,
+        signal
       })
       const endedAt = new Date().toISOString()
 
-      let finalStatus: RunStatus = 'success'
+      let finalStatus: RunStatus = result.cancelled ? 'cancelled' : 'success'
       let appliedActions: ScriptAction[] = []
       let actionErrors: string[] = []
 
       if (result.error) {
         finalStatus = 'error'
+      } else if (result.cancelled) {
+        finalStatus = 'cancelled'
       } else if (job.outputMode === 'review_before_apply') {
         finalStatus = result.actions.length > 0 ? 'review' : 'success'
       } else {
@@ -380,7 +425,7 @@ export class ScheduleService {
           date: action.date,
           endDate: normalizeCalendarEndDate(action.date, action.endDate),
           time: action.time,
-          completed: action.status === 'completed',
+          completed: isTaskStatusDone(action.status),
           status: action.status ?? 'pending',
           createdAt: new Date().toISOString(),
           priority: action.priority ?? 'low',
@@ -438,7 +483,7 @@ export class ScheduleService {
             ? { completed: action.completed, status: action.completed ? 'completed' : 'pending' }
             : {}),
           ...(action.status !== undefined
-            ? { status: action.status, completed: action.status === 'completed' }
+            ? { status: action.status, completed: isTaskStatusDone(action.status) }
             : {})
         }
 
@@ -535,7 +580,7 @@ export class ScheduleService {
           date: action.date,
           endDate: action.endDate,
           time: action.time,
-          completed: action.status === 'completed',
+          completed: isTaskStatusDone(action.status),
           status: action.status ?? 'pending',
           createdAt: new Date().toISOString(),
           priority: 'low',
@@ -574,12 +619,19 @@ export function computeNextRunAt(trigger: TriggerConfig): string | undefined {
 
     case 'daily': {
       const [hours, minutes] = (trigger.time ?? '09:00').split(':').map(Number)
-      const next = new Date(now)
-      next.setHours(hours, minutes, 0, 0)
-      if (next <= now) {
-        next.setDate(next.getDate() + 1)
+      const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+      const timezone =
+        trigger.timezone && trigger.timezone !== 'local'
+          ? trigger.timezone
+          : resolveDefaultCalendarTimezone()
+      const currentDate = getDateInTimezone(now, timezone)
+      let nextRunAt = localDateTimeToInstant(currentDate, time, timezone)
+
+      if (Date.parse(nextRunAt) <= now.getTime()) {
+        nextRunAt = localDateTimeToInstant(addDateOnlyDays(currentDate, 1), time, timezone)
       }
-      return next.toISOString()
+
+      return nextRunAt
     }
 
     case 'every': {
@@ -594,6 +646,24 @@ export function computeNextRunAt(trigger: TriggerConfig): string | undefined {
     default:
       return undefined
   }
+}
+
+function getDateInTimezone(value: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(value)
+  const getPart = (type: 'year' | 'month' | 'day'): string => {
+    const part = parts.find((item) => item.type === type)?.value
+    if (!part) {
+      throw new Error(`Could not resolve ${type} in timezone ${timezone}`)
+    }
+    return part.padStart(2, '0')
+  }
+
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}`
 }
 
 // ── Minimal cron parser ────────────────────────────────────────────────────

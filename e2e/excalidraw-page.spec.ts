@@ -195,6 +195,48 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
   }
 })
 
+test('deletes an Excalidraw file safely while it is still loading', async () => {
+  const vaultRoot = await createFixtureVault(false)
+  const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-excalidraw-e2e-user-'))
+  await fs.writeFile(
+    path.join(userDataPath, 'settings.json'),
+    JSON.stringify({ lastVaultPath: vaultRoot }, null, 2),
+    'utf-8'
+  )
+  const electronApp = await electron.launch({
+    args: [`--user-data-dir=${userDataPath}`, '.'],
+    cwd: process.cwd(),
+    env: { ...process.env, CI: '1' }
+  })
+
+  try {
+    const page = await electronApp.firstWindow()
+    await page.waitForLoadState('domcontentloaded')
+    await expect(page.getByTestId('sidebar-page:notes')).toBeVisible({ timeout: 20_000 })
+    await page.getByTestId('sidebar-page:notes').click()
+
+    await page.getByRole('button', { name: 'Notebook actions' }).click()
+    await page.getByRole('menuitem', { name: 'New drawing', exact: true }).click()
+
+    const drawingPath = 'untitled-drawing.excalidraw'
+    const drawingRow = page.getByTestId(`note-tree-row:${drawingPath}`)
+    await expect(drawingRow).toBeVisible({ timeout: 20_000 })
+
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByTestId(`note-tree-menu:${drawingPath}`).click()
+    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+
+    await expect(drawingRow).toHaveCount(0)
+    await expect(page.getByTestId('notebook-card-browser')).toBeVisible()
+    await expect(page.getByText('Fatal Application Error', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/read-excalidraw-file-document|ENOENT/)).toHaveCount(0)
+  } finally {
+    await electronApp.close()
+    await fs.rm(vaultRoot, { recursive: true, force: true })
+    await fs.rm(userDataPath, { recursive: true, force: true })
+  }
+})
+
 test('syncs externally added and removed Excalidraw files', async () => {
   const vaultRoot = await createFixtureVault(false)
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-excalidraw-e2e-user-'))

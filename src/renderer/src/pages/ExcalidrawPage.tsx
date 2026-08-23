@@ -34,7 +34,7 @@ import {
 import { EmptyState } from '../components/ui/empty-state'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
-type ExcalidrawTheme = typeof THEME.LIGHT | typeof THEME.DARK
+type ExcalidrawTheme = typeof THEME.DARK
 type ExcalidrawApi = Parameters<NonNullable<ComponentProps<typeof Excalidraw>['excalidrawAPI']>>[0]
 type ExcalidrawOnChange = NonNullable<ComponentProps<typeof Excalidraw>['onChange']>
 type ExcalidrawInitialData = NonNullable<ComponentProps<typeof Excalidraw>['initialData']>
@@ -80,10 +80,6 @@ const excalidrawUiOptions = {
 }
 
 const ExcalidrawWorkspaceContext = createContext<ExcalidrawWorkspaceContextValue | null>(null)
-
-function getSystemExcalidrawTheme(): ExcalidrawTheme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? THEME.DARK : THEME.LIGHT
-}
 
 function createEmptyScene(): ExcalidrawSessionScene {
   return {
@@ -159,7 +155,7 @@ export function ExcalidrawWorkspaceProvider({
   pushToast,
   children
 }: ExcalidrawWorkspaceProviderProps): ReactElement {
-  const [theme, setTheme] = useState<ExcalidrawTheme>(getSystemExcalidrawTheme)
+  const [theme] = useState<ExcalidrawTheme>(THEME.DARK)
   const [sessions, setSessions] = useState<ExcalidrawSession[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [activeToolType, setActiveToolType] = useState('selection')
@@ -201,18 +197,6 @@ export function ExcalidrawWorkspaceProvider({
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
   }, [selectedSessionId])
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const syncTheme = (): void => setTheme(getSystemExcalidrawTheme())
-
-    syncTheme()
-    mediaQuery.addEventListener('change', syncTheme)
-
-    return () => {
-      mediaQuery.removeEventListener('change', syncTheme)
-    }
-  }, [])
 
   useEffect(() => {
     if (!editingSessionId) {
@@ -669,7 +653,7 @@ export function ExcalidrawSidebar(): ReactElement {
                             event.preventDefault()
                             void handleDeleteSession(session.id)
                           }}
-                          className="w-full rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="w-full rounded-md text-left transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <div className="truncate text-sm font-semibold text-foreground">
                             {session.title}

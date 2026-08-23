@@ -1,44 +1,35 @@
 import type { ReactElement } from 'react'
 import { cn } from '../lib/utils'
+import type { ProjectMilestoneStatus } from '../lib/projectMilestones'
+import { Milestone, MilestoneFilled } from './ui/icons'
 
 export function MilestoneCompletenessIcon({
-  completed,
+  status,
   size = 18,
   className = '',
   dataTestId
 }: {
-  completed: boolean
+  status: ProjectMilestoneStatus
   size?: number
   className?: string
   dataTestId?: string
 }): ReactElement {
+  const completed = status === 'complete'
+  const Icon = completed ? MilestoneFilled : Milestone
+  const statusClassName = {
+    current: 'text-milestone-current',
+    complete: 'text-milestone-complete',
+    unreached: 'text-milestone-unreached'
+  }[status]
+
   return (
-    <svg
+    <Icon
       aria-hidden="true"
-      className={cn('shrink-0 text-warning', className)}
+      className={cn('shrink-0', statusClassName, className)}
       data-completed={completed ? 'true' : 'false'}
+      data-milestone-status={status}
       data-testid={dataTestId}
-      fill="none"
-      height={size}
-      viewBox="0 0 24 24"
-      width={size}
-    >
-      <path
-        d="M12 3 21 12l-9 9-9-9 9-9Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.5"
-      />
-      {completed ? (
-        <path
-          d="m8.2 12 2.4 2.4 5.2-5.2"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2.2"
-        />
-      ) : null}
-    </svg>
+      size={size}
+    />
   )
 }

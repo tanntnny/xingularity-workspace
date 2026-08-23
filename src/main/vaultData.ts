@@ -15,6 +15,10 @@ export const VAULT_SUBSCRIPTIONS_DIRNAME = 'subscriptions'
 export const VAULT_SCHEDULES_DIRNAME = 'schedules'
 export const VAULT_AGENT_DIRNAME = 'agent'
 export const VAULT_EXCALIDRAW_DIRNAME = 'excalidraw'
+export const VAULT_RESOURCES_DIRNAME = 'resources'
+export const VAULT_RESOURCES_FILE_NAME = 'resources.json'
+export const VAULT_RELATIONS_FILE_NAME = 'relations.json'
+export const VAULT_LOCATORS_FILE_NAME = 'locators.json'
 export const VAULT_SETTINGS_FILE_NAME = 'settings.json'
 export const VAULT_MIGRATIONS_FILE_NAME = 'migrations.json'
 
@@ -88,6 +92,22 @@ export function getVaultAgentDir(rootPath: string): string {
 
 export function getVaultExcalidrawDir(rootPath: string): string {
   return path.join(rootPath, VAULT_EXCALIDRAW_DIRNAME)
+}
+
+export function getVaultResourcesDir(rootPath: string): string {
+  return path.join(rootPath, VAULT_RESOURCES_DIRNAME)
+}
+
+export function getVaultResourcesPath(rootPath: string): string {
+  return path.join(getVaultResourcesDir(rootPath), VAULT_RESOURCES_FILE_NAME)
+}
+
+export function getVaultRelationsPath(rootPath: string): string {
+  return path.join(getVaultResourcesDir(rootPath), VAULT_RELATIONS_FILE_NAME)
+}
+
+export function getVaultLocatorsPath(rootPath: string): string {
+  return path.join(getVaultResourcesDir(rootPath), VAULT_LOCATORS_FILE_NAME)
 }
 
 export function getVaultSettingsPath(rootPath: string): string {

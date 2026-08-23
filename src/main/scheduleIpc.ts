@@ -5,9 +5,7 @@ import type { ScheduleService } from './scheduleService'
 
 const jobIdSchema = z.string().min(1).max(120)
 const runIdSchema = z.string().min(1).max(120)
-const secretNameSchema = z
-  .string()
-  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/)
+const secretNameSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/)
 
 const triggerConfigSchema = z.object({
   type: z.enum(['manual', 'daily', 'every', 'cron', 'on_app_start']),
@@ -61,6 +59,10 @@ export function registerScheduleIpcHandlers(service: ScheduleService): void {
 
   handleIpc(SCHEDULE_CHANNELS.runNow, async (_event, id: unknown) => {
     return service.runNow(jobIdSchema.parse(id))
+  })
+
+  handleIpc(SCHEDULE_CHANNELS.cancelRun, async (_event, id: unknown) => {
+    return service.cancelRun(jobIdSchema.parse(id))
   })
 
   handleIpc(SCHEDULE_CHANNELS.listRuns, async (_event, jobId: unknown) => {

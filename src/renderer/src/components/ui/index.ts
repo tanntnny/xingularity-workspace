@@ -3,10 +3,11 @@
 
 export * from './icons'
 
-export { Button, buttonVariants } from './button'
+export { Button, buttonVariants, rowActionButtonClassName } from './button'
 export type { ButtonProps } from './button'
 
 export { Input } from './input'
+export type { InputProps, InputVariant } from './input'
 export { Checkbox } from './checkbox'
 export { Textarea } from './textarea'
 export { Field } from './field'
@@ -15,6 +16,25 @@ export type { SwitchProps } from './switch'
 
 export { Badge, badgeVariants } from './badge'
 export type { BadgeProps } from './badge'
+export { StatusChip } from './status-chip'
+export type {
+  StatusChipItem,
+  StatusChipLabelOverflow,
+  StatusChipProps,
+  StatusChipSurface,
+  StatusChipVariant
+} from './status-chip'
+export { StatusChipSelect } from './status-chip-select'
+export type { StatusChipOption, StatusChipSelectProps } from './status-chip-select'
+export { ProgressRing } from './progress-ring'
+export type { ProgressRingProps } from './progress-ring'
+export { SelectionPopover } from './selection-popover'
+export type {
+  MultipleSelectionPopoverProps,
+  SelectionPopoverOption,
+  SelectionPopoverProps,
+  SingleSelectionPopoverProps
+} from './selection-popover'
 export { SelectiveChip } from './selective-chip'
 export type { SelectiveChipOption, SelectiveChipProps } from './selective-chip'
 export { CalendarTaskTypeBadge } from './calendar-task-type-badge'
@@ -52,6 +72,7 @@ export {
   DialogContent,
   DialogShell,
   DialogHeader,
+  DialogShellHeader,
   DialogBody,
   DialogFooter,
   DialogShellFooter,
@@ -129,10 +150,18 @@ export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popove
 
 export { Calendar } from './calendar'
 export type { CalendarProps } from './calendar'
+export { CalendarDateEditPopover } from './calendar-date-edit-popover'
+export type { CalendarDateEditPopoverProps } from './calendar-date-edit-popover'
+export { CalendarTimeEditPopover } from './calendar-time-edit-popover'
+export type { CalendarTimeEditPopoverProps } from './calendar-time-edit-popover'
 
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
+export { TabToggleGroup, TabToggleGroupItem } from './tab-toggle-group'
+export type { TabToggleGroupItemProps, TabToggleGroupProps } from './tab-toggle-group'
+export { StatusChipToggleGroup, StatusChipToggleItem } from './status-chip-toggle'
+export type { StatusChipToggleGroupProps, StatusChipToggleItemProps } from './status-chip-toggle'
 export { WorkspaceListRail, WorkspaceListRailItem } from './workspace-list-rail'
 export type { WorkspaceListRailItemProps, WorkspaceListRailProps } from './workspace-list-rail'
 export {
@@ -149,6 +178,8 @@ export {
 } from './select'
 export { ActionButtonGroup, ButtonGroup } from './button-group'
 export type { ActionButtonGroupProps } from './button-group'
+export { ChipGroup } from './chip-group'
+export type { ChipGroupProps } from './chip-group'
 
 export {
   Table,
@@ -161,6 +192,8 @@ export {
   TableCell,
   TableCaption
 } from './table'
+export { TableRowList } from './table-row-list'
+export type { TableRowListColumn, TableRowListProps } from './table-row-list'
 
 export { Toaster } from './sonner'
 
@@ -168,7 +201,12 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tool
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
 export { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
 export { DragSource } from './drag-source'
-export type { DragSourceProps } from './drag-source'
+export type {
+  DragPreviewAxis,
+  DragPreviewElevation,
+  DragPreviewMotion,
+  DragSourceProps
+} from './drag-source'
 export { DropZone } from './drop-zone'
 export type { DropZoneProps } from './drop-zone'
 
@@ -205,6 +243,7 @@ export {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbButton,
+  BreadcrumbIconLabel,
   BreadcrumbLabel,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -231,6 +270,7 @@ export {
   WorkspaceHeaderActionGroup,
   WorkspaceHeaderActionDivider,
   WorkspaceIconButton,
+  WorkspacePageContextMenu,
   type WorkspaceTab
 } from './document-workspace'
 

@@ -14,7 +14,6 @@ import {
 } from '../src/renderer/src/components/scheduling/SchedulingPythonTrustPopover'
 import {
   SchedulingAddAutomationButton,
-  SchedulingHeaderActions,
   SchedulingPage,
   SchedulingRightPanel,
   SchedulingWorkspaceProvider
@@ -126,12 +125,14 @@ describe('Scheduling page UI', () => {
     expect(markup).not.toContain('1 automation')
     expect(markup).toContain('aria-label="Automations"')
     expect(markup).toContain('<th')
-    expect(markup).toContain('cursor-pointer rounded-xl border-0 bg-card hover:bg-accent')
-    expect(markup).toContain('data-[state=selected]:bg-accent')
+    expect(markup).toContain(
+      'cursor-pointer rounded-xl border-0 bg-transparent hover:bg-panel-hover'
+    )
+    expect(markup).toContain('data-[state=selected]:bg-muted')
     expect(markup).toContain('[&amp;_tr]:border-0')
     expect(markup).toContain('rounded-xl')
     expect(markup).toContain('border-separate border-spacing-y-1')
-    expect(markup).not.toContain('transition-colors hover:bg-accent')
+    expect(markup).toContain('--status-chip-schedule-job-success-icon')
     expect(markup).toContain('rounded-l-xl')
     expect(markup).toContain('rounded-r-xl')
     expect(markup).not.toContain('hover:underline')
@@ -193,8 +194,11 @@ describe('Scheduling page UI', () => {
     expect(markup).toContain('aria-label="Scheduling view"')
     expect(markup).toContain('data-testid="scheduling-view-tab:automation"')
     expect(markup).toContain('data-testid="scheduling-view-tab:history"')
-    expect(markup).toContain('data-testid="scheduling-view-tab-icon:automation"')
-    expect(markup).toContain('data-testid="scheduling-view-tab-icon:history"')
+    expect(markup).toContain('id="scheduling-view-tab-automation"')
+    expect(markup).toContain('id="scheduling-view-tab-history"')
+    expect(markup).toContain('aria-controls="scheduling-view-panel"')
+    expect(markup).not.toContain('data-testid="scheduling-view-tab-icon:automation"')
+    expect(markup).not.toContain('data-testid="scheduling-view-tab-icon:history"')
     expect(markup).toContain('<span>Automation</span>')
     expect(markup).toContain('<span>History</span>')
     expect(markup).toContain('aria-selected="true"')
@@ -226,7 +230,8 @@ describe('Scheduling page UI', () => {
 
     expect(markup).toContain('data-testid="scheduling-breadcrumb"')
     expect(markup).toContain('data-testid="scheduling-breadcrumb:scheduling"')
-    expect(markup).toContain('>Scheduling</button>')
+    expect(markup).toContain('>Scheduling</span>')
+    expect(markup).toContain('tabler-icon-bolt')
     expect(markup).not.toContain('List of Automation')
     expect(markup).not.toContain('>Automation</span>')
     expect(markup).not.toContain('>History</span>')
@@ -249,58 +254,6 @@ describe('Scheduling page UI', () => {
     expect(markup).toContain('data-testid="scheduling-add-automation"')
     expect(markup).toContain('aria-label="Add automation"')
     expect(markup).toContain('<span>Add automation</span>')
-  })
-
-  it('renders Save changes as the rightmost workspace header action', () => {
-    const markup = renderToStaticMarkup(
-      createElement(
-        SchedulingWorkspaceProvider,
-        {
-          enabled: false,
-          vaultApi: {} as RendererVaultApi,
-          pushToast: () => undefined
-        },
-        createElement(SchedulingHeaderActions, { onOpenApiGuide: () => undefined })
-      )
-    )
-
-    expect(markup).toContain('data-testid="scheduling-save-changes"')
-    expect(markup).toContain('aria-label="Save changes"')
-    expect(markup).toContain('<span>Save changes</span>')
-  })
-
-  it('renders the API guide action in the first header row', () => {
-    const markup = renderToStaticMarkup(
-      createElement(
-        SchedulingWorkspaceProvider,
-        {
-          enabled: false,
-          vaultApi: {} as RendererVaultApi,
-          pushToast: () => undefined
-        },
-        createElement(SchedulingHeaderActions, { onOpenApiGuide: () => undefined })
-      )
-    )
-
-    expect(markup).toContain('data-testid="scheduling-api-guide"')
-    expect(markup).toContain('aria-label="Open scheduling API guide"')
-    expect(markup).toContain('<span>API guide</span>')
-    expect(markup).toContain('data-testid="scheduling-run-now"')
-    expect(markup).toContain('aria-label="Run automation now"')
-    expect(markup).toContain('<span>Run now</span>')
-    expect(markup).not.toContain('data-testid="scheduling-delete"')
-
-    for (const testId of [
-      'scheduling-api-guide',
-      'scheduling-run-now',
-      'scheduling-save-changes'
-    ]) {
-      const buttonMarkup = markup.match(
-        new RegExp(`<button[^>]*data-testid="${testId}"[^>]*>`)
-      )?.[0]
-
-      expect(buttonMarkup).toContain('border border-input')
-    }
   })
 
   it('renders the Python trust guidance as an icon-only attention control', () => {
@@ -355,28 +308,37 @@ describe('Scheduling page UI', () => {
     const markup = renderToStaticMarkup(
       createElement(SchedulePropertiesPanel, {
         draft,
+        secretNames: [],
         onChange: () => undefined,
         onEnabledChange: () => undefined,
         onTriggerChange: () => undefined,
-        onTogglePermission: () => undefined
+        onTogglePermission: () => undefined,
+        onSaveSecret: async () => undefined,
+        onDeleteSecret: async () => undefined
       })
     )
     const javascriptMarkup = renderToStaticMarkup(
       createElement(SchedulePropertiesPanel, {
         draft: { ...draft, runtime: 'javascript' as const },
+        secretNames: [],
         onChange: () => undefined,
         onEnabledChange: () => undefined,
         onTriggerChange: () => undefined,
-        onTogglePermission: () => undefined
+        onTogglePermission: () => undefined,
+        onSaveSecret: async () => undefined,
+        onDeleteSecret: async () => undefined
       })
     )
     const dailyMarkup = renderToStaticMarkup(
       createElement(SchedulePropertiesPanel, {
         draft: dailyDraft,
+        secretNames: [],
         onChange: () => undefined,
         onEnabledChange: () => undefined,
         onTriggerChange: () => undefined,
-        onTogglePermission: () => undefined
+        onTogglePermission: () => undefined,
+        onSaveSecret: async () => undefined,
+        onDeleteSecret: async () => undefined
       })
     )
 
@@ -396,9 +358,12 @@ describe('Scheduling page UI', () => {
     expect(dailyMarkup).toContain('data-testid="scheduling-daily-time"')
     expect(dailyMarkup).toContain('data-testid="scheduling-property-timezone"')
     expect(dailyMarkup).toContain('id="scheduling-timezone"')
+    expect(dailyMarkup).not.toContain('readonly')
     expect(markup).toContain('data-testid="scheduling-property-enabled"')
     expect(markup).toContain('data-testid="scheduling-property-permissions"')
     expect(markup).toContain('data-testid="scheduling-permissions-trigger"')
+    expect(markup).toContain('data-testid="scheduling-manage-secrets"')
+    expect(markup).not.toContain('None attached')
     expect(markup).toContain('data-testid="scheduling-property-output"')
     expect(markup).toContain('>Output</span>')
     expect(markup).not.toContain('>Output handling</span>')

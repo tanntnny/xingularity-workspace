@@ -10,7 +10,12 @@ import {
   TaskStatus
 } from '../../../shared/types'
 import { getTaskStatus } from '../lib/taskStatus'
-import { TaskStatusIcon } from './TaskStatusIcon'
+import { StatusChip } from './ui/status-chip'
+import {
+  getCalendarTaskTypeChipItem,
+  getTaskPriorityChipItem,
+  getTaskStatusChipItem
+} from '../lib/statusChipMeta'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -28,16 +33,14 @@ import {
   Dialog,
   DialogActionButton,
   DialogBody,
-  DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogShell,
-  DialogShellFooter,
-  DialogTitle
+  DialogShellHeader,
+  DialogShellFooter
 } from './ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
+import { CalendarTimeEditPopover } from './ui/calendar-time-edit-popover'
+import { SelectionPopover } from './ui/selection-popover'
 
 interface TaskContextMenuProps {
   task: CalendarTask
@@ -131,8 +134,10 @@ export function TaskContextMenu({
                   key={option.value}
                   onSelect={() => onUpdateStatus(task.id, option.value)}
                 >
-                  <TaskStatusIcon status={option.value} size={16} />
-                  {option.label}
+                  <StatusChip
+                    item={getTaskStatusChipItem(option.value)}
+                    className="pointer-events-none"
+                  />
                   {currentStatus === option.value && <Check className="ml-auto h-4 w-4" />}
                 </ContextMenuItem>
               ))}
@@ -149,7 +154,10 @@ export function TaskContextMenu({
                   key={taskType.value}
                   onSelect={() => onUpdateTaskType(task.id, taskType.value)}
                 >
-                  <CalendarTaskTypeBadge taskType={taskType.value} />
+                  <StatusChip
+                    item={getCalendarTaskTypeChipItem(taskType.value)}
+                    className="pointer-events-none"
+                  />
                   {(task.taskType || 'assignment') === taskType.value && (
                     <Check className="ml-auto h-4 w-4" />
                   )}
@@ -168,7 +176,10 @@ export function TaskContextMenu({
                   key={priority.value}
                   onSelect={() => onUpdatePriority(task.id, priority.value)}
                 >
-                  {priority.label}
+                  <StatusChip
+                    item={getTaskPriorityChipItem(priority.value)}
+                    className="pointer-events-none"
+                  />
                   {(task.priority || 'low') === priority.value && (
                     <Check className="ml-auto h-4 w-4" />
                   )}
@@ -224,7 +235,7 @@ export function TaskContextMenu({
               {task.endDate ? `Move deadline to ${selectedDate}` : `Schedule to ${selectedDate}`}
             </ContextMenuItem>
           ) : null}
-          <ContextMenuItem destructive onSelect={() => onDelete(task.id)}>
+          <ContextMenuItem onSelect={() => onDelete(task.id)}>
             <Trash2 className="mr-2 h-4 w-4" />
             Delete task
             <ContextMenuShortcut>
@@ -235,21 +246,26 @@ export function TaskContextMenu({
       </ContextMenu>
 
       <Dialog open={isTimeDialogOpen} onOpenChange={setIsTimeDialogOpen}>
-        <DialogContent className="max-w-sm" showCloseButton={false}>
+        <DialogContent showCloseButton={false}>
           <DialogShell>
-            <DialogHeader>
-              <DialogTitle>Set task time</DialogTitle>
-              <DialogDescription>Choose a time for this task.</DialogDescription>
-            </DialogHeader>
+            <DialogShellHeader
+              context="Task"
+              title="Set task time"
+              closeLabel="Close time dialog"
+              onClose={() => setIsTimeDialogOpen(false)}
+            />
             <DialogBody>
-              <input
-                type="time"
-                value={timeInputValue}
-                onChange={(event) => setTimeInputValue(event.target.value)}
-                className=" w-full rounded-lg border px-3 py-2 text-sm text-foreground outline-none"
+              <DialogDescription className="mb-3">Choose a time for this task.</DialogDescription>
+              <CalendarTimeEditPopover
+                value={timeInputValue || undefined}
+                label="Task time"
+                onValueChange={(value) => setTimeInputValue(value ?? '')}
+                placeholder="Choose task time"
+                aria-label="Task time"
+                className="w-full justify-start"
               />
             </DialogBody>
-            <DialogShellFooter closeAction={<DialogCloseAction label="Close time dialog" />}>
+            <DialogShellFooter withDivider>
               <DialogActionButton
                 onClick={() => {
                   onUpdateTime(task.id, timeInputValue || undefined)
@@ -258,7 +274,8 @@ export function TaskContextMenu({
                 title="Done"
                 aria-label="Done"
                 icon={<Check />}
-                tone="primary"
+                label="Done"
+                tone="accent"
               />
             </DialogShellFooter>
           </DialogShell>
@@ -266,14 +283,19 @@ export function TaskContextMenu({
       </Dialog>
 
       <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
-        <DialogContent className="max-w-md" showCloseButton={false}>
+        <DialogContent showCloseButton={false}>
           <DialogShell>
-            <DialogHeader>
-              <DialogTitle>Task reminders</DialogTitle>
-              <DialogDescription>Manage notifications for this task.</DialogDescription>
-            </DialogHeader>
+            <DialogShellHeader
+              context="Task"
+              title="Task reminders"
+              closeLabel="Close reminders"
+              onClose={() => setIsReminderDialogOpen(false)}
+            />
 
             <DialogBody>
+              <DialogDescription className="mb-3">
+                Manage notifications for this task.
+              </DialogDescription>
               <div className="space-y-3">
                 {(task.reminders || []).length > 0 ? (
                   <div className="space-y-1.5">
@@ -282,14 +304,14 @@ export function TaskContextMenu({
                         key={reminder.id}
                         className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-xs ${
                           reminder.enabled
-                            ? 'border-ring bg-accent'
+                            ? 'border-ring bg-muted'
                             : 'border-border bg-muted opacity-70'
                         }`}
                       >
                         <button
                           type="button"
                           onClick={() => handleToggleReminder(reminder.id)}
-                          className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {reminder.enabled ? (
                             <BellRing size={12} className="text-muted-foreground" />
@@ -326,21 +348,24 @@ export function TaskContextMenu({
                       }
                       className=" w-16 rounded-lg border px-2 py-1 text-xs text-foreground outline-none"
                     />
-                    <Select
+                    <SelectionPopover
+                      selectionMode="single"
                       value={newReminderType}
+                      options={[
+                        { value: 'minutes', label: 'minutes' },
+                        { value: 'hours', label: 'hours' },
+                        { value: 'days', label: 'days' }
+                      ]}
                       onValueChange={(value) =>
                         setNewReminderType(value as 'minutes' | 'hours' | 'days')
                       }
-                    >
-                      <SelectTrigger className=" flex-1 text-xs">
-                        <SelectValue placeholder="Unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="minutes">minutes</SelectItem>
-                        <SelectItem value="hours">hours</SelectItem>
-                        <SelectItem value="days">days</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      label="Reminder unit"
+                      searchPlaceholder="Search reminder units"
+                      triggerProps={{
+                        className: 'flex-1 text-xs',
+                        'aria-label': 'Reminder unit'
+                      }}
+                    />
                     <Button type="button" onClick={handleAddReminder} variant="outline" size="sm">
                       Add
                     </Button>
@@ -348,13 +373,14 @@ export function TaskContextMenu({
                 </div>
               </div>
             </DialogBody>
-            <DialogShellFooter closeAction={<DialogCloseAction label="Close reminders" />}>
+            <DialogShellFooter withDivider>
               <DialogActionButton
                 onClick={() => setIsReminderDialogOpen(false)}
                 title="Done"
                 aria-label="Done"
                 icon={<Check />}
-                tone="primary"
+                label="Done"
+                tone="accent"
               />
             </DialogShellFooter>
           </DialogShell>

@@ -24,9 +24,7 @@ async function signTarget(targetPath, identity, { entitlements, deep } = {}) {
 async function listChildren(baseDir, matcher) {
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true })
-    return entries
-      .filter((entry) => matcher(entry))
-      .map((entry) => path.join(baseDir, entry.name))
+    return entries.filter((entry) => matcher(entry)).map((entry) => path.join(baseDir, entry.name))
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return []
@@ -38,9 +36,7 @@ async function listChildren(baseDir, matcher) {
 async function detectExistingIdentity(appPath) {
   try {
     const { stderr } = await execFileAsync('codesign', ['-dv', appPath])
-    const identityLine = stderr
-      .split('\n')
-      .find((line) => line.startsWith('Authority='))
+    const identityLine = stderr.split('\n').find((line) => line.startsWith('Authority='))
     return identityLine ? identityLine.replace('Authority=', '').trim() : null
   } catch (error) {
     return null
@@ -50,9 +46,7 @@ async function detectExistingIdentity(appPath) {
 async function getTeamIdentifier(targetPath) {
   try {
     const { stderr } = await execFileAsync('codesign', ['-dv', targetPath])
-    const teamLine = stderr
-      .split('\n')
-      .find((line) => line.startsWith('TeamIdentifier='))
+    const teamLine = stderr.split('\n').find((line) => line.startsWith('TeamIdentifier='))
     if (!teamLine) {
       return null
     }
@@ -116,7 +110,10 @@ async function afterSign(context) {
 
   const appPath = await resolveAppBundlePath(context)
   const projectDir =
-    context.projectDir || context.packager?.projectDir || context.packager?.info?.projectDir || process.cwd()
+    context.projectDir ||
+    context.packager?.projectDir ||
+    context.packager?.info?.projectDir ||
+    process.cwd()
   const entitlementsPath = path.join(projectDir, 'build', 'entitlements.mac.plist')
 
   const envIdentity =
@@ -131,8 +128,14 @@ async function afterSign(context) {
   console.info(`  • macOS after-sign: re-signing ${appPath} with identity "${identity}"`)
 
   const frameworksDir = path.join(appPath, 'Contents', 'Frameworks')
-  const frameworks = await listChildren(frameworksDir, (entry) => entry.isDirectory() && entry.name.endsWith('.framework'))
-  const helperApps = await listChildren(frameworksDir, (entry) => entry.isDirectory() && entry.name.endsWith('.app'))
+  const frameworks = await listChildren(
+    frameworksDir,
+    (entry) => entry.isDirectory() && entry.name.endsWith('.framework')
+  )
+  const helperApps = await listChildren(
+    frameworksDir,
+    (entry) => entry.isDirectory() && entry.name.endsWith('.app')
+  )
 
   try {
     for (const frameworkPath of frameworks) {

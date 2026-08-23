@@ -10,6 +10,7 @@ import {
   useState
 } from 'react'
 import { CalendarTask, Project, WeeklyHeightMode } from '../../../shared/types'
+import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import {
   buildWeeklyCalendarEntries,
   getWeeklyAllDaySurfaceHeightPx,
@@ -56,6 +57,7 @@ import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 
 interface CalendarWeekViewProps {
   selectedDate: string
@@ -68,7 +70,7 @@ interface CalendarWeekViewProps {
     time: string
     endTime: string
   }) => Promise<CalendarTask>
-  onOpenTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
@@ -584,7 +586,7 @@ export function CalendarWeekView({
       )
     )
       .then((task) => {
-        onOpenTask?.(task.id)
+        onOpenTask?.(task.id, { isNewTask: true })
       })
       .catch((error) => {
         console.error('Failed to create weekly calendar task', error)
@@ -754,7 +756,7 @@ export function CalendarWeekView({
             setHoveredTaskCard(null)
             onOpenTask?.(task.id)
           }}
-          className={`pointer-events-auto w-full transition-colors ${task.completed ? 'line-through' : ''}`}
+          className={`pointer-events-auto w-full transition-colors ${isTaskDone(task) ? 'line-through' : ''}`}
         >
           <CalendarTaskCard
             ref={(element) => registerAllDayTaskElement(task.id, element)}
@@ -766,7 +768,7 @@ export function CalendarWeekView({
             showProject={Boolean(task.projectId)}
             showTime={Boolean(task.time || task.endTime)}
             onStatusChange={(taskId, status) =>
-              safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+              safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
             }
           />
         </DragSource>
@@ -856,26 +858,38 @@ export function CalendarWeekView({
           setHoveredTaskCard(null)
           onOpenTask?.(task.id)
         }}
-        className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-accent ${
+        className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-muted ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
-        } ${task.completed ? 'line-through' : ''} cursor-grab active:cursor-grabbing`}
+        } ${isTaskDone(task) ? 'line-through' : ''} cursor-grab active:cursor-grabbing`}
       >
         <button
           type="button"
           data-weekly-resize-handle="true"
+          data-resize-direction="y"
+          data-resizing={
+            timedInteraction?.taskId === task.id && timedInteraction.kind === 'resize-start'
+              ? 'true'
+              : undefined
+          }
           aria-label="Resize task start"
           title="Resize task start"
           onMouseDown={(event) => startResizeInteraction('resize-start', event, task, layout)}
-          className="absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="resize-affordance absolute inset-x-0 top-0 z-20 cursor-ns-resize rounded-t-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ height: `${resizeBandPx}px` }}
         />
         <button
           type="button"
           data-weekly-resize-handle="true"
+          data-resize-direction="y"
+          data-resizing={
+            timedInteraction?.taskId === task.id && timedInteraction.kind === 'resize-end'
+              ? 'true'
+              : undefined
+          }
           aria-label="Resize task end"
           title="Resize task end"
           onMouseDown={(event) => startResizeInteraction('resize-end', event, task, layout)}
-          className="absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="resize-affordance absolute inset-x-0 bottom-0 z-20 cursor-ns-resize rounded-b-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ height: `${resizeBandPx}px` }}
         />
         <div
@@ -891,7 +905,7 @@ export function CalendarWeekView({
             showTime={false}
             heightMode={layout.heightMode === 'content' ? 'content' : 'fill'}
             onStatusChange={(taskId, status) =>
-              safeUpdateTaskStatus(taskId, { status, completed: status === 'completed' })
+              safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
             }
             className="min-h-0"
           />
@@ -904,13 +918,13 @@ export function CalendarWeekView({
     <section
       ref={calendarRootRef}
       data-testid="calendar-week-view"
-      className="flex min-h-full flex-1 flex-col overflow-hidden rounded-shell border border-panel-border"
+      className="flex min-h-full flex-1 flex-col overflow-hidden rounded-shell border border-panel-border bg-[var(--calendar-surface)]"
     >
       <div
         data-testid="calendar-week-weekday-header"
         className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-panel-border bg-card"
       >
-        <div className="border-r border-panel-border bg-muted px-3 py-4" />
+        <div className="border-r border-panel-border bg-[var(--calendar-surface)] px-3 py-4" />
         {weekDays.map(({ date, value }) => {
           const isSelected = date === selectedDate
           const isToday = date === todayIso
@@ -949,7 +963,7 @@ export function CalendarWeekView({
       </div>
 
       <div className="grid shrink-0 grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-        <div className="border-r border-panel-border bg-muted px-3 py-3" />
+        <div className="border-r border-panel-border bg-[var(--calendar-surface)] px-3 py-3" />
         <div className="relative col-span-7" style={{ minHeight: `${allDaySurfaceHeightPx}px` }}>
           <div className="absolute inset-0 grid grid-cols-7">
             {weekDays.map(({ date }) => {
@@ -1033,7 +1047,7 @@ export function CalendarWeekView({
         className="flex-1 overflow-visible"
       >
         <div className="relative grid min-w-full grid-cols-[72px_repeat(7,minmax(0,1fr))]">
-          <div className="border-r border-panel-border bg-muted">
+          <div className="border-r border-panel-border bg-[var(--calendar-surface)]">
             <div className="relative" style={{ height: `${weeklyTimedSurfaceHeightPx}px` }}>
               <div
                 ref={timeScaleRef}

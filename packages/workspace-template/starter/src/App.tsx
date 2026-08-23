@@ -195,8 +195,8 @@ export default function App(): React.JSX.Element {
           collapsible={isFocusMode ? 'offcanvas' : 'icon'}
         />
 
-        <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased">
-          <div className="flex h-full min-w-0 flex-col">
+        <SidebarInset className="!min-h-0 overflow-hidden bg-background text-foreground antialiased p-2 pr-4">
+          <div className="flex h-full min-w-0 flex-col gap-2">
             <WorkspaceTabManager
               tabs={[
                 {

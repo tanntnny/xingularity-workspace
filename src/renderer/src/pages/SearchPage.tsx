@@ -4,7 +4,7 @@ import { SearchResults } from '../components/SearchResults'
 
 interface SearchPageProps {
   results: SearchResult[]
-  onOpen: (relPath: string) => void
+  onOpen: (result: SearchResult) => void
 }
 
 export function SearchPage({ results, onOpen }: SearchPageProps): ReactElement {

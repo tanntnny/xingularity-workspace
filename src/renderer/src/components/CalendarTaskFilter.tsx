@@ -156,7 +156,11 @@ export function CalendarTaskFilter({
                       aria-hidden="true"
                       className="pointer-events-none"
                     />
-                    <TagChip tag={option.value} className="max-w-[12rem]" />
+                    <TagChip
+                      tag={option.value}
+                      className="w-full max-w-full"
+                      labelOverflow="fade"
+                    />
                     <Badge
                       variant="secondary"
                       className="ml-auto min-w-5 justify-center px-1.5 text-xs"

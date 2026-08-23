@@ -35,7 +35,7 @@ export function createWindowErrorPageHtml(error: AppErrorEvent): string {
     <title>Xingularity Error</title>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: dark;
         --bg: #0b1018;
         --panel: rgba(15, 23, 42, 0.9);
         --panel-2: rgba(15, 23, 42, 0.72);
@@ -51,8 +51,7 @@ export function createWindowErrorPageHtml(error: AppErrorEvent): string {
       body {
         margin: 0;
         min-height: 100vh;
-        font-family:
-          Iowan Old Style, Palatino Linotype, Book Antiqua, Palatino, serif;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
         background:
           radial-gradient(circle at top, rgba(248, 113, 113, 0.16), transparent 34%),
           linear-gradient(180deg, #020617 0%, #0f172a 100%);

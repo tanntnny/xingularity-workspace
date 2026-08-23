@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   commandsCtx,
+  EditorStatus,
   editorViewCtx,
   parserCtx,
   prosePluginsCtx,
@@ -40,7 +41,8 @@ import { createTable } from '@milkdown/kit/preset/gfm'
 import { insert, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/crepe/theme/common/style.css'
 import katex from 'katex'
-import { Check, Link2 } from './ui/icons'
+import { Check } from './ui/icons'
+import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
 import {
   NOTE_PDF_IMAGE_URI_PREFIX,
@@ -63,10 +65,9 @@ import {
 } from '../lib/noteCallouts'
 import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
 import { ensureEditorViewContext, hasReadyEditorView } from '../lib/milkdownEditorViewContext'
-import { extractNoteOutlineFromMarkdown, type NoteOutlineItem } from '../lib/noteOutline'
 import {
+  NOTE_SLASH_COMMANDS,
   findNoteSlashTrigger,
-  getNoteSlashCommands,
   type NoteSlashCommandId
 } from '../lib/noteSlashMenu'
 import { resolveArrowReplacementForTextInput } from '../lib/noteArrowInputRules'
@@ -76,6 +77,9 @@ import { cn } from '../lib/utils'
 
 interface EditorProps {
   initialContent?: string | null
+  density?: 'default' | 'compact'
+  background?: 'transparent' | 'inherit'
+  readOnly?: boolean
   onDirty: () => void
   onSnapshotChange?: (snapshot: NoteEditorSnapshot) => void
   onDropFile: (sourcePath: string) => Promise<string | null>
@@ -83,7 +87,6 @@ interface EditorProps {
   notes: NoteListItem[]
   currentNotePath?: string
   onOpenNoteLink?: (target: string) => void
-  onOutlineChange?: (items: NoteOutlineItem[], notePath: string | undefined) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
   onVimModeChange?: (mode: NoteVimMode) => void
@@ -542,13 +545,15 @@ function getBlockquoteCalloutInfo(
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   {
     initialContent,
+    density = 'default',
+    background = 'transparent',
+    readOnly = false,
     onDirty,
     onSnapshotChange,
     onPasteImage,
     notes,
     currentNotePath,
     onOpenNoteLink,
-    onOutlineChange,
     vimModeEnabled,
     vimKeyMappings,
     onVimModeChange
@@ -561,39 +566,63 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const rootRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<Crepe | null>(null)
   const editorReadyRef = useRef(false)
-  const notesRef = useRef(notes)
   const currentNotePathRef = useRef(currentNotePath)
   const mentionPickerRef = useRef<MentionPickerState | null>(null)
   const slashPickerRef = useRef<SlashPickerState | null>(null)
+  const slashCommandSelectionRef = useRef(false)
+  const dismissedMentionTriggerRef = useRef<{
+    from: number
+    to: number
+    query: string
+  } | null>(null)
   const vimModeEnabledRef = useRef(vimModeEnabled)
   const vimKeyMappingsRef = useRef(vimKeyMappings)
+  const readOnlyRef = useRef(readOnly)
   const onVimModeChangeRef = useRef(onVimModeChange)
   const [isEditorVisible, setIsEditorVisible] = useState(false)
   const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
-  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [slashPicker, setSlashPicker] = useState<SlashPickerState | null>(null)
-  const [activeSlashIndex, setActiveSlashIndex] = useState(0)
   const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const hasFocusIntentRef = useRef(false)
   const onDirtyRef = useRef(onDirty)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
   const onPasteImageRef = useRef(onPasteImage)
   const onOpenNoteLinkRef = useRef(onOpenNoteLink)
-  const onOutlineChangeRef = useRef(onOutlineChange)
   const suppressNextDirtySyncRef = useRef(false)
 
   const resolveNoteMentionTarget = createNoteMentionResolver(notes)
   const mentionSuggestions = buildMentionSuggestions(notes, currentNotePath, mentionPicker)
-  const highlightedMentionIndex =
-    mentionSuggestions.length === 0
-      ? 0
-      : Math.min(activeMentionIndex, mentionSuggestions.length - 1)
-  const slashSuggestions = useMemo(
-    () => (slashPicker?.open ? getNoteSlashCommands(slashPicker.query) : []),
-    [slashPicker]
+  const mentionOptions: SelectionPopoverOption[] = mentionSuggestions.map((note) => {
+    const alreadyLinked =
+      Boolean(mentionPicker?.query.trim()) &&
+      resolveNoteMentionTarget(mentionPicker?.query ?? '') === note.relPath
+
+    return {
+      value: note.relPath,
+      label: (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{getNoteDisplayName(note.relPath)}</span>
+            <span className="block truncate text-xs opacity-75">
+              {stripNoteExtension(note.relPath)}
+            </span>
+          </span>
+          {alreadyLinked ? <Check aria-hidden="true" size={14} /> : null}
+        </span>
+      ),
+      searchText: `${getNoteDisplayName(note.relPath)} ${stripNoteExtension(note.relPath)}`,
+      wrapLabel: true
+    }
+  })
+  const slashOptions = useMemo<SelectionPopoverOption[]>(
+    () =>
+      NOTE_SLASH_COMMANDS.map((command) => ({
+        value: command.id,
+        label: command.label,
+        searchText: command.keywords.join(' ')
+      })),
+    []
   )
-  const highlightedSlashIndex =
-    slashSuggestions.length === 0 ? 0 : Math.min(activeSlashIndex, slashSuggestions.length - 1)
 
   useEffect(() => {
     onDirtyRef.current = onDirty
@@ -608,20 +637,12 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   }, [onPasteImage])
 
   useEffect(() => {
-    notesRef.current = notes
-  }, [notes])
-
-  useEffect(() => {
     currentNotePathRef.current = currentNotePath
   }, [currentNotePath])
 
   useEffect(() => {
     onOpenNoteLinkRef.current = onOpenNoteLink
   }, [onOpenNoteLink])
-
-  useEffect(() => {
-    onOutlineChangeRef.current = onOutlineChange
-  }, [onOutlineChange])
 
   useEffect(() => {
     mentionPickerRef.current = mentionPicker
@@ -640,6 +661,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   }, [vimKeyMappings])
 
   useEffect(() => {
+    readOnlyRef.current = readOnly
+    editorRef.current?.setReadonly(readOnly)
+  }, [readOnly])
+
+  useEffect(() => {
     onVimModeChangeRef.current = onVimModeChange
   }, [onVimModeChange])
 
@@ -650,19 +676,19 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
     contentRef.current = nextContent
     onSnapshotChangeRef.current?.({ content: nextContent })
-    onOutlineChangeRef.current?.(
-      extractNoteOutlineFromMarkdown(nextContent),
-      currentNotePathRef.current
-    )
     if (dirty) {
       onDirtyRef.current()
     }
   }, [])
 
-  const editorHasFocus = useCallback((): boolean => {
-    const root = rootRef.current
-    return Boolean(root && document.activeElement && root.contains(document.activeElement))
+  const isEditorTarget = useCallback((target: EventTarget | null): boolean => {
+    const editable = rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')
+    return Boolean(editable && target instanceof Node && editable.contains(target))
   }, [])
+
+  const editorHasFocus = useCallback((): boolean => {
+    return isEditorTarget(document.activeElement)
+  }, [isEditorTarget])
 
   const runEditorActionSafely = useCallback(
     (runner: Parameters<Crepe['editor']['action']>[0]): boolean => {
@@ -704,28 +730,31 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.blur()
   }, [])
 
-  const jumpToOutlineIndex = useCallback((index: number): void => {
-    const root = rootRef.current
-    if (!root || index < 0) {
-      return
-    }
+  const jumpToOutlineIndex = useCallback(
+    (index: number): void => {
+      const root = rootRef.current
+      if (!root || index < 0) {
+        return
+      }
 
-    const headings = Array.from(
-      root.querySelectorAll<HTMLElement>(
-        '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
+      const headings = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
+        )
       )
-    )
-    const target = headings[index]
-    if (!target) {
-      return
-    }
+      const target = headings[index]
+      if (!target) {
+        return
+      }
 
-    hasFocusIntentRef.current = true
-    target.scrollIntoView({
-      block: 'center',
-      behavior: 'auto'
-    })
-  }, [])
+      focus()
+      target.scrollIntoView({
+        block: 'center',
+        behavior: 'auto'
+      })
+    },
+    [focus]
+  )
 
   const createSnapshot = useCallback((): NoteEditorSnapshot => {
     const content =
@@ -800,12 +829,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
   const closeMentionPicker = useCallback((): void => {
     setMentionPicker(null)
-    setActiveMentionIndex(0)
   }, [])
 
   const closeSlashPicker = useCallback((): void => {
     setSlashPicker(null)
-    setActiveSlashIndex(0)
   }, [])
 
   const loadDocument = useCallback(
@@ -830,10 +857,6 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         contentRef.current = nextContent
         if (!sameContent) {
           onSnapshotChangeRef.current?.({ content: nextContent })
-          onOutlineChangeRef.current?.(
-            extractNoteOutlineFromMarkdown(nextContent),
-            currentNotePathRef.current
-          )
         }
         return
       }
@@ -848,6 +871,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         return
       }
       syncContent(nextContent, false)
+      dismissedMentionTriggerRef.current = null
       closeMentionPicker()
       closeSlashPicker()
 
@@ -1017,11 +1041,131 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [closeSlashPicker, runEditorActionSafely, slashPicker]
   )
 
+  const clearSlashTrigger = useCallback((): void => {
+    const picker = slashPickerRef.current
+    if (!picker?.open) {
+      closeSlashPicker()
+      return
+    }
+
+    if (
+      !runEditorActionSafely((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const { state } = view
+        const { from, empty, $from } = state.selection
+        if (!empty) {
+          view.focus()
+          return
+        }
+
+        const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\0')
+        const match = findNoteSlashTrigger(textBefore)
+        if (!match) {
+          view.focus()
+          return
+        }
+
+        const triggerStart = from - match.query.length - 1
+        const transaction = state.tr.delete(triggerStart, from)
+        transaction.setSelection(TextSelection.create(transaction.doc, triggerStart))
+        view.dispatch(transaction.scrollIntoView())
+        view.focus()
+      })
+    ) {
+      closeSlashPicker()
+      return
+    }
+
+    closeSlashPicker()
+  }, [closeSlashPicker, runEditorActionSafely])
+
+  const handleSlashCommandSelect = useCallback(
+    (commandId: string): void => {
+      slashCommandSelectionRef.current = true
+      runSlashCommand(commandId as NoteSlashCommandId)
+    },
+    [runSlashCommand]
+  )
+
+  const handleSlashSearchValueChange = useCallback((query: string): void => {
+    setSlashPicker((previous) => (previous ? { ...previous, query } : previous))
+  }, [])
+
+  const handleSlashPopoverOpenChange = useCallback(
+    (nextOpen: boolean): void => {
+      if (nextOpen) {
+        return
+      }
+
+      if (slashCommandSelectionRef.current) {
+        slashCommandSelectionRef.current = false
+        return
+      }
+
+      const picker = slashPickerRef.current
+      if (picker?.open) {
+        clearSlashTrigger()
+        return
+      }
+
+      closeSlashPicker()
+    },
+    [clearSlashTrigger, closeSlashPicker]
+  )
+
+  const handleSlashPopoverCloseAutoFocus = useCallback(
+    (event: Event): void => {
+      event.preventDefault()
+      focus()
+    },
+    [focus]
+  )
+
+  const handleMentionSelect = useCallback(
+    (targetRelPath: string): void => {
+      insertNoteLink(targetRelPath)
+    },
+    [insertNoteLink]
+  )
+
+  const handleMentionSearchValueChange = useCallback((query: string): void => {
+    setMentionPicker((previous) => (previous ? { ...previous, query } : previous))
+  }, [])
+
+  const handleMentionPopoverOpenChange = useCallback(
+    (nextOpen: boolean): void => {
+      if (!nextOpen) {
+        const picker = mentionPickerRef.current
+        if (picker?.open) {
+          dismissedMentionTriggerRef.current = {
+            from: picker.from,
+            to: picker.to,
+            query: picker.query
+          }
+        }
+        closeMentionPicker()
+      }
+    },
+    [closeMentionPicker]
+  )
+
+  const handleMentionPopoverCloseAutoFocus = useCallback(
+    (event: Event): void => {
+      event.preventDefault()
+      focus()
+    },
+    [focus]
+  )
+
   const syncMentionPicker = useCallback((): void => {
     const editor = editorRef.current
     const root = rootRef.current
     if (!editor || !editorReadyRef.current || !root) {
       closeMentionPicker()
+      return
+    }
+
+    if (mentionPickerRef.current?.open && !editorHasFocus()) {
       return
     }
 
@@ -1032,6 +1176,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         const { from, empty } = state.selection
 
         if (!empty) {
+          dismissedMentionTriggerRef.current = null
           closeMentionPicker()
           return
         }
@@ -1040,35 +1185,42 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         const textBefore = state.doc.textBetween(lookBehindStart, from, '\n', '\0')
         const match = textBefore.match(/\[\[([^\]\n]*)$/)
         if (!match) {
+          dismissedMentionTriggerRef.current = null
           closeMentionPicker()
           return
         }
 
         const query = match[1] ?? ''
         const triggerStart = from - query.length - 2
+        const dismissedTrigger = dismissedMentionTriggerRef.current
+        if (
+          dismissedTrigger &&
+          dismissedTrigger.from === triggerStart &&
+          dismissedTrigger.to === from &&
+          dismissedTrigger.query === query
+        ) {
+          closeMentionPicker()
+          return
+        }
+
+        dismissedMentionTriggerRef.current = null
         const caretRect = view.coordsAtPos(from)
         const rootRect = root.getBoundingClientRect()
 
-        setMentionPicker((previous) => {
-          if (previous?.query !== query) {
-            setActiveMentionIndex(0)
-          }
-
-          return {
-            open: true,
-            query,
-            from: triggerStart,
-            to: from,
-            top: caretRect.bottom - rootRect.top + 8,
-            left: Math.max(0, caretRect.left - rootRect.left)
-          }
+        setMentionPicker({
+          open: true,
+          query,
+          from: triggerStart,
+          to: from,
+          top: caretRect.bottom - rootRect.top + 8,
+          left: Math.max(0, caretRect.left - rootRect.left)
         })
         closeSlashPicker()
       })
     ) {
       closeMentionPicker()
     }
-  }, [closeMentionPicker, closeSlashPicker, runEditorActionSafely])
+  }, [closeMentionPicker, closeSlashPicker, editorHasFocus, runEditorActionSafely])
 
   const syncSlashPicker = useCallback((): void => {
     const editor = editorRef.current
@@ -1107,13 +1259,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         const rootRect = root.getBoundingClientRect()
 
         setSlashPicker((previous) => {
-          if (previous?.query !== match.query) {
-            setActiveSlashIndex(0)
-          }
-
           return {
             open: true,
-            query: match.query,
+            query: previous?.open && previous.from === triggerStart ? previous.query : match.query,
             from: triggerStart,
             to: from,
             top: caretRect.bottom - rootRect.top + 8,
@@ -1179,10 +1327,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
           inputPlaceholder: 'Paste link or select a note link'
         },
         [CrepeFeature.Placeholder]: {
-          text: 'Type / for headings, lists, tables, code, and more'
+          text: 'Type / for commands'
         }
       }
     })
+    editor.setReadonly(readOnlyRef.current)
 
     editor.editor.config((ctx) => {
       ensureEditorViewContext(ctx)
@@ -1215,10 +1364,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     editorReadyRef.current = false
     contentRef.current = initialValue
     onSnapshotChangeRef.current?.({ content: initialValue })
-    onOutlineChangeRef.current?.(
-      extractNoteOutlineFromMarkdown(initialValue),
-      currentNotePathRef.current
-    )
+    editor.editor.onStatusChange((status) => {
+      if (status === EditorStatus.Destroyed) {
+        ensureEditorViewContext(editor.editor.ctx)
+      }
+    })
 
     void editor
       .create()
@@ -1388,242 +1538,93 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       return
     }
 
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (slashPicker?.open) {
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          closeSlashPicker()
-          return
-        }
-
-        if (event.key === 'ArrowDown') {
-          event.preventDefault()
-          setActiveSlashIndex((current) =>
-            slashSuggestions.length === 0 ? 0 : (current + 1) % slashSuggestions.length
-          )
-          return
-        }
-
-        if (event.key === 'ArrowUp') {
-          event.preventDefault()
-          setActiveSlashIndex((current) =>
-            slashSuggestions.length === 0
-              ? 0
-              : (current - 1 + slashSuggestions.length) % slashSuggestions.length
-          )
-          return
-        }
-
-        if ((event.key === 'Enter' || event.key === 'Tab') && slashSuggestions.length > 0) {
-          event.preventDefault()
-          const selectionIndex =
-            slashSuggestions.length === 0
-              ? 0
-              : Math.min(activeSlashIndex, slashSuggestions.length - 1)
-          runSlashCommand(slashSuggestions[selectionIndex]?.id ?? slashSuggestions[0].id)
-          return
-        }
-      }
-
-      if (!mentionPicker?.open) {
-        return
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        closeMentionPicker()
-        return
-      }
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault()
-        const suggestions = buildMentionSuggestions(
-          notesRef.current,
-          currentNotePathRef.current,
-          mentionPicker
-        )
-        setActiveMentionIndex((current) =>
-          suggestions.length === 0 ? 0 : (current + 1) % suggestions.length
-        )
-        return
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        const suggestions = buildMentionSuggestions(
-          notesRef.current,
-          currentNotePathRef.current,
-          mentionPicker
-        )
-        setActiveMentionIndex((current) =>
-          suggestions.length === 0 ? 0 : (current - 1 + suggestions.length) % suggestions.length
-        )
-        return
-      }
-
-      if (
-        (event.key === 'Enter' || event.key === 'Tab') &&
-        buildMentionSuggestions(notesRef.current, currentNotePathRef.current, mentionPicker)
-          .length > 0
-      ) {
-        event.preventDefault()
-        const suggestions = buildMentionSuggestions(
-          notesRef.current,
-          currentNotePathRef.current,
-          mentionPicker
-        )
-        const index =
-          suggestions.length === 0 ? 0 : Math.min(activeMentionIndex, suggestions.length - 1)
-        insertNoteLink(suggestions[index]?.relPath ?? suggestions[0].relPath)
-      }
-    }
-
     const handleSelectionChange = (): void => {
       syncMentionPicker()
       syncSlashPicker()
     }
 
-    root.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('selectionchange', handleSelectionChange)
     return () => {
-      root.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('selectionchange', handleSelectionChange)
     }
-  }, [
-    activeSlashIndex,
-    activeMentionIndex,
-    closeMentionPicker,
-    closeSlashPicker,
-    insertNoteLink,
-    mentionPicker,
-    mentionPicker?.open,
-    runSlashCommand,
-    slashPicker,
-    slashPicker?.open,
-    slashSuggestions,
-    syncMentionPicker,
-    syncSlashPicker
-  ])
+  }, [syncMentionPicker, syncSlashPicker])
 
   return (
     <div
       data-testid="note-block-editor"
       data-vim-mode={vimModeEnabled ? vimMode : undefined}
+      data-editor-read-only={readOnly ? 'true' : undefined}
       data-editor-ready={isEditorVisible ? 'true' : 'false'}
-      className="motion-editor-surface relative h-full min-h-[60vh]"
+      data-editor-density={density}
+      data-editor-background={background}
+      className="motion-editor-surface relative h-full min-h-[10vh]"
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
-      onFocusCapture={() => {
-        hasFocusIntentRef.current = true
+      onFocusCapture={(event) => {
+        if (isEditorTarget(event.target)) {
+          hasFocusIntentRef.current = true
+        }
       }}
-      onPointerDownCapture={() => {
-        hasFocusIntentRef.current = true
+      onPointerDownCapture={(event) => {
+        if (isEditorTarget(event.target)) {
+          hasFocusIntentRef.current = true
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (!isEditorTarget(event.relatedTarget)) {
+          hasFocusIntentRef.current = false
+        }
       }}
     >
-      <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[60vh] h-full" />
-      {slashPicker?.open ? (
-        <div
-          className="motion-editor-popover absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
-          style={{
-            top: slashPicker.top,
-            left: slashPicker.left
-          }}
-          data-testid="note-slash-completion"
-        >
-          <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
-            Insert block
-            {slashPicker.query ? (
-              <span className="ml-1 truncate">for &quot;{slashPicker.query}&quot;</span>
-            ) : null}
-          </div>
-          <div className="max-h-72 overflow-y-auto p-1">
-            {slashSuggestions.length > 0 ? (
-              slashSuggestions.map((command, index) => {
-                const isActive = index === highlightedSlashIndex
-
-                return (
-                  <button
-                    key={command.id}
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center rounded-md px-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      isActive
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-                    )}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      runSlashCommand(command.id)
-                    }}
-                    onMouseEnter={() => setActiveSlashIndex(index)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{command.label}</div>
-                    </div>
-                  </button>
-                )
-              })
-            ) : (
-              <div className="px-3 py-3 text-sm text-muted-foreground">No matching commands</div>
-            )}
-          </div>
-        </div>
-      ) : null}
-      {mentionPicker?.open ? (
-        <div
-          className="motion-editor-popover absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
-          style={{
-            top: mentionPicker.top,
-            left: mentionPicker.left
-          }}
-          data-testid="note-link-completion"
-        >
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
-            <Link2 size={14} />
-            Link note
-            {mentionPicker.query ? (
-              <span className="truncate">for &quot;{mentionPicker.query}&quot;</span>
-            ) : null}
-          </div>
-          <div className="max-h-72 overflow-y-auto p-1">
-            {mentionSuggestions.length > 0 ? (
-              mentionSuggestions.map((note, index) => {
-                const isActive = index === highlightedMentionIndex
-                const alreadyLinked =
-                  mentionPicker.query.trim().length > 0 &&
-                  resolveNoteMentionTarget(mentionPicker.query) === note.relPath
-
-                return (
-                  <button
-                    key={note.relPath}
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      isActive
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-                    )}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      insertNoteLink(note.relPath)
-                    }}
-                    onMouseEnter={() => setActiveMentionIndex(index)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{getNoteDisplayName(note.relPath)}</div>
-                      <div className="truncate text-xs opacity-75">
-                        {stripNoteExtension(note.relPath)}
-                      </div>
-                    </div>
-                    {alreadyLinked ? <Check size={14} /> : null}
-                  </button>
-                )
-              })
-            ) : (
-              <div className="px-3 py-3 text-sm text-muted-foreground">No matching notes</div>
-            )}
-          </div>
-        </div>
-      ) : null}
+      <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[10vh] h-full" />
+      <SelectionPopover
+        selectionMode="single"
+        value=""
+        options={slashOptions}
+        onValueChange={handleSlashCommandSelect}
+        label="Insert block"
+        searchPlaceholder="Search commands"
+        testId="note-slash-completion"
+        contentClassName="note-editor-popover w-72 p-1"
+        open={Boolean(slashPicker?.open)}
+        onOpenChange={handleSlashPopoverOpenChange}
+        searchValue={slashPicker?.query ?? ''}
+        onSearchValueChange={handleSlashSearchValueChange}
+        onCloseAutoFocus={handleSlashPopoverCloseAutoFocus}
+        loop
+        hideTrigger
+        anchor={
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute h-px w-px"
+            style={{ top: slashPicker?.top ?? 0, left: slashPicker?.left ?? 0 }}
+          />
+        }
+      />
+      <SelectionPopover
+        selectionMode="single"
+        value=""
+        options={mentionOptions}
+        onValueChange={handleMentionSelect}
+        label="Link note"
+        searchPlaceholder="Search notes"
+        testId="note-link-completion"
+        contentClassName="note-editor-popover w-72 p-1"
+        open={Boolean(mentionPicker?.open)}
+        onOpenChange={handleMentionPopoverOpenChange}
+        searchValue={mentionPicker?.query ?? ''}
+        onSearchValueChange={handleMentionSearchValueChange}
+        onCloseAutoFocus={handleMentionPopoverCloseAutoFocus}
+        loop
+        selectOnTab
+        hideTrigger
+        anchor={
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute h-px w-px"
+            style={{ top: mentionPicker?.top ?? 0, left: mentionPicker?.left ?? 0 }}
+          />
+        }
+      />
     </div>
   )
 })

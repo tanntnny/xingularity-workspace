@@ -7,14 +7,19 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
     --app-background: #f4f4f4;
     --background: var(--app-background);
     --workspace-background: #f8f8f8;
+    --panel: #f8f8f8;
+    --panel-hover: #ffffff;
+    --calendar-surface: color-mix(in srgb, var(--panel) 10%, transparent);
     --foreground: #1a1a1a;
     --card: #fafafa;
+    --card-hover: #ffffff;
     --card-foreground: #1a1a1a;
     --popover: #ffffff;
+    --popover-hover: color-mix(in srgb, var(--popover) 90%, #ffffff);
     --popover-foreground: #1a1a1a;
     --primary: #202020;
     --primary-foreground: #fafafa;
@@ -22,12 +27,21 @@
     --secondary-foreground: #202020;
     --muted: #eeeeee;
     --muted-foreground: #707070;
-    --accent: #e5e5e5;
-    --accent-foreground: #202020;
+    --accent: #74a9df;
+    --accent-foreground: #0d2a55;
+    --accent-hover: #5d92c9;
+    --progress: #2563eb;
+    --milestone-current-icon: color-mix(in srgb, var(--warning) 72%, transparent);
+    --milestone-complete-icon: color-mix(in srgb, var(--accent) 72%, transparent);
+    --milestone-unreached-icon: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+    --surface-subtle: #e9e9e9;
+    --surface-subtle-foreground: #202020;
+    --surface-subtle-hover: #f5f5f5;
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
     --destructive-muted: #fee2e2;
     --destructive-muted-foreground: #991b1b;
+    --destructive-strong: #dc2626;
     --success: #16a34a;
     --success-foreground: #f0fdf4;
     --success-muted: #f0fdf4;
@@ -43,8 +57,9 @@
     --info-muted: #ecfeff;
     --info-muted-foreground: #155e75;
     --info-border: #a5f3fc;
-    --overlay: rgb(0 0 0 / 0.8);
+    --overlay: rgb(0 0 0 / 0.5);
     --overlay-muted: rgb(0 0 0 / 0.5);
+    --border-width: 0.5px;
     --border: #c7c7c7;
     --panel-border: #dedede;
     --note-block-border: var(--border);
@@ -59,11 +74,13 @@
     --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
     --drop-zone-active-border: var(--ring);
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
+    --scrollbar-size: 2px;
     --scrollbar-thumb: #b8b8b8;
     --scrollbar-thumb-hover: #8a8a8a;
     --radius: 0.75rem;
     --radius-surface: var(--radius);
-    --radius-shell: calc(var(--radius) + 4px);
+    --radius-shell: calc(var(--radius) + 2px);
+    --radius-dialog: 2rem;
     --sidebar-background: var(--app-background);
     --sidebar-foreground: #1a1a1a;
     --sidebar-primary: #202020;
@@ -72,17 +89,21 @@
     --sidebar-accent-foreground: #1a1a1a;
     --sidebar-border: #bdbdbd;
     --sidebar-ring: #555555;
+    --resize-handle-edge: #9d9d9d;
+    --resize-handle-center: #ffffff;
 
     --app-font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
     --radius-button: calc(var(--radius) - 2px);
     --radius-button-pill: 9999px;
     --radius-control: 9999px;
     --control-height: 2rem;
+    --compact-control-height: 1.75rem;
     --control-font-size: 0.875rem;
     --control-icon-size: 1rem;
+    --status-chip-icon-size: 1.25rem;
     --control-padding-x: 1rem;
     --workspace-chrome-height: 2rem;
-    --workspace-tab-control-height: 1.5rem;
+    --workspace-tab-control-height: 1.625rem;
     --calendar-task-stack-gap-y: 0.5rem;
     --calendar-task-meeting-bg: #fce7f3;
     --calendar-task-meeting-border: #d38ab2;
@@ -108,7 +129,7 @@
     --chart-review: #84263b;
     --chart-renewal: #8c6406;
     --chart-default: #164f63;
-    --icon-on-color: #ffffff;
+    --project-icon-surface-strength: 14%;
     --tag-0-bg: #fff1f2;
     --tag-0-border: #fecdd3;
     --tag-0-foreground: #9f1239;
@@ -133,6 +154,76 @@
     --tag-5-border: #fbcfe8;
     --tag-5-foreground: #be185d;
     --tag-5-hover: #fce7f3;
+    --status-chip-task-status-pending-icon: var(--muted-foreground);
+    --status-chip-task-status-backlog-icon: var(--warning);
+    --status-chip-task-status-in-progress-icon: var(--warning);
+    --status-chip-task-status-blocked-icon: var(--warning);
+    --status-chip-task-status-canceled-icon: var(--destructive-strong);
+    --status-chip-task-status-completed-icon: var(--success);
+    --status-chip-task-priority-low-icon: var(--foreground);
+    --status-chip-task-priority-medium-icon: var(--foreground);
+    --status-chip-task-priority-high-icon: var(--foreground);
+    --status-chip-calendar-task-type-meeting-icon: var(--calendar-task-meeting-border);
+    --status-chip-calendar-task-type-assignment-icon: var(--calendar-task-assignment-border);
+    --status-chip-calendar-task-type-review-icon: var(--calendar-task-review-border);
+    --status-chip-calendar-task-type-personal-icon: var(--calendar-task-personal-border);
+    --status-chip-calendar-task-type-deep-work-icon: var(--calendar-task-deep-work-border);
+    --status-chip-calendar-task-type-errand-icon: var(--calendar-task-errand-border);
+    --status-chip-calendar-task-type-follow-up-icon: var(--calendar-task-follow-up-border);
+    --status-chip-calendar-task-type-other-icon: var(--calendar-task-other-border);
+    --status-chip-tag-0-icon: var(--tag-0-border);
+    --status-chip-tag-1-icon: var(--tag-1-border);
+    --status-chip-tag-2-icon: var(--tag-2-border);
+    --status-chip-tag-3-icon: var(--tag-3-border);
+    --status-chip-tag-4-icon: var(--tag-4-border);
+    --status-chip-tag-5-icon: var(--tag-5-border);
+    --status-chip-project-state-active-icon: var(--foreground);
+    --status-chip-project-state-archived-icon: var(--foreground);
+    --status-chip-project-favorite-favorite-icon: var(--warning);
+    --status-chip-project-favorite-not-favorite-icon: var(--muted-foreground);
+    --status-chip-project-health-on-track-icon: var(--success);
+    --status-chip-project-health-needs-attention-icon: var(--warning);
+    --status-chip-project-health-dependency-cycle-icon: var(--warning);
+    --status-chip-project-health-blocked-icon: var(--destructive);
+    --status-chip-project-health-overdue-icon: var(--warning);
+    --status-chip-capture-triage-inbox-icon: var(--info);
+    --status-chip-capture-triage-in-progress-icon: var(--info);
+    --status-chip-capture-triage-converted-icon: var(--success);
+    --status-chip-capture-triage-archived-icon: var(--muted-foreground);
+    --status-chip-subscription-status-active-icon: var(--success);
+    --status-chip-subscription-status-paused-icon: var(--warning);
+    --status-chip-subscription-status-cancelled-icon: var(--destructive);
+    --status-chip-subscription-status-archived-icon: var(--muted-foreground);
+    --status-chip-subscription-review-none-icon: var(--muted-foreground);
+    --status-chip-subscription-review-review-icon: var(--warning);
+    --status-chip-subscription-review-unused-icon: var(--destructive);
+    --status-chip-subscription-review-duplicate-icon: var(--destructive);
+    --status-chip-subscription-review-expensive-icon: var(--warning);
+    --status-chip-subscription-usage-not-reviewed-icon: var(--muted-foreground);
+    --status-chip-subscription-usage-keep-icon: var(--success);
+    --status-chip-subscription-usage-cancel-icon: var(--destructive);
+    --status-chip-subscription-usage-snooze-icon: var(--warning);
+    --status-chip-resource-state-available-icon: var(--success);
+    --status-chip-resource-reference-icon: var(--info);
+    --status-chip-resource-state-stale-icon: var(--warning);
+    --status-chip-resource-state-moved-icon: var(--warning);
+    --status-chip-resource-state-offline-icon: var(--warning);
+    --status-chip-resource-state-permission-denied-icon: var(--destructive);
+    --status-chip-resource-state-reauthorization-required-icon: var(--destructive);
+    --status-chip-resource-state-missing-icon: var(--destructive);
+    --status-chip-resource-state-conflict-icon: var(--destructive);
+    --status-chip-resource-state-unindexed-icon: var(--warning);
+    --status-chip-schedule-job-disabled-icon: var(--muted-foreground);
+    --status-chip-schedule-job-error-icon: var(--destructive);
+    --status-chip-schedule-job-review-icon: var(--warning);
+    --status-chip-schedule-job-success-icon: var(--success);
+    --status-chip-schedule-job-ready-icon: var(--info);
+    --status-chip-run-status-idle-icon: var(--muted-foreground);
+    --status-chip-run-status-running-icon: var(--info);
+    --status-chip-run-status-success-icon: var(--success);
+    --status-chip-run-status-error-icon: var(--destructive);
+    --status-chip-run-status-review-icon: var(--warning);
+    --status-chip-run-status-cancelled-icon: var(--muted-foreground);
     --capture-group-bg: #eeeeee;
     --capture-card-bg: var(--workspace-background);
     --capture-card-hover-bg: #ffffff;
@@ -156,120 +247,204 @@
     --motion-ease-linear: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --background: var(--sidebar-background);
-      --workspace-background: #101010;
-      --foreground: #eeeeee;
-      --card: #181818;
-      --card-foreground: #eeeeee;
-      --popover: #222222;
-      --popover-foreground: #eeeeee;
-      --primary: #e5e5e5;
-      --primary-foreground: #0c0c0c;
-      --secondary: #262626;
-      --secondary-foreground: #eeeeee;
-      --muted: #222222;
-      --muted-foreground: #a3a3a3;
-      --accent: #2b2b2b;
-      --accent-foreground: #f2f2f2;
-      --destructive: #7f1d1d;
-      --destructive-foreground: #fafafa;
-      --destructive-muted: #450a0a;
-      --destructive-muted-foreground: #fecaca;
-      --success: #22c55e;
-      --success-foreground: #052e16;
-      --success-muted: #052e16;
-      --success-muted-foreground: #bbf7d0;
-      --success-border: #166534;
-      --warning: #f59e0b;
-      --warning-foreground: #451a03;
-      --warning-muted: #451a03;
-      --warning-muted-foreground: #fde68a;
-      --warning-border: #92400e;
-      --info: #22d3ee;
-      --info-foreground: #083344;
-      --info-muted: #083344;
-      --info-muted-foreground: #a5f3fc;
-      --info-border: #0e7490;
-      --border: #353535;
-      --panel-border: #2a2a2a;
-      --note-block-border: #4a4a4a;
-      --input: #404040;
-      --ring: #a3a3a3;
-      --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
-      --scrollbar-thumb: #454545;
-      --scrollbar-thumb-hover: #6b6b6b;
-      --sidebar-background: #080808;
-      --sidebar-foreground: #eeeeee;
-      --sidebar-primary: #e5e5e5;
-      --sidebar-primary-foreground: #ffffff;
-      --sidebar-accent: #1b1b1b;
-      --sidebar-accent-foreground: #f2f2f2;
-      --sidebar-border: #242424;
-      --sidebar-ring: #a3a3a3;
-      --calendar-task-meeting-bg: #4c0d30;
-      --calendar-task-meeting-border: #a70e65;
-      --calendar-task-assignment-bg: #0d2a55;
-      --calendar-task-assignment-border: #1b63c7;
-      --calendar-task-review-bg: #531c11;
-      --calendar-task-review-border: #a74424;
-      --calendar-task-personal-bg: #042e1b;
-      --calendar-task-personal-border: #0b9958;
-      --calendar-task-deep-work-bg: #1e1b4b;
-      --calendar-task-deep-work-border: #5b48c9;
-      --calendar-task-errand-bg: #542c0e;
-      --calendar-task-errand-border: #a26a22;
-      --calendar-task-follow-up-bg: #073642;
-      --calendar-task-follow-up-border: #0e8e9e;
-      --calendar-task-other-bg: #1e1e20;
-      --calendar-task-other-border: #3f3f46;
-      --chart-label: #f6f8fb;
-      --chart-label-muted: rgb(246 248 251 / 0.82);
-      --chart-category-label: rgb(255 255 255 / 0.72);
-      --chart-category-label-muted: rgb(255 255 255 / 0.58);
-      --chart-record-stroke: rgb(255 255 255 / 0.12);
-      --chart-review: #84263b;
-      --chart-renewal: #8c6406;
-      --chart-default: #164f63;
-      --icon-on-color: #ffffff;
-      --tag-0-bg: #4c0519;
-      --tag-0-border: #9f1239;
-      --tag-0-foreground: #fecdd3;
-      --tag-0-hover: #881337;
-      --tag-1-bg: #451a03;
-      --tag-1-border: #92400e;
-      --tag-1-foreground: #fde68a;
-      --tag-1-hover: #78350f;
-      --tag-2-bg: #052e16;
-      --tag-2-border: #166534;
-      --tag-2-foreground: #bbf7d0;
-      --tag-2-hover: #14532d;
-      --tag-3-bg: #2e1065;
-      --tag-3-border: #6d28d9;
-      --tag-3-foreground: #ddd6fe;
-      --tag-3-hover: #4c1d95;
-      --tag-4-bg: #431407;
-      --tag-4-border: #c2410c;
-      --tag-4-foreground: #fed7aa;
-      --tag-4-hover: #7c2d12;
-      --tag-5-bg: #500724;
-      --tag-5-border: #be185d;
-      --tag-5-foreground: #fbcfe8;
-      --tag-5-hover: #831843;
-      --capture-group-bg: #0c0c0c;
-      --capture-card-bg: var(--workspace-background);
-      --capture-card-hover-bg: #242424;
-      --capture-group-today-bg: #7e22ce;
-      --capture-group-today-border: #e879f9;
-      --capture-group-this-week-bg: #0369a1;
-      --capture-group-this-week-border: #38bdf8;
-      --capture-group-this-month-bg: #c2410c;
-      --capture-group-this-month-border: #fdba74;
-      --capture-group-before-this-month-bg: #15803d;
-      --capture-group-before-this-month-border: #86efac;
-    }
+  :root {
+    color-scheme: dark;
+    --background: var(--sidebar-background);
+    --workspace-background: #121213;
+    --panel: #1a1a1b;
+    --panel-hover: #2b2b2d;
+    --foreground: #eeeeee;
+    --card: #212122;
+    --card-hover: #2b2b2d;
+    --card-foreground: #eeeeee;
+    --popover: #222222;
+    --popover-hover: color-mix(in srgb, var(--popover) 90%, #ffffff);
+    --popover-foreground: #eeeeee;
+    --primary: #e5e5e5;
+    --primary-foreground: #0c0c0c;
+    --secondary: #262626;
+    --secondary-foreground: #eeeeee;
+    --muted: #222222;
+    --muted-foreground: #a3a3a3;
+    --accent: #1b63c7;
+    --accent-foreground: #ffffff;
+    --accent-hover: #1553ad;
+    --progress: #60a5fa;
+    --milestone-current-icon: color-mix(in srgb, var(--warning) 72%, transparent);
+    --milestone-complete-icon: color-mix(in srgb, var(--accent) 72%, transparent);
+    --milestone-unreached-icon: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+    --surface-subtle: #2b2b2d;
+    --surface-subtle-foreground: #f2f2f2;
+    --surface-subtle-hover: #353537;
+    --destructive: #7f1d1d;
+    --destructive-foreground: #fafafa;
+    --destructive-muted: #450a0a;
+    --destructive-muted-foreground: #fecaca;
+    --destructive-strong: #ef4444;
+    --success: #22c55e;
+    --success-foreground: #052e16;
+    --success-muted: #052e16;
+    --success-muted-foreground: #bbf7d0;
+    --success-border: #166534;
+    --warning: #f59e0b;
+    --warning-foreground: #451a03;
+    --warning-muted: #451a03;
+    --warning-muted-foreground: #fde68a;
+    --warning-border: #92400e;
+    --info: #22d3ee;
+    --info-foreground: #083344;
+    --info-muted: #083344;
+    --info-muted-foreground: #a5f3fc;
+    --info-border: #0e7490;
+    --border-width: 0.5px;
+    --border: #353535;
+    --panel-border: #2a2a2a;
+    --note-block-border: #4a4a4a;
+    --input: #404040;
+    --ring: #a3a3a3;
+    --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
+    --scrollbar-thumb: #454545;
+    --scrollbar-thumb-hover: #6b6b6b;
+    --sidebar-background: #080808;
+    --sidebar-foreground: #eeeeee;
+    --sidebar-primary: #e5e5e5;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #1b1b1b;
+    --sidebar-accent-foreground: #f2f2f2;
+    --sidebar-border: #242424;
+    --sidebar-ring: #a3a3a3;
+    --resize-handle-edge: #6f6f6f;
+    --resize-handle-center: #f5f5f5;
+    --calendar-task-meeting-bg: #4c0d30;
+    --calendar-task-meeting-border: #a70e65;
+    --calendar-task-assignment-bg: #0d2a55;
+    --calendar-task-assignment-border: #1b63c7;
+    --calendar-task-review-bg: #531c11;
+    --calendar-task-review-border: #a74424;
+    --calendar-task-personal-bg: #042e1b;
+    --calendar-task-personal-border: #0b9958;
+    --calendar-task-deep-work-bg: #1e1b4b;
+    --calendar-task-deep-work-border: #5b48c9;
+    --calendar-task-errand-bg: #542c0e;
+    --calendar-task-errand-border: #a26a22;
+    --calendar-task-follow-up-bg: #073642;
+    --calendar-task-follow-up-border: #0e8e9e;
+    --calendar-task-other-bg: #1e1e20;
+    --calendar-task-other-border: #3f3f46;
+    --chart-label: #f6f8fb;
+    --chart-label-muted: rgb(246 248 251 / 0.82);
+    --chart-category-label: rgb(255 255 255 / 0.72);
+    --chart-category-label-muted: rgb(255 255 255 / 0.58);
+    --chart-record-stroke: rgb(255 255 255 / 0.12);
+    --chart-review: #84263b;
+    --chart-renewal: #8c6406;
+    --chart-default: #164f63;
+    --project-icon-surface-strength: 14%;
+    --tag-0-bg: #4c0519;
+    --tag-0-border: #9f1239;
+    --tag-0-foreground: #fecdd3;
+    --tag-0-hover: #881337;
+    --tag-1-bg: #451a03;
+    --tag-1-border: #92400e;
+    --tag-1-foreground: #fde68a;
+    --tag-1-hover: #78350f;
+    --tag-2-bg: #052e16;
+    --tag-2-border: #166534;
+    --tag-2-foreground: #bbf7d0;
+    --tag-2-hover: #14532d;
+    --tag-3-bg: #2e1065;
+    --tag-3-border: #6d28d9;
+    --tag-3-foreground: #ddd6fe;
+    --tag-3-hover: #4c1d95;
+    --tag-4-bg: #431407;
+    --tag-4-border: #c2410c;
+    --tag-4-foreground: #fed7aa;
+    --tag-4-hover: #7c2d12;
+    --tag-5-bg: #500724;
+    --tag-5-border: #be185d;
+    --tag-5-foreground: #fbcfe8;
+    --tag-5-hover: #831843;
+    --status-chip-task-status-pending-icon: var(--muted-foreground);
+    --status-chip-task-status-backlog-icon: var(--warning);
+    --status-chip-task-status-in-progress-icon: var(--warning);
+    --status-chip-task-status-blocked-icon: var(--warning);
+    --status-chip-task-status-canceled-icon: var(--destructive-strong);
+    --status-chip-task-status-completed-icon: var(--success);
+    --status-chip-task-priority-low-icon: var(--foreground);
+    --status-chip-task-priority-medium-icon: var(--foreground);
+    --status-chip-task-priority-high-icon: var(--foreground);
+    --status-chip-calendar-task-type-meeting-icon: var(--calendar-task-meeting-border);
+    --status-chip-calendar-task-type-assignment-icon: var(--calendar-task-assignment-border);
+    --status-chip-calendar-task-type-review-icon: var(--calendar-task-review-border);
+    --status-chip-calendar-task-type-personal-icon: var(--calendar-task-personal-border);
+    --status-chip-calendar-task-type-deep-work-icon: var(--calendar-task-deep-work-border);
+    --status-chip-calendar-task-type-errand-icon: var(--calendar-task-errand-border);
+    --status-chip-calendar-task-type-follow-up-icon: var(--calendar-task-follow-up-border);
+    --status-chip-calendar-task-type-other-icon: var(--calendar-task-other-border);
+    --status-chip-tag-0-icon: var(--tag-0-border);
+    --status-chip-tag-1-icon: var(--tag-1-border);
+    --status-chip-tag-2-icon: var(--tag-2-border);
+    --status-chip-tag-3-icon: var(--tag-3-border);
+    --status-chip-tag-4-icon: var(--tag-4-border);
+    --status-chip-tag-5-icon: var(--tag-5-border);
+    --status-chip-project-state-active-icon: var(--foreground);
+    --status-chip-project-state-archived-icon: var(--foreground);
+    --status-chip-project-favorite-favorite-icon: var(--warning);
+    --status-chip-project-favorite-not-favorite-icon: var(--muted-foreground);
+    --status-chip-project-health-on-track-icon: var(--success);
+    --status-chip-project-health-needs-attention-icon: var(--warning);
+    --status-chip-project-health-dependency-cycle-icon: var(--warning);
+    --status-chip-project-health-blocked-icon: var(--destructive);
+    --status-chip-project-health-overdue-icon: var(--warning);
+    --status-chip-capture-triage-inbox-icon: var(--info);
+    --status-chip-capture-triage-in-progress-icon: var(--info);
+    --status-chip-capture-triage-converted-icon: var(--success);
+    --status-chip-capture-triage-archived-icon: var(--muted-foreground);
+    --status-chip-subscription-status-active-icon: var(--success);
+    --status-chip-subscription-status-paused-icon: var(--warning);
+    --status-chip-subscription-status-cancelled-icon: var(--destructive);
+    --status-chip-subscription-status-archived-icon: var(--muted-foreground);
+    --status-chip-subscription-review-none-icon: var(--muted-foreground);
+    --status-chip-subscription-review-review-icon: var(--warning);
+    --status-chip-subscription-review-unused-icon: var(--destructive);
+    --status-chip-subscription-review-duplicate-icon: var(--destructive);
+    --status-chip-subscription-review-expensive-icon: var(--warning);
+    --status-chip-subscription-usage-not-reviewed-icon: var(--muted-foreground);
+    --status-chip-subscription-usage-keep-icon: var(--success);
+    --status-chip-subscription-usage-cancel-icon: var(--destructive);
+    --status-chip-subscription-usage-snooze-icon: var(--warning);
+    --status-chip-resource-state-available-icon: var(--success);
+    --status-chip-resource-reference-icon: var(--info);
+    --status-chip-resource-state-stale-icon: var(--warning);
+    --status-chip-resource-state-moved-icon: var(--warning);
+    --status-chip-resource-state-offline-icon: var(--warning);
+    --status-chip-resource-state-permission-denied-icon: var(--destructive);
+    --status-chip-resource-state-reauthorization-required-icon: var(--destructive);
+    --status-chip-resource-state-missing-icon: var(--destructive);
+    --status-chip-resource-state-conflict-icon: var(--destructive);
+    --status-chip-resource-state-unindexed-icon: var(--warning);
+    --status-chip-schedule-job-disabled-icon: var(--muted-foreground);
+    --status-chip-schedule-job-error-icon: var(--destructive);
+    --status-chip-schedule-job-review-icon: var(--warning);
+    --status-chip-schedule-job-success-icon: var(--success);
+    --status-chip-schedule-job-ready-icon: var(--info);
+    --status-chip-run-status-idle-icon: var(--muted-foreground);
+    --status-chip-run-status-running-icon: var(--info);
+    --status-chip-run-status-success-icon: var(--success);
+    --status-chip-run-status-error-icon: var(--destructive);
+    --status-chip-run-status-review-icon: var(--warning);
+    --status-chip-run-status-cancelled-icon: var(--muted-foreground);
+    --capture-group-bg: #0c0c0c;
+    --capture-card-bg: var(--workspace-background);
+    --capture-card-hover-bg: #242424;
+    --capture-group-today-bg: #7e22ce;
+    --capture-group-today-border: #e879f9;
+    --capture-group-this-week-bg: #0369a1;
+    --capture-group-this-week-border: #38bdf8;
+    --capture-group-this-month-bg: #c2410c;
+    --capture-group-this-month-border: #fdba74;
+    --capture-group-before-this-month-bg: #15803d;
+    --capture-group-before-this-month-border: #86efac;
   }
 
   * {
@@ -279,8 +454,8 @@
   }
 
   *::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
   }
 
   *::-webkit-scrollbar-track,
@@ -329,6 +504,19 @@
 }
 
 @layer components {
+  .project-icon-surface {
+    background-color: var(--card);
+    background-color: color-mix(
+      in srgb,
+      var(--project-icon-color) var(--project-icon-surface-strength),
+      var(--card)
+    );
+  }
+
+  .all-project-milestone-summary {
+    color: var(--muted-foreground);
+  }
+
   .capture-dashed-border {
     --capture-dash-gap: 10px;
     --capture-dash-length: 18px;
@@ -348,36 +536,36 @@
           transparent var(--capture-dash-length)
             calc(var(--capture-dash-length) + var(--capture-dash-gap))
         )
-        top left / 100% 1px no-repeat,
+        top left / 100% var(--border-width) no-repeat,
       repeating-linear-gradient(
           to bottom,
           var(--border) 0 var(--capture-dash-length),
           transparent var(--capture-dash-length)
             calc(var(--capture-dash-length) + var(--capture-dash-gap))
         )
-        top right / 1px 100% no-repeat,
+        top right / var(--border-width) 100% no-repeat,
       repeating-linear-gradient(
           to left,
           var(--border) 0 var(--capture-dash-length),
           transparent var(--capture-dash-length)
             calc(var(--capture-dash-length) + var(--capture-dash-gap))
         )
-        bottom right / 100% 1px no-repeat,
+        bottom right / 100% var(--border-width) no-repeat,
       repeating-linear-gradient(
           to top,
           var(--border) 0 var(--capture-dash-length),
           transparent var(--capture-dash-length)
             calc(var(--capture-dash-length) + var(--capture-dash-gap))
         )
-        bottom left / 1px 100% no-repeat;
+        bottom left / var(--border-width) 100% no-repeat;
     content: '';
     pointer-events: none;
   }
 
   .calendar-date-highlight,
   .calendar-date-highlight-hover:hover {
-    background-color: var(--accent);
-    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background-color: var(--surface-subtle);
+    background-color: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
   }
 
   .sidebar-brand-shimmer {
@@ -828,7 +1016,7 @@
       width: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
       flex-basis: min(var(--workspace-pane-width), calc(100% - 1rem)) !important;
       flex-shrink: 0;
-      border: 1px solid var(--panel-border);
+      border: var(--border-width) solid var(--panel-border);
       border-radius: var(--radius);
       background: var(--card);
       box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
@@ -866,6 +1054,12 @@
     .motion-editor-surface {
       opacity: 1;
     }
+
+    .resize-affordance::after,
+    .calendar-full .fc-event .fc-event-resizer,
+    .calendar-full .fc-event .fc-event-resizer::after {
+      transition: none;
+    }
   }
 
   .ui-control {
@@ -873,33 +1067,86 @@
     font-size: var(--control-font-size);
   }
 
+  .ui-compact-control {
+    height: var(--compact-control-height);
+  }
+
   .ui-control svg {
     height: var(--control-icon-size);
     width: var(--control-icon-size);
+  }
+
+  .resize-affordance::after {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+    content: '';
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-linear);
+  }
+
+  .resize-affordance::after {
+    opacity: 0;
+  }
+
+  .resize-affordance[data-resize-direction='x']::after {
+    inset-block: 0;
+    left: 50%;
+    width: var(--border-width);
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--resize-handle-center) 50%,
+      transparent 100%
+    );
+  }
+
+  .resize-affordance[data-resize-direction='y']::after {
+    inset-inline: 0;
+    top: 50%;
+    height: var(--border-width);
+    transform: translateY(-50%);
+    background: linear-gradient(
+      to right,
+      var(--resize-handle-edge),
+      var(--resize-handle-center) 50%,
+      var(--resize-handle-edge)
+    );
+  }
+
+  .resize-affordance:is(
+      :hover,
+      :focus-visible,
+      [data-resizing='true'],
+      [data-separator='active']
+    )::after {
+    opacity: 1;
   }
 
   .calendar-full .fc {
     --fc-border-color: var(--panel-border);
     --fc-page-bg-color: transparent;
     --fc-neutral-bg-color: var(--muted);
-    --fc-today-bg-color: var(--accent);
+    --fc-today-bg-color: var(--surface-subtle);
     color: var(--foreground);
   }
 
   .calendar-full .fc-scrollgrid {
     overflow: hidden;
-    border: 1px solid var(--panel-border);
+    border: var(--border-width) solid var(--panel-border);
     border-radius: var(--radius-shell);
     background-color: transparent;
   }
 
   .calendar-full .fc-scrollgrid-section > td,
   .calendar-full .fc-scrollgrid-section > th {
+    border-width: var(--border-width);
     border-color: var(--panel-border);
     background-color: var(--card);
   }
 
   .calendar-full .fc-col-header-cell {
+    border-width: var(--border-width);
     border-color: var(--panel-border);
     background-color: var(--card);
   }
@@ -909,6 +1156,7 @@
   }
 
   .calendar-full .fc-daygrid-day {
+    border-width: var(--border-width);
     border-color: var(--panel-border);
     background-color: transparent;
   }
@@ -917,6 +1165,35 @@
     border: 0;
     background-color: transparent;
     margin-top: var(--calendar-task-stack-gap-y);
+  }
+
+  .calendar-full .fc-event .fc-event-resizer {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .calendar-full .fc-event .fc-event-resizer::after {
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: var(--border-width);
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to bottom,
+      var(--resize-handle-edge),
+      var(--resize-handle-center) 50%,
+      var(--resize-handle-edge)
+    );
+    opacity: 0;
+    pointer-events: none;
+    content: '';
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-linear);
+  }
+
+  .calendar-full .fc-event .fc-event-resizer:hover::after,
+  .calendar-full .fc-event.fc-event-resizing .fc-event-resizer::after {
+    opacity: 1;
   }
 
   .calendar-full .fc-daygrid-day[data-calendar-drop-zone='true'] {
@@ -939,14 +1216,14 @@
   }
 
   .calendar-full .fc-daygrid-day:not(.calendar-date-highlight):not(.fc-day-today):hover {
-    background-color: var(--accent);
-    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background-color: var(--surface-subtle-hover);
+    background-color: color-mix(in srgb, var(--surface-subtle-hover) 50%, transparent);
   }
 
   .calendar-full .fc-daygrid-day.calendar-date-highlight,
   .calendar-full .fc-daygrid-day.fc-day-today {
-    background-color: var(--accent);
-    background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background-color: var(--surface-subtle);
+    background-color: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
   }
 
   .calendar-full .fc-daygrid-day[data-calendar-drop-zone='true'][data-calendar-drop-over='true'],
@@ -981,18 +1258,19 @@
     --crepe-color-on-inverse: var(--primary-foreground);
     --crepe-color-inline-code: var(--foreground);
     --crepe-color-error: var(--destructive);
-    --crepe-color-hover: var(--accent);
-    --crepe-color-selected: var(--note-editor-selection);
+    --crepe-color-hover: var(--surface-subtle-hover);
+    --crepe-color-selected: var(--note-editor-ui-selection);
     --crepe-color-inline-area: var(--muted);
     --crepe-font-default: var(--app-font-family);
     --crepe-font-title: var(--app-font-family);
     --crepe-font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     --crepe-shadow-1: 0 1px 3px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
     --crepe-shadow-2: 0 2px 6px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
-    --note-editor-selection: var(--accent);
+    --note-editor-ui-selection: color-mix(in srgb, var(--accent) 18%, var(--popover));
+    --note-editor-selection: color-mix(in srgb, var(--accent) 58%, transparent);
     --note-editor-selection-foreground: var(--accent-foreground);
-    --note-editor-cursor: var(--accent);
-    --note-editor-cursor-foreground: var(--accent-foreground);
+    --note-editor-cursor: var(--note-editor-selection);
+    --note-editor-cursor-foreground: var(--note-editor-selection-foreground);
     --note-editor-muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--popover));
     --note-editor-popup-border: color-mix(in srgb, var(--foreground) 30%, var(--popover));
     background: transparent;
@@ -1004,12 +1282,26 @@
     caret-color: var(--foreground);
   }
 
+  .motion-editor-surface[data-editor-density='compact'] .milkdown .ProseMirror {
+    padding: 0.5rem 0;
+  }
+
+  .motion-editor-surface .milkdown .crepe-placeholder::before {
+    color: var(--muted-foreground);
+  }
+
+  .motion-editor-surface[data-editor-background='inherit'],
+  .motion-editor-surface[data-editor-background='inherit'] > [data-testid='note-milkdown-root'],
+  .motion-editor-surface[data-editor-background='inherit'] .milkdown {
+    background: inherit !important;
+  }
+
   .note-editor-surface .milkdown .ProseMirror blockquote {
     padding-left: 34px;
   }
 
   .note-editor-surface .milkdown *::selection {
-    background: var(--note-editor-selection);
+    background: var(--note-editor-selection) !important;
     color: var(--note-editor-selection-foreground) !important;
   }
 
@@ -1041,7 +1333,7 @@
   .note-editor-surface .milkdown .ProseMirror :not(pre) > code {
     display: inline-block;
     padding: 0 0.25rem;
-    border: 1px solid var(--note-block-border) !important;
+    border: var(--border-width) solid var(--note-block-border) !important;
     border-radius: calc(var(--radius) - 2px);
     background: var(--muted) !important;
     color: var(--foreground) !important;
@@ -1062,14 +1354,14 @@
 .note-editor-surface .milkdown-code-block,
 .note-editor-surface .note-fenced-code-block {
   background: transparent !important;
-  border: 1px solid var(--note-block-border) !important;
+  border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-shadow: none;
 }
 
 .note-editor-surface .milkdown .ProseMirror pre {
   background: transparent !important;
-  border: 1px solid var(--note-block-border) !important;
+  border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-shadow: none;
 }
@@ -1078,41 +1370,204 @@
   background: var(--note-block-border) !important;
 }
 
-.note-editor-surface .milkdown :is(
-  .milkdown-toolbar,
-  .milkdown-link-preview > .link-preview,
-  .milkdown-link-edit > .link-edit,
-  .milkdown-slash-menu,
-  .milkdown-top-bar .top-bar-heading-dropdown,
-  .milkdown-latex-inline-edit
-) {
-  border: 1px solid var(--note-editor-popup-border);
+.note-editor-surface
+  .milkdown
+  .ProseMirror
+  :is(blockquote:not(.note-callout), blockquote.note-callout-neutral) {
+  background: transparent !important;
+}
+
+.note-editor-surface
+  .milkdown
+  :is(
+    .milkdown-toolbar,
+    .milkdown-link-preview > .link-preview,
+    .milkdown-link-edit > .link-edit,
+    .milkdown-slash-menu,
+    .milkdown-top-bar .top-bar-heading-dropdown,
+    .milkdown-latex-inline-edit
+  ) {
+  border: var(--border-width) solid var(--note-editor-popup-border);
+  background: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+  font-family: var(--app-font-family);
+  box-shadow: var(--crepe-shadow-2);
+}
+
+.note-editor-surface
+  .milkdown
+  :is(
+    .milkdown-toolbar,
+    .milkdown-link-preview > .link-preview,
+    .milkdown-link-edit > .link-edit,
+    .milkdown-slash-menu,
+    .milkdown-top-bar .top-bar-heading-dropdown,
+    .milkdown-latex-inline-edit
+  )
+  :is(button, input, [role='button']) {
+  color: var(--popover-foreground) !important;
+  background: transparent !important;
+  font-family: var(--app-font-family);
+}
+
+.note-editor-surface
+  .milkdown
+  :is(
+    .milkdown-toolbar,
+    .milkdown-link-preview > .link-preview,
+    .milkdown-link-edit > .link-edit,
+    .milkdown-slash-menu,
+    .milkdown-top-bar .top-bar-heading-dropdown,
+    .milkdown-latex-inline-edit
+  )
+  :is(button, [role='button']):is(:hover, :focus-visible) {
+  background: var(--surface-subtle-hover) !important;
+  color: var(--foreground) !important;
+}
+
+.note-editor-surface
+  .milkdown
+  :is(
+    .milkdown-toolbar,
+    .milkdown-link-preview > .link-preview,
+    .milkdown-link-edit > .link-edit,
+    .milkdown-slash-menu,
+    .milkdown-top-bar .top-bar-heading-dropdown,
+    .milkdown-latex-inline-edit
+  )
+  svg {
+  color: var(--popover-foreground) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.note-editor-surface .milkdown .milkdown-toolbar {
+  align-items: center;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  border-radius: var(--radius-button-pill);
+  font-size: var(--control-font-size);
+}
+
+.note-editor-surface .milkdown .milkdown-toolbar .toolbar-item {
+  display: inline-flex;
+  flex: 0 0 var(--control-height);
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-button-pill);
+  box-sizing: border-box;
+  font-size: var(--control-font-size);
+}
+
+.note-editor-surface .milkdown .milkdown-toolbar .toolbar-item svg {
+  width: var(--control-icon-size);
+  height: var(--control-icon-size);
+}
+
+.note-editor-surface .milkdown .milkdown-toolbar .divider {
+  height: calc(var(--control-height) - 8px);
+  margin: 0 0.25rem;
+}
+
+.note-editor-surface
+  .milkdown
+  :is(.milkdown-link-preview > .link-preview, .milkdown-link-edit > .link-edit) {
+  align-items: center;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  box-sizing: border-box;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-button-pill);
+  font-size: var(--control-font-size);
+}
+
+.note-editor-surface
+  .milkdown
+  :is(.milkdown-link-preview > .link-preview, .milkdown-link-edit > .link-edit)
+  > :is(.link-icon, .button) {
+  display: inline-flex;
+  flex: 0 0 var(--control-height);
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-button-pill);
+  box-sizing: border-box;
+  font-size: var(--control-font-size);
+}
+
+.note-editor-surface
+  .milkdown
+  :is(.milkdown-link-preview > .link-preview, .milkdown-link-edit > .link-edit)
+  > :is(.link-icon, .button)
+  svg {
+  width: var(--control-icon-size);
+  height: var(--control-icon-size);
+}
+
+.note-editor-surface .milkdown .milkdown-link-edit > .link-edit > .input-area,
+.note-editor-surface .milkdown .milkdown-link-preview > .link-preview > .link-display {
+  font-size: var(--control-font-size);
+}
+
+.note-editor-popover {
+  border-color: color-mix(in srgb, var(--foreground) 30%, var(--popover)) !important;
+  background: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+  font-family: var(--app-font-family);
+  box-shadow:
+    0 2px 6px var(--overlay-muted),
+    0 1px 2px var(--overlay-muted);
+}
+
+.note-editor-popover [cmdk-root],
+.note-editor-popover [cmdk-group] {
+  background: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+}
+
+.note-editor-popover [cmdk-input],
+.note-editor-popover [cmdk-item] {
+  color: var(--foreground) !important;
+}
+
+.note-editor-popover [cmdk-item][data-selected='true'],
+.note-editor-popover [cmdk-item][aria-selected='true'] {
+  background: var(--surface-subtle-hover) !important;
+  color: var(--foreground) !important;
 }
 
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block {
-  border: 1px solid var(--note-block-border) !important;
+  border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block table {
-  border: 1px solid var(--note-block-border) !important;
+  border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   overflow: hidden;
 }
 
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block th,
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block td {
+  border-width: var(--border-width) !important;
   border-color: var(--note-block-border) !important;
 }
 
 .note-editor-surface .milkdown .ProseMirror hr {
-  height: 1px;
+  height: var(--border-width);
   margin: 16px 0;
   padding: 0;
   border: 0 !important;
-  border-top: 1px solid var(--note-block-border) !important;
+  border-top: var(--border-width) solid var(--note-block-border) !important;
   background: transparent !important;
 }
 
@@ -1131,7 +1586,9 @@
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
 }
 
-.note-editor-surface .milkdown :is(button, input, [role='button'], .toolbar-item, .button):focus-visible {
+.note-editor-surface
+  .milkdown
+  :is(button, input, [role='button'], .toolbar-item, .button):focus-visible {
   outline: 2px solid var(--ring) !important;
   outline-offset: 2px;
   box-shadow: 0 0 0 1px var(--background);
@@ -1146,7 +1603,8 @@
   --note-callout-accent: var(--border);
   --note-callout-surface: var(--muted);
   margin: 8px 0;
-  border: 1px solid color-mix(in srgb, var(--note-callout-accent) 45%, var(--note-callout-surface));
+  border: var(--border-width) solid
+    color-mix(in srgb, var(--note-callout-accent) 45%, var(--note-callout-surface));
   border-radius: var(--note-block-radius);
   background: var(--note-callout-surface);
 }
@@ -1185,6 +1643,9 @@
 }
 
 .note-editor-surface .milkdown .ProseMirror .note-callout-neutral {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   --note-callout-title: var(--foreground);
 }
 
@@ -1204,6 +1665,58 @@
 
 .note-editor-surface .milkdown .ProseMirror .note-latex-preview {
   color: var(--foreground);
+}
+
+.motion-editor-surface .milkdown .ProseMirror p {
+  padding: 2px 0;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.motion-editor-surface .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  padding: 1px 0;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h1 {
+  margin-top: 24px;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 650;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h2 {
+  margin-top: 20px;
+  font-size: 23px;
+  line-height: 29px;
+  font-weight: 625;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h3 {
+  margin-top: 16px;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h4 {
+  margin-top: 14px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 575;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h5 {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 550;
+}
+
+.motion-editor-surface .milkdown .ProseMirror h6 {
+  margin-top: 10px;
+  font-size: 16px;
+  line-height: 21px;
+  font-weight: 500;
 }
 
 .scheduling-code-editor-surface {
@@ -1263,20 +1776,44 @@
   border-left-color: #c9d1d9;
 }
 
-.workspace-tab-label-fade {
+.workspace-text-fade {
+  display: block;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+}
+
+.status-chip-label-fade {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.status-chip-label-fade[data-overflowing='true'] {
   -webkit-mask-image: linear-gradient(
     to right,
     black 0,
-    black calc(100% - 1.25rem),
+    black max(0px, calc(100% - 2rem)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to right,
     black 0,
-    black calc(100% - 1.25rem),
+    black max(0px, calc(100% - 2rem)),
     transparent 100%
   );
+}
+
+.workspace-tab-label-fade {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.workspace-tab-card:hover .workspace-tab-label-fade,
+.workspace-tab-card:focus-within .workspace-tab-label-fade {
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
 }

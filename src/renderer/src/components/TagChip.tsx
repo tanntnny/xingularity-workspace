@@ -1,52 +1,69 @@
-import { ReactElement } from 'react'
-import { getTagColorVariant } from '../utils/tagColor'
-import { Badge } from './ui/badge'
+import type { ReactElement } from 'react'
+
+import { getTagChipItem } from '../lib/statusChipMeta'
 import { Button } from './ui/button'
-import { cn } from '../lib/utils'
+import { HardDrive, TagOutline, X } from './ui/icons'
+import { StatusChip, type StatusChipLabelOverflow } from './ui/status-chip'
 
 interface TagChipProps {
   tag: string
+  kind?: 'tag' | 'resource'
   onClick?: (tag: string) => void
   onRemove?: (tag: string) => void
   className?: string
+  labelOverflow?: StatusChipLabelOverflow
 }
 
-export function TagChip({ tag, onClick, onRemove, className }: TagChipProps): ReactElement {
+export function TagChip({
+  tag,
+  kind = 'tag',
+  onClick,
+  onRemove,
+  className,
+  labelOverflow = 'truncate'
+}: TagChipProps): ReactElement {
+  const item =
+    kind === 'resource'
+      ? {
+          ...getTagChipItem(tag),
+          icon: <HardDrive aria-hidden="true" />,
+          iconColorToken: 'var(--status-chip-resource-reference-icon)'
+        }
+      : {
+          ...getTagChipItem(tag),
+          icon: <TagOutline aria-hidden="true" />
+        }
+  const chip = onClick ? (
+    <StatusChip
+      as="button"
+      item={item}
+      className={className}
+      labelOverflow={labelOverflow}
+      onClick={() => onClick(tag)}
+      aria-label={`Search tag ${tag}`}
+    />
+  ) : (
+    <StatusChip item={item} className={className} labelOverflow={labelOverflow} />
+  )
+
+  if (!onRemove) {
+    return chip
+  }
+
   return (
-    <Badge
-      variant={getTagColorVariant(tag)}
-      className={cn(
-        'min-w-0 shrink-0 px-2 py-0.5 font-normal leading-[1.2]',
-        onClick && 'cursor-pointer',
-        className
-      )}
-    >
-      {onClick ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto min-w-0 rounded-[var(--radius-control)] px-1 text-inherit hover:bg-accent/50 hover:text-foreground"
-          onClick={() => onClick(tag)}
-          aria-label={`Search tag ${tag}`}
-        >
-          <span className="truncate">{tag}</span>
-        </Button>
-      ) : (
-        <span className="truncate">{tag}</span>
-      )}
-      {onRemove ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto w-auto rounded-[var(--radius-control)] p-0.5 text-xs leading-none text-inherit opacity-80 hover:bg-accent/50 hover:text-foreground hover:opacity-100"
-          onClick={() => onRemove(tag)}
-          aria-label={`Remove tag ${tag}`}
-        >
-          x
-        </Button>
-      ) : null}
-    </Badge>
+    <span className="inline-flex min-w-0 items-center gap-1">
+      {chip}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        shape="pill"
+        className="h-auto w-auto shrink-0 p-1 text-xs leading-none text-foreground opacity-80 hover:bg-muted hover:text-foreground hover:opacity-100"
+        onClick={() => onRemove(tag)}
+        aria-label={`Remove tag ${tag}`}
+      >
+        <X size={14} aria-hidden="true" />
+      </Button>
+    </span>
   )
 }

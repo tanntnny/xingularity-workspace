@@ -1,9 +1,10 @@
 import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { X } from './icons'
+import { ChevronRight, X } from './icons'
 
 import { cn } from '../../lib/utils'
 import { Button } from './button'
+import { WorkspaceIconButton } from './document-workspace'
 
 const Dialog = DialogPrimitive.Root
 
@@ -36,7 +37,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'motion-dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-panel-border bg-card p-6 text-card-foreground shadow-lg sm:rounded-lg',
+        'motion-dialog-content fixed left-1/2 top-1/2 z-50 grid w-[min(860px,92vw)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-dialog border border-border bg-panel p-6 text-foreground shadow-xl',
         className
       )}
       {...props}
@@ -61,6 +62,52 @@ const DialogHeader = ({
 )
 DialogHeader.displayName = 'DialogHeader'
 
+interface DialogShellHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  context: React.ReactNode
+  title: React.ReactNode
+  closeLabel: string
+  onClose: () => void
+  actions?: React.ReactNode
+  closeDisabled?: boolean
+  closeTestId?: string
+}
+
+const DialogShellHeader = ({
+  context,
+  title,
+  closeLabel,
+  onClose,
+  actions,
+  closeDisabled = false,
+  closeTestId,
+  className,
+  ...props
+}: DialogShellHeaderProps): React.ReactElement => (
+  <DialogHeader
+    className={cn('flex-row items-center justify-between gap-3 space-y-0 text-left', className)}
+    {...props}
+  >
+    <DialogTitle className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold">
+      <span className="shrink-0 text-muted-foreground">{context}</span>
+      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate text-foreground">{title}</span>
+    </DialogTitle>
+    <div className="flex shrink-0 items-center gap-1">
+      {actions}
+      <WorkspaceIconButton
+        onClick={onClose}
+        aria-label={closeLabel}
+        title={closeLabel}
+        icon={<X />}
+        borderless
+        disabled={closeDisabled}
+        data-testid={closeTestId}
+      />
+    </div>
+  </DialogHeader>
+)
+DialogShellHeader.displayName = 'DialogShellHeader'
+
 const DialogShell = ({
   className,
   ...props
@@ -69,7 +116,11 @@ const DialogShell = ({
 )
 DialogShell.displayName = 'DialogShell'
 
-const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+interface DialogBodyProps extends React.HTMLAttributes<HTMLDivElement> {
+  style?: React.CSSProperties
+}
+
+const DialogBody = React.forwardRef<HTMLDivElement, DialogBodyProps>(
   ({ className, style, ...props }, ref) => (
     <div
       ref={ref}
@@ -94,27 +145,36 @@ const DialogFooter = ({
 DialogFooter.displayName = 'DialogFooter'
 
 interface DialogShellFooterProps extends React.HTMLAttributes<HTMLDivElement> {
-  closeAction: React.ReactNode
+  closeAction?: React.ReactNode
+  leadingAction?: React.ReactNode
+  withDivider?: boolean
 }
 
 const DialogShellFooter = ({
   className,
   closeAction,
+  leadingAction,
+  withDivider = false,
   children,
   ...props
-}: DialogShellFooterProps): React.ReactElement => (
-  <div
-    data-dialog-footer
-    className={cn(
-      'flex items-center justify-between gap-3 [&_button]:rounded-[var(--radius-button-pill)]',
-      className
-    )}
-    {...props}
-  >
-    <div className="shrink-0">{closeAction}</div>
-    <div className="ml-auto flex items-center gap-2">{children}</div>
-  </div>
-)
+}: DialogShellFooterProps): React.ReactElement => {
+  const leftAction = leadingAction ?? closeAction
+
+  return (
+    <div
+      data-dialog-footer
+      className={cn(
+        'flex items-center justify-between gap-3 [&_button]:rounded-[var(--radius-button-pill)]',
+        withDivider && 'border-t border-border pt-3',
+        className
+      )}
+      {...props}
+    >
+      {leftAction ? <div className="shrink-0">{leftAction}</div> : null}
+      <div className="ml-auto flex items-center gap-2">{children}</div>
+    </div>
+  )
+}
 DialogShellFooter.displayName = 'DialogShellFooter'
 
 interface DialogActionButtonProps extends Omit<
@@ -123,7 +183,7 @@ interface DialogActionButtonProps extends Omit<
 > {
   icon: React.ReactNode
   label?: string
-  tone?: 'default' | 'primary'
+  tone?: 'default' | 'primary' | 'accent'
 }
 
 const DialogActionButton = React.forwardRef<
@@ -133,7 +193,7 @@ const DialogActionButton = React.forwardRef<
   <Button
     ref={ref}
     type={type}
-    variant={tone === 'primary' ? 'default' : 'outline'}
+    variant={tone === 'primary' ? 'default' : tone === 'accent' ? 'accent' : 'outline'}
     size={label ? 'sm' : 'icon'}
     className={cn(
       'shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:h-3.5 [&>svg]:w-3.5',
@@ -194,6 +254,7 @@ export {
   DialogContent,
   DialogShell,
   DialogHeader,
+  DialogShellHeader,
   DialogBody,
   DialogFooter,
   DialogShellFooter,

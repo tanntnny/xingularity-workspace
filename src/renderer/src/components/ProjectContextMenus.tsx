@@ -47,7 +47,7 @@ export function ProjectMilestoneContextMenu({
           {expanded ? 'Collapse milestone' : 'Expand milestone'}
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem destructive onSelect={onDelete}>
+        <ContextMenuItem onSelect={onDelete}>
           <Trash2 />
           Delete milestone
         </ContextMenuItem>

@@ -15,7 +15,9 @@ import {
   ChevronUp,
   Star,
   FileText,
-  PenTool
+  PenTool,
+  Folder,
+  ListTodo
 } from './components/ui/icons'
 import {
   CalendarTask,
@@ -32,17 +34,27 @@ import {
   ProjectMilestone,
   ProjectPropertiesPatch,
   ProjectState,
+  ProjectUpdateStatus,
   NativeMenuItemDescriptor,
   RendererVaultApi,
   TaskPriority,
   TaskReminder,
   CalendarTaskType,
   HistoryAffectedAreas,
-  VaultOpenResult
+  VaultOpenResult,
+  ResourceRef,
+  ResourceRelation,
+  ResourceLocator,
+  ResourceInput,
+  GoogleDriveFileCandidate,
+  WorkspaceFeatureFlags
 } from '../../shared/types'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../shared/excalidrawFile'
 import { normalizeProjectIcon } from '../../shared/projectIcons'
+import { notebookPathFromResource } from '../../shared/resourceDomain'
 import { normalizeCalendarEndDate } from '../../shared/calendarTaskDates'
+import { validateTaskDependencies } from '../../shared/projectPlanning'
+import { isTaskDone, isTaskStatusDone } from '../../shared/taskStatus'
 import { normalizeTaskTags } from '../../shared/taskTags'
 import {
   appendTextToNoteMarkdown,
@@ -60,6 +72,7 @@ import {
 } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { CalendarWeekView } from './components/CalendarWeekView'
+import { CalendarDayView } from './components/CalendarDayView'
 import { CalendarTaskPanel } from './components/CalendarTaskPanel'
 import { TaskEditDialog } from './components/TaskEditDialog'
 import { TaskPropertiesPanel } from './components/TaskPropertiesPanel'
@@ -68,6 +81,7 @@ import { CommandPalette, type CommandPaletteSearchResult } from './components/Co
 import { NotesTreeView } from './components/NotesTreeView'
 import { NotebookCardBrowser } from './components/NotebookCardBrowser'
 import { NoteShapeIcon } from './components/NoteShapeIcon'
+import { NoteOutlinePanel } from './components/NoteOutlinePanel'
 import type { NoteEditorHandle } from './components/Editor'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
@@ -83,6 +97,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from './components/ui/dropdown-menu'
 import {
@@ -100,23 +118,29 @@ import {
   WorkspaceTabManager,
   WorkspaceIconButton,
   WorkspaceHeaderActions,
-  WorkspaceHeaderActionDivider,
-  WorkspaceHeaderActionGroup
+  WorkspaceHeaderActionGroup,
+  WorkspaceHeaderSecondaryActionsRight,
+  WorkspacePageContextMenu
 } from './components/ui/document-workspace'
 import { EmptyState } from './components/ui/empty-state'
-import { WorkspacePanelSection } from './components/ui/workspace-panel-section'
-import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
-import { ButtonGroup } from './components/ui/button-group'
+import {
+  CollapsibleWorkspacePanelSection,
+  WorkspacePanelSection
+} from './components/ui/workspace-panel-section'
+import { TabToggleGroup, TabToggleGroupItem } from './components/ui/tab-toggle-group'
 import { EditorPage } from './pages/EditorPage'
 import {
-  ProjectsWorkspaceHeaderActions,
+  ProjectsWorkspaceBreadcrumb,
   ProjectsWorkspacePage,
-  ProjectsWorkspaceRightPanel
+  ProjectsWorkspaceRightPanel,
+  ProjectsWorkspaceSecondaryActions,
+  type ProjectsWorkspaceView
 } from './pages/ProjectsWorkspacePage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import {
-  SchedulingHeaderActions,
+  SchedulingContextMenuItems,
+  SchedulingAddAutomationButton,
   SchedulingPage,
   SchedulingRightPanel,
   SchedulingWorkspaceBreadcrumb,
@@ -145,10 +169,12 @@ import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { usePersistentState } from './hooks/usePersistentState'
 import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
+import type { TaskOpenOptions } from './lib/taskOpenOptions'
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbButton,
+  BreadcrumbIconLabel,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator
@@ -163,7 +189,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from './components/ui/alert-dialog'
-import { Shortcut } from './components/ui/kbd'
 import {
   filterCalendarTasks,
   filterCalendarTasksByTags,
@@ -171,10 +196,11 @@ import {
   normalizeCalendarTasks,
   type CalendarContentFilter
 } from './lib/calendarTasks'
-import { filterProjectsForWorkspace } from './lib/projectTaskRows'
 import { APP_PAGE_ICONS } from './lib/pageIcons'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
+import { extractNoteOutlineFromMarkdown } from './lib/noteOutline'
 import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
+import { createProjectSaveCoordinator } from './lib/projectSaveCoordinator'
 import { getNotebookFolderContents } from './lib/notebookFolderContents'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
@@ -210,13 +236,13 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings'
 }
 
-type CalendarViewMode = 'month' | 'week'
-type StoredProjectsWorkspaceView = 'board' | 'taskList' | 'projectDetail'
+type CalendarViewMode = 'month' | 'week' | 'day'
 
 type WorkspacePageTab = {
   id: string
   page: AppPage
   projectId: string | null
+  projectView: ProjectsWorkspaceView
   calendarDate: string
   calendarViewMode: CalendarViewMode
 }
@@ -238,12 +264,15 @@ const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
 function createWorkspacePageTab(
   id: string,
   page: AppPage,
-  context: Partial<Pick<WorkspacePageTab, 'projectId' | 'calendarDate' | 'calendarViewMode'>> = {}
+  context: Partial<
+    Pick<WorkspacePageTab, 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'>
+  > = {}
 ): WorkspacePageTab {
   return {
     id,
     page,
     projectId: null,
+    projectView: 'list',
     calendarDate: toIsoDate(new Date()),
     calendarViewMode: 'month',
     ...context
@@ -252,7 +281,7 @@ function createWorkspacePageTab(
 
 const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 300
 const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 220
-const WORKSPACE_RIGHT_PANEL_MAX_WIDTH = 360
+const WORKSPACE_RIGHT_PANEL_MAX_WIDTH = 480
 const WORKSPACE_RIGHT_PANEL_STORAGE_KEY = 'workspace_right_panel_width'
 
 function clampWorkspaceRightPanelWidth(width: number): number {
@@ -338,10 +367,12 @@ if (typeof window !== 'undefined') {
 
 const CALENDAR_VIEW_MODE_OPTIONS = [
   { value: 'month', label: 'Monthly' },
-  { value: 'week', label: 'Weekly' }
+  { value: 'week', label: 'Weekly' },
+  { value: 'day', label: 'Daily' }
 ]
 
 const NOTE_AUTOSAVE_DELAY_MS = 1200
+const EMPTY_FEATURE_FLAGS: Partial<WorkspaceFeatureFlags> = {}
 
 function App(): ReactElement {
   const platform = useAppPlatform()
@@ -357,14 +388,14 @@ function App(): ReactElement {
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const recentNotebookPaths = useVaultStore((state) => state.settings.recentNotebookPaths)
-  const lastOpenedProjectId = useVaultStore((state) => state.settings.lastOpenedProjectId)
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
+  const featureFlags = useVaultStore((state) => state.settings.featureFlags ?? EMPTY_FEATURE_FLAGS)
+  const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
   const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
   const editorVimKeyMappings = useVaultStore((state) => state.settings.editorVimKeyMappings)
   const profileName = useVaultStore((state) => state.settings.profile.name)
-  const mistralApiKey = useVaultStore((state) => state.settings.ai.mistralApiKey)
   const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
   const projectIcons = useVaultStore((state) => state.settings.projectIcons)
   const setVault = useVaultStore((state) => state.setVault)
@@ -380,6 +411,7 @@ function App(): ReactElement {
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [openTaskDialogId, setOpenTaskDialogId] = useState<string | null>(null)
   const [taskDialogOrigin, setTaskDialogOrigin] = useState<TaskOriginRequest | null>(null)
+  const [taskDialogIsNewTask, setTaskDialogIsNewTask] = useState(false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [taskOrigin, setTaskOrigin] = useState<TaskOrigin | null>(null)
   const taskOriginRef = useRef<TaskOrigin | null>(null)
@@ -432,10 +464,8 @@ function App(): ReactElement {
   const [knowledgeShowOrphans, setKnowledgeShowOrphans] = useState(true)
   const availablePages = useMemo(() => getAvailablePages(platform), [platform])
   const useNativeMenus = platform.capabilities.supportsNativeMenus && canUseNativeMenus()
-  const [isDarkMode, setIsDarkMode] = useState(
-    () => window.matchMedia('(prefers-color-scheme: dark)').matches
-  )
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [mistralApiKeyConfigured, setMistralApiKeyConfigured] = useState(false)
   const pythonCondaEnvironmentPath = useVaultStore(
     (state) => state.settings.pythonCondaEnvironmentPath
   )
@@ -448,13 +478,39 @@ function App(): ReactElement {
   const [detectedCondaExecutablePath, setDetectedCondaExecutablePath] = useState<string | null>(
     null
   )
+
+  useEffect(() => {
+    if (!vaultApi || !vault?.rootPath) {
+      setMistralApiKeyConfigured(false)
+      return
+    }
+
+    let cancelled = false
+    void vaultApi.credentials
+      .status('mistral')
+      .then((status) => {
+        if (!cancelled) {
+          setMistralApiKeyConfigured(status.configured)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMistralApiKeyConfigured(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [vault?.rootPath, vaultApi])
   const settingsMutationVersionRef = useRef(0)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
     'calendar-view-mode',
     'month',
     {
-      validate: (value): value is CalendarViewMode => value === 'month' || value === 'week'
+      validate: (value): value is CalendarViewMode =>
+        value === 'month' || value === 'week' || value === 'day'
     }
   )
   const [calendarContentFilter, setCalendarContentFilter] =
@@ -484,6 +540,11 @@ function App(): ReactElement {
   const [calendarHeaderNewTask, setCalendarHeaderNewTask] = useState('')
   const [fleetingNotes, setFleetingNotes] = useState<FleetingNote[]>([])
   const [fleetingNotesLoading, setFleetingNotesLoading] = useState(false)
+  const [resourceSnapshot, setResourceSnapshot] = useState<{
+    resources: ResourceRef[]
+    relations: ResourceRelation[]
+    locators: ResourceLocator[]
+  }>({ resources: [], relations: [], locators: [] })
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
   const [currentExcalidrawPath, setCurrentExcalidrawPath] = useState<string | null>(null)
@@ -495,6 +556,7 @@ function App(): ReactElement {
   const [noteExportFormat, setNoteExportFormat] = useState<NoteExportFormat>('markdown')
   const [isNoteExporting, setIsNoteExporting] = useState(false)
   const [isFolderExporting, setIsFolderExporting] = useState(false)
+  const [isProjectContextExporting, setIsProjectContextExporting] = useState(false)
 
   const [collapseAllNotesTreeToken, setCollapseAllNotesTreeToken] = useState(0)
   const [areAllNoteFoldersCollapsed, setAreAllNoteFoldersCollapsed] = useState(false)
@@ -539,23 +601,24 @@ function App(): ReactElement {
   const hasVault = Boolean(vault?.rootPath)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const selectedProjectIdRef = useRef<string | null>(null)
+  const [projectView, setProjectView] = useState<ProjectsWorkspaceView>('list')
+  const [resourceAddRequestProjectId, setResourceAddRequestProjectId] = useState<string | null>(
+    null
+  )
+  const handleResourceAddRequestHandled = useCallback((): void => {
+    setResourceAddRequestProjectId(null)
+  }, [])
+
+  useEffect(() => {
+    if (activePage === 'projects' && projectView === 'resources' && selectedProjectId) return
+    setResourceAddRequestProjectId(null)
+  }, [activePage, projectView, selectedProjectId])
+
   const projectMutationVersionRef = useRef(new Map<string, number>())
   const projectMilestoneMutationVersionRef = useRef(new Map<string, number>())
   const favoriteProjectMutationVersionRef = useRef(new Map<string, number>())
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectsWorkspaceFilterMode>('all')
-  const [, setStoredProjectsWorkspaceView] = usePersistentState<StoredProjectsWorkspaceView>(
-    'projects-workspace-tab',
-    'projectDetail',
-    {
-      validate: (value): value is StoredProjectsWorkspaceView =>
-        value === 'board' || value === 'taskList' || value === 'projectDetail'
-    }
-  )
-  useEffect(() => {
-    setStoredProjectsWorkspaceView('projectDetail')
-  }, [setStoredProjectsWorkspaceView])
   const [isCreatingProject, setIsCreatingProject] = useState(false)
-  const todayIso = toIsoDate(new Date())
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
     []
   )
@@ -602,7 +665,8 @@ function App(): ReactElement {
     activePage !== 'capture' &&
     activePage !== 'schedulingGuide' &&
     activePage !== 'settings' &&
-    !(activePage === 'schedules' && schedulingView === 'list')
+    !(activePage === 'schedules' && schedulingView === 'list') &&
+    !(activePage === 'projects' && (projectView === 'list' || projectView === 'resources'))
   const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
 
   const loadCondaEnvironments = useCallback(async (): Promise<void> => {
@@ -669,7 +733,9 @@ function App(): ReactElement {
 
   const updateActiveWorkspaceTabContext = useCallback(
     (
-      patch: Partial<Pick<WorkspacePageTab, 'projectId' | 'calendarDate' | 'calendarViewMode'>>
+      patch: Partial<
+        Pick<WorkspacePageTab, 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'>
+      >
     ): void => {
       const activeTabId = activeWorkspaceTabIdRef.current
       setWorkspaceTabs((tabs) =>
@@ -682,12 +748,14 @@ function App(): ReactElement {
   useEffect(() => {
     updateActiveWorkspaceTabContext({
       projectId: selectedProjectId,
+      projectView,
       calendarDate: selectedCalendarDate,
       calendarViewMode
     })
   }, [
     activeWorkspaceTabId,
     calendarViewMode,
+    projectView,
     selectedCalendarDate,
     selectedProjectId,
     updateActiveWorkspaceTabContext
@@ -935,6 +1003,19 @@ function App(): ReactElement {
     [vaultApi, favoriteNotePathSettings, patchSettings, pushToast]
   )
 
+  const updateFeatureFlag = useCallback(
+    async (key: keyof WorkspaceFeatureFlags, enabled: boolean): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        const nextSettings = await vaultApi.settings.update({ featureFlags: { [key]: enabled } })
+        setSettings(nextSettings)
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, setSettings, vaultApi]
+  )
+
   const selectProject = useCallback(
     (projectId: string | null): void => {
       const previousProjectId = selectedProjectIdRef.current
@@ -960,7 +1041,44 @@ function App(): ReactElement {
     [vaultApi, setSettings, pushToast]
   )
 
+  const openProject = useCallback(
+    (projectId: string): void => {
+      selectProject(projectId)
+      setProjectView('home')
+    },
+    [selectProject]
+  )
+
+  const openProjectPulse = useCallback(
+    (projectId: string): void => {
+      selectProject(projectId)
+      setProjectView('pulse')
+    },
+    [selectProject]
+  )
+
+  const openProjectResources = useCallback(
+    (projectId: string): void => {
+      selectProject(projectId)
+      setProjectView('resources')
+    },
+    [selectProject]
+  )
+
+  const openAllProjects = useCallback((): void => {
+    selectedProjectIdRef.current = null
+    setSelectedProjectId(null)
+    setProjectView('list')
+  }, [])
+
   const noteIsOpen = Boolean(currentNotePath)
+  const currentNoteOutline = useMemo(
+    () =>
+      noteIsOpen && activePage === 'notes' && !searchQuery.trim() && !currentExcalidrawPath
+        ? extractNoteOutlineFromMarkdown(currentNoteContent)
+        : [],
+    [activePage, currentExcalidrawPath, currentNoteContent, noteIsOpen, searchQuery]
+  )
   const currentNoteBacklinks = useMemo(() => {
     if (!currentNotePath) {
       return []
@@ -1100,6 +1218,7 @@ function App(): ReactElement {
           ? {
               ...tab,
               projectId: selectedProjectId,
+              projectView,
               calendarDate: selectedCalendarDate,
               calendarViewMode
             }
@@ -1112,6 +1231,7 @@ function App(): ReactElement {
     currentNoteEditorDraft,
     getWorkspaceTabSession,
     browseFolderPath,
+    projectView,
     selectedCalendarDate,
     selectedProjectId,
     searchQuery,
@@ -1198,7 +1318,11 @@ function App(): ReactElement {
   }, [taskOrigin])
 
   useEffect(() => {
-    if (!openTaskId || activeTask) {
+    if (
+      !openTaskId ||
+      activeTask ||
+      calendarTasksRef.current.some((task) => task.id === openTaskId)
+    ) {
       return
     }
 
@@ -1207,32 +1331,30 @@ function App(): ReactElement {
   }, [activeTask, openTaskId])
 
   useEffect(() => {
-    if (!openTaskDialogId || taskDialogTask) {
+    if (
+      !openTaskDialogId ||
+      taskDialogTask ||
+      calendarTasksRef.current.some((task) => task.id === openTaskDialogId)
+    ) {
       return
     }
 
     setOpenTaskDialogId(null)
     setTaskDialogOrigin(null)
+    setTaskDialogIsNewTask(false)
   }, [openTaskDialogId, taskDialogTask])
 
   const openTaskDialog = useCallback(
-    (taskId: string, origin: TaskOriginRequest): void => {
-      if (!normalizedCalendarTasks.some((task) => task.id === taskId)) {
-        return
-      }
-
+    (taskId: string, origin: TaskOriginRequest, options: TaskOpenOptions = {}): void => {
       setTaskDialogOrigin(origin)
+      setTaskDialogIsNewTask(options.isNewTask === true)
       setOpenTaskDialogId(taskId)
     },
-    [normalizedCalendarTasks]
+    []
   )
 
   const openTaskPage = useCallback(
     (taskId: string, origin: TaskOriginRequest): void => {
-      if (!normalizedCalendarTasks.some((task) => task.id === taskId)) {
-        return
-      }
-
       const nextOrigin: TaskOrigin =
         origin.source === 'calendar'
           ? {
@@ -1245,17 +1367,12 @@ function App(): ReactElement {
           : origin
       setOpenTaskDialogId(null)
       setTaskDialogOrigin(null)
+      setTaskDialogIsNewTask(false)
       taskOriginRef.current = nextOrigin
       setTaskOrigin(nextOrigin)
       setOpenTaskId(taskId)
     },
-    [
-      calendarContentFilter,
-      calendarTaskTagSettings,
-      calendarViewMode,
-      normalizedCalendarTasks,
-      selectedCalendarDate
-    ]
+    [calendarContentFilter, calendarTaskTagSettings, calendarViewMode, selectedCalendarDate]
   )
 
   const closeTaskPage = useCallback(async (): Promise<void> => {
@@ -1263,6 +1380,7 @@ function App(): ReactElement {
     taskFlushRef.current = null
     setOpenTaskDialogId(null)
     setTaskDialogOrigin(null)
+    setTaskDialogIsNewTask(false)
     restoreTaskOrigin()
     taskOriginRef.current = null
     setOpenTaskId(null)
@@ -1310,9 +1428,13 @@ function App(): ReactElement {
     () => getCalendarTaskTagOptions(normalizedCalendarTasks),
     [normalizedCalendarTasks]
   )
-  const availableCalendarTaskTags = useMemo(
-    () => new Set(calendarTaskTagOptions.map((option) => option.value)),
+  const calendarTaskTagValues = useMemo(
+    () => calendarTaskTagOptions.map((option) => option.value),
     [calendarTaskTagOptions]
+  )
+  const availableCalendarTaskTags = useMemo(
+    () => new Set(calendarTaskTagValues),
+    [calendarTaskTagValues]
   )
   const activeCalendarTaskTags = useMemo(
     () =>
@@ -1354,7 +1476,7 @@ function App(): ReactElement {
     activeCalendarTaskTags.length + (calendarContentFilter === 'all' ? 0 : 1)
   const hasActiveCalendarFilter = calendarActiveFilterCount > 0
   const calendarUndoneCount = useMemo(() => {
-    return calendarTasks.filter((task) => !task.completed).length
+    return calendarTasks.filter((task) => !isTaskDone(task)).length
   }, [calendarTasks])
 
   const favoriteProjectIds = useMemo(
@@ -1365,18 +1487,12 @@ function App(): ReactElement {
     [favoriteProjectIdSettings, projects]
   )
   const selectedProjectForHeader = useMemo(() => {
-    const visibleProjects = filterProjectsForWorkspace(
-      projects,
-      favoriteProjectIds,
-      projectFilterMode
-    )
+    if (activePage !== 'projects' || projectView === 'list') {
+      return null
+    }
 
-    return (
-      visibleProjects.find((project) => project.id === selectedProjectId) ??
-      visibleProjects[0] ??
-      null
-    )
-  }, [favoriteProjectIds, projectFilterMode, projects, selectedProjectId])
+    return projects.find((project) => project.id === selectedProjectId) ?? null
+  }, [activePage, projectView, projects, selectedProjectId])
   const favoriteNotePaths = useMemo(
     () =>
       favoriteNotePathSettings.filter((relPath) => notes.some((note) => note.relPath === relPath)),
@@ -1416,10 +1532,6 @@ function App(): ReactElement {
 
     return null
   }, [activePage, hasVault, searchQuery, currentExcalidrawPath, currentNotePath])
-  const calendarCurrentPeriodTitle = useMemo(() => {
-    return formatCalendarTabPeriodTitle(selectedCalendarDate, calendarViewMode)
-  }, [calendarViewMode, selectedCalendarDate])
-  const calendarTodayHeader = useMemo(() => getCalendarHeaderDateParts(todayIso), [todayIso])
   const noteHeaderBreadcrumbSegments = useMemo(() => {
     if (
       activePage !== 'notes' ||
@@ -1505,16 +1617,46 @@ function App(): ReactElement {
   }, [activePage, pushToast, vault?.rootPath, vaultApi])
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const syncColorScheme = (): void => setIsDarkMode(mediaQuery.matches)
+    if (!vaultApi || !vault?.rootPath) {
+      setResourceSnapshot({ resources: [], relations: [], locators: [] })
+      return
+    }
 
-    syncColorScheme()
-    mediaQuery.addEventListener('change', syncColorScheme)
+    let cancelled = false
+    void vaultApi.resources
+      .list()
+      .then((snapshot) => {
+        if (!cancelled) setResourceSnapshot(snapshot)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) pushToast('error', String(error))
+      })
 
     return () => {
-      mediaQuery.removeEventListener('change', syncColorScheme)
+      cancelled = true
     }
-  }, [])
+  }, [pushToast, vault?.rootPath, vaultApi])
+
+  useEffect(() => {
+    if (!vaultApi || !vault?.rootPath) {
+      setGoogleDriveConnected(false)
+      return
+    }
+
+    let cancelled = false
+    void vaultApi.credentials
+      .status('google-drive')
+      .then((status) => {
+        if (!cancelled) setGoogleDriveConnected(status.configured)
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleDriveConnected(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [vault?.rootPath, vaultApi])
 
   useEffect(() => {
     calendarTasksRef.current = calendarTasks
@@ -1533,28 +1675,13 @@ function App(): ReactElement {
       return
     }
 
-    const storedId = lastOpenedProjectId
-    if (storedId && projects.some((project) => project.id === storedId)) {
-      if (selectedProjectId !== storedId) {
-        selectedProjectIdRef.current = storedId
-        setSelectedProjectId(storedId)
-      }
-      return
-    }
-
-    if (!projects.length) {
+    if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
       if (selectedProjectId !== null) {
         selectedProjectIdRef.current = null
         setSelectedProjectId(null)
       }
-      return
     }
-
-    if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
-      selectedProjectIdRef.current = projects[0].id
-      setSelectedProjectId(projects[0].id)
-    }
-  }, [settingsLoaded, lastOpenedProjectId, projects, selectedProjectId, setSelectedProjectId])
+  }, [settingsLoaded, projects, selectedProjectId, setSelectedProjectId])
 
   const noteSaveCoordinator = useMemo(() => {
     if (!vaultApi) {
@@ -1574,6 +1701,16 @@ function App(): ReactElement {
           tagCount: document.tags.length
         })
       }
+    })
+  }, [vaultApi])
+
+  const projectSaveCoordinator = useMemo(() => {
+    if (!vaultApi) {
+      return null
+    }
+
+    return createProjectSaveCoordinator({
+      updateProject: (request) => vaultApi.projects.update(request)
     })
   }, [vaultApi])
 
@@ -1769,7 +1906,15 @@ function App(): ReactElement {
 
       await savePromise
       syncCurrentNoteDirtyState(relPath)
-      if (shouldRestoreEditorFocus || (!settleEditor && document.activeElement === document.body)) {
+      const activeElement = document.activeElement
+      const editorRoot = document.querySelector<HTMLElement>(
+        '[data-testid="note-block-editor"] [contenteditable="true"]'
+      )
+      const focusIsInEditor = Boolean(
+        editorRoot && activeElement && editorRoot.contains(activeElement)
+      )
+      const focusIsUnclaimed = activeElement === document.body || activeElement === null
+      if (shouldRestoreEditorFocus && (focusIsInEditor || focusIsUnclaimed)) {
         currentNoteEditorRef.current?.focus()
       }
       pushNoteSaveTrace('flush:done', {
@@ -2007,9 +2152,25 @@ function App(): ReactElement {
 
         activePageRef.current = targetPage
         setActivePage(targetPage)
+        if (targetPage === 'projects') {
+          selectedProjectIdRef.current = null
+          setSelectedProjectId(null)
+          setProjectView('list')
+        }
         setWorkspaceTabs((tabs) =>
           tabs.map((tab) =>
-            tab.id === activeWorkspaceTabIdRef.current ? { ...tab, page: targetPage } : tab
+            tab.id === activeWorkspaceTabIdRef.current
+              ? {
+                  ...tab,
+                  page: targetPage,
+                  ...(targetPage === 'projects'
+                    ? {
+                        projectId: null,
+                        projectView: 'list' as ProjectsWorkspaceView
+                      }
+                    : {})
+                }
+              : tab
           )
         )
         pushNoteSaveTrace('navigate:done', {
@@ -2034,6 +2195,20 @@ function App(): ReactElement {
       restoreTaskOrigin
     ]
   )
+
+  useEffect(() => {
+    if (!vaultApi || !vault) {
+      return
+    }
+
+    return vaultApi.reminders.onClick((target) => {
+      setSelectedCalendarDate(target.selectedDate)
+      setCalendarViewMode(target.view)
+      void navigateToPage(target.page).then(() => {
+        openTaskDialog(target.taskId, { source: 'calendar' })
+      })
+    })
+  }, [navigateToPage, openTaskDialog, setCalendarViewMode, vault, vaultApi])
 
   const createWorkspaceTabId = useCallback((): string => {
     workspaceTabSequenceRef.current += 1
@@ -2067,12 +2242,15 @@ function App(): ReactElement {
         activeWorkspaceTabIdRef.current = tabId
         activePageRef.current = targetPage
         if (targetPage === 'projects') {
+          const targetProjectView = targetTab?.projectView ?? 'list'
           const targetProjectId =
-            targetTab?.projectId && projects.some((project) => project.id === targetTab.projectId)
-              ? targetTab.projectId
-              : selectedProjectId && projects.some((project) => project.id === selectedProjectId)
-                ? selectedProjectId
-                : (projects[0]?.id ?? null)
+            targetProjectView === 'list'
+              ? null
+              : targetTab?.projectId &&
+                  projects.some((project) => project.id === targetTab.projectId)
+                ? targetTab.projectId
+                : null
+          setProjectView(targetProjectView)
           selectProject(targetProjectId)
         }
         if (targetPage === 'calendar') {
@@ -2100,7 +2278,6 @@ function App(): ReactElement {
       restoreTaskOrigin,
       selectProject,
       selectedCalendarDate,
-      selectedProjectId,
       setCalendarViewMode,
       setSelectedCalendarDate,
       workspaceTabs
@@ -2297,7 +2474,9 @@ function App(): ReactElement {
       void runHistoryOperation('redo')
     },
     onToggleCalendarView: () => {
-      setCalendarViewMode((current) => (current === 'month' ? 'week' : 'month'))
+      setCalendarViewMode((current) =>
+        current === 'month' ? 'week' : current === 'week' ? 'day' : 'month'
+      )
     },
     onCreateWorkspaceTab: handleCreateWorkspaceTab,
     onCloseActiveWorkspaceTab: () => handleCloseWorkspaceTab(activeWorkspaceTabId),
@@ -2402,12 +2581,13 @@ function App(): ReactElement {
     }
 
     try {
-      const nextSettings = await vaultApi.settings.update({
-        ai: {
-          mistralApiKey
-        }
-      })
-      patchSettings({ ai: nextSettings.ai })
+      if (mistralApiKey) {
+        await vaultApi.credentials.set('mistral', mistralApiKey)
+        setMistralApiKeyConfigured(true)
+      } else {
+        await vaultApi.credentials.delete('mistral')
+        setMistralApiKeyConfigured(false)
+      }
       pushToast('success', mistralApiKey ? 'Mistral API key saved' : 'Mistral API key cleared')
     } catch (error) {
       pushToast('error', String(error))
@@ -2481,13 +2661,19 @@ function App(): ReactElement {
 
     try {
       const normalizedTasks = normalizeCalendarTasks(calendarTasks)
+      const dependencyErrors = validateTaskDependencies(normalizedTasks)
+      if (dependencyErrors.length > 0) {
+        throw new Error(`Task dependency validation failed: ${dependencyErrors[0]}`)
+      }
       const nextSettings = await vaultApi.settings.update({
         tasks: normalizedTasks,
         calendarTasks: normalizedTasks
       })
       patchSettings({
         tasks: nextSettings.tasks ?? nextSettings.calendarTasks,
-        calendarTasks: nextSettings.calendarTasks
+        calendarTasks: nextSettings.calendarTasks,
+        projects: nextSettings.projects,
+        projectIcons: nextSettings.projectIcons
       })
     } catch (error) {
       pushToast('error', String(error))
@@ -2547,6 +2733,7 @@ function App(): ReactElement {
           })
         }
       }
+      setSettings(await vaultApi.settings.get())
       return true
     } catch (error) {
       setSettings(currentSettings)
@@ -2594,10 +2781,11 @@ function App(): ReactElement {
       time,
       endTime
     })
-    const nextTasks = normalizeCalendarTasks([...calendarTasksRef.current, nextTask])
+    const nextSettings = await vaultApi.settings.get()
+    const nextTasks = normalizeCalendarTasks(nextSettings.calendarTasks)
     calendarTasksRef.current = nextTasks
     setSettings({
-      ...useVaultStore.getState().settings,
+      ...nextSettings,
       calendarTasks: nextTasks,
       tasks: nextTasks
     })
@@ -2638,15 +2826,8 @@ function App(): ReactElement {
         projectId,
         title: title.trim() || 'New Milestone'
       })
-      const currentSettings = useVaultStore.getState().settings
-      setSettings({
-        ...currentSettings,
-        projects: currentSettings.projects.map((project) =>
-          project.id === projectId
-            ? { ...project, milestones: [...(project.milestones ?? []), milestone] }
-            : project
-        )
-      })
+      const nextSettings = await vaultApi.settings.get()
+      setSettings(nextSettings)
       return milestone
     } catch (error) {
       pushToast('error', String(error))
@@ -2673,7 +2854,7 @@ function App(): ReactElement {
       return
     }
 
-    const mutationKey = `${projectId}:${milestoneId}`
+    const mutationKey = projectId
     const mutationVersion = (projectMilestoneMutationVersionRef.current.get(mutationKey) ?? 0) + 1
     projectMilestoneMutationVersionRef.current.set(mutationKey, mutationVersion)
     const optimisticMilestone = {
@@ -2697,24 +2878,11 @@ function App(): ReactElement {
 
     void vaultApi.projects
       .updateMilestone({ projectId, milestoneId, title: normalizedTitle })
-      .then((updatedMilestone) => {
+      .then(async () => {
         if (projectMilestoneMutationVersionRef.current.get(mutationKey) !== mutationVersion) {
           return
         }
-        const latestSettings = useVaultStore.getState().settings
-        setSettings({
-          ...latestSettings,
-          projects: latestSettings.projects.map((project) =>
-            project.id === projectId
-              ? {
-                  ...project,
-                  milestones: (project.milestones ?? []).map((milestone) =>
-                    milestone.id === milestoneId ? updatedMilestone : milestone
-                  )
-                }
-              : project
-          )
-        })
+        setSettings(await vaultApi.settings.get())
       })
       .catch((error: unknown) => {
         if (projectMilestoneMutationVersionRef.current.get(mutationKey) === mutationVersion) {
@@ -2737,31 +2905,72 @@ function App(): ReactElement {
 
     try {
       settingsMutationVersionRef.current += 1
-      const result = await vaultApi.projects.deleteMilestone({ projectId, milestoneId })
-      const movedTaskIds = new Set(result.movedTaskIds)
-      const currentSettings = useVaultStore.getState().settings
-      const nextTasks = currentSettings.calendarTasks.map((task) =>
-        movedTaskIds.has(task.id) ? { ...task, milestoneId: undefined } : task
-      )
+      await vaultApi.projects.deleteMilestone({ projectId, milestoneId })
+      const nextSettings = await vaultApi.settings.get()
+      const nextTasks = normalizeCalendarTasks(nextSettings.calendarTasks)
       calendarTasksRef.current = nextTasks
       setSettings({
-        ...currentSettings,
-        projects: currentSettings.projects.map((project) =>
-          project.id === projectId
-            ? {
-                ...project,
-                milestones: (project.milestones ?? []).filter(
-                  (milestone) => milestone.id !== milestoneId
-                )
-              }
-            : project
-        ),
+        ...nextSettings,
         calendarTasks: nextTasks,
         tasks: nextTasks
       })
       pushToast('success', 'Milestone removed')
     } catch (error) {
       pushToast('error', String(error))
+    }
+  }
+
+  const reorderProjectMilestones = async (
+    projectId: string,
+    milestoneIds: string[]
+  ): Promise<boolean> => {
+    if (!vaultApi) {
+      return false
+    }
+
+    const currentSettings = useVaultStore.getState().settings
+    const previousProject = currentSettings.projects.find((project) => project.id === projectId)
+    if (!previousProject) {
+      return false
+    }
+
+    const mutationKey = projectId
+    const mutationVersion = (projectMilestoneMutationVersionRef.current.get(mutationKey) ?? 0) + 1
+    projectMilestoneMutationVersionRef.current.set(mutationKey, mutationVersion)
+    settingsMutationVersionRef.current += 1
+
+    const optimisticProject = {
+      ...previousProject,
+      milestones: milestoneIds.flatMap((milestoneId) =>
+        (previousProject.milestones ?? []).filter((milestone) => milestone.id === milestoneId)
+      ),
+      updatedAt: new Date().toISOString()
+    }
+    const previousSettings = currentSettings
+    setSettings({
+      ...currentSettings,
+      projects: currentSettings.projects.map((project) =>
+        project.id === projectId ? optimisticProject : project
+      )
+    })
+
+    try {
+      await vaultApi.projects.reorderMilestones({ projectId, milestoneIds })
+      if (projectMilestoneMutationVersionRef.current.get(mutationKey) !== mutationVersion) {
+        return true
+      }
+      setSettings(await vaultApi.settings.get())
+      return true
+    } catch (error) {
+      if (projectMilestoneMutationVersionRef.current.get(mutationKey) === mutationVersion) {
+        try {
+          setSettings(await vaultApi.settings.get())
+        } catch {
+          setSettings(previousSettings)
+        }
+      }
+      pushToast('error', String(error))
+      return false
     }
   }
 
@@ -2777,7 +2986,7 @@ function App(): ReactElement {
           next.endDate = nextEndDate
         }
         const status = next.status ?? (next.completed ? 'completed' : 'pending')
-        return { ...next, status, completed: status === 'completed' }
+        return { ...next, status, completed: isTaskStatusDone(status) }
       })
     )
     if (patch.date) {
@@ -2959,7 +3168,9 @@ function App(): ReactElement {
     setSelectedCalendarDate(
       calendarViewMode === 'week'
         ? addIsoDays(selectedCalendarDate, -7)
-        : shiftIsoMonthClamped(selectedCalendarDate, -1)
+        : calendarViewMode === 'day'
+          ? addIsoDays(selectedCalendarDate, -1)
+          : shiftIsoMonthClamped(selectedCalendarDate, -1)
     )
   }
 
@@ -2967,7 +3178,9 @@ function App(): ReactElement {
     setSelectedCalendarDate(
       calendarViewMode === 'week'
         ? addIsoDays(selectedCalendarDate, 7)
-        : shiftIsoMonthClamped(selectedCalendarDate, 1)
+        : calendarViewMode === 'day'
+          ? addIsoDays(selectedCalendarDate, 1)
+          : shiftIsoMonthClamped(selectedCalendarDate, 1)
     )
   }
 
@@ -3159,6 +3372,71 @@ function App(): ReactElement {
     [openExcalidrawFile, openNote]
   )
 
+  const openNotebookResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      const resource = resourceSnapshot.resources.find((candidate) => candidate.id === resourceId)
+      if (!resource || resource.type !== 'notebook') {
+        pushToast('error', 'Notebook resource not found')
+        return
+      }
+
+      const requestedPath = notebookPathFromResource(resource)
+      if (!requestedPath) {
+        pushToast('error', 'Invalid notebook resource')
+        return
+      }
+
+      if (!treeContainsPath(noteTree, requestedPath)) {
+        pushToast('info', `Linked notebook folder not found for ${resource.title}`)
+        return
+      }
+
+      await navigateToPage('notes')
+      try {
+        await flushCurrentNote({ force: true, settleEditor: true })
+      } catch (error) {
+        pushToast('error', String(error))
+        return
+      }
+
+      const nextPath = getNotebookFolderContents(noteTree, requestedPath).path
+      const activeSession = getWorkspaceTabSession()
+      activeSession.currentNotePath = null
+      activeSession.currentExcalidrawPath = null
+      activeSession.currentNoteContent = ''
+      activeSession.currentNoteTags = []
+      activeSession.currentNoteEditorDraft = null
+      activeSession.browseFolderPath = nextPath
+      activeSession.selectedNoteTreeEntries = nextPath
+        ? [{ kind: 'folder', relPath: nextPath }]
+        : []
+
+      currentNotePathRef.current = null
+      currentExcalidrawPathRef.current = null
+      currentNoteContentRef.current = ''
+      currentNoteTagsRef.current = []
+      setCurrentNotePath(null)
+      setCurrentExcalidrawPath(null)
+      setCurrentNoteContent('')
+      setCurrentNoteTagsState([])
+      resetCurrentNoteEditorSession()
+      setBrowseFolderPath(nextPath)
+      setSelectedNoteTreeEntries(nextPath ? [{ kind: 'folder', relPath: nextPath }] : [])
+    },
+    [
+      flushCurrentNote,
+      getWorkspaceTabSession,
+      navigateToPage,
+      noteTree,
+      pushToast,
+      resetCurrentNoteEditorSession,
+      resourceSnapshot.resources,
+      setCurrentExcalidrawPath,
+      setCurrentNoteContent,
+      setCurrentNotePath
+    ]
+  )
+
   useEffect(() => {
     if (!settingsLoaded) {
       return
@@ -3251,6 +3529,7 @@ function App(): ReactElement {
     setSelectedNoteTreeEntries([])
     selectedProjectIdRef.current = null
     setSelectedProjectId(null)
+    setProjectView('list')
   }, [
     setActivePage,
     setActiveWorkspaceTabId,
@@ -4220,31 +4499,38 @@ function App(): ReactElement {
     }
   }
 
-  const exportProject = async (project: Project): Promise<void> => {
+  const exportProjectContext = async (project: Project): Promise<void> => {
+    if (isProjectContextExporting) {
+      return
+    }
     if (!vaultApi) {
       pushToast('error', 'Project export is only available inside the Electron app')
       return
     }
 
     try {
-      const exportContent = [
-        `# ${project.name}`,
-        '',
-        `- Last updated: ${new Date(project.updatedAt).toISOString()}`,
-        '',
-        '## Description',
-        '',
-        project.description?.trim() || project.summary.trim() || '_No description provided._',
-        ''
-      ].join('\n')
-
-      const exportedPath = await vaultApi.files.exportProject(project.name, exportContent)
-      if (!exportedPath) {
+      setIsProjectContextExporting(true)
+      await flushCurrentNote({ force: true })
+      const result = await vaultApi.files.exportProjectContext({ projectId: project.id })
+      if (!result.path) {
         return
       }
-      pushToast('success', `Project exported to ${exportedPath}`)
+      const noteLabel = result.noteCount === 1 ? 'note' : 'notes'
+      const taskLabel = result.taskCount === 1 ? 'task' : 'tasks'
+      const updateLabel = result.updateCount === 1 ? 'update' : 'updates'
+      const externalDocumentLabel =
+        result.externalDocumentCount === 1 ? 'Google Doc' : 'Google Docs'
+      pushToast(
+        'success',
+        `Exported project context to ${result.path} (${result.noteCount} ${noteLabel}, ${result.taskCount} ${taskLabel}, ${result.updateCount} ${updateLabel}, ${result.externalDocumentCount} ${externalDocumentLabel})`
+      )
+      if (result.warnings.length > 0) {
+        pushToast('info', `Project context export encountered ${result.warnings.length} warning(s)`)
+      }
     } catch (error) {
       pushToast('error', String(error))
+    } finally {
+      setIsProjectContextExporting(false)
     }
   }
 
@@ -4381,6 +4667,7 @@ function App(): ReactElement {
       })
       selectedProjectIdRef.current = nextProject.id
       setSelectedProjectId(nextProject.id)
+      setProjectView('home')
       pushToast('success', 'Project created')
       return nextProject.id
     } catch (error) {
@@ -4403,6 +4690,82 @@ function App(): ReactElement {
       setIsCreatingProject(false)
     }
   }
+
+  const applyProjectResult = useCallback(
+    (updatedProject: Project): void => {
+      const currentSettings = useVaultStore.getState().settings
+      setSettings({
+        ...currentSettings,
+        projects: currentSettings.projects.map((project) =>
+          project.id === updatedProject.id ? updatedProject : project
+        ),
+        projectIcons: {
+          ...currentSettings.projectIcons,
+          [updatedProject.id]: updatedProject.icon
+        }
+      })
+    },
+    [setSettings]
+  )
+
+  const createProjectUpdate = useCallback(
+    async (
+      projectId: string,
+      input: { markdown: string; status: ProjectUpdateStatus }
+    ): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.createUpdate({ projectId, ...input })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project update posted')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
+
+  const updateProjectUpdate = useCallback(
+    async (
+      projectId: string,
+      updateId: string,
+      input: { markdown: string; status: ProjectUpdateStatus }
+    ): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.updateUpdate({
+          projectId,
+          updateId,
+          ...input
+        })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project update saved')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
+
+  const deleteProjectUpdate = useCallback(
+    async (projectId: string, updateId: string): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.deleteUpdate({ projectId, updateId })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project update deleted')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
 
   const renameProject = (projectId: string, nextName: string): void => {
     const normalizedName = nextName.trim()
@@ -4427,7 +4790,7 @@ function App(): ReactElement {
     projectId: string,
     draft: { name: string; description: string; icon: ProjectIconStyle }
   ): void => {
-    if (!vaultApi) {
+    if (!vaultApi || !projectSaveCoordinator) {
       return
     }
 
@@ -4461,8 +4824,8 @@ function App(): ReactElement {
       projectIcons: { ...currentSettings.projectIcons, [projectId]: icon }
     })
 
-    void vaultApi.projects
-      .update({
+    void projectSaveCoordinator
+      .enqueue({
         projectId,
         name: normalizedName,
         description: draft.description.trim(),
@@ -4504,7 +4867,7 @@ function App(): ReactElement {
   }
 
   const saveProjectProperties = (projectId: string, patch: ProjectPropertiesPatch): void => {
-    if (!vaultApi) {
+    if (!vaultApi || !projectSaveCoordinator) {
       return
     }
 
@@ -4527,7 +4890,7 @@ function App(): ReactElement {
       startDate,
       endDate,
       tags: patch.tags ?? previousProject.tags,
-      resources: patch.resources ?? previousProject.resources,
+      resourceRefs: patch.resourceRefs ?? previousProject.resourceRefs,
       updatedAt: new Date().toISOString()
     })
     const mutationVersion = (projectMutationVersionRef.current.get(projectId) ?? 0) + 1
@@ -4539,8 +4902,8 @@ function App(): ReactElement {
       )
     })
 
-    void vaultApi.projects
-      .update({ projectId, ...patch })
+    void projectSaveCoordinator
+      .enqueue({ projectId, ...patch })
       .then((updatedProject) => {
         if (projectMutationVersionRef.current.get(projectId) !== mutationVersion) {
           return
@@ -4583,7 +4946,13 @@ function App(): ReactElement {
     void persistProjects(nextProjects)
   }
 
-  void [updateProjectIcon, exportProject, openProjectFolder, renameProject, updateProjectSummary]
+  void [
+    updateProjectIcon,
+    exportProjectContext,
+    openProjectFolder,
+    renameProject,
+    updateProjectSummary
+  ]
 
   const removeProjectById = async (projectId: string): Promise<void> => {
     if (!vaultApi) {
@@ -4639,6 +5008,7 @@ function App(): ReactElement {
       if (selectedProjectIdRef.current === result.deletedProjectId) {
         selectedProjectIdRef.current = result.nextSelectedProjectId
         setSelectedProjectId(result.nextSelectedProjectId)
+        setProjectView('list')
       }
     } catch (error) {
       pushToast('error', String(error))
@@ -4968,6 +5338,22 @@ function App(): ReactElement {
       pushToast('success', 'Removed capture')
     },
     [pushToast, vaultApi]
+  )
+
+  const updateFleetingNote = useCallback(
+    async (
+      relPath: string,
+      patch: Partial<Pick<FleetingNote, 'priority' | 'triageState'>>
+    ): Promise<void> => {
+      if (!vaultApi) {
+        throw new Error('Vault API unavailable')
+      }
+      const updated = await vaultApi.fleeting.update({ relPath, ...patch })
+      setFleetingNotes((current) =>
+        current.map((note) => (note.relPath === relPath ? updated : note))
+      )
+    },
+    [vaultApi]
   )
 
   useEffect(() => {
@@ -5310,12 +5696,15 @@ function App(): ReactElement {
         return
       }
 
+      let pathMutationPrepared = false
       try {
-        const isCurrentExcalidraw = normalizedEntries.some(
-          (entry) =>
-            entry.kind === 'excalidraw' && entry.relPath === currentExcalidrawPathRef.current
+        const isCurrentExcalidraw = normalizedEntries.some((entry) =>
+          entry.kind === 'folder'
+            ? isNestedPath(currentExcalidrawPathRef.current, entry.relPath)
+            : entry.kind === 'excalidraw' && entry.relPath === currentExcalidrawPathRef.current
         )
         if (isCurrentExcalidraw) {
+          pathMutationPrepared = true
           await currentExcalidrawEditorRef.current?.prepareForPathMutation()
         }
 
@@ -5396,6 +5785,9 @@ function App(): ReactElement {
             : `${normalizedEntries.length} items deleted`
         )
       } catch (error) {
+        if (pathMutationPrepared) {
+          currentExcalidrawEditorRef.current?.cancelPathMutation()
+        }
         pushToast('error', String(error))
       }
     },
@@ -5534,6 +5926,218 @@ function App(): ReactElement {
     ]
   )
 
+  const refreshResourceSnapshot = useCallback(async (): Promise<void> => {
+    if (!vaultApi) return
+    const snapshot = await vaultApi.resources.list()
+    setResourceSnapshot(snapshot)
+  }, [vaultApi])
+
+  const addProjectResource = useCallback(
+    async (projectId: string, input: ResourceInput): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.add({ ...input, projectId })
+        await refreshResourceSnapshot()
+        const nextSettings = await vaultApi.settings.get()
+        setSettings(nextSettings)
+        pushToast('success', 'Resource linked to project')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const listGoogleDriveFiles = useCallback(async (): Promise<GoogleDriveFileCandidate[]> => {
+    if (!vaultApi) throw new Error('No vault is open')
+    return vaultApi.resources.drive.listFiles()
+  }, [vaultApi])
+
+  const attachGoogleDriveResources = useCallback(
+    async (projectId: string, fileIds: string[]): Promise<void> => {
+      if (!vaultApi) throw new Error('No vault is open')
+      try {
+        const resources = await vaultApi.resources.drive.attach({ fileIds, projectId })
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        const count = resources.length
+        pushToast(
+          'success',
+          count === 1
+            ? 'Google Doc attached to project'
+            : `${count} Google Docs attached to project`
+        )
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const setProjectNotebookResource = useCallback(
+    async (projectId: string, notebookPath: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.setProjectNotebook({ projectId, notebookPath })
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Notebook resource linked to project')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const updateProjectResource = useCallback(
+    async (input: { resourceId: string; canonicalUri?: string; title?: string }): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.update(input)
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Resource updated')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const detachProjectResource = useCallback(
+    async (projectId: string, resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.detachFromProject({ projectId, resourceId })
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Resource removed from project')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const captureResource = useCallback(
+    async (canonicalUri: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.add({ canonicalUri })
+        await refreshResourceSnapshot()
+        pushToast('success', 'Source captured for review')
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, refreshResourceSnapshot, vaultApi]
+  )
+
+  const locateResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        const selectedPath = await vaultApi.desktop.choosePath('Locate resource')
+        if (!selectedPath) return
+        await vaultApi.resources.locate(resourceId, selectedPath)
+        await refreshResourceSnapshot()
+        pushToast('success', 'Resource location updated')
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, refreshResourceSnapshot, vaultApi]
+  )
+
+  const openResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.open(resourceId)
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, vaultApi]
+  )
+
+  const revealResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.reveal(resourceId)
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, vaultApi]
+  )
+
+  const refreshResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.refresh(resourceId)
+        await refreshResourceSnapshot()
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, refreshResourceSnapshot, vaultApi]
+  )
+
+  const previewResource = useCallback(
+    async (resourceId: string) => {
+      if (!vaultApi) {
+        throw new Error('No vault is open')
+      }
+      try {
+        return await vaultApi.resources.preview(resourceId, true)
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, vaultApi]
+  )
+
+  const startGoogleDriveAuthorization = useCallback(async () => {
+    if (!vaultApi) throw new Error('No vault is open')
+    return vaultApi.resources.drive.startAuthorization()
+  }, [vaultApi])
+
+  const completeGoogleDriveAuthorization = useCallback(
+    async (input: { connectionId: string; code: string; state: string }): Promise<void> => {
+      if (!vaultApi) throw new Error('No vault is open')
+      await vaultApi.resources.drive.completeAuthorization(input)
+      setGoogleDriveConnected(true)
+      await refreshResourceSnapshot()
+      pushToast('success', 'Google Drive connected')
+    },
+    [pushToast, refreshResourceSnapshot, vaultApi]
+  )
+
+  const disconnectGoogleDrive = useCallback(async (): Promise<void> => {
+    if (!vaultApi) throw new Error('No vault is open')
+    await vaultApi.resources.drive.disconnect()
+    setGoogleDriveConnected(false)
+    await refreshResourceSnapshot()
+    pushToast('success', 'Google Drive disconnected')
+  }, [pushToast, refreshResourceSnapshot, vaultApi])
+
+  const openExternal = useCallback(
+    async (url: string): Promise<void> => {
+      if (!vaultApi) throw new Error('No vault is open')
+      await vaultApi.desktop.openExternal(url)
+    },
+    [vaultApi]
+  )
+
   const pushNoteImportToast = (result: NoteImportResult): void => {
     const renamedCount = result.imported.filter((item) => item.renamed).length
 
@@ -5568,6 +6172,12 @@ function App(): ReactElement {
       : hasVault
         ? PAGE_LABELS[activePage]
         : 'Vault'
+  const HeaderPageIcon = hasVault ? APP_PAGE_ICONS[activePage] : FolderOpen
+  const headerPageLabelContent = (
+    <BreadcrumbIconLabel icon={<HeaderPageIcon size={14} strokeWidth={1.8} aria-hidden="true" />}>
+      {headerPageLabel}
+    </BreadcrumbIconLabel>
+  )
   const getWorkspaceTabPresentation = (
     tab: WorkspacePageTab
   ): {
@@ -5616,6 +6226,12 @@ function App(): ReactElement {
     }
 
     if (tab.page === 'projects') {
+      if ((tab.projectView ?? 'list') === 'list') {
+        return {
+          label: 'All Projects',
+          icon: <APP_PAGE_ICONS.projects size={16} strokeWidth={1.8} aria-hidden="true" />
+        }
+      }
       const project =
         projects.find((candidate) => candidate.id === tab.projectId) ??
         (tab.id === activeWorkspaceTabId
@@ -5625,8 +6241,8 @@ function App(): ReactElement {
 
       return project
         ? {
-            label: project.name,
-            icon: <NoteShapeIcon icon={project.icon} size={16} />
+            label: tab.projectView === 'pulse' ? `${project.name} · Activity` : project.name,
+            icon: <NoteShapeIcon icon={project.icon} size={18} />
           }
         : {
             label: PAGE_LABELS.projects,
@@ -5703,36 +6319,183 @@ function App(): ReactElement {
   }
 
   const calendarViewToggle = (
-    <WorkspaceHeaderActionGroup>
-      <ToggleGroup
-        type="single"
+    <div className="flex min-w-max items-center gap-1.5">
+      <TabToggleGroup
         value={calendarViewMode}
         onValueChange={(value) => value && setCalendarViewMode(value as CalendarViewMode)}
-        variant="outline"
-        size="sm"
         aria-label="Calendar view"
         data-testid="calendar-view-toggle"
+        className="max-w-none"
       >
         {CALENDAR_VIEW_MODE_OPTIONS.map((option) => (
-          <ToggleGroupItem key={option.value} value={option.value}>
-            <span className="inline-flex items-center gap-2">
-              {option.value === 'month' ? (
-                <LayoutGrid size={15} className="shrink-0" aria-hidden="true" />
-              ) : (
-                <CalendarDays size={15} className="shrink-0" aria-hidden="true" />
-              )}
-              {option.label}
-            </span>
-          </ToggleGroupItem>
+          <TabToggleGroupItem
+            key={option.value}
+            value={option.value}
+            id={`calendar-view-tab-${option.value}`}
+            aria-controls="calendar-view-panel"
+          >
+            {option.label}
+          </TabToggleGroupItem>
         ))}
-        <Shortcut
-          keys={['option', 'tab']}
-          data-testid="workspace-shortcut:calendar-view-toggle"
-          className="shrink-0"
-        />
-      </ToggleGroup>
-    </WorkspaceHeaderActionGroup>
+      </TabToggleGroup>
+    </div>
   )
+
+  const pageContextMenuItems = activeTask ? (
+    <DropdownMenuItem
+      data-testid="workspace-page-context-menu-item:delete-task"
+      onSelect={() => setIsTaskDeleteDialogOpen(true)}
+    >
+      <Trash2 aria-hidden="true" />
+      Delete task
+    </DropdownMenuItem>
+  ) : activePage === 'schedules' ? (
+    <SchedulingContextMenuItems
+      activeView={schedulingView}
+      onOpenApiGuide={() => {
+        void navigateToPage('schedulingGuide')
+      }}
+    />
+  ) : noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
+    <>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger data-testid="workspace-page-context-menu-item:backlinks">
+          <Link2 aria-hidden="true" />
+          Backlinks
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-72">
+          {currentNoteBacklinks.length > 0 ? (
+            currentNoteBacklinks.map((note) => (
+              <DropdownMenuItem
+                key={note.relPath}
+                onSelect={() => {
+                  void openNote(note.relPath)
+                }}
+                className="flex flex-col items-start gap-0.5"
+              >
+                <span className="max-w-full truncate font-medium">
+                  {getNoteDisplayName(note.relPath)}
+                </span>
+                <span className="max-w-full truncate text-xs text-muted-foreground">
+                  {stripNoteExtension(note.relPath)}
+                </span>
+              </DropdownMenuItem>
+            ))
+          ) : (
+            <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
+          )}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:copy-markdown"
+        onSelect={() => {
+          void copyCurrentNoteMarkdown()
+        }}
+      >
+        <Copy aria-hidden="true" />
+        Copy raw Markdown
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:export-note"
+        onSelect={() => setIsNoteExportDialogOpen(true)}
+      >
+        <Download aria-hidden="true" />
+        Export note
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:favorite-note"
+        onSelect={toggleCurrentNoteFavorite}
+      >
+        <Star className={currentNoteIsFavorite ? 'fill-current' : undefined} aria-hidden="true" />
+        {currentNoteIsFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:delete-note"
+        onSelect={() => {
+          void deleteCurrentNote()
+        }}
+      >
+        <Trash2 aria-hidden="true" />
+        Delete note
+      </DropdownMenuItem>
+    </>
+  ) : activePage === 'projects' ? (
+    <>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:new-project"
+        disabled={isCreatingProject}
+        onSelect={() => void createProjectFromToolbar()}
+      >
+        <Plus aria-hidden="true" />
+        New project
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:export-project-context"
+        disabled={!selectedProjectForHeader || isProjectContextExporting}
+        onSelect={() => {
+          if (selectedProjectForHeader) {
+            void exportProjectContext(selectedProjectForHeader)
+          }
+        }}
+      >
+        <Download aria-hidden="true" />
+        Export project context
+      </DropdownMenuItem>
+      {selectedProjectForHeader ? (
+        <DropdownMenuItem
+          data-testid="workspace-page-context-menu-item:delete-project"
+          onSelect={() => {
+            void removeProjectById(selectedProjectForHeader.id)
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+          Delete project
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  ) : activePage === 'calendar' ? (
+    <>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:previous-period"
+        onSelect={goToPrevCalendarPeriod}
+      >
+        <ChevronLeft aria-hidden="true" />
+        {calendarViewMode === 'week'
+          ? 'Previous week'
+          : calendarViewMode === 'day'
+            ? 'Previous day'
+            : 'Previous month'}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:current-period"
+        onSelect={goToToday}
+      >
+        <CalendarDays aria-hidden="true" />
+        {calendarViewMode === 'week'
+          ? 'Current week'
+          : calendarViewMode === 'day'
+            ? 'Today'
+            : 'Current month'}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="workspace-page-context-menu-item:next-period"
+        onSelect={goToNextCalendarPeriod}
+      >
+        <ChevronRight aria-hidden="true" />
+        {calendarViewMode === 'week'
+          ? 'Next week'
+          : calendarViewMode === 'day'
+            ? 'Next day'
+            : 'Next month'}
+      </DropdownMenuItem>
+    </>
+  ) : null
+
+  const pageContextMenu = pageContextMenuItems ? (
+    <WorkspacePageContextMenu>{pageContextMenuItems}</WorkspacePageContextMenu>
+  ) : null
 
   return (
     <div className="flex h-screen">
@@ -5761,7 +6524,7 @@ function App(): ReactElement {
             macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
           />
 
-          <SidebarInset className="!min-h-0 overflow-hidden p-2 text-foreground antialiased">
+          <SidebarInset className="!min-h-0 overflow-hidden p-2 pr-4 text-foreground antialiased">
             <div className="flex h-full min-w-0 flex-col gap-2">
               <WorkspaceContextProvider
                 hasPanel={hasRightPanel}
@@ -5805,7 +6568,25 @@ function App(): ReactElement {
                                     }}
                                     className="text-sm text-muted-foreground"
                                   >
-                                    {taskOrigin?.source === 'projects' ? 'Projects' : 'Calendar'}
+                                    <BreadcrumbIconLabel
+                                      icon={
+                                        taskOrigin?.source === 'projects' ? (
+                                          <APP_PAGE_ICONS.projects
+                                            size={14}
+                                            strokeWidth={1.8}
+                                            aria-hidden="true"
+                                          />
+                                        ) : (
+                                          <APP_PAGE_ICONS.calendar
+                                            size={14}
+                                            strokeWidth={1.8}
+                                            aria-hidden="true"
+                                          />
+                                        )
+                                      }
+                                    >
+                                      {taskOrigin?.source === 'projects' ? 'Projects' : 'Calendar'}
+                                    </BreadcrumbIconLabel>
                                   </BreadcrumbButton>
                                 </BreadcrumbItem>
                                 {taskOrigin?.source === 'projects' && activeTaskProject ? (
@@ -5819,7 +6600,16 @@ function App(): ReactElement {
                                         }}
                                         className="max-w-[180px] truncate text-sm text-muted-foreground"
                                       >
-                                        {activeTaskProject.name}
+                                        <BreadcrumbIconLabel
+                                          icon={
+                                            <NoteShapeIcon
+                                              icon={activeTaskProject.icon}
+                                              size={16}
+                                            />
+                                          }
+                                        >
+                                          {activeTaskProject.name}
+                                        </BreadcrumbIconLabel>
                                       </BreadcrumbButton>
                                     </BreadcrumbItem>
                                   </>
@@ -5827,7 +6617,13 @@ function App(): ReactElement {
                                 <BreadcrumbSeparator className="text-muted-foreground" />
                                 <BreadcrumbItem>
                                   <BreadcrumbPage className="max-w-[260px] truncate text-sm font-semibold text-foreground">
-                                    {activeTask.title}
+                                    <BreadcrumbIconLabel
+                                      icon={
+                                        <ListTodo size={14} strokeWidth={1.8} aria-hidden="true" />
+                                      }
+                                    >
+                                      {activeTask.title}
+                                    </BreadcrumbIconLabel>
                                   </BreadcrumbPage>
                                 </BreadcrumbItem>
                               </BreadcrumbList>
@@ -5837,7 +6633,18 @@ function App(): ReactElement {
                               value={schedulingView}
                               onNavigate={setSchedulingView}
                             />
-                          ) : activePage === 'calendar' || activePage === 'projects' ? null : (
+                          ) : activePage === 'projects' ? (
+                            <ProjectsWorkspaceBreadcrumb
+                              project={selectedProjectForHeader}
+                              view={projectView}
+                              onOpenAllProjects={openAllProjects}
+                              onOpenProjectHome={() => {
+                                if (selectedProjectForHeader) {
+                                  openProject(selectedProjectForHeader.id)
+                                }
+                              }}
+                            />
+                          ) : (
                             <Breadcrumb>
                               <BreadcrumbList className="text-muted-foreground">
                                 <BreadcrumbItem>
@@ -5849,7 +6656,7 @@ function App(): ReactElement {
                                       className="text-sm text-muted-foreground"
                                       data-testid="notebook-breadcrumb:root"
                                     >
-                                      {headerPageLabel}
+                                      {headerPageLabelContent}
                                     </BreadcrumbButton>
                                   ) : notebookBrowseBreadcrumbSegments && browseFolderPath ? (
                                     <BreadcrumbButton
@@ -5857,11 +6664,11 @@ function App(): ReactElement {
                                       className="text-sm text-muted-foreground"
                                       data-testid="notebook-breadcrumb:root"
                                     >
-                                      {headerPageLabel}
+                                      {headerPageLabelContent}
                                     </BreadcrumbButton>
                                   ) : (
                                     <BreadcrumbPage className="text-sm text-muted-foreground">
-                                      {headerPageLabel}
+                                      {headerPageLabelContent}
                                     </BreadcrumbPage>
                                   )}
                                 </BreadcrumbItem>
@@ -5882,7 +6689,17 @@ function App(): ReactElement {
                                               className="max-w-[220px] truncate text-sm font-semibold text-foreground"
                                               data-testid={`notebook-breadcrumb:current:${path}`}
                                             >
-                                              {segment}
+                                              <BreadcrumbIconLabel
+                                                icon={
+                                                  <Folder
+                                                    size={14}
+                                                    strokeWidth={1.8}
+                                                    aria-hidden="true"
+                                                  />
+                                                }
+                                              >
+                                                {segment}
+                                              </BreadcrumbIconLabel>
                                             </BreadcrumbPage>
                                           ) : (
                                             <BreadcrumbButton
@@ -5890,7 +6707,17 @@ function App(): ReactElement {
                                               className="max-w-[140px] truncate text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
                                             >
-                                              {segment}
+                                              <BreadcrumbIconLabel
+                                                icon={
+                                                  <Folder
+                                                    size={14}
+                                                    strokeWidth={1.8}
+                                                    aria-hidden="true"
+                                                  />
+                                                }
+                                              >
+                                                {segment}
+                                              </BreadcrumbIconLabel>
                                             </BreadcrumbButton>
                                           )}
                                         </BreadcrumbItem>
@@ -5910,7 +6737,25 @@ function App(): ReactElement {
                                         <BreadcrumbItem>
                                           {isLast ? (
                                             <BreadcrumbPage className="max-w-[220px] truncate text-sm font-semibold text-foreground">
-                                              {segment}
+                                              <BreadcrumbIconLabel
+                                                icon={
+                                                  currentExcalidrawPath ? (
+                                                    <PenTool
+                                                      size={14}
+                                                      strokeWidth={1.8}
+                                                      aria-hidden="true"
+                                                    />
+                                                  ) : (
+                                                    <FileText
+                                                      size={14}
+                                                      strokeWidth={1.8}
+                                                      aria-hidden="true"
+                                                    />
+                                                  )
+                                                }
+                                              >
+                                                {segment}
+                                              </BreadcrumbIconLabel>
                                             </BreadcrumbPage>
                                           ) : (
                                             <BreadcrumbButton
@@ -5920,7 +6765,17 @@ function App(): ReactElement {
                                               className="max-w-[140px] truncate text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
                                             >
-                                              {segment}
+                                              <BreadcrumbIconLabel
+                                                icon={
+                                                  <Folder
+                                                    size={14}
+                                                    strokeWidth={1.8}
+                                                    aria-hidden="true"
+                                                  />
+                                                }
+                                              >
+                                                {segment}
+                                              </BreadcrumbIconLabel>
                                             </BreadcrumbButton>
                                           )}
                                         </BreadcrumbItem>
@@ -5932,7 +6787,17 @@ function App(): ReactElement {
                                     <BreadcrumbSeparator className="text-muted-foreground" />
                                     <BreadcrumbItem>
                                       <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
-                                        {middleHeaderBreadcrumbItem}
+                                        <BreadcrumbIconLabel
+                                          icon={
+                                            <HeaderPageIcon
+                                              size={14}
+                                              strokeWidth={1.8}
+                                              aria-hidden="true"
+                                            />
+                                          }
+                                        >
+                                          {middleHeaderBreadcrumbItem}
+                                        </BreadcrumbIconLabel>
                                       </BreadcrumbPage>
                                     </BreadcrumbItem>
                                   </>
@@ -5942,20 +6807,89 @@ function App(): ReactElement {
                           )}
                         </div>
                       }
+                      primaryRightActions={
+                        !activeTask && activePage === 'projects' ? (
+                          projectView === 'resources' && selectedProjectForHeader ? (
+                            <WorkspaceIconButton
+                              icon={<Plus size={18} aria-hidden="true" />}
+                              label="Add resource"
+                              variant="accent"
+                              data-testid="add-resource-button"
+                              aria-label="Add resource"
+                              title="Add resource"
+                              borderless
+                              disabled={!vaultApi}
+                              onClick={() =>
+                                setResourceAddRequestProjectId(selectedProjectForHeader.id)
+                              }
+                            />
+                          ) : projectView === 'home' && selectedProjectForHeader ? (
+                            <WorkspaceIconButton
+                              icon={<Download size={18} aria-hidden="true" />}
+                              variant="muted"
+                              data-testid="export-project-context-button"
+                              aria-label="Export project context"
+                              title="Export project context"
+                              borderless
+                              disabled={!vaultApi || isProjectContextExporting}
+                              onClick={() => {
+                                void exportProjectContext(selectedProjectForHeader)
+                              }}
+                            />
+                          ) : projectView === 'list' ? (
+                            <WorkspaceIconButton
+                              icon={<Plus size={18} aria-hidden="true" />}
+                              label="New project"
+                              variant="accent"
+                              data-testid="new-project-button"
+                              aria-label="New project"
+                              title="New project"
+                              borderless
+                              disabled={!vaultApi || isCreatingProject}
+                              onClick={() => void createProjectFromToolbar()}
+                            />
+                          ) : null
+                        ) : null
+                      }
                       secondaryActions={
-                        activeTask ? null : activePage === 'schedules' ? (
-                          <div className="flex min-w-max items-center gap-1.5">
-                            {schedulingView !== 'list' ? (
-                              <SchedulingViewTabs
-                                value={schedulingView}
-                                onValueChange={setSchedulingView}
-                                reviewCount={schedulingReviewCount}
-                              />
-                            ) : null}
-                            {schedulingView === 'automation' ? (
-                              <SchedulingPythonTrustPopover vaultRoot={vault?.rootPath ?? null} />
-                            ) : null}
-                          </div>
+                        activeTask ? null : activePage === 'projects' ? (
+                          <ProjectsWorkspaceSecondaryActions
+                            project={selectedProjectForHeader}
+                            view={projectView}
+                            onViewChange={(nextView) => {
+                              if (selectedProjectForHeader) {
+                                if (nextView === 'pulse') {
+                                  openProjectPulse(selectedProjectForHeader.id)
+                                } else if (nextView === 'resources') {
+                                  openProjectResources(selectedProjectForHeader.id)
+                                } else {
+                                  openProject(selectedProjectForHeader.id)
+                                }
+                              }
+                            }}
+                          />
+                        ) : activePage === 'schedules' ? (
+                          <>
+                            <div className="flex min-w-max items-center gap-1.5">
+                              {schedulingView !== 'list' ? (
+                                <SchedulingViewTabs
+                                  value={schedulingView}
+                                  onValueChange={setSchedulingView}
+                                  reviewCount={schedulingReviewCount}
+                                />
+                              ) : null}
+                              {schedulingView === 'automation' ? (
+                                <SchedulingPythonTrustPopover vaultRoot={vault?.rootPath ?? null} />
+                              ) : null}
+                            </div>
+                            <WorkspaceHeaderSecondaryActionsRight>
+                              <WorkspaceHeaderActionGroup>
+                                <SchedulingAddAutomationButton
+                                  onCreate={() => setSchedulingView('automation')}
+                                />
+                              </WorkspaceHeaderActionGroup>
+                            </WorkspaceHeaderSecondaryActionsRight>
+                          </>
                         ) : activePage === 'calendar' ? (
                           <div className="flex min-w-max items-center gap-1.5">
                             {calendarViewToggle}
@@ -5970,192 +6904,7 @@ function App(): ReactElement {
                           </div>
                         ) : null
                       }
-                      actions={
-                        activeTask ? (
-                          <WorkspaceHeaderActions>
-                            <WorkspaceIconButton
-                              onClick={() => setIsTaskDeleteDialogOpen(true)}
-                              aria-label="Delete task"
-                              title="Delete task"
-                              icon={<Trash2 size={18} />}
-                            />
-                          </WorkspaceHeaderActions>
-                        ) : activePage === 'schedules' ? (
-                          <SchedulingHeaderActions
-                            activeView={schedulingView}
-                            onViewChange={setSchedulingView}
-                            onOpenApiGuide={() => {
-                              void navigateToPage('schedulingGuide')
-                            }}
-                          />
-                        ) : noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-                          <WorkspaceHeaderActions>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <WorkspaceIconButton
-                                  title="Show backlinks"
-                                  aria-label="Show backlinks"
-                                  icon={<Link2 size={18} />}
-                                />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-72">
-                                {currentNoteBacklinks.length > 0 ? (
-                                  currentNoteBacklinks.map((note) => (
-                                    <DropdownMenuItem
-                                      key={note.relPath}
-                                      onSelect={() => {
-                                        void openNote(note.relPath)
-                                      }}
-                                      className="flex flex-col items-start gap-0.5"
-                                    >
-                                      <span className="max-w-full truncate font-medium">
-                                        {getNoteDisplayName(note.relPath)}
-                                      </span>
-                                      <span className="max-w-full truncate text-xs text-muted-foreground">
-                                        {stripNoteExtension(note.relPath)}
-                                      </span>
-                                    </DropdownMenuItem>
-                                  ))
-                                ) : (
-                                  <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <WorkspaceIconButton
-                              onClick={() => {
-                                void copyCurrentNoteMarkdown()
-                              }}
-                              title="Copy Raw Markdown"
-                              aria-label="Copy Raw Markdown"
-                              icon={<Copy size={18} />}
-                            />
-                            <WorkspaceIconButton
-                              onClick={() => {
-                                setIsNoteExportDialogOpen(true)
-                              }}
-                              title="Export Note"
-                              aria-label="Export Note"
-                              icon={<Download size={18} />}
-                            />
-                            <WorkspaceHeaderActionDivider />
-                            <WorkspaceHeaderActionGroup>
-                              <WorkspaceIconButton
-                                onClick={toggleCurrentNoteFavorite}
-                                title={
-                                  currentNoteIsFavorite
-                                    ? 'Remove from Favorites'
-                                    : 'Add to Favorites'
-                                }
-                                className={
-                                  currentNoteIsFavorite
-                                    ? 'border-border bg-accent text-muted-foreground hover:text-muted-foreground'
-                                    : 'hover:border-border hover:bg-accent hover:text-muted-foreground'
-                                }
-                                icon={
-                                  <Star
-                                    size={18}
-                                    className={currentNoteIsFavorite ? 'fill-current' : ''}
-                                  />
-                                }
-                              />
-                            </WorkspaceHeaderActionGroup>
-                            <WorkspaceHeaderActionDivider />
-                            <WorkspaceHeaderActionGroup>
-                              <WorkspaceIconButton
-                                onClick={() => {
-                                  void deleteCurrentNote()
-                                }}
-                                title="Delete Note"
-                                icon={<Trash2 size={18} />}
-                              />
-                            </WorkspaceHeaderActionGroup>
-                          </WorkspaceHeaderActions>
-                        ) : activePage === 'projects' ? (
-                          <WorkspaceHeaderActions>
-                            <WorkspaceHeaderActionGroup>
-                              <WorkspaceIconButton
-                                onClick={() => void createProjectFromToolbar()}
-                                disabled={isCreatingProject}
-                                data-testid="new-project-button"
-                                icon={<Plus size={16} />}
-                                label="New Project"
-                                aria-label="New Project"
-                                title="New Project"
-                              />
-                            </WorkspaceHeaderActionGroup>
-                            <ProjectsWorkspaceHeaderActions
-                              project={selectedProjectForHeader}
-                              onDelete={() => {
-                                if (selectedProjectForHeader) {
-                                  void removeProjectById(selectedProjectForHeader.id)
-                                }
-                              }}
-                            />
-                          </WorkspaceHeaderActions>
-                        ) : activePage === 'calendar' ? (
-                          <WorkspaceHeaderActions className="min-w-0 max-w-full overflow-x-auto scrollbar-none">
-                            <div
-                              data-testid="calendar-workspace-toolbar"
-                              className="flex min-w-max items-center gap-3"
-                            >
-                              <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
-                                <div className="flex h-3.5 items-center justify-center bg-primary px-2 text-center text-xs font-extrabold leading-none text-primary-foreground">
-                                  {calendarTodayHeader.monthShort}
-                                </div>
-                                <div className="flex h-4 items-center justify-center border-t border-border px-2 text-center">
-                                  <span className="block text-sm font-medium leading-none text-foreground">
-                                    {calendarTodayHeader.dayNumber}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <p
-                                  data-testid="calendar-period-title"
-                                  className="truncate text-sm font-semibold leading-4 text-foreground"
-                                >
-                                  {calendarCurrentPeriodTitle}
-                                </p>
-                              </div>
-                              <ButtonGroup
-                                variant="outline"
-                                size="sm"
-                                className="[&>button]:border-0"
-                                aria-label="Calendar period navigation"
-                              >
-                                <WorkspaceIconButton
-                                  onClick={goToPrevCalendarPeriod}
-                                  title={
-                                    calendarViewMode === 'week' ? 'Previous week' : 'Previous month'
-                                  }
-                                  icon={<ChevronLeft size={18} />}
-                                />
-                                <WorkspaceIconButton
-                                  onClick={goToToday}
-                                  title={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  aria-label={
-                                    calendarViewMode === 'week'
-                                      ? 'Go to current week'
-                                      : 'Go to current month'
-                                  }
-                                  icon={<CalendarDays size={18} />}
-                                  label={
-                                    calendarViewMode === 'week' ? 'Current week' : 'Current month'
-                                  }
-                                />
-                                <WorkspaceIconButton
-                                  onClick={goToNextCalendarPeriod}
-                                  title={calendarViewMode === 'week' ? 'Next week' : 'Next month'}
-                                  icon={<ChevronRight size={18} />}
-                                />
-                              </ButtonGroup>
-                            </div>
-                          </WorkspaceHeaderActions>
-                        ) : null
-                      }
+                      pageContextMenu={pageContextMenu}
                     />
 
                     <DocumentWorkspaceMain className={paletteSurfaceClass}>
@@ -6194,6 +6943,8 @@ function App(): ReactElement {
                                 task={activeTask}
                                 onUpdateTask={updateProjectTask}
                                 onRegisterFlush={registerTaskFlush}
+                                vimModeEnabled={editorVimModeEnabled}
+                                vimKeyMappings={editorVimKeyMappings}
                               />
                             ) : activePage === 'capture' ? (
                               <CapturePage
@@ -6201,14 +6952,22 @@ function App(): ReactElement {
                                 isLoading={fleetingNotesLoading}
                                 onCapture={createFleetingNote}
                                 onRemove={removeFleetingNote}
+                                onUpdate={updateFleetingNote}
                                 onConvert={convertFleetingNote}
+                                resources={resourceSnapshot.resources}
+                                onCaptureResource={captureResource}
+                                onOpenResource={openResource}
                               />
                             ) : activePage === 'notes' ? (
                               searchQuery.trim() ? (
                                 <SearchPage
                                   results={searchResults}
-                                  onOpen={(relPath) => {
-                                    void openNotebookPath(relPath)
+                                  onOpen={(result) => {
+                                    if (result.entityType === 'resource' && result.resourceId) {
+                                      void openResource(result.resourceId)
+                                      return
+                                    }
+                                    void openNotebookPath(result.relPath)
                                     setSearchQuery('')
                                     setSearchResults([])
                                   }}
@@ -6292,6 +7051,9 @@ function App(): ReactElement {
                             ) : activePage === 'knowledge' ? (
                               <KnowledgePage
                                 notes={notes}
+                                projects={projects}
+                                tasks={calendarTasks}
+                                resources={resourceSnapshot.resources}
                                 orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
                                 showOrphans={knowledgeShowOrphans}
                                 onOpenNote={(relPath) => {
@@ -6300,6 +7062,15 @@ function App(): ReactElement {
                                   setSearchResults([])
                                   void openNote(relPath)
                                 }}
+                                onOpenEntity={(kind, id) => {
+                                  if (kind === 'task') {
+                                    openTaskDialog(id, { source: 'calendar' })
+                                  } else if (kind === 'resource') {
+                                    void openResource(id)
+                                  } else {
+                                    void navigateToPage('projects').then(() => openProject(id))
+                                  }
+                                }}
                               />
                             ) : activePage === 'projects' ? (
                               <ProjectsWorkspacePage
@@ -6307,12 +7078,47 @@ function App(): ReactElement {
                                 tasks={calendarTasks}
                                 favoriteProjectIds={favoriteProjectIds}
                                 selectedProjectId={selectedProjectId}
+                                view={projectView}
                                 filterMode={projectFilterMode}
                                 onFilterModeChange={setProjectFilterMode}
+                                onUpdateProjectProperties={saveProjectProperties}
+                                onOpenProject={openProject}
+                                onOpenProjectUpdates={openProjectPulse}
+                                onCreateProjectUpdate={createProjectUpdate}
+                                onUpdateProjectUpdate={updateProjectUpdate}
+                                onDeleteProjectUpdate={deleteProjectUpdate}
+                                noteTree={noteTree}
+                                resources={resourceSnapshot.resources}
+                                relations={resourceSnapshot.relations}
+                                onAddResource={addProjectResource}
+                                addResourceRequestProjectId={resourceAddRequestProjectId}
+                                onAddResourceRequestHandled={handleResourceAddRequestHandled}
+                                onSetProjectNotebook={setProjectNotebookResource}
+                                onUpdateResource={updateProjectResource}
+                                onDetachResource={detachProjectResource}
+                                onOpenResource={openResource}
+                                onOpenNotebookResource={(resourceId) => {
+                                  void openNotebookResource(resourceId)
+                                }}
+                                onLocateResource={locateResource}
+                                onRevealResource={revealResource}
+                                onRefreshResource={refreshResource}
+                                onPreviewResource={previewResource}
+                                googleDriveEnabled={featureFlags.googleDriveResources}
+                                googleDriveConnected={googleDriveConnected}
+                                onListGoogleDriveFiles={listGoogleDriveFiles}
+                                onAttachGoogleDriveResources={attachGoogleDriveResources}
+                                notes={notes}
+                                vimModeEnabled={editorVimModeEnabled}
+                                vimKeyMappings={editorVimKeyMappings}
+                                onOpenNoteLink={(target) => {
+                                  void navigateToPage('notes').then(() => openNote(target))
+                                }}
                                 onCreateTask={createProjectTask}
                                 onCreateMilestone={createProjectMilestone}
                                 onUpdateMilestone={updateProjectMilestone}
                                 onDeleteMilestone={deleteProjectMilestone}
+                                onReorderMilestones={reorderProjectMilestones}
                                 onUpdateProject={(projectId, draft) =>
                                   saveProject(projectId, {
                                     name: draft.name,
@@ -6320,18 +7126,23 @@ function App(): ReactElement {
                                     icon: draft.icon
                                   })
                                 }
-                                onUpdateProjectProperties={saveProjectProperties}
                                 onUpdateTask={updateProjectTask}
                                 onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
-                                onOpenTask={(taskId) => {
-                                  openTaskDialog(taskId, {
-                                    source: 'projects',
-                                    projectId: selectedProjectForHeader?.id ?? selectedProjectId
-                                  })
+                                onOpenTask={(taskId, options) => {
+                                  openTaskDialog(
+                                    taskId,
+                                    {
+                                      source: 'projects',
+                                      projectId: selectedProjectForHeader?.id ?? selectedProjectId
+                                    },
+                                    options
+                                  )
                                 }}
                               />
                             ) : activePage === 'subscriptions' ? (
-                              <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
+                              vaultApi ? (
+                                <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
+                              ) : null
                             ) : activePage === 'schedules' ? (
                               <SchedulingPage
                                 activeView={schedulingView}
@@ -6342,11 +7153,10 @@ function App(): ReactElement {
                             ) : activePage === 'calendar' ? (
                               <div className="min-h-full">
                                 <section
-                                  data-testid={
-                                    calendarViewMode === 'week'
-                                      ? 'calendar-week-shell'
-                                      : 'calendar-month-shell'
-                                  }
+                                  id="calendar-view-panel"
+                                  role="tabpanel"
+                                  aria-labelledby={`calendar-view-tab-${calendarViewMode}`}
+                                  data-testid={`calendar-${calendarViewMode}-shell`}
                                   className="min-h-full rounded-lg"
                                 >
                                   <div>
@@ -6357,8 +7167,8 @@ function App(): ReactElement {
                                         projects={projects}
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForWeeklyTime}
-                                        onOpenTask={(taskId) => {
-                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        onOpenTask={(taskId, options) => {
+                                          openTaskDialog(taskId, { source: 'calendar' }, options)
                                         }}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
@@ -6371,6 +7181,25 @@ function App(): ReactElement {
                                           void updateCalendarTaskSchedule(taskId, schedule)
                                         }}
                                       />
+                                    ) : calendarViewMode === 'day' ? (
+                                      <CalendarDayView
+                                        selectedDate={selectedCalendarDate}
+                                        tasks={visibleCalendarTasks.filter((task) => {
+                                          if (!task.date) return false
+                                          const endDate = task.endDate ?? task.date
+                                          return (
+                                            task.date <= selectedCalendarDate &&
+                                            endDate >= selectedCalendarDate
+                                          )
+                                        })}
+                                        onSelectDate={setSelectedCalendarDate}
+                                        onRescheduleTask={(taskId, newDate) => {
+                                          void rescheduleCalendarTask(taskId, newDate)
+                                        }}
+                                        onOpenTask={(taskId) => {
+                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        }}
+                                      />
                                     ) : (
                                       <CalendarMonthView
                                         selectedDate={selectedCalendarDate}
@@ -6378,8 +7207,8 @@ function App(): ReactElement {
                                         projects={projects}
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForDate}
-                                        onOpenTask={(taskId) => {
-                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        onOpenTask={(taskId, options) => {
+                                          openTaskDialog(taskId, { source: 'calendar' }, options)
                                         }}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
@@ -6412,11 +7241,11 @@ function App(): ReactElement {
                                 </section>
                               </div>
                             ) : activePage === 'designAudit' ? (
-                              <DesignAuditPage themeVersion={`${isDarkMode}:${fontFamily}`} />
+                              <DesignAuditPage themeVersion={`dark:${fontFamily}`} />
                             ) : activePage === 'settings' ? (
                               <SettingsPage
                                 profileName={profileName}
-                                mistralApiKey={mistralApiKey}
+                                mistralApiKeyConfigured={mistralApiKeyConfigured}
                                 editorVimModeEnabled={editorVimModeEnabled}
                                 editorVimKeyMappings={editorVimKeyMappings}
                                 vaultLocation={vault?.rootPath ?? lastVaultPath}
@@ -6467,6 +7296,17 @@ function App(): ReactElement {
                                 onResetCondaExecutable={() => {
                                   void resetPythonCondaExecutable()
                                 }}
+                                featureFlags={featureFlags}
+                                onUpdateFeatureFlag={(key, enabled) => {
+                                  void updateFeatureFlag(key, enabled)
+                                }}
+                                googleDriveConnected={googleDriveConnected}
+                                onStartGoogleDriveAuthorization={startGoogleDriveAuthorization}
+                                onCompleteGoogleDriveAuthorization={
+                                  completeGoogleDriveAuthorization
+                                }
+                                onDisconnectGoogleDrive={disconnectGoogleDrive}
+                                onOpenExternal={openExternal}
                               />
                             ) : (
                               <div className="p-5 text-sm text-muted-foreground">
@@ -6594,7 +7434,10 @@ function App(): ReactElement {
                                 }
                               />
 
-                              <DocumentWorkspacePanelContent>
+                              <DocumentWorkspacePanelContent
+                                className="overflow-hidden"
+                                data-testid="workspace-right-panel-content"
+                              >
                                 {!hasVault ? (
                                   <WorkspacePanelStack className="h-full">
                                     <WorkspacePanelSection>
@@ -6610,11 +7453,17 @@ function App(): ReactElement {
                                   <TaskPropertiesPanel
                                     task={activeTask}
                                     projects={projects}
+                                    availableTags={calendarTaskTagValues}
                                     onUpdateTask={updateProjectTask}
                                   />
                                 ) : activePage === 'notes' ? (
-                                  <WorkspacePanelStack className="h-full">
-                                    <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
+                                  <WorkspacePanelStack data-testid="notes-panel-stack">
+                                    <CollapsibleWorkspacePanelSection
+                                      data-testid="note-file-tree-panel"
+                                      heading="File tree"
+                                      className="min-h-0 shrink-0 overflow-hidden p-0 data-[state=open]:min-h-[12rem] data-[state=open]:flex-1"
+                                      contentClassName="min-h-0 flex-1 overflow-hidden"
+                                    >
                                       <NotesTreeView
                                         tree={visibleNoteTree}
                                         searchTerm={searchQuery}
@@ -6668,15 +7517,28 @@ function App(): ReactElement {
                                         }}
                                         onMoveEntries={moveTreeEntries}
                                       />
-                                    </WorkspacePanelSection>
+                                    </CollapsibleWorkspacePanelSection>
+                                    {noteIsOpen && !searchQuery.trim() && !currentExcalidrawPath ? (
+                                      <CollapsibleWorkspacePanelSection
+                                        key={currentNotePath ?? 'note-outline'}
+                                        data-testid="note-outline-panel"
+                                        heading="Outline"
+                                        className="shrink-0 overflow-hidden p-0"
+                                      >
+                                        <NoteOutlinePanel
+                                          items={currentNoteOutline}
+                                          onJumpToIndex={(index) => {
+                                            currentNoteEditorRef.current?.jumpToOutlineIndex(index)
+                                          }}
+                                        />
+                                      </CollapsibleWorkspacePanelSection>
+                                    ) : null}
                                   </WorkspacePanelStack>
                                 ) : activePage === 'projects' ? (
                                   <ProjectsWorkspaceRightPanel
                                     projects={projects}
                                     favoriteProjectIds={favoriteProjectIds}
                                     selectedProjectId={selectedProjectId}
-                                    filterMode={projectFilterMode}
-                                    onSelectProject={selectProject}
                                     onToggleProjectFavorite={toggleProjectFavoriteById}
                                     onToggleProjectArchive={toggleProjectArchiveById}
                                     onUpdateProjectProperties={saveProjectProperties}
@@ -6707,7 +7569,7 @@ function App(): ReactElement {
                                     onUpdateStatus={(taskId, status) => {
                                       void updateProjectTask(taskId, {
                                         status,
-                                        completed: status === 'completed'
+                                        completed: isTaskStatusDone(status)
                                       })
                                     }}
                                     onUpdateTime={(taskId, time) => {
@@ -6778,15 +7640,21 @@ function App(): ReactElement {
         <TaskEditDialog
           key={taskDialogTask.id}
           task={taskDialogTask}
+          isNewTask={taskDialogIsNewTask}
           projects={projects}
+          availableTags={calendarTaskTagValues}
+          vimModeEnabled={editorVimModeEnabled}
+          vimKeyMappings={editorVimKeyMappings}
           onClose={() => {
             setOpenTaskDialogId(null)
             setTaskDialogOrigin(null)
+            setTaskDialogIsNewTask(false)
           }}
           onSave={updateProjectTask}
           onDelete={(taskId) => {
             setOpenTaskDialogId(null)
             setTaskDialogOrigin(null)
+            setTaskDialogIsNewTask(false)
             void removeCalendarTask(taskId)
           }}
           onOpenFullPage={() => {
@@ -6924,38 +7792,19 @@ function formatCalendarTabPeriodTitle(dateIso: string, viewMode: CalendarViewMod
     return formatWeekRange(start, addIsoDays(start, 6))
   }
 
+  if (viewMode === 'day') {
+    return parseIsoDate(dateIso).toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
   return parseIsoDate(dateIso).toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric'
   })
-}
-
-function getCalendarHeaderDateParts(isoDate: string): {
-  monthShort: string
-  dayNumber: string
-  weekday: string
-  fullDate: string
-} {
-  const parsed = new Date(`${isoDate}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) {
-    return {
-      monthShort: 'N/A',
-      dayNumber: '--',
-      weekday: isoDate,
-      fullDate: isoDate
-    }
-  }
-
-  return {
-    monthShort: parsed.toLocaleDateString(undefined, { month: 'short' }).replace('.', ''),
-    dayNumber: parsed.toLocaleDateString(undefined, { day: 'numeric' }),
-    weekday: parsed.toLocaleDateString(undefined, { weekday: 'long' }),
-    fullDate: parsed.toLocaleDateString(undefined, {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-  }
 }
 
 type RankedCommandPaletteNote = {

@@ -8,6 +8,7 @@ import {
   TaskReminder,
   TaskStatus
 } from '../../../shared/types'
+import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
@@ -70,8 +71,8 @@ export function UnscheduledTaskList({
     y: number
   } | null>(null)
 
-  const pendingCount = tasks.filter((t) => !t.completed).length
-  const completedCount = tasks.filter((t) => t.completed).length
+  const pendingCount = tasks.filter((task) => !isTaskDone(task)).length
+  const completedCount = tasks.filter((task) => isTaskDone(task)).length
   const projectsById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects]
@@ -142,7 +143,7 @@ export function UnscheduledTaskList({
             onClick={onInsertTask}
             aria-label="Insert task"
             title="Insert task"
-            className="border border-input bg-card text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="border border-input bg-card text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus size={13} aria-hidden="true" />
           </button>
@@ -178,7 +179,7 @@ export function UnscheduledTaskList({
                     }
                     onUpdateTask?.(taskId, {
                       status,
-                      completed: status === 'completed'
+                      completed: isTaskStatusDone(status)
                     })
                   }}
                   onUpdatePriority={onUpdatePriority}
@@ -244,7 +245,7 @@ export function UnscheduledTaskList({
                       setHoveredTaskCard(null)
                       onOpenTask?.(task.id)
                     }}
-                    className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-accent active:cursor-grabbing ${task.completed ? 'line-through' : ''}`}
+                    className={`${revealProps.className} cursor-grab rounded-md bg-card transition-colors hover:bg-muted active:cursor-grabbing ${isTaskDone(task) ? 'line-through' : ''}`}
                   >
                     <CalendarTaskCard
                       task={task}

@@ -51,7 +51,9 @@ describe('NotebookWorkspaceSession', () => {
         title: 'Alpha',
         tags: [],
         updated: '',
-        snippet: ''
+        snippet: '',
+        entityType: 'note',
+        target: { kind: 'note', id: 'alpha', relPath: 'archive/alpha.md' }
       }
     ]
     session.noteEditorSessions['archive/alpha.md'] = { content: 'Alpha', tags: [] }

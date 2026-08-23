@@ -100,6 +100,10 @@ test('automation rows change background on hover', async () => {
     await page.getByTestId('sidebar-page:schedules').click()
     const row = page.getByTestId('scheduling-job:job-hover')
     await expect(row).toBeVisible()
+    await page.getByTestId('workspace-page-context-menu-trigger').click()
+    await expect(page.getByTestId('workspace-page-context-menu')).toBeVisible()
+    await expect(page.getByTestId('scheduling-context-menu-item:api-guide')).toBeVisible()
+    await page.keyboard.press('Escape')
 
     const cell = row.locator('td').first()
     await page.mouse.move(1, 1)

@@ -1,13 +1,24 @@
-import type { ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { TaskStatus } from '../../../shared/types'
-import { TASK_STATUS_META, getTaskStatus, type TaskStatusVisual } from '../lib/taskStatus'
+import { CircleCheck, CircleDashedMinus, CircleHalf2 } from './ui/icons'
+import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
 import { cn } from '../lib/utils'
 
-const CENTER = 12
-const RING_RADIUS = 8
 const STROKE_WIDTH = 1.75
-const CONTRAST_COLOR = 'var(--card)'
-const PENDING_DASH_ARRAY = '1.35 2.25'
+
+function getNormalizedIconStyle(size: number, color: string): CSSProperties {
+  return {
+    color,
+    display: 'block',
+    flex: '0 0 auto',
+    height: size,
+    maxHeight: size,
+    maxWidth: size,
+    minHeight: size,
+    minWidth: size,
+    width: size
+  }
+}
 
 export function TaskStatusIcon({
   status,
@@ -23,15 +34,80 @@ export function TaskStatusIcon({
   const resolved = getTaskStatus(status, completed)
   const meta = TASK_STATUS_META[resolved]
 
+  if (meta.visual === 'completed-check') {
+    return (
+      <CircleCheck
+        aria-hidden="true"
+        className={cn('shrink-0', meta.className, className)}
+        data-status={resolved}
+        focusable="false"
+        size={size}
+        style={getNormalizedIconStyle(size, meta.iconColorToken)}
+      />
+    )
+  }
+
+  if (meta.visual === 'backlog-dashed-minus') {
+    return (
+      <CircleDashedMinus
+        aria-hidden="true"
+        className={cn('shrink-0', meta.className, className)}
+        data-status={resolved}
+        focusable="false"
+        size={size}
+        style={getNormalizedIconStyle(size, meta.iconColorToken)}
+      />
+    )
+  }
+
+  if (meta.visual === 'progress-half') {
+    return (
+      <CircleHalf2
+        aria-hidden="true"
+        className={cn('shrink-0', meta.className, className)}
+        data-status={resolved}
+        focusable="false"
+        size={size}
+        style={getNormalizedIconStyle(size, meta.iconColorToken)}
+      />
+    )
+  }
+
+  if (meta.visual === 'blocked-cancel') {
+    return (
+      <TaskStatusSvg
+        className={cn('shrink-0', meta.className, className)}
+        dataStatus={resolved}
+        iconColorToken={meta.iconColorToken}
+        size={size}
+      >
+        <BlockedStatusGlyph />
+      </TaskStatusSvg>
+    )
+  }
+
+  if (meta.visual === 'canceled-dashed-x') {
+    return (
+      <TaskStatusSvg
+        className={cn('shrink-0', meta.className, className)}
+        dataStatus={resolved}
+        iconColorToken={meta.iconColorToken}
+        size={size}
+      >
+        <CanceledStatusGlyph />
+      </TaskStatusSvg>
+    )
+  }
+
   return (
     <svg
       aria-hidden="true"
-      className={cn(meta.className, className)}
+      className={cn('block shrink-0', meta.className, className)}
       data-status={resolved}
       fill="none"
       focusable="false"
       height={size}
-      style={{ height: size, width: size }}
+      style={getNormalizedIconStyle(size, meta.iconColorToken)}
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -39,62 +115,85 @@ export function TaskStatusIcon({
       viewBox="0 0 24 24"
       width={size}
     >
-      <TaskStatusGlyph visual={meta.visual} />
+      <TaskStatusGlyph />
     </svg>
   )
 }
 
-function TaskStatusGlyph({ visual }: { visual: TaskStatusVisual }): ReactElement {
-  switch (visual) {
-    case 'pending-dash':
-      return (
-        <circle
-          cx={CENTER}
-          cy={CENTER}
-          r={RING_RADIUS}
-          strokeDasharray={PENDING_DASH_ARRAY}
-          strokeWidth={1.5}
-        />
-      )
-    case 'backlog-ring':
-      return <circle cx={CENTER} cy={CENTER} r={RING_RADIUS} />
-    case 'progress-half':
-      return (
-        <g>
-          <path
-            d={`M ${CENTER} ${CENTER - RING_RADIUS} A ${RING_RADIUS} ${RING_RADIUS} 0 0 1 ${CENTER} ${CENTER + RING_RADIUS} Z`}
-            fill="currentColor"
-            stroke="none"
-          />
-          <circle cx={CENTER} cy={CENTER} r={RING_RADIUS} />
-          <line x1={CENTER} x2={CENTER} y1={CENTER - RING_RADIUS} y2={CENTER + RING_RADIUS} />
-        </g>
-      )
-    case 'blocked-cross':
-      return (
-        <g>
-          <circle
-            cx={CENTER}
-            cy={CENTER}
-            fill="currentColor"
-            r={RING_RADIUS}
-            stroke="currentColor"
-          />
-          <path d="m8.5 8.5 7 7m0-7-7 7" fill="none" stroke={CONTRAST_COLOR} strokeWidth={1.8} />
-        </g>
-      )
-    case 'completed-check':
-      return (
-        <g>
-          <circle
-            cx={CENTER}
-            cy={CENTER}
-            fill="currentColor"
-            r={RING_RADIUS}
-            stroke="currentColor"
-          />
-          <path d="m8.5 12.1 2.4 2.4 4.7-5" fill="none" stroke={CONTRAST_COLOR} strokeWidth={1.8} />
-        </g>
-      )
-  }
+function TaskStatusSvg({
+  children,
+  className,
+  dataStatus,
+  iconColorToken,
+  size
+}: {
+  children: ReactElement
+  className: string
+  dataStatus: TaskStatus
+  iconColorToken: string
+  size: number
+}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      data-status={dataStatus}
+      fill="none"
+      focusable="false"
+      height={size}
+      style={getNormalizedIconStyle(size, iconColorToken)}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      {children}
+    </svg>
+  )
+}
+
+function BlockedStatusGlyph(): ReactElement {
+  return (
+    <g>
+      <path d="M0 0h24v24H0z" fill="none" stroke="none" />
+      <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />
+      <path d="M18.364 5.636l-12.728 12.728" />
+    </g>
+  )
+}
+
+function CanceledStatusGlyph(): ReactElement {
+  return (
+    <g>
+      <path d="M0 0h24v24H0z" fill="none" stroke="none" />
+      <path d="M8.56 3.69a9 9 0 0 0 -2.92 1.95" />
+      <path d="M3.69 8.56a9 9 0 0 0 -.69 3.44" />
+      <path d="M3.69 15.44a9 9 0 0 0 1.95 2.92" />
+      <path d="M8.56 20.31a9 9 0 0 0 3.44 .69" />
+      <path d="M15.44 20.31a9 9 0 0 0 2.92 -1.95" />
+      <path d="M20.31 15.44a9 9 0 0 0 .69 -3.44" />
+      <path d="M20.31 8.56a9 9 0 0 0 -.69 -3.44" />
+      <path d="M15.44 3.69a9 9 0 0 0 -3.44 -.69" />
+      <path d="M14 14l-4 -4" />
+      <path d="M10 14l4 -4" />
+    </g>
+  )
+}
+
+function TaskStatusGlyph(): ReactElement {
+  return (
+    <g strokeWidth={2}>
+      <path d="M0 0h24v24H0z" fill="none" stroke="none" />
+      <path d="M8.56 3.69a9 9 0 0 0 -2.92 1.95" />
+      <path d="M3.69 8.56a9 9 0 0 0 -.69 3.44" />
+      <path d="M3.69 15.44a9 9 0 0 0 1.95 2.92" />
+      <path d="M8.56 20.31a9 9 0 0 0 3.44 .69" />
+      <path d="M15.44 20.31a9 9 0 0 0 2.92 -1.95" />
+      <path d="M20.31 15.44a9 9 0 0 0 .69 -3.44" />
+      <path d="M20.31 8.56a9 9 0 0 0 -1.95 -2.92" />
+      <path d="M15.44 3.69a9 9 0 0 0 -3.44 -.69" />
+    </g>
+  )
 }

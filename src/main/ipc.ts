@@ -13,6 +13,7 @@ import {
   NOTE_VIM_MAPPING_MODE_VALUES
 } from '../shared/types'
 import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
+import { isVaultRelativePath } from '../shared/projectFolders'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
 import { loadMainWindowApp } from './window'
@@ -20,8 +21,13 @@ import { listCondaEnvironments, validateCondaExecutable } from './pythonEnvironm
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
+const notebookPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(512)
+  .refine(isVaultRelativePath, 'Notebook path must be vault-relative')
 const noteNameSchema = z.string().min(1).max(120)
-const projectNameSchema = z.string().min(1).max(200)
 const projectDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const projectValuesSchema = z.array(z.string().trim().min(1).max(100)).max(50)
 const contentSchema = z.string().max(2_000_000)
@@ -29,6 +35,15 @@ const fleetingContentSchema = z.string().trim().min(1).max(2_000_000)
 const fleetingConversionSchema = z.object({
   relPath: genericPathSchema,
   target: z.enum(['note', 'task'])
+})
+const fleetingUpdateSchema = z.object({
+  relPath: genericPathSchema,
+  content: z.string().trim().min(1).max(2_000_000).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
+  dueDate: projectDateSchema.optional(),
+  projectId: z.string().min(1).max(120).optional(),
+  triageState: z.enum(['inbox', 'in-progress', 'converted', 'archived']).optional()
 })
 const notePdfExportInputSchema = z.object({
   relPath: notePathSchema,
@@ -52,7 +67,98 @@ const folderPdfExportInputSchema = z.object({
 const folderMarkdownExportInputSchema = z.object({
   folderPath: z.string().min(1).max(512)
 })
+const projectContextMarkdownExportInputSchema = z.object({
+  projectId: z.string().trim().min(1).max(120)
+})
 const querySchema = z.string().min(1).max(200)
+const resourceInputSchema = z.object({
+  type: z.enum(['notebook', 'external']).optional(),
+  provider: z.enum(['xingularity', 'google-drive', 'filesystem', 'web']).optional(),
+  kind: z
+    .enum([
+      'note',
+      'notebook',
+      'project',
+      'task',
+      'local-file',
+      'local-folder',
+      'google-doc',
+      'google-sheet',
+      'google-slide',
+      'drive-file',
+      'url'
+    ])
+    .optional(),
+  title: z.string().trim().max(500).optional(),
+  canonicalUri: z.string().trim().min(1).max(4000),
+  externalProduct: z
+    .enum(['google-docs', 'google-sheets', 'google-slides', 'google-drive', 'canva', 'generic'])
+    .optional(),
+  externalId: z.string().trim().max(500).optional(),
+  mimeType: z.string().trim().max(200).optional(),
+  sourceOfTruth: z.enum(['xingularity', 'external']).optional(),
+  access: z.enum(['read-only', 'read-write', 'unknown']).optional(),
+  metadata: z
+    .record(z.string(), z.union([z.string().max(500), z.number(), z.boolean(), z.null()]))
+    .optional(),
+  projectId: z.string().min(1).max(120).optional()
+})
+const resourceIdSchema = z.string().min(1).max(200)
+const resourceUpdateSchema = z.object({
+  resourceId: resourceIdSchema,
+  canonicalUri: z.string().trim().min(1).max(4000).optional(),
+  title: z.string().trim().max(500).optional()
+})
+const projectNotebookResourceSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  notebookPath: notebookPathSchema
+})
+const resourceDetachSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  resourceId: resourceIdSchema
+})
+const resourceRelationSchema = z.object({
+  type: z.enum([
+    'project_contains_resource',
+    'task_derived_from_resource',
+    'note_references_resource',
+    'decision_supported_by_resource',
+    'milestone_delivered_by_resource',
+    'resource_related_to_resource',
+    'resource_snapshot_of_external',
+    'resource_supersedes_resource',
+    'capture_came_from_resource'
+  ]),
+  fromId: z.string().min(1).max(200),
+  fromKind: z.string().min(1).max(80),
+  toId: z.string().min(1).max(200),
+  toKind: z.string().min(1).max(80),
+  confidence: z.enum(['suggested', 'confirmed']).optional()
+})
+const resourceWriteInputSchema = z.object({
+  resourceId: z.string().min(1).max(200).optional(),
+  targetPath: z.string().min(1).max(2048),
+  operation: z.enum(['create', 'replace', 'append']),
+  content: z.string().max(2_000_000),
+  authorizedRoot: z.string().min(1).max(2048),
+  expectedHash: z.string().max(200).optional(),
+  label: z.string().max(200).optional()
+})
+const driveAuthorizationInputSchema = z.object({
+  connectionId: z.string().min(1).max(200),
+  code: z.string().min(1).max(4000),
+  state: z.string().min(1).max(500)
+})
+const driveAttachInputSchema = z.object({
+  fileIds: z.array(z.string().min(1).max(500)).min(1).max(100),
+  projectId: z.string().min(1).max(120).optional()
+})
+const drivePageTokenSchema = z.string().min(1).max(4000)
+const credentialProviderSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/i)
+const credentialValueSchema = z.string().max(5000)
 const aiPromptSchema = z.string().trim().min(1).max(1000)
 const sourcePathSchema = z.string().min(1).max(1024)
 const directoryTitleSchema = z.string().trim().min(1).max(200)
@@ -173,7 +279,9 @@ const calendarTaskSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   completed: z.boolean(),
-  status: z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed']).optional(),
+  status: z
+    .enum(['pending', 'backlog', 'in-progress', 'blocked', 'canceled', 'completed'])
+    .optional(),
   createdAt: z.string().min(1).max(64),
   priority: z.enum(['low', 'medium', 'high']),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
@@ -192,6 +300,7 @@ const calendarTaskSchema = z.object({
 })
 const taskCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).optional(),
   projectId: z.string().min(1).max(120).optional(),
   milestoneId: z.string().min(1).max(120).optional(),
   tags: taskTagsSchema.optional(),
@@ -213,7 +322,10 @@ const taskCreateInputSchema = z.object({
     .optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.enum(CALENDAR_TASK_TYPE_VALUES).optional(),
-  reminders: z.array(taskReminderSchema).max(10).optional()
+  reminders: z.array(taskReminderSchema).max(10).optional(),
+  dependencyIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+  parentTaskId: z.string().min(1).max(120).optional(),
+  estimateMinutes: z.number().int().min(0).max(10_000_000).optional()
 })
 
 const projectIconSchema = z.object({
@@ -237,7 +349,7 @@ const projectCreateInputSchema = z.object({
   startDate: projectDateSchema.optional(),
   endDate: projectDateSchema.optional(),
   tags: projectValuesSchema.optional(),
-  resources: projectValuesSchema.optional()
+  timeBudgetMinutes: z.number().int().min(0).max(10_000_000).optional()
 })
 const projectSelectInputSchema = z.object({
   projectId: z.string().min(1).max(120).nullable()
@@ -250,7 +362,7 @@ const projectUpdateInputSchema = z.object({
   startDate: projectDateSchema.nullable().optional(),
   endDate: projectDateSchema.nullable().optional(),
   tags: projectValuesSchema.optional(),
-  resources: projectValuesSchema.optional()
+  timeBudgetMinutes: z.number().int().min(0).max(10_000_000).nullable().optional()
 })
 const projectStateInputSchema = z.object({
   projectId: z.string().min(1).max(120),
@@ -273,9 +385,28 @@ const projectMilestoneUpdateInputSchema = z.object({
   milestoneId: z.string().min(1).max(120),
   title: z.string().trim().min(1).max(200)
 })
+const projectMilestoneReorderInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  milestoneIds: z.array(z.string().min(1).max(120))
+})
 const projectMilestoneDeleteInputSchema = z.object({
   projectId: z.string().min(1).max(120),
   milestoneId: z.string().min(1).max(120)
+})
+const projectUpdateCreateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  markdown: z.string().max(2_000_000),
+  status: z.enum(['on-track', 'at-risk', 'off-track'])
+})
+const projectUpdateUpdateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  updateId: z.string().min(1).max(120),
+  markdown: z.string().max(2_000_000),
+  status: z.enum(['on-track', 'at-risk', 'off-track'])
+})
+const projectUpdateDeleteInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  updateId: z.string().min(1).max(120)
 })
 
 const nativeMenuItemSchema: z.ZodType<{
@@ -379,7 +510,19 @@ const settingsUpdateSchema = z.object({
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
   pythonCondaEnvironmentPath: z.string().trim().min(1).max(1024).nullable().optional(),
-  pythonCondaExecutablePath: z.string().trim().min(1).max(1024).nullable().optional()
+  pythonCondaExecutablePath: z.string().trim().min(1).max(1024).nullable().optional(),
+  featureFlags: z
+    .object({
+      resources: z.boolean().optional(),
+      filesystemResources: z.boolean().optional(),
+      filesystemContentIndexing: z.boolean().optional(),
+      googleDriveResources: z.boolean().optional(),
+      googleDriveContentIndexing: z.boolean().optional(),
+      captureReview: z.boolean().optional(),
+      externalWrites: z.boolean().optional(),
+      agentContextBundles: z.boolean().optional()
+    })
+    .optional()
 })
 
 const settingsUpdateOptionsSchema = z
@@ -440,6 +583,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.runVaultMigration()
   })
 
+  handleIpc(IPC_CHANNELS.vaultMigrationReport, async () => {
+    return runtime.getVaultMigrationReport()
+  })
+
   handleIpc(IPC_CHANNELS.vaultListSaved, async () => {
     return runtime.listSavedVaults()
   })
@@ -458,6 +605,14 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
     return runtime.chooseDirectory(directoryTitleSchema.parse(title))
+  })
+
+  handleIpc(IPC_CHANNELS.desktopChoosePath, async (_event, title: unknown) => {
+    return runtime.choosePath(directoryTitleSchema.parse(title))
+  })
+
+  handleIpc(IPC_CHANNELS.desktopOpenExternal, async (_event, url: unknown) => {
+    await runtime.openExternal(z.string().url().parse(url))
   })
 
   handleIpc(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
@@ -486,6 +641,11 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.removeFleetingNote, async (_event, relPath: unknown) => {
     return runtime.removeFleetingNote(genericPathSchema.parse(relPath))
+  })
+
+  handleIpc(IPC_CHANNELS.updateFleetingNote, async (_event, input: unknown) => {
+    const parsed = fleetingUpdateSchema.parse(input)
+    return runtime.updateFleetingNote(parsed.relPath, parsed)
   })
 
   handleIpc(IPC_CHANNELS.convertFleetingNote, async (_event, input: unknown) => {
@@ -601,12 +761,108 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.exportFolderMarkdown(folderMarkdownExportInputSchema.parse(input))
   })
 
-  handleIpc(IPC_CHANNELS.exportProject, async (_event, projectName: unknown, content: unknown) => {
-    return runtime.exportProject(projectNameSchema.parse(projectName), contentSchema.parse(content))
+  handleIpc(IPC_CHANNELS.exportProjectContext, async (_event, input: unknown) => {
+    return runtime.exportProjectContext(projectContextMarkdownExportInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.searchQuery, (_event, query: unknown) => {
     return runtime.search(querySchema.parse(query))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesList, async () => runtime.listResources())
+
+  handleIpc(IPC_CHANNELS.resourcesAdd, async (_event, input: unknown) => {
+    return runtime.addResource(resourceInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesUpdate, async (_event, input: unknown) => {
+    return runtime.updateResource(resourceUpdateSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesSetProjectNotebook, async (_event, input: unknown) => {
+    return runtime.setProjectNotebook(projectNotebookResourceSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesDetachFromProject, async (_event, input: unknown) => {
+    await runtime.detachResource(resourceDetachSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesRefresh, async (_event, resourceId: unknown) => {
+    return runtime.refreshResource(resourceIdSchema.parse(resourceId))
+  })
+
+  handleIpc(
+    IPC_CHANNELS.resourcesLocate,
+    async (_event, resourceId: unknown, nextPath: unknown) => {
+      return runtime.locateResource(
+        resourceIdSchema.parse(resourceId),
+        sourcePathSchema.parse(nextPath)
+      )
+    }
+  )
+
+  handleIpc(
+    IPC_CHANNELS.resourcesPreview,
+    async (_event, resourceId: unknown, allowContent: unknown) => {
+      return runtime.previewResource(
+        resourceIdSchema.parse(resourceId),
+        z.boolean().optional().parse(allowContent)
+      )
+    }
+  )
+
+  handleIpc(IPC_CHANNELS.resourcesRelate, async (_event, input: unknown) => {
+    return runtime.relateResource(resourceRelationSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesProjectContext, async (_event, projectId: unknown) => {
+    return runtime.getProjectResourceContext(resourceIdSchema.parse(projectId))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesOpen, async (_event, resourceId: unknown) => {
+    await runtime.openResource(resourceIdSchema.parse(resourceId))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesReveal, async (_event, resourceId: unknown) => {
+    await runtime.revealResource(resourceIdSchema.parse(resourceId))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesPreviewWrite, async (_event, input: unknown) => {
+    return runtime.previewResourceWrite(resourceWriteInputSchema.parse(input))
+  })
+
+  handleIpc(
+    IPC_CHANNELS.resourcesApplyWrite,
+    async (_event, input: unknown, confirmation: unknown) => {
+      return runtime.applyResourceWrite(
+        resourceWriteInputSchema.parse(input),
+        z.literal(true).parse(confirmation)
+      )
+    }
+  )
+
+  handleIpc(IPC_CHANNELS.resourcesWriteAudit, async () => runtime.listResourceWriteAudit())
+
+  handleIpc(IPC_CHANNELS.resourcesDriveStartAuthorization, async () => {
+    return runtime.startGoogleDriveAuthorization()
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesDriveCompleteAuthorization, async (_event, input: unknown) => {
+    await runtime.completeGoogleDriveAuthorization(driveAuthorizationInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesDriveListFiles, async () => runtime.listGoogleDriveFiles())
+
+  handleIpc(IPC_CHANNELS.resourcesDriveAttach, async (_event, input: unknown) => {
+    return runtime.attachGoogleDriveResources(driveAttachInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesDriveRefresh, async (_event, pageToken: unknown) => {
+    return runtime.refreshGoogleDriveChanges(drivePageTokenSchema.parse(pageToken))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesDriveDisconnect, async () => {
+    await runtime.disconnectGoogleDrive()
   })
 
   handleIpc(IPC_CHANNELS.aiCompleteNote, async (_event, input: unknown) => {
@@ -615,6 +871,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.agentChatSendMessage, async (_event, input: unknown) => {
     return runtime.chatWithAgent(agentChatInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.agentChatCancel, async (_event, requestId: unknown) => {
+    return runtime.cancelAgentChat(z.string().min(1).max(200).parse(requestId))
   })
 
   handleIpc(IPC_CHANNELS.agentChatListSessions, async () => {
@@ -676,6 +936,21 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.updateSettings(parsedNext, settingsUpdateOptionsSchema.parse(options))
   })
 
+  handleIpc(IPC_CHANNELS.credentialStatus, async (_event, provider: unknown) => {
+    return runtime.getCredentialStatus(credentialProviderSchema.parse(provider))
+  })
+
+  handleIpc(IPC_CHANNELS.credentialSet, async (_event, provider: unknown, value: unknown) => {
+    return runtime.setCredential(
+      credentialProviderSchema.parse(provider),
+      credentialValueSchema.parse(value)
+    )
+  })
+
+  handleIpc(IPC_CHANNELS.credentialDelete, async (_event, provider: unknown) => {
+    await runtime.deleteCredential(credentialProviderSchema.parse(provider))
+  })
+
   handleIpc(IPC_CHANNELS.pythonListCondaEnvironments, async () => {
     const settings = await runtime.getSettings()
     return listCondaEnvironments(settings.pythonCondaExecutablePath)
@@ -733,8 +1008,24 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.updateProjectMilestone(projectMilestoneUpdateInputSchema.parse(input))
   })
 
+  handleIpc(IPC_CHANNELS.reorderProjectMilestones, async (_event, input: unknown) => {
+    return runtime.reorderProjectMilestones(projectMilestoneReorderInputSchema.parse(input))
+  })
+
   handleIpc(IPC_CHANNELS.deleteProjectMilestone, async (_event, input: unknown) => {
     return runtime.deleteProjectMilestone(projectMilestoneDeleteInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.createProjectUpdate, async (_event, input: unknown) => {
+    return runtime.createProjectUpdate(projectUpdateCreateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.updateProjectUpdate, async (_event, input: unknown) => {
+    return runtime.updateProjectUpdate(projectUpdateUpdateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.deleteProjectUpdate, async (_event, input: unknown) => {
+    return runtime.deleteProjectUpdate(projectUpdateDeleteInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.createTask, async (_event, input: unknown) => {

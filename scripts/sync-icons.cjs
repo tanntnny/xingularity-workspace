@@ -5,7 +5,8 @@ const rootDir = path.resolve(__dirname, '..')
 const source = path.join(rootDir, 'assets', 'logo.png')
 const targets = [
   path.join(rootDir, 'build', 'icon.png'),
-  path.join(rootDir, 'resources', 'icon.png')
+  path.join(rootDir, 'resources', 'icon.png'),
+  path.join(rootDir, 'src', 'renderer', 'src', 'assets', 'app-logo.png')
 ]
 
 if (!fs.existsSync(source)) {

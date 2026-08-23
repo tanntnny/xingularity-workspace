@@ -1,6 +1,10 @@
 import {
   IconAdjustmentsHorizontalFilled,
   IconAlertCircleFilled,
+  IconAntennaBars3,
+  IconAntennaBars4,
+  IconAntennaBars5,
+  IconArchive,
   IconArchiveFilled,
   IconArrowDownCircleFilled,
   IconArrowLeftCircleFilled,
@@ -16,32 +20,47 @@ import {
   IconBrandMastercard,
   IconBrandPython,
   IconBriefcaseFilled,
+  IconCalendarCheck,
   IconBulbFilled,
   IconCalendarEvent,
   IconCalendarEventFilled,
   IconCalendarFilled,
+  IconCalendarOff,
   IconCameraFilled,
+  IconChartLine,
   IconChartDots3,
-  IconCaretDownFilled,
-  IconCaretLeftFilled,
-  IconCaretRightFilled,
-  IconCaretUpFilled,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronUp,
   IconCheckFilled,
+  IconCircleCheck,
   IconCircleCheckFilled,
+  IconCircleDashed,
+  IconCircleDashedMinus,
+  IconCircleDotted,
   IconCircleDotFilled,
   IconCircleFilled,
+  IconCircleHalf2,
   IconCircleKeyFilled,
   IconCircleArrowUpRightFilled,
+  IconCircleRectangle,
   IconCircleXFilled,
+  IconClockCheck,
   IconClockFilled,
+  IconClockOff,
   IconCopyFilled,
   IconCreditCardFilled,
   IconDeviceDesktopFilled,
   IconDeviceFloppyFilled,
   IconDeviceSpeakerFilled,
   IconDirectionArrowsFilled,
+  IconDiamonds,
+  IconDiamondsFilled,
   IconDotsFilled,
+  IconDotsVertical,
   IconDownloadFilled,
+  IconExclamationMark,
   IconEyeFilled,
   IconFileDownloadFilled,
   IconFiles,
@@ -50,9 +69,12 @@ import {
   IconFlagFilled,
   IconFlaskFilled,
   IconFolderFilled,
+  IconFolderOff,
   IconFolderOpenFilled,
+  IconGripVertical,
   IconHourglassFilled,
   IconHeartFilled,
+  IconHexagon,
   IconInbox,
   IconHomeFilled,
   IconKeyboardFilled,
@@ -70,20 +92,26 @@ import {
   IconMessage2Filled,
   IconMessageChatbotFilled,
   IconMessageFilled,
+  IconMaximize,
   IconPaletteFilled,
   IconPencilFilled,
   IconPlayerPlayFilled,
   IconPlusFilled,
+  IconRefresh,
   IconSendFilled,
   IconSearch,
   IconSettingsFilled,
   IconShieldFilled,
   IconSparklesFilled,
+  IconStar,
   IconStarFilled,
+  IconTag,
   IconTagFilled,
-  IconTrashFilled,
+  IconTrash,
+  IconTrendingDown,
   IconTrophyFilled,
   IconFileTypographyFilled,
+  IconUnlink,
   IconWorldFilled,
   IconXFilled
 } from '@tabler/icons-react'
@@ -93,6 +121,10 @@ export type FilledIcon = TablerIcon
 export type FilledIconProps = IconProps
 
 export const AlertCircle = IconAlertCircleFilled
+export const AntennaBars3 = IconAntennaBars3
+export const AntennaBars4 = IconAntennaBars4
+export const AntennaBars5 = IconAntennaBars5
+export const ArchiveOutline = IconArchive
 export const Archive = IconArchiveFilled
 export const ArrowDown = IconArrowDownCircleFilled
 export const ArrowLeft = IconArrowLeftCircleFilled
@@ -111,28 +143,39 @@ export const Bot = IconMessageChatbotFilled
 export const Briefcase = IconBriefcaseFilled
 export const BrandMastercard = IconBrandMastercard
 export const Calendar = IconCalendarFilled
+export const CalendarCheck = IconCalendarCheck
 export const CalendarEvent = IconCalendarEvent
 export const CalendarClock = IconCalendarEventFilled
 export const CalendarDays = IconCalendarEventFilled
 export const CalendarIcon = IconCalendarFilled
+export const CalendarOff = IconCalendarOff
 export const CalendarPlus = IconCalendarEventFilled
 export const Camera = IconCameraFilled
+export const ChartLine = IconChartLine
 export const ChartDots3 = IconChartDots3
 export const Check = IconCheckFilled
+export const CircleCheck = IconCircleCheck
 export const CheckCircle2 = IconCircleCheckFilled
-export const ChevronDown = IconCaretDownFilled
-export const ChevronLeft = IconCaretLeftFilled
-export const ChevronRight = IconCaretRightFilled
-export const ChevronUp = IconCaretUpFilled
+export const ChevronDown = IconChevronDown
+export const ChevronLeft = IconChevronLeft
+export const ChevronRight = IconChevronRight
+export const ChevronUp = IconChevronUp
 export const Circle = IconCircleFilled
 export const CircleAlert = IconAlertCircleFilled
-export const CircleDashed = IconCircleDotFilled
+export const CircleDashed = IconCircleDashed
+export const CircleDashedMinus = IconCircleDashedMinus
+export const CircleDotted = IconCircleDotted
+export const CircleHalf2 = IconCircleHalf2
+export const CircleRectangle = IconCircleRectangle
 export const Clock = IconClockFilled
+export const ClockCheck = IconClockCheck
 export const Clock3 = IconClockFilled
+export const ClockOff = IconClockOff
 export const Command = IconCircleKeyFilled
 export const Copy = IconCopyFilled
 export const CreditCard = IconCreditCardFilled
 export const Download = IconDownloadFilled
+export const ExclamationMark = IconExclamationMark
 export const Eye = IconEyeFilled
 export const FileDown = IconFileDownloadFilled
 export const Files = IconFiles
@@ -142,6 +185,7 @@ export const FlaskConical = IconFlaskFilled
 export const Folder = IconFolderFilled
 export const FolderInput = IconFolderOpenFilled
 export const FolderKanban = IconLayoutKanbanFilled
+export const FolderOff = IconFolderOff
 export const FolderOpen = IconFolderOpenFilled
 export const FolderPlus = IconFolderOpenFilled
 export const Funnel = IconFilterFilled
@@ -149,6 +193,7 @@ export const GitBranch = IconBrandGithubFilled
 export const Globe = IconWorldFilled
 export const HardDrive = IconDeviceDesktopFilled
 export const Heart = IconHeartFilled
+export const Hexagon = IconHexagon
 export const Home = IconHomeFilled
 export const Inbox = IconInbox
 export const House = IconHomeFilled
@@ -165,11 +210,16 @@ export const ListTodo = IconListCheckFilled
 export const Loader2 = IconHourglassFilled
 export const LoaderCircle = IconHourglassFilled
 export const Mail = IconMail
+export const Maximize = IconMaximize
 export const Megaphone = IconDeviceSpeakerFilled
 export const MessageSquare = IconMessageFilled
 export const MessageSquarePlus = IconMessage2Filled
+export const Milestone = IconDiamonds
+export const MilestoneFilled = IconDiamondsFilled
 export const Monitor = IconDeviceDesktopFilled
 export const MoreHorizontal = IconDotsFilled
+export const MoreVertical = IconDotsVertical
+export const GripVertical = IconGripVertical
 export const NotebookPen = IconBookFilled
 export const NotebookTabs = IconBookFilled
 export const Option = IconCircleKeyFilled
@@ -185,6 +235,7 @@ export const Pencil = IconPencilFilled
 export const Play = IconPlayerPlayFilled
 export const Plus = IconPlusFilled
 export const Python = IconBrandPython
+export const RefreshCw = IconRefresh
 export const Rocket = IconSendFilled
 export const Rows3 = IconListDetailsFilled
 export const Save = IconDeviceFloppyFilled
@@ -194,12 +245,16 @@ export const Shield = IconShieldFilled
 export const SlidersHorizontal = IconAdjustmentsHorizontalFilled
 export const Sparkles = IconSparklesFilled
 export const Star = IconStarFilled
+export const StarOutline = IconStar
 export const Tag = IconTagFilled
+export const TagOutline = IconTag
 export const Terminal = IconDeviceDesktopFilled
 export const Target = IconCircleDotFilled
-export const Trash2 = IconTrashFilled
+export const Trash2 = IconTrash
+export const TrendingDown = IconTrendingDown
 export const Trophy = IconTrophyFilled
 export const Type = IconFileTypographyFilled
+export const Unlink = IconUnlink
 export const WalletCards = IconCreditCardFilled
 export const X = IconXFilled
 export const XCircle = IconCircleXFilled

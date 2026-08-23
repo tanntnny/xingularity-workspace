@@ -23,10 +23,8 @@ import {
   Play,
   Plus,
   Save,
-  WorkspaceHeaderActions,
-  WorkspaceHeaderActionDivider,
-  WorkspaceHeaderActionGroup,
-  WorkspaceHeaderSecondaryActionsRight,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   WorkspaceIconButton,
   WorkspacePanelStack,
   Trash2
@@ -399,6 +397,11 @@ export function SchedulingWorkspaceProvider({
       return null
     }
 
+    if (draft.permissions.includes('useSecrets') && (draft.secretRefs?.length ?? 0) === 0) {
+      pushToast('error', 'Attach at least one configured secret before saving the automation.')
+      return null
+    }
+
     setIsSaving(true)
     try {
       const savedJob = await vaultApi.schedules.saveJob({
@@ -708,6 +711,15 @@ export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps
     onViewChange?.('automation')
   }
 
+  const schedulingTabPanelProps =
+    activeView === 'list'
+      ? {}
+      : {
+          id: 'scheduling-view-panel',
+          role: 'tabpanel' as const,
+          'aria-labelledby': `scheduling-view-tab-${activeView}`
+        }
+
   return (
     <>
       <WorkspacePage
@@ -715,7 +727,10 @@ export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps
         data-testid="scheduling-page"
         aria-label="Scheduling"
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          {...schedulingTabPanelProps}
+        >
           {activeView === 'list' ? (
             <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               <ScheduleJobList
@@ -782,79 +797,58 @@ export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps
   )
 }
 
-export interface SchedulingHeaderActionsProps {
+export interface SchedulingContextMenuItemsProps {
   onOpenApiGuide: () => void
   activeView?: SchedulingView
-  onViewChange?: (view: SchedulingView) => void
 }
 
-export function SchedulingHeaderActions({
+export function SchedulingContextMenuItems({
   onOpenApiGuide,
-  activeView = 'automation',
-  onViewChange
-}: SchedulingHeaderActionsProps): ReactElement {
+  activeView = 'automation'
+}: SchedulingContextMenuItemsProps): ReactElement {
   const { isNewDraft, isDirty, isSaving, isRunning, handleSave, handleRun, setDeleteDialogOpen } =
     useSchedulingWorkspace()
   const isDetailView = activeView !== 'list'
 
   return (
     <>
-      <WorkspaceHeaderActions>
-        <WorkspaceIconButton
-          type="button"
-          onClick={onOpenApiGuide}
-          data-testid="scheduling-api-guide"
-          aria-label="Open scheduling API guide"
-          title="Open scheduling API guide"
-          icon={<BookOpen size={16} />}
-          label="API guide"
-          bordered
-        />
-        <WorkspaceHeaderActionDivider />
-        {isDetailView ? (
-          <WorkspaceIconButton
-            type="button"
-            onClick={handleRun}
-            disabled={isRunning || isSaving}
-            data-testid="scheduling-run-now"
-            aria-label="Run automation now"
-            title={isRunning ? 'Automation is running' : 'Run automation now'}
-            icon={<Play size={16} />}
-            label={isRunning ? 'Running…' : 'Run now'}
-            bordered
-          />
-        ) : null}
-        {isDetailView && !isNewDraft ? (
-          <WorkspaceIconButton
-            type="button"
-            onClick={() => setDeleteDialogOpen(true)}
-            data-testid="scheduling-delete"
-            aria-label="Delete automation"
-            title="Delete automation"
-            icon={<Trash2 size={16} />}
-            label="Delete"
-            bordered
-          />
-        ) : null}
-        {isDetailView ? (
-          <WorkspaceIconButton
-            type="button"
-            onClick={handleSave}
-            disabled={!isDirty || isSaving}
-            data-testid="scheduling-save-changes"
-            aria-label="Save changes"
-            title={isSaving ? 'Saving changes' : 'Save changes'}
-            icon={<Save size={16} />}
-            label={isSaving ? 'Saving…' : 'Save changes'}
-            bordered
-          />
-        ) : null}
-      </WorkspaceHeaderActions>
-      <WorkspaceHeaderSecondaryActionsRight>
-        <WorkspaceHeaderActionGroup>
-          <SchedulingAddAutomationButton onCreate={() => onViewChange?.('automation')} />
-        </WorkspaceHeaderActionGroup>
-      </WorkspaceHeaderSecondaryActionsRight>
+      <DropdownMenuItem
+        data-testid="scheduling-context-menu-item:api-guide"
+        onSelect={onOpenApiGuide}
+      >
+        <BookOpen aria-hidden="true" />
+        API guide
+      </DropdownMenuItem>
+      {isDetailView ? <DropdownMenuSeparator /> : null}
+      {isDetailView ? (
+        <DropdownMenuItem
+          data-testid="scheduling-context-menu-item:run"
+          disabled={isRunning || isSaving}
+          onSelect={handleRun}
+        >
+          <Play aria-hidden="true" />
+          {isRunning ? 'Running…' : 'Run now'}
+        </DropdownMenuItem>
+      ) : null}
+      {isDetailView && !isNewDraft ? (
+        <DropdownMenuItem
+          data-testid="scheduling-context-menu-item:delete"
+          onSelect={() => setDeleteDialogOpen(true)}
+        >
+          <Trash2 aria-hidden="true" />
+          Delete automation
+        </DropdownMenuItem>
+      ) : null}
+      {isDetailView ? (
+        <DropdownMenuItem
+          data-testid="scheduling-context-menu-item:save"
+          disabled={!isDirty || isSaving}
+          onSelect={handleSave}
+        >
+          <Save aria-hidden="true" />
+          {isSaving ? 'Saving…' : 'Save changes'}
+        </DropdownMenuItem>
+      ) : null}
     </>
   )
 }
@@ -897,6 +891,9 @@ export function SchedulingRightPanel({
     updateDraft,
     updateTrigger,
     togglePermission,
+    secretNames,
+    saveSecret,
+    deleteSecret,
     handleEnabledChange,
     runs,
     selectedRunId,
@@ -918,10 +915,13 @@ export function SchedulingRightPanel({
       ) : (
         <SchedulePropertiesPanel
           draft={draft}
+          secretNames={secretNames}
           onChange={updateDraft}
           onEnabledChange={handleEnabledChange}
           onTriggerChange={updateTrigger}
           onTogglePermission={togglePermission}
+          onSaveSecret={saveSecret}
+          onDeleteSecret={deleteSecret}
         />
       )}
     </WorkspacePanelStack>

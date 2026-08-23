@@ -11,7 +11,7 @@ const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectio
     <section
       ref={ref}
       className={cn(
-        'flex flex-col gap-3 rounded-lg border border-panel-border bg-card p-4 text-card-foreground',
+        'flex flex-col gap-3 rounded-shell border border-panel-border bg-panel p-4 text-card-foreground',
         className
       )}
       {...props}
@@ -49,42 +49,61 @@ interface CollapsibleWorkspacePanelSectionProps extends Omit<
   heading: React.ReactNode
   description?: React.ReactNode
   defaultOpen?: boolean
+  actions?: React.ReactNode
+  contentClassName?: string
   children?: React.ReactNode
 }
 
 const CollapsibleWorkspacePanelSection = React.forwardRef<
   HTMLElement,
   CollapsibleWorkspacePanelSectionProps
->(({ className, heading, description, defaultOpen = true, children, ...props }, ref) => (
-  <Collapsible defaultOpen={defaultOpen} asChild>
-    <WorkspacePanelSection
-      ref={ref}
-      className={cn('gap-0 overflow-hidden p-0', className)}
-      {...props}
-    >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="group flex min-h-[var(--control-height)] w-full items-center justify-between gap-3 bg-transparent px-4 py-3 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:bg-transparent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        >
-          <span className="min-w-0 truncate">{heading}</span>
-          <ChevronDown
-            aria-hidden="true"
-            className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div>
-          {description ? (
-            <p className="px-4 pb-1 pt-3 text-xs text-muted-foreground">{description}</p>
-          ) : null}
-          {children}
+>(
+  (
+    {
+      className,
+      heading,
+      description,
+      defaultOpen = true,
+      actions,
+      contentClassName,
+      children,
+      ...props
+    },
+    ref
+  ) => (
+    <Collapsible defaultOpen={defaultOpen} asChild>
+      <WorkspacePanelSection
+        ref={ref}
+        className={cn('gap-0 overflow-hidden p-0', className)}
+        {...props}
+      >
+        <div className="flex min-h-[var(--control-height)] items-center gap-2 px-4 py-3">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="group flex min-w-0 flex-1 items-center justify-between gap-3 bg-transparent p-0 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            >
+              <span className="min-w-0 truncate">{heading}</span>
+              <ChevronDown
+                aria-hidden="true"
+                className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"
+              />
+            </button>
+          </CollapsibleTrigger>
+          {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
-      </CollapsibleContent>
-    </WorkspacePanelSection>
-  </Collapsible>
-))
+        <CollapsibleContent className={cn('min-h-0', contentClassName)}>
+          <div className="h-full min-h-0">
+            {description ? (
+              <p className="px-4 pb-1 pt-3 text-xs text-muted-foreground">{description}</p>
+            ) : null}
+            {children}
+          </div>
+        </CollapsibleContent>
+      </WorkspacePanelSection>
+    </Collapsible>
+  )
+)
 CollapsibleWorkspacePanelSection.displayName = 'CollapsibleWorkspacePanelSection'
 
 export { CollapsibleWorkspacePanelSection, WorkspacePanelSection, WorkspacePanelSectionHeader }

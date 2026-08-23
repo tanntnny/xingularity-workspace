@@ -78,7 +78,9 @@ describe('sidebar shortcuts', () => {
     const firstSeparatorIndex = markup.indexOf('data-sidebar="separator"')
     const lastSeparatorIndex = markup.lastIndexOf('data-sidebar="separator"')
     expect(markup.match(/data-sidebar="separator"/g)).toHaveLength(2)
-    expect(markup).toContain('data-sidebar="separator" class="h-px w-auto bg-sidebar-border mx-1"')
+    expect(markup).toContain(
+      'data-sidebar="separator" class="h-[var(--border-width)] w-auto bg-sidebar-border mx-1"'
+    )
     expect(markup.indexOf('data-testid="sidebar-vault-manager"')).toBeLessThan(firstSeparatorIndex)
     expect(firstSeparatorIndex).toBeLessThan(
       markup.indexOf('data-testid="sidebar-command-palette"')
@@ -198,7 +200,9 @@ describe('sidebar shortcuts', () => {
     expect(markup).not.toContain('data-testid="sidebar-shortcut:schedules"')
     expect(markup).not.toContain('data-testid="sidebar-page:designAudit"')
     expect(markup).not.toContain('sidebar-page:weeklyPlan')
-    expect(markup).not.toContain('Weekly Plan')
+    expect(markup).not.toContain('Weekly plan')
+    expect(markup).not.toContain('sidebar-page:agent')
+    expect(markup).not.toContain('>Agent</span>')
   })
 
   it('renders shortcut content inside a toggle group', () => {
@@ -254,12 +258,22 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-testid="workspace-tab-icon:notes"')
     expect(markup).toContain('data-testid="workspace-tab-label:notes"')
     expect(markup).toContain('workspace-tab-label-fade')
+    expect(markup).toContain('workspace-text-fade')
+    expect(markup).toContain('workspace-tab-card')
+    expect(markup).toContain('rounded-sm bg-workspace data-[active=true]:bg-transparent')
+    expect(markup).toContain('text-xs font-semibold text-muted-foreground')
+    expect(markup).toContain('workspace-tab-shortcut-overlay')
+    expect(markup).toContain('workspace-tab-close-overlay')
+    expect(markup).toContain('group-hover:opacity-100')
+    expect(markup).toContain('group-focus-within:opacity-100')
+    expect(markup).toContain('hover:bg-muted')
+    expect(markup).not.toContain('&amp;_button]:rounded-[var(--radius-button-pill)]')
     expect(markup).toContain(
       'title="A very long note title that fades before the tab close control"'
     )
     expect(markup).toContain('data-testid="workspace-tab-shortcut:notes"')
     expect(markup).toContain('app-drag-region min-w-0 flex-1 overflow-x-auto')
-    expect(markup).toContain('app-no-drag flex w-max items-center gap-1.5')
+    expect(markup).toContain('app-no-drag flex w-max items-center gap-1')
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
     expect(markup).toContain('data-toggle-group-indicator="true"')
     expect(markup).toContain('transition-none')

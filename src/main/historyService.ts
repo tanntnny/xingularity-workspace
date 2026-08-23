@@ -1,6 +1,12 @@
-import type { HistoryAffectedAreas, HistoryOperationResult, HistoryStatus } from '../shared/types'
+import type {
+  HistoryAffectedAreas,
+  HistoryOperationResult,
+  HistoryStatus,
+  MutationEnvelope
+} from '../shared/types'
 
 export interface HistoryEntry {
+  operation?: MutationEnvelope
   label: string
   affected: HistoryAffectedAreas
   undo: () => Promise<HistoryAffectedAreas | void>

@@ -1,53 +1,74 @@
 import { ReactElement, useRef, useState } from 'react'
 import {
-  CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CalendarTaskType,
+  NoteVimKeyMapping,
   Project,
   TaskPriority,
-  TaskStatus,
-  TASK_STATUS_OPTIONS
+  TaskStatus
 } from '../../../shared/types'
-import { NoteShapeIcon } from './NoteShapeIcon'
-import { Check, Trash2 } from './ui/icons'
+import { Editor, type NoteEditorHandle } from './Editor'
+import { Check, Maximize, Trash2 } from './ui/icons'
 import { Input } from './ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
-import { TaskPriorityBadge } from './ui/task-priority-badge'
-import { TaskStatusIcon } from './TaskStatusIcon'
 import { TagEditor } from './TagEditor'
-import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
+import { WorkspaceIconButton } from './ui/document-workspace'
+import { getTaskStatus } from '../lib/taskStatus'
+import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
+import {
+  CALENDAR_TASK_TYPE_CHIP_OPTIONS,
+  NO_PROJECT_VALUE,
+  TASK_PRIORITY_CHIP_ITEMS,
+  TASK_STATUS_CHIP_OPTIONS,
+  getProjectChipOptions
+} from '../lib/statusChipMeta'
 import { normalizeCalendarEndDate } from '../../../shared/calendarTaskDates'
+import { isTaskStatusDone } from '../../../shared/taskStatus'
 import {
   Dialog,
   DialogActionButton,
   DialogBody,
-  DialogCloseAction,
   DialogContent,
-  DialogHeader,
   DialogShell,
-  DialogShellFooter,
-  DialogTitle
+  DialogShellHeader,
+  DialogShellFooter
 } from './ui/dialog'
+import { ChipGroup } from './ui/chip-group'
+import { CalendarDateEditPopover } from './ui/calendar-date-edit-popover'
+import { CalendarTimeEditPopover } from './ui/calendar-time-edit-popover'
+import { StatusChipSelect } from './ui/status-chip-select'
+
+const NO_MILESTONE_VALUE = '__none__'
+const TASK_DIALOG_STATUS_CHIP_CLASS_NAME =
+  'max-w-full justify-start rounded-[var(--radius-button-pill)]'
+const TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME =
+  'min-w-0 max-w-full justify-start rounded-none border-0 bg-transparent hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0'
 
 export interface TaskEditDialogProps {
   task: CalendarTask
+  isNewTask?: boolean
   projects?: Project[]
+  availableTags?: readonly string[]
   onClose: () => void
   onSave: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
   onDelete: (taskId: string) => void
   onOpenFullPage: () => void | Promise<void>
+  vimModeEnabled: boolean
+  vimKeyMappings: NoteVimKeyMapping[]
 }
 
 export function TaskEditDialog({
   task,
+  isNewTask = false,
   projects = [],
+  availableTags = [],
   onClose,
   onSave,
   onDelete,
-  onOpenFullPage
+  onOpenFullPage,
+  vimModeEnabled,
+  vimKeyMappings
 }: TaskEditDialogProps): ReactElement {
-  const [title, setTitle] = useState(task.title)
+  const [titleDraft, setTitleDraft] = useState(() => (isNewTask ? '' : task.title))
   const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
   const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
   const [status, setStatus] = useState<TaskStatus>(getTaskStatus(task.status, task.completed))
@@ -58,17 +79,36 @@ export function TaskEditDialog({
   const [endDate, setEndDate] = useState(task.endDate ?? '')
   const [time, setTime] = useState(task.time ?? '')
   const [endTime, setEndTime] = useState(task.endTime ?? '')
+  const editorRef = useRef<NoteEditorHandle | null>(null)
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const descriptionRef = useRef(task.description ?? '')
   const closeHandledRef = useRef(false)
   const selectedProject = projects.find((project) => project.id === projectId)
-  const selectedMilestone = selectedProject?.milestones?.find(
-    (milestone) => milestone.id === milestoneId
-  )
+  const dialogTitle = titleDraft.trim() || (isNewTask ? 'New task' : task.title)
+  const milestoneOptions = [
+    {
+      value: NO_MILESTONE_VALUE,
+      label: 'No milestone',
+      icon: null,
+      iconColorToken: 'var(--muted-foreground)',
+      mutedTrigger: true
+    },
+    ...(selectedProject?.milestones ?? []).map((milestone) => ({
+      value: milestone.id,
+      label: milestone.title,
+      icon: null,
+      iconColorToken: 'var(--muted-foreground)'
+    }))
+  ]
 
   const buildPatch = (): Partial<CalendarTask> => {
     const patch: Partial<CalendarTask> = {}
-    const trimmedTitle = title.trim()
-    if (trimmedTitle && trimmedTitle !== task.title) {
-      patch.title = trimmedTitle
+    const normalizedTitle = titleDraft.trim()
+    if (normalizedTitle && (isNewTask || normalizedTitle !== task.title)) {
+      patch.title = normalizedTitle
+    }
+    if (descriptionRef.current !== (task.description ?? '')) {
+      patch.description = descriptionRef.current || undefined
     }
     if ((task.priority ?? 'low') !== priority) {
       patch.priority = priority
@@ -78,7 +118,7 @@ export function TaskEditDialog({
     }
     if (getTaskStatus(task.status, task.completed) !== status) {
       patch.status = status
-      patch.completed = status === 'completed'
+      patch.completed = isTaskStatusDone(status)
     }
 
     const normalizedProjectId = projectId.trim() || undefined
@@ -120,21 +160,46 @@ export function TaskEditDialog({
     return patch
   }
 
-  const handleClose = (): void => {
+  const handleDescriptionSnapshot = (snapshot: NoteEditorSnapshot): void => {
+    descriptionRef.current = snapshot.content
+  }
+
+  const flushDescription = async (): Promise<void> => {
+    const snapshot = await editorRef.current?.flushPendingChanges()
+    if (snapshot) {
+      descriptionRef.current = snapshot.content
+    }
+  }
+
+  const handleClose = async (): Promise<void> => {
     if (closeHandledRef.current) return
     closeHandledRef.current = true
 
+    if (isNewTask && !titleDraft.trim()) {
+      onDelete(task.id)
+      onClose()
+      return
+    }
+
+    await flushDescription()
     const patch = buildPatch()
     if (Object.keys(patch).length > 0) {
-      void onSave(task.id, patch)
+      await onSave(task.id, patch)
     }
     onClose()
   }
 
   const handleOpenFullPage = async (): Promise<void> => {
     if (closeHandledRef.current) return
+
+    if (isNewTask && !titleDraft.trim()) {
+      titleInputRef.current?.focus()
+      return
+    }
+
     closeHandledRef.current = true
 
+    await flushDescription()
     const patch = buildPatch()
     if (Object.keys(patch).length > 0) {
       await onSave(task.id, patch)
@@ -154,286 +219,238 @@ export function TaskEditDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) handleClose()
+        if (!open) void handleClose()
       }}
     >
       <DialogContent
-        className="max-h-[min(760px,calc(100vh-2rem))] max-w-lg overflow-hidden"
+        className="max-h-[min(760px,calc(100vh-2rem))] overflow-hidden"
         data-testid="task-center-dialog"
         showCloseButton={false}
+        onOpenAutoFocus={(event) => {
+          if (!isNewTask) return
+          event.preventDefault()
+          window.requestAnimationFrame(() => titleInputRef.current?.focus())
+        }}
       >
         <DialogShell>
-          <DialogHeader className="flex-row items-start justify-between gap-4 space-y-0 text-left">
-            <DialogTitle>Edit task</DialogTitle>
-            <DialogActionButton
-              onClick={() => {
-                void handleOpenFullPage()
-              }}
-              label="Open full page"
-              data-testid="task-open-full-page"
+          <DialogShellHeader
+            data-testid="task-dialog-header"
+            context="Edit Task"
+            title={<span data-testid="task-dialog-title">{dialogTitle}</span>}
+            closeLabel="Close task editor"
+            onClose={() => void handleClose()}
+            closeTestId="task-dialog-close"
+            actions={
+              <WorkspaceIconButton
+                onClick={() => {
+                  void handleOpenFullPage()
+                }}
+                aria-label="Open full page"
+                title="Open full page"
+                icon={<Maximize />}
+                borderless
+                data-testid="task-open-full-page"
+              />
+            }
+          />
+          <div
+            data-testid="task-dialog-title-input-row"
+            className="min-w-0 border-b border-border pb-2"
+          >
+            <Input
+              ref={titleInputRef}
+              id={`task-title-${task.id}`}
+              data-testid="task-dialog-title-input"
+              type="text"
+              variant="plain"
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              aria-label="Task name"
+              placeholder="Task name"
+              autoFocus={isNewTask}
+              className="h-auto min-h-9 text-2xl font-semibold leading-tight tracking-tight text-foreground placeholder:text-muted-foreground"
             />
-          </DialogHeader>
+          </div>
           <DialogBody className="overflow-y-auto pr-1">
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor={`task-title-${task.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  Title
-                </label>
-                <Input
-                  id={`task-title-${task.id}`}
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="mt-1"
-                  placeholder="Task title"
-                  autoFocus
+            <div className="space-y-5">
+              <div data-testid="task-description-editor" className="note-editor-surface min-w-0">
+                <Editor
+                  ref={editorRef}
+                  key={task.id}
+                  initialContent={task.description ?? ''}
+                  density="compact"
+                  onDirty={() => undefined}
+                  onSnapshotChange={handleDescriptionSnapshot}
+                  onDropFile={async () => null}
+                  onPasteImage={async () => null}
+                  notes={[]}
+                  vimModeEnabled={vimModeEnabled}
+                  vimKeyMappings={vimKeyMappings}
                 />
               </div>
-              <div>
+              <div
+                data-testid="task-dialog-properties"
+                className="flex min-w-0 flex-wrap items-center gap-2"
+              >
+                <StatusChipSelect
+                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+                  data-testid="task-dialog-status-chip"
+                  id={`task-status-${task.id}`}
+                  label={`Task status for ${dialogTitle}`}
+                  value={status}
+                  options={TASK_STATUS_CHIP_OPTIONS}
+                  surface="pill"
+                  wrapLabel
+                  onValueChange={(value) => setStatus(value as TaskStatus)}
+                />
+                <StatusChipSelect
+                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+                  data-testid="task-dialog-task-type-chip"
+                  id={`task-type-${task.id}`}
+                  label={`Task type for ${dialogTitle}`}
+                  value={taskType}
+                  options={CALENDAR_TASK_TYPE_CHIP_OPTIONS}
+                  surface="pill"
+                  wrapLabel
+                  onValueChange={(value) => setTaskType(value as CalendarTaskType)}
+                />
+                <StatusChipSelect
+                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+                  data-testid="task-dialog-priority-chip"
+                  id={`task-priority-${task.id}`}
+                  label={`Task priority for ${dialogTitle}`}
+                  value={priority}
+                  options={(['low', 'medium', 'high'] as TaskPriority[]).map((option) => ({
+                    value: option,
+                    ...TASK_PRIORITY_CHIP_ITEMS[option]
+                  }))}
+                  surface="pill"
+                  wrapLabel
+                  onValueChange={(value) => setPriority(value as TaskPriority)}
+                />
+                <ChipGroup
+                  aria-label={`Task start date and time for ${dialogTitle}`}
+                  data-testid="task-dialog-start-datetime-group"
+                >
+                  <CalendarDateEditPopover
+                    id={`task-start-date-${task.id}`}
+                    label="Task start date"
+                    value={date || undefined}
+                    onValueChange={(value) => setDate(value ?? '')}
+                    placeholder="Start date"
+                    variant="ghost"
+                    aria-label="Task start date"
+                    className="h-7 w-fit rounded-none px-2"
+                  />
+                  <CalendarTimeEditPopover
+                    id={`task-start-time-${task.id}`}
+                    label="Task start time"
+                    value={time || undefined}
+                    onValueChange={(value) => setTime(value ?? '')}
+                    placeholder="Start time"
+                    variant="ghost"
+                    aria-label="Task start time"
+                    className="h-7 w-fit rounded-none px-2"
+                  />
+                </ChipGroup>
+                <span aria-hidden="true" className="shrink-0 text-muted-foreground">
+                  →
+                </span>
+                <ChipGroup
+                  aria-label={`Task end date and time for ${dialogTitle}`}
+                  data-testid="task-dialog-end-datetime-group"
+                >
+                  <CalendarDateEditPopover
+                    id={`task-end-date-${task.id}`}
+                    label={date ? 'Task end date' : 'Task due date'}
+                    value={endDate || undefined}
+                    onValueChange={(value) => setEndDate(value ?? '')}
+                    placeholder="End date"
+                    variant="ghost"
+                    aria-label={date ? 'Task end date' : 'Task due date'}
+                    className="h-7 w-fit rounded-none px-2"
+                  />
+                  <CalendarTimeEditPopover
+                    id={`task-end-time-${task.id}`}
+                    label={date ? 'Task end time' : 'Task due time'}
+                    value={endTime || undefined}
+                    onValueChange={(value) => setEndTime(value ?? '')}
+                    placeholder="End time"
+                    variant="ghost"
+                    aria-label={date ? 'Task end time' : 'Task due time'}
+                    className="h-7 w-fit rounded-none px-2"
+                  />
+                </ChipGroup>
+                <ChipGroup
+                  aria-label={`Task project and milestone for ${dialogTitle}`}
+                  data-testid="task-dialog-project-milestone-group"
+                >
+                  <StatusChipSelect
+                    className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
+                    data-testid="task-dialog-project-chip"
+                    id={`task-project-${task.id}`}
+                    label={`Task project for ${dialogTitle}`}
+                    value={projectId || NO_PROJECT_VALUE}
+                    options={getProjectChipOptions(projects)}
+                    surface="none"
+                    wrapLabel
+                    onValueChange={(value) => {
+                      const nextProjectId = value === NO_PROJECT_VALUE ? '' : value
+                      setProjectId(nextProjectId)
+                      if (
+                        !projects
+                          .find((project) => project.id === nextProjectId)
+                          ?.milestones?.some((milestone) => milestone.id === milestoneId)
+                      ) {
+                        setMilestoneId('')
+                      }
+                    }}
+                  />
+                  <StatusChipSelect
+                    className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
+                    data-testid="task-dialog-milestone-chip"
+                    id={`task-milestone-${task.id}`}
+                    label={`Task milestone for ${dialogTitle}`}
+                    value={milestoneId || NO_MILESTONE_VALUE}
+                    options={milestoneOptions}
+                    surface="none"
+                    wrapLabel
+                    onValueChange={(value) =>
+                      setMilestoneId(value === NO_MILESTONE_VALUE ? '' : value)
+                    }
+                    disabled={!selectedProject}
+                  />
+                </ChipGroup>
                 <TagEditor
                   value={tags}
+                  availableTags={availableTags}
                   onChange={setTags}
                   label="Task tags"
                   testId="task-tags-editor"
+                  surface="pill"
+                  className="min-w-0 max-w-full"
                 />
-              </div>
-              <div>
-                <label
-                  htmlFor={`task-project-${task.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  Project
-                </label>
-                <Select
-                  value={projectId || '__none__'}
-                  onValueChange={(value) => {
-                    const nextProjectId = value === '__none__' ? '' : value
-                    setProjectId(nextProjectId)
-                    if (
-                      !projects
-                        .find((project) => project.id === nextProjectId)
-                        ?.milestones?.some((milestone) => milestone.id === milestoneId)
-                    ) {
-                      setMilestoneId('')
-                    }
-                  }}
-                >
-                  <SelectTrigger id={`task-project-${task.id}`} className="mt-1 w-full">
-                    <SelectValue placeholder="No project">
-                      {selectedProject ? (
-                        <span className="flex min-w-0 items-center gap-2">
-                          <NoteShapeIcon icon={selectedProject.icon} size="1.25em" />
-                          <span className="truncate">{selectedProject.name}</span>
-                        </span>
-                      ) : null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No project</SelectItem>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        <span className="flex items-center gap-2">
-                          <NoteShapeIcon icon={project.icon} size="1.25em" />
-                          <span className="truncate">{project.name}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label
-                  htmlFor={`task-milestone-${task.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  Milestone
-                </label>
-                <Select
-                  value={milestoneId || '__none__'}
-                  onValueChange={(value) => setMilestoneId(value === '__none__' ? '' : value)}
-                  disabled={!selectedProject}
-                >
-                  <SelectTrigger id={`task-milestone-${task.id}`} className="mt-1 w-full">
-                    <SelectValue placeholder="No milestone">
-                      {selectedMilestone ? (
-                        <span className="truncate">{selectedMilestone.title}</span>
-                      ) : null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No milestone</SelectItem>
-                    {selectedProject?.milestones?.map((milestone) => (
-                      <SelectItem key={milestone.id} value={milestone.id}>
-                        <span className="truncate">{milestone.title}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label
-                  htmlFor={`task-status-${task.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  Status
-                </label>
-                <Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}>
-                  <SelectTrigger id={`task-status-${task.id}`} className="mt-1 w-full">
-                    <SelectValue asChild>
-                      <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
-                        <TaskStatusIcon status={status} size={18} className="shrink-0" />
-                        <span className="truncate">{TASK_STATUS_META[status].label}</span>
-                      </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TASK_STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <TaskStatusIcon status={option.value} size={18} className="shrink-0" />
-                          <span>{option.label}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor={`task-type-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    Type
-                  </label>
-                  <Select
-                    value={taskType}
-                    onValueChange={(value) => setTaskType(value as CalendarTaskType)}
-                  >
-                    <SelectTrigger id={`task-type-${task.id}`} className="mt-1 w-full">
-                      <SelectValue asChild>
-                        <CalendarTaskTypeBadge taskType={taskType} />
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <CalendarTaskTypeBadge taskType={option.value} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label
-                    htmlFor={`task-priority-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    Priority
-                  </label>
-                  <Select
-                    value={priority}
-                    onValueChange={(value) => setPriority(value as TaskPriority)}
-                  >
-                    <SelectTrigger id={`task-priority-${task.id}`} className="mt-1 w-full">
-                      <SelectValue asChild>
-                        <TaskPriorityBadge priority={priority} />
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(['low', 'medium', 'high'] as TaskPriority[]).map((option) => (
-                        <SelectItem key={option} value={option}>
-                          <TaskPriorityBadge priority={option} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor={`task-start-date-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    Start date
-                  </label>
-                  <Input
-                    id={`task-start-date-${task.id}`}
-                    type="date"
-                    value={date}
-                    onChange={(event) => setDate(event.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor={`task-start-time-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    Start time
-                  </label>
-                  <Input
-                    id={`task-start-time-${task.id}`}
-                    type="time"
-                    value={time}
-                    onChange={(event) => setTime(event.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor={`task-end-date-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    {date ? 'End date' : 'Due date'}
-                  </label>
-                  <Input
-                    id={`task-end-date-${task.id}`}
-                    type="date"
-                    value={endDate}
-                    onChange={(event) => setEndDate(event.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor={`task-end-time-${task.id}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    {date ? 'End time' : 'Due time'}
-                  </label>
-                  <Input
-                    id={`task-end-time-${task.id}`}
-                    type="time"
-                    value={endTime}
-                    onChange={(event) => setEndTime(event.target.value)}
-                    className="mt-1"
-                  />
-                </div>
               </div>
             </div>
           </DialogBody>
           <DialogShellFooter
-            className="border-t border-border pt-3"
-            closeAction={<DialogCloseAction label="Close task editor" />}
+            withDivider
+            leadingAction={
+              <DialogActionButton
+                onClick={handleDelete}
+                title="Delete task"
+                aria-label="Delete task"
+                icon={<Trash2 />}
+              />
+            }
           >
             <DialogActionButton
-              onClick={handleDelete}
-              title="Delete task"
-              aria-label="Delete task"
-              icon={<Trash2 />}
-            />
-            <DialogActionButton
               onClick={handleClose}
-              title="Done"
-              aria-label="Done"
+              title="Save changes"
+              aria-label="Save changes"
               icon={<Check />}
-              tone="primary"
+              label="Save changes"
+              tone="accent"
             />
           </DialogShellFooter>
         </DialogShell>

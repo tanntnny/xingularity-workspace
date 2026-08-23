@@ -10,14 +10,17 @@ module.exports = {
     extend: {
       colors: {
         background: 'var(--background)',
+        panel: 'var(--panel)',
         foreground: 'var(--foreground)',
         card: {
           DEFAULT: 'var(--card)',
-          foreground: 'var(--card-foreground)'
+          foreground: 'var(--card-foreground)',
+          hover: 'var(--card-hover)'
         },
         popover: {
           DEFAULT: 'var(--popover)',
-          foreground: 'var(--popover-foreground)'
+          foreground: 'var(--popover-foreground)',
+          hover: 'var(--popover-hover)'
         },
         primary: {
           DEFAULT: 'var(--primary)',
@@ -54,9 +57,16 @@ module.exports = {
         }
       },
       borderRadius: {
+        dialog: 'var(--radius-dialog)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
+      },
+      borderWidth: {
+        DEFAULT: 'var(--border-width)'
+      },
+      divideWidth: {
+        DEFAULT: 'var(--border-width)'
       },
       fontFamily: {
         sans: ['Inter Variable', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']

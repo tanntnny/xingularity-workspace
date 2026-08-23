@@ -13,6 +13,32 @@ export interface VaultSettings {
   createdAt: string
 }
 
+export interface WorkspaceFeatureFlags {
+  resources: boolean
+  filesystemResources: boolean
+  filesystemContentIndexing: boolean
+  googleDriveResources: boolean
+  googleDriveContentIndexing: boolean
+  captureReview: boolean
+  externalWrites: boolean
+  agentContextBundles: boolean
+}
+
+export interface VaultMigrationReport {
+  generatedAt: string
+  schemaVersion: number
+  migrations: {
+    version: number
+    copiedFromLegacyNotesAt?: string
+    copiedFromLegacySystemAt?: string
+  }
+  canonicalPaths: string[]
+  legacyPathsFound: string[]
+  conflicts: string[]
+  counts: Record<string, number>
+  rollbackGuidance: string
+}
+
 export interface NoteMetadata {
   title: string
   tags: string[]
@@ -72,6 +98,19 @@ export interface FolderMarkdownExportResult {
   warnings: string[]
 }
 
+export interface ProjectContextMarkdownExportInput {
+  projectId: string
+}
+
+export interface ProjectContextMarkdownExportResult {
+  path: Maybe<string>
+  noteCount: number
+  taskCount: number
+  updateCount: number
+  externalDocumentCount: number
+  warnings: string[]
+}
+
 export type ProjectIconShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'hex'
 export type ProjectIconSet = 'tabler'
 export type LegacyProjectIconSet = 'shape' | 'lucide'
@@ -114,6 +153,12 @@ export interface FleetingNote {
   content: string
   createdAt: string
   updatedAt: string
+  source?: 'manual' | 'shortcut' | 'clipboard' | 'import'
+  priority?: TaskPriority
+  tags?: string[]
+  dueDate?: string
+  projectId?: string
+  triageState?: 'inbox' | 'in-progress' | 'converted' | 'archived'
 }
 
 export type FleetingConversionTarget = 'note' | 'task'
@@ -156,6 +201,223 @@ export interface NoteTreeExcalidrawFile extends NoteTreeFileBase {
 
 export type NoteTreeNode = NoteTreeFolder | NoteTreeFile | NoteTreeExcalidrawFile
 
+export type ResourceProvider = 'xingularity' | 'google-drive' | 'filesystem' | 'web'
+
+export type ResourceType = 'notebook' | 'external'
+
+export type ExternalProduct =
+  | 'google-docs'
+  | 'google-sheets'
+  | 'google-slides'
+  | 'google-drive'
+  | 'canva'
+  | 'generic'
+
+export type ResourceKind =
+  | 'note'
+  | 'notebook'
+  | 'project'
+  | 'task'
+  | 'local-file'
+  | 'local-folder'
+  | 'google-doc'
+  | 'google-sheet'
+  | 'google-slide'
+  | 'drive-file'
+  | 'url'
+
+export type ResourceAccess = 'read-only' | 'read-write' | 'unknown'
+
+export type ResourceState =
+  | 'available'
+  | 'stale'
+  | 'moved'
+  | 'offline'
+  | 'permission-denied'
+  | 'reauthorization-required'
+  | 'missing'
+  | 'conflict'
+  | 'unindexed'
+
+export type ResourceFreshness = 'live' | 'periodic' | 'manual' | 'unknown'
+
+export type ResourceSourceOfTruth = 'xingularity' | 'external'
+
+export interface ResourceRef {
+  id: string
+  type: ResourceType
+  provider: ResourceProvider
+  kind: ResourceKind
+  title: string
+  canonicalUri: string
+  externalProduct?: ExternalProduct
+  externalId?: string
+  mimeType?: string
+  sourceOfTruth: ResourceSourceOfTruth
+  access: ResourceAccess
+  state: ResourceState
+  projectIds?: string[]
+  createdAt: string
+  updatedAt: string
+  lastSeenAt?: string
+  lastIndexedAt?: string
+  sourceModifiedAt?: string
+  freshness?: ResourceFreshness
+  metadata?: Record<string, string | number | boolean | null>
+}
+
+export interface ResourceLocator {
+  resourceId: string
+  deviceId: string
+  provider: 'filesystem' | 'google-drive'
+  path?: string
+  bookmarkOrHandle?: string
+  fileId?: string
+  observedName?: string
+  observedParent?: string
+  updatedAt: string
+}
+
+export type ResourceRelationType =
+  | 'project_contains_resource'
+  | 'task_derived_from_resource'
+  | 'note_references_resource'
+  | 'decision_supported_by_resource'
+  | 'milestone_delivered_by_resource'
+  | 'resource_related_to_resource'
+  | 'resource_snapshot_of_external'
+  | 'resource_supersedes_resource'
+  | 'capture_came_from_resource'
+
+export type ResourceRelationConfidence = 'suggested' | 'confirmed'
+
+export interface ResourceRelation {
+  id: string
+  type: ResourceRelationType
+  fromId: string
+  fromKind: SearchEntityType | 'resource'
+  toId: string
+  toKind: SearchEntityType | 'resource'
+  createdAt: string
+  createdBy: 'user' | 'system' | 'agent'
+  confidence: ResourceRelationConfidence
+  sourceLocation?: string
+  note?: string
+}
+
+export interface ResourcePreview {
+  resourceId: string
+  kind: ResourceKind
+  mimeType?: string
+  sizeBytes?: number
+  modifiedAt?: string
+  text?: string
+  truncated: boolean
+  error?: string
+}
+
+export interface ResourceInput {
+  type?: ResourceType
+  provider?: ResourceProvider
+  kind?: ResourceKind
+  title?: string
+  canonicalUri: string
+  externalProduct?: ExternalProduct
+  externalId?: string
+  mimeType?: string
+  sourceOfTruth?: ResourceSourceOfTruth
+  access?: ResourceAccess
+  metadata?: Record<string, string | number | boolean | null>
+  projectId?: string
+}
+
+export interface ResourceHealth {
+  resourceId: string
+  state: ResourceState
+  checkedAt: string
+  message?: string
+  locator?: ResourceLocator
+}
+
+export interface ResourceContextBundle {
+  projectId?: string
+  generatedAt: string
+  resources: ResourceRef[]
+  relations: ResourceRelation[]
+  citations: Array<{
+    resourceId: string
+    uri: string
+    title: string
+    excerpt?: string
+    observedAt?: string
+  }>
+  allowedActions: Array<'open' | 'reveal' | 'refresh' | 'create-task' | 'create-note'>
+}
+
+export type ResourceWriteOperation = 'create' | 'replace' | 'append'
+
+export interface ResourceWriteInput {
+  resourceId?: string
+  targetPath: string
+  operation: ResourceWriteOperation
+  content: string
+  authorizedRoot: string
+  expectedHash?: string
+  label?: string
+}
+
+export interface ResourceWritePreview {
+  targetPath: string
+  operation: ResourceWriteOperation
+  contentLength: number
+  existing: boolean
+  existingHash?: string
+  nextHash: string
+  requiresConfirmation: boolean
+  warning?: string
+}
+
+export interface ResourceWriteAuditRecord {
+  id: string
+  createdAt: string
+  targetPath: string
+  operation: ResourceWriteOperation
+  expectedHash?: string
+  previousHash?: string
+  nextHash: string
+  result: 'applied' | 'rejected'
+  reason?: string
+}
+
+export interface GoogleDriveAuthorizationStart {
+  connectionId: string
+  request: {
+    url: string
+    state: string
+    scopes: string[]
+  }
+}
+
+export interface GoogleDriveFileCandidate {
+  id: string
+  name: string
+  mimeType?: string
+  modifiedTime?: string
+  webViewLink?: string
+}
+
+export type SearchEntityType =
+  | 'note'
+  | 'task'
+  | 'project'
+  | 'resource'
+  | 'calendar-event'
+  | 'subscription'
+  | 'schedule'
+  | 'agent-run'
+  | 'drawing'
+  | 'capture'
+
 export interface SearchResult {
   id: string
   relPath: string
@@ -163,6 +425,20 @@ export interface SearchResult {
   tags: string[]
   updated: string
   snippet: string
+  entityType: SearchEntityType
+  target: {
+    kind: SearchEntityType
+    id: string
+    relPath?: string
+  }
+  status?: string
+  date?: string
+  projectId?: string
+  resourceId?: string
+  provider?: string
+  freshness?: string
+  access?: string
+  state?: string
 }
 
 export const NOTE_VIM_MAPPING_MODE_VALUES = ['insert', 'normal', 'visual', 'visualLine'] as const
@@ -197,13 +473,20 @@ export interface AppErrorEvent {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high'
-export type TaskStatus = 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'completed'
+export type TaskStatus =
+  | 'pending'
+  | 'backlog'
+  | 'in-progress'
+  | 'blocked'
+  | 'canceled'
+  | 'completed'
 
 export const TASK_STATUS_VALUES: TaskStatus[] = [
   'pending',
   'backlog',
   'in-progress',
   'blocked',
+  'canceled',
   'completed'
 ]
 
@@ -212,6 +495,7 @@ export const TASK_STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = 
   { value: 'backlog', label: 'Backlog' },
   { value: 'in-progress', label: 'In progress' },
   { value: 'blocked', label: 'Blocked' },
+  { value: 'canceled', label: 'Canceled' },
   { value: 'completed', label: 'Completed' }
 ]
 export const CALENDAR_TASK_TYPE_VALUES = [
@@ -251,6 +535,13 @@ export interface TaskReminder {
   enabled: boolean
 }
 
+export interface ReminderClickTarget {
+  page: 'calendar'
+  taskId: string
+  selectedDate: string
+  view: 'month'
+}
+
 export interface CalendarTask {
   id: string
   title: string
@@ -273,6 +564,10 @@ export interface CalendarTask {
   // Automation deduplication fields (set by schedule runner)
   automationSource?: string
   automationSourceKey?: string
+  updatedAt?: string
+  dependencyIds?: string[]
+  parentTaskId?: string
+  estimateMinutes?: number
 }
 
 export interface CreateTaskInput {
@@ -287,17 +582,147 @@ export interface CreateTaskInput {
   priority?: TaskPriority
   taskType?: CalendarTaskType
   reminders?: TaskReminder[]
+  description?: string
+  dependencyIds?: string[]
+  parentTaskId?: string
+  estimateMinutes?: number
 }
 
 // CalendarTask remains as a compatibility alias while the renderer and persisted data
 // transition to the domain-neutral Task name.
 export type Task = CalendarTask
 
+export type CalendarSource = 'local' | 'google'
+export type CalendarEventAccess = 'read-write' | 'read-only'
+
+export interface CalendarRecurrence {
+  rrule: string
+  timezone?: string
+  until?: string
+  exceptions?: string[]
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  description?: string
+  allDay: boolean
+  start: string
+  end: string
+  timezone?: string
+  recurrence?: CalendarRecurrence
+  location?: string
+  attendees: Array<{ email: string; name?: string; responseStatus?: string }>
+  organizer?: { email: string; name?: string }
+  source: CalendarSource
+  calendarId?: string
+  externalId?: string
+  etag?: string
+  access: CalendarEventAccess
+  status?: 'confirmed' | 'tentative' | 'cancelled'
+  updatedAt: string
+}
+
+export interface CalendarLink {
+  id: string
+  taskId: string
+  eventId: string
+  ownership: 'task' | 'event' | 'manual'
+  syncState: 'linked' | 'pending' | 'conflict' | 'unlinked'
+  updatedAt: string
+}
+
+export interface ExternalCalendar {
+  id: string
+  connectionId: string
+  provider: 'google'
+  name: string
+  color?: string
+  selected: boolean
+  access: CalendarEventAccess
+  timezone?: string
+}
+
+export interface CalendarConnection {
+  id: string
+  provider: 'google'
+  accountLabel: string
+  email?: string
+  status: 'connected' | 'reauthorization-required' | 'disconnected' | 'error'
+  selectedCalendarIds: string[]
+  syncCursor?: string
+  lastSyncAt?: string
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CalendarState {
+  events: CalendarEvent[]
+  links: CalendarLink[]
+  connections: CalendarConnection[]
+  calendars: ExternalCalendar[]
+}
+
+export interface CalendarEventInput {
+  title: string
+  description?: string
+  allDay: boolean
+  start: string
+  end: string
+  timezone?: string
+  recurrence?: CalendarRecurrence
+  location?: string
+  attendees?: Array<{ email: string; name?: string; responseStatus?: string }>
+  projectId?: string
+}
+
+export interface CalendarSyncResult {
+  connectionId: string
+  imported: number
+  updated: number
+  deleted: number
+  skipped: number
+  nextCursor?: string
+  warnings: string[]
+}
+
 export type ProjectState = 'active' | 'archived'
 
 export interface ProjectMilestone {
   id: string
   title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectTaskDependency {
+  taskId: string
+  dependsOnTaskId: string
+  createdAt: string
+}
+
+export interface ProjectSavedView {
+  id: string
+  name: string
+  filters: {
+    statuses?: TaskStatus[]
+    priorities?: TaskPriority[]
+    tags?: string[]
+    milestoneId?: string
+    blockedOnly?: boolean
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProjectUpdateStatus = 'on-track' | 'at-risk' | 'off-track'
+
+export interface ProjectUpdate {
+  id: string
+  projectId: string
+  markdown: string
+  status: ProjectUpdateStatus
   createdAt: string
   updatedAt: string
 }
@@ -313,12 +738,17 @@ export interface Project {
   startDate?: string
   endDate?: string
   tags?: string[]
-  resources?: string[]
+  /** Typed resources attached to this project. */
+  resourceRefs?: ResourceRef[]
   updatedAt: string
   // Tasks are resolved from Task.projectId at runtime; this optional field is only
   // used by project-focused renderer projections.
   tasks?: CalendarTask[]
   milestones?: ProjectMilestone[]
+  savedViews?: ProjectSavedView[]
+  taskDependencies?: ProjectTaskDependency[]
+  timeBudgetMinutes?: number
+  updates?: ProjectUpdate[]
   icon: ProjectIconStyle
 }
 
@@ -329,7 +759,8 @@ export interface CreateProjectInput {
   startDate?: string
   endDate?: string
   tags?: string[]
-  resources?: string[]
+  resourceRefs?: ResourceRef[]
+  timeBudgetMinutes?: number
 }
 
 export interface UpdateProjectInput {
@@ -340,14 +771,16 @@ export interface UpdateProjectInput {
   startDate?: string | null
   endDate?: string | null
   tags?: string[]
-  resources?: string[]
+  resourceRefs?: ResourceRef[]
+  timeBudgetMinutes?: number | null
 }
 
 export interface ProjectPropertiesPatch {
   startDate?: string | null
   endDate?: string | null
   tags?: string[]
-  resources?: string[]
+  resourceRefs?: ResourceRef[]
+  timeBudgetMinutes?: number | null
 }
 
 export interface DeleteProjectInput {
@@ -373,6 +806,11 @@ export interface UpdateProjectMilestoneInput {
   title: string
 }
 
+export interface ReorderProjectMilestonesInput {
+  projectId: string
+  milestoneIds: string[]
+}
+
 export interface DeleteProjectMilestoneInput {
   projectId: string
   milestoneId: string
@@ -381,6 +819,24 @@ export interface DeleteProjectMilestoneInput {
 export interface DeleteProjectMilestoneResult {
   deletedMilestoneId: string
   movedTaskIds: string[]
+}
+
+export interface CreateProjectUpdateInput {
+  projectId: string
+  markdown: string
+  status: ProjectUpdateStatus
+}
+
+export interface UpdateProjectUpdateInput {
+  projectId: string
+  updateId: string
+  markdown: string
+  status: ProjectUpdateStatus
+}
+
+export interface DeleteProjectUpdateInput {
+  projectId: string
+  updateId: string
 }
 
 export type GridBoardItemKind = 'note' | 'project' | 'text'
@@ -443,6 +899,17 @@ export interface ExcalidrawSession {
 export interface StoredExcalidrawFileDocument {
   version: 1
   scene: ExcalidrawSessionScene
+  metadata?: ExcalidrawMetadata
+}
+
+export interface ExcalidrawMetadata {
+  title?: string
+  description?: string
+  tags?: string[]
+  projectId?: string
+  backlinks?: string[]
+  assetIds?: string[]
+  updatedAt?: string
 }
 
 export interface ExcalidrawFileReadResult {
@@ -486,7 +953,8 @@ export interface AppSettings {
     name: string
   }
   ai: {
-    mistralApiKey: string
+    /** @deprecated Legacy vault field. New versions never persist credential material here. */
+    mistralApiKey?: string
   }
   fontFamily: string
   pythonCondaEnvironmentPath: Maybe<string>
@@ -500,6 +968,7 @@ export interface AppSettings {
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
   gridBoard: GridBoardState
+  featureFlags?: Partial<WorkspaceFeatureFlags>
 }
 
 export interface AppSettingsUpdate {
@@ -508,7 +977,8 @@ export interface AppSettingsUpdate {
     name?: string
   }
   ai?: {
-    mistralApiKey: string
+    /** @deprecated Accepted only to migrate old vaults; it is never written back. */
+    mistralApiKey?: string
   }
   fontFamily?: string
   pythonCondaEnvironmentPath?: Maybe<string>
@@ -525,6 +995,7 @@ export interface AppSettingsUpdate {
   lastOpenedProjectId?: Maybe<string>
   favoriteNotePaths?: string[]
   favoriteProjectIds?: string[]
+  featureFlags?: Partial<WorkspaceFeatureFlags>
 }
 
 export interface AppSettingsUpdateOptions {
@@ -536,10 +1007,102 @@ export type RendererSettingsUpdate = Omit<
   'projects' | 'projectIcons' | 'lastOpenedProjectId' | 'favoriteProjectIds'
 >
 
+export interface CredentialStatus {
+  provider: string
+  configured: boolean
+  scope: 'device' | 'vault'
+  updatedAt?: string
+}
+
+export interface VaultDiagnosticIssue {
+  severity: 'error' | 'warning' | 'info'
+  code: string
+  path?: string
+  message: string
+  recoverable: boolean
+}
+
+export interface VaultDiagnosticsReport {
+  generatedAt: string
+  schemaVersion: number
+  vaultRoot: string
+  recordCounts: Record<string, number>
+  checksums: Record<string, string>
+  legacyPaths: string[]
+  orphanedPaths: string[]
+  issues: VaultDiagnosticIssue[]
+}
+
+export interface VaultBackupResult {
+  path: string
+  createdAt: string
+  fileCount: number
+  checksum: string
+}
+
+export interface VaultTransferManifest {
+  version: 1
+  createdAt: string
+  schemaVersion: number
+  files: Array<{ path: string; size: number; checksum: string }>
+  excludes: string[]
+}
+
+export interface VaultSyncStatus {
+  mode: 'local-only' | 'ready' | 'syncing' | 'offline' | 'conflict'
+  deviceId: string
+  lastSyncAt?: string
+  conflicts: Array<{
+    path: string
+    localChecksum: string
+    remoteChecksum: string
+  }>
+}
+
+export interface PluginCapabilityManifest {
+  id: string
+  version: string
+  name: string
+  provider: 'calendar' | 'task-import' | 'note-export' | 'automation'
+  capabilities: string[]
+  permissions: Array<'network' | 'read-vault' | 'write-vault' | 'secrets'>
+  entrypoint?: string
+}
+
+export interface AssistiveSuggestion {
+  id: string
+  kind: 'capture-task' | 'capture-note' | 'duplicate-subscription' | 'calendar-conflict' | 'summary'
+  title: string
+  explanation: string
+  sourceIds: string[]
+  confidence: number
+  status: 'pending' | 'accepted' | 'rejected'
+  createdAt: string
+}
+
 export interface HistoryAffectedAreas {
   notes?: boolean
   settings?: boolean
   weeklyPlan?: boolean
+}
+
+export type MutationKind =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'archive'
+  | 'restore'
+  | 'import'
+  | 'migrate'
+
+export interface MutationEnvelope {
+  id: string
+  kind: MutationKind
+  domain: 'notes' | 'tasks' | 'projects' | 'calendar' | 'settings' | 'weekly-plan' | 'vault'
+  entityId?: string
+  label: string
+  createdAt: string
+  reversible: boolean
 }
 
 export interface HistoryOperationResult {
@@ -594,6 +1157,18 @@ export interface WeeklyPlanState {
   weeks: WeeklyPlanWeek[]
   priorities: WeeklyPlanPriority[]
   reviews: WeeklyPlanReview[]
+}
+
+export interface RendererWeeklyPlanApi {
+  getState: () => Promise<WeeklyPlanState>
+  createWeek: (input: CreateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  updateWeek: (input: UpdateWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  deleteWeek: (input: DeleteWeeklyPlanWeekInput) => Promise<WeeklyPlanState>
+  addPriority: (input: CreateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
+  updatePriority: (input: UpdateWeeklyPlanPriorityInput) => Promise<WeeklyPlanState>
+  deletePriority: (priorityId: string) => Promise<WeeklyPlanState>
+  reorderPriorities: (input: ReorderWeeklyPlanPrioritiesInput) => Promise<WeeklyPlanState>
+  upsertReview: (input: UpsertWeeklyPlanReviewInput) => Promise<WeeklyPlanState>
 }
 
 export interface CreateWeeklyPlanWeekInput {
@@ -664,6 +1239,22 @@ export interface SubscriptionRecord {
   notes?: string
   createdAt: string
   updatedAt: string
+  renewalReminderDays?: number[]
+  calendarEventId?: string
+  cancellationUrl?: string
+  cancellationContact?: string
+  currencyRate?: number
+  currencyRateSource?: string
+  currencyRateAsOf?: string
+  usageReviewState?: 'not-reviewed' | 'keep' | 'cancel' | 'snooze'
+  paymentHistory?: Array<{
+    id: string
+    paidAt: string
+    amount: number
+    currency: string
+    note?: string
+  }>
+  attachments?: string[]
 }
 
 export interface CreateSubscriptionInput {
@@ -680,6 +1271,9 @@ export interface CreateSubscriptionInput {
   lastUsedAt?: string
   tags?: string[]
   notes?: string
+  renewalReminderDays?: number[]
+  cancellationUrl?: string
+  cancellationContact?: string
 }
 
 export interface UpdateSubscriptionInput {
@@ -697,6 +1291,19 @@ export interface UpdateSubscriptionInput {
   lastUsedAt?: string | null
   tags?: string[]
   notes?: string | null
+  renewalReminderDays?: number[]
+  calendarEventId?: string | null
+  cancellationUrl?: string | null
+  cancellationContact?: string | null
+  usageReviewState?: SubscriptionRecord['usageReviewState']
+}
+
+export interface AddSubscriptionPaymentInput {
+  subscriptionId: string
+  paidAt: string
+  amount: number
+  currency?: string
+  note?: string
 }
 
 export interface SubscriptionAnalyticsFilters {
@@ -733,6 +1340,7 @@ export interface RendererSubscriptionsApi {
   update: (input: UpdateSubscriptionInput) => Promise<SubscriptionRecord>
   delete: (id: string) => Promise<void>
   archive: (id: string) => Promise<SubscriptionRecord>
+  addPayment: (input: AddSubscriptionPaymentInput) => Promise<SubscriptionRecord>
   getAnalytics: (filters?: SubscriptionAnalyticsFilters) => Promise<SubscriptionAnalytics>
 }
 
@@ -973,7 +1581,7 @@ export type AgentChatEvent =
       toolStep: AgentChatToolStep
     }
 
-export type AgentRunStatus = 'running' | 'success' | 'error'
+export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 
 export interface AgentRunContext {
   notePath?: string
@@ -1086,6 +1694,7 @@ export interface RendererVaultApi {
     create: () => Promise<Maybe<VaultOpenResult>>
     restoreLast: () => Promise<Maybe<VaultOpenResult>>
     runMigration: () => Promise<VaultOpenResult>
+    getMigrationReport: () => Promise<VaultMigrationReport>
     listSaved: () => Promise<SavedVaultState>
     switchSaved: (rootPath: string) => Promise<VaultOpenResult>
     toggleFavoriteSaved: (rootPath: string) => Promise<SavedVaultState>
@@ -1093,6 +1702,8 @@ export interface RendererVaultApi {
   }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>
+    choosePath: (title: string) => Promise<Maybe<string>>
+    openExternal: (url: string) => Promise<void>
     openPath: (targetPath: string) => Promise<void>
     openWarpAtNotePath: (relPath: string) => Promise<void>
   }
@@ -1127,11 +1738,25 @@ export interface RendererVaultApi {
     exportNotePdf: (input: NotePdfExportInput) => Promise<NotePdfExportResult>
     exportFolderPdf: (input: FolderPdfExportInput) => Promise<FolderPdfExportResult>
     exportFolderMarkdown: (input: FolderMarkdownExportInput) => Promise<FolderMarkdownExportResult>
-    exportProject: (projectName: string, content: string) => Promise<Maybe<string>>
+    exportProjectContext: (
+      input: ProjectContextMarkdownExportInput
+    ) => Promise<ProjectContextMarkdownExportResult>
+  }
+  reminders: {
+    onClick: (listener: (target: ReminderClickTarget) => void) => () => void
   }
   fleeting: {
     list: () => Promise<FleetingNote[]>
     create: (content: string) => Promise<FleetingNote>
+    update: (input: {
+      relPath: string
+      content?: string
+      priority?: TaskPriority
+      tags?: string[]
+      dueDate?: string
+      projectId?: string
+      triageState?: FleetingNote['triageState']
+    }) => Promise<FleetingNote>
     remove: (relPath: string) => Promise<void>
     convert: (input: {
       relPath: string
@@ -1140,6 +1765,54 @@ export interface RendererVaultApi {
   }
   search: {
     query: (query: string) => Promise<SearchResult[]>
+  }
+  resources: {
+    list: () => Promise<{
+      resources: ResourceRef[]
+      relations: ResourceRelation[]
+      locators: ResourceLocator[]
+    }>
+    add: (input: ResourceInput) => Promise<ResourceRef>
+    update: (input: {
+      resourceId: string
+      canonicalUri?: string
+      title?: string
+    }) => Promise<ResourceRef>
+    setProjectNotebook: (input: { projectId: string; notebookPath: string }) => Promise<ResourceRef>
+    detachFromProject: (input: { projectId: string; resourceId: string }) => Promise<void>
+    refresh: (resourceId: string) => Promise<ResourceHealth>
+    locate: (resourceId: string, nextPath: string) => Promise<ResourceRef>
+    preview: (resourceId: string, allowContent?: boolean) => Promise<ResourcePreview>
+    relate: (input: {
+      type: ResourceRelationType
+      fromId: string
+      fromKind: ResourceRelation['fromKind']
+      toId: string
+      toKind: ResourceRelation['toKind']
+      confidence?: ResourceRelation['confidence']
+    }) => Promise<ResourceRelation>
+    projectContext: (projectId: string) => Promise<ResourceContextBundle>
+    open: (resourceId: string) => Promise<void>
+    reveal: (resourceId: string) => Promise<void>
+    previewWrite: (input: ResourceWriteInput) => Promise<ResourceWritePreview>
+    applyWrite: (input: ResourceWriteInput, confirmation: boolean) => Promise<ResourceWritePreview>
+    writeAudit: () => Promise<ResourceWriteAuditRecord[]>
+    drive: {
+      startAuthorization: () => Promise<GoogleDriveAuthorizationStart>
+      completeAuthorization: (input: {
+        connectionId: string
+        code: string
+        state: string
+      }) => Promise<void>
+      listFiles: () => Promise<GoogleDriveFileCandidate[]>
+      attach: (input: { fileIds: string[]; projectId?: string }) => Promise<ResourceRef[]>
+      refresh: (pageToken: string) => Promise<{
+        resources: ResourceRef[]
+        nextPageToken?: string
+        newStartPageToken?: string
+      }>
+      disconnect: () => Promise<void>
+    }
   }
   attachments: {
     import: (sourcePath: string) => Promise<string>
@@ -1150,6 +1823,7 @@ export interface RendererVaultApi {
   }
   agentChat: {
     sendMessage: (input: AgentChatMessageInput) => Promise<AgentChatMessageResult>
+    cancel: (requestId: string) => Promise<boolean>
     listSessions: () => Promise<AgentChatSession[]>
     saveSession: (session: AgentChatSession) => Promise<AgentChatSession>
     deleteSession: (sessionId: string) => Promise<void>
@@ -1174,6 +1848,12 @@ export interface RendererVaultApi {
       options?: AppSettingsUpdateOptions
     ) => Promise<AppSettings>
   }
+  credentials: {
+    status: (provider: string) => Promise<CredentialStatus>
+    set: (provider: string, value: string) => Promise<CredentialStatus>
+    delete: (provider: string) => Promise<void>
+  }
+  calendar: RendererCalendarApi
   python: {
     listCondaEnvironments: () => Promise<CondaEnvironmentListResult>
     chooseCondaExecutable: () => Promise<CondaExecutablePickerResult>
@@ -1190,7 +1870,11 @@ export interface RendererVaultApi {
     delete: (input: DeleteProjectInput) => Promise<DeleteProjectResult>
     createMilestone: (input: CreateProjectMilestoneInput) => Promise<ProjectMilestone>
     updateMilestone: (input: UpdateProjectMilestoneInput) => Promise<ProjectMilestone>
+    reorderMilestones: (input: ReorderProjectMilestonesInput) => Promise<Project>
     deleteMilestone: (input: DeleteProjectMilestoneInput) => Promise<DeleteProjectMilestoneResult>
+    createUpdate: (input: CreateProjectUpdateInput) => Promise<Project>
+    updateUpdate: (input: UpdateProjectUpdateInput) => Promise<Project>
+    deleteUpdate: (input: DeleteProjectUpdateInput) => Promise<Project>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<CalendarTask>
@@ -1201,6 +1885,56 @@ export interface RendererVaultApi {
     status: () => Promise<HistoryStatus>
   }
   schedules: import('./scheduleTypes').RendererScheduleApi
+  weeklyPlan: RendererWeeklyPlanApi
   subscriptions: RendererSubscriptionsApi
   agentTools: RendererAgentToolsApi
+}
+
+export interface RendererCalendarApi {
+  getState: () => Promise<import('./calendarDomain').CalendarDomainState>
+  startGoogleAuthorization: (accountLabel?: string) => Promise<{
+    connectionId: string
+    request: { url: string; state: string; scopes: string[] }
+    connection: import('./calendarDomain').CalendarConnectionRecord
+  }>
+  completeGoogleAuthorization: (input: {
+    connectionId: string
+    callback: string
+  }) => Promise<import('./calendarDomain').CalendarConnectionRecord>
+  cancelGoogleAuthorization: (
+    connectionId: string
+  ) => Promise<import('./calendarDomain').CalendarConnectionRecord>
+  selectGoogleCalendars: (input: {
+    connectionId: string
+    calendarIds: string[]
+  }) => Promise<import('./calendarDomain').CalendarConnectionRecord>
+  syncGoogleConnection: (
+    connectionId: string
+  ) => Promise<
+    CalendarSyncResult & { connection: import('./calendarDomain').CalendarConnectionRecord }
+  >
+  createLocalEvent: (
+    input: import('./calendarDomain').CalendarEventDraft
+  ) => Promise<import('./calendarDomain').CalendarEventRecord>
+  updateLocalEvent: (input: {
+    eventId: string
+    draft: import('./calendarDomain').CalendarEventDraft
+  }) => Promise<import('./calendarDomain').CalendarEventRecord>
+  linkTaskToEvent: (input: {
+    taskId: string
+    eventId: string
+    id?: string
+    ownership?: 'task' | 'event' | 'manual'
+    fieldOwnership?: import('./calendarDomain').CalendarFieldOwnership
+  }) => Promise<import('./calendarDomain').CalendarLinkRecord>
+  unlinkTaskFromEvent: (linkId: string) => Promise<boolean>
+  deleteLocalCache: (connectionId: string) => Promise<number>
+  disconnectGoogleConnection: (input: {
+    connectionId: string
+    deleteCache?: boolean
+  }) => Promise<import('./calendarDomain').CalendarConnectionRecord>
+  revokeGoogleConnection: (input: {
+    connectionId: string
+    deleteCache?: boolean
+  }) => Promise<import('./calendarDomain').CalendarConnectionRecord>
 }

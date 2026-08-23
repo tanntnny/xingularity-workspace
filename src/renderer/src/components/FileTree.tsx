@@ -107,6 +107,7 @@ export function FileTree({
           tags.map((tag) => (
             <Button
               variant="ghost"
+              shape="pill"
               className="h-8 w-full justify-start px-2"
               key={tag}
               type="button"
@@ -257,7 +258,7 @@ export function FileTree({
                     </ContextMenuItem>
                   )}
                   <ContextMenuSeparator />
-                  <ContextMenuItem destructive onClick={() => onDelete(note.relPath)}>
+                  <ContextMenuItem onClick={() => onDelete(note.relPath)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                     <ContextMenuShortcut>

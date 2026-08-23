@@ -3,44 +3,63 @@ import type { UiTone } from './uiTone'
 
 export type TaskStatusVisual =
   | 'pending-dash'
-  | 'backlog-ring'
+  | 'backlog-dashed-minus'
   | 'progress-half'
-  | 'blocked-cross'
+  | 'blocked-cancel'
+  | 'canceled-dashed-x'
   | 'completed-check'
 
 export const TASK_STATUS_META: Record<
   TaskStatus,
-  { label: string; className: string; tone: UiTone; visual: TaskStatusVisual }
+  {
+    label: string
+    className: string
+    tone: UiTone
+    visual: TaskStatusVisual
+    iconColorToken: string
+  }
 > = {
   pending: {
     label: 'Pending',
     className: 'text-muted-foreground',
     tone: 'neutral',
-    visual: 'pending-dash'
+    visual: 'pending-dash',
+    iconColorToken: 'var(--status-chip-task-status-pending-icon)'
   },
   backlog: {
     label: 'Backlog',
     className: 'text-warning',
     tone: 'warning',
-    visual: 'backlog-ring'
+    visual: 'backlog-dashed-minus',
+    iconColorToken: 'var(--status-chip-task-status-backlog-icon)'
   },
   'in-progress': {
     label: 'In progress',
-    className: 'text-primary',
+    className: 'text-warning',
     tone: 'info',
-    visual: 'progress-half'
+    visual: 'progress-half',
+    iconColorToken: 'var(--status-chip-task-status-in-progress-icon)'
   },
   blocked: {
     label: 'Blocked',
+    className: 'text-warning',
+    tone: 'warning',
+    visual: 'blocked-cancel',
+    iconColorToken: 'var(--status-chip-task-status-blocked-icon)'
+  },
+  canceled: {
+    label: 'Canceled',
     className: 'text-destructive',
     tone: 'danger',
-    visual: 'blocked-cross'
+    visual: 'canceled-dashed-x',
+    iconColorToken: 'var(--status-chip-task-status-canceled-icon)'
   },
   completed: {
     label: 'Completed',
     className: 'text-success',
     tone: 'success',
-    visual: 'completed-check'
+    visual: 'completed-check',
+    iconColorToken: 'var(--status-chip-task-status-completed-icon)'
   }
 }
 

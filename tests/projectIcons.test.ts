@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   coerceFilledTablerProjectIcon,
   createRandomProjectIcon,
-  normalizeProjectIcon
+  normalizeProjectIcon,
+  PROJECT_ICON_COLORS
 } from '../src/shared/projectIcons'
 
 describe('project icon helpers', () => {
@@ -12,6 +13,7 @@ describe('project icon helpers', () => {
     expect(first).toEqual(second)
     expect(first.set).toBe('tabler')
     expect(first.variant).toBe('filled')
+    expect(PROJECT_ICON_COLORS).toContain(first.color)
   })
 
   it('creates different icons for different seeds', () => {
@@ -26,7 +28,7 @@ describe('project icon helpers', () => {
         {
           shape: 'diamond',
           variant: 'outlined',
-          color: '#be123c'
+          color: '#38bdf8'
         },
         'alpha'
       )
@@ -35,7 +37,7 @@ describe('project icon helpers', () => {
       glyph: 'folder-kanban',
       shape: undefined,
       variant: 'filled',
-      color: '#be123c'
+      color: '#38bdf8'
     })
   })
 
@@ -45,7 +47,7 @@ describe('project icon helpers', () => {
         {
           shape: 'diamond',
           variant: 'outlined',
-          color: '#be123c'
+          color: '#38bdf8'
         },
         'alpha'
       )
@@ -54,7 +56,7 @@ describe('project icon helpers', () => {
       glyph: 'folder-kanban',
       shape: undefined,
       variant: 'filled',
-      color: '#be123c'
+      color: '#38bdf8'
     })
   })
 
@@ -65,7 +67,7 @@ describe('project icon helpers', () => {
           set: 'lucide',
           glyph: 'sparkles',
           variant: 'outlined',
-          color: '#0ea5e9'
+          color: '#60a5fa'
         },
         'beta'
       )
@@ -74,7 +76,7 @@ describe('project icon helpers', () => {
       glyph: 'sparkles',
       shape: undefined,
       variant: 'filled',
-      color: '#0ea5e9'
+      color: '#60a5fa'
     })
   })
 
@@ -85,7 +87,7 @@ describe('project icon helpers', () => {
           set: 'tabler',
           glyph: '3d-cube-sphere',
           variant: 'filled',
-          color: '#0ea5e9'
+          color: '#38bdf8'
         },
         'gamma'
       )
@@ -94,7 +96,22 @@ describe('project icon helpers', () => {
       glyph: '3d-cube-sphere',
       shape: undefined,
       variant: 'filled',
-      color: '#0ea5e9'
+      color: '#38bdf8'
     })
+  })
+
+  it('remaps low-contrast project colors deterministically', () => {
+    const first = normalizeProjectIcon(
+      { glyph: 'rocket', variant: 'filled', color: '#334155' },
+      'legacy-project'
+    )
+    const second = normalizeProjectIcon(
+      { glyph: 'rocket', variant: 'filled', color: '#334155' },
+      'legacy-project'
+    )
+
+    expect(first.color).not.toBe('#334155')
+    expect(PROJECT_ICON_COLORS).toContain(first.color)
+    expect(second.color).toBe(first.color)
   })
 })

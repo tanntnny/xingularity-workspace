@@ -1,16 +1,15 @@
 import { CSSProperties, forwardRef, HTMLAttributes, MouseEventHandler, ReactElement } from 'react'
-import { TaskStatusIcon } from './TaskStatusIcon'
-import { CalendarTask, Project, TASK_STATUS_OPTIONS, TaskStatus } from '../../../shared/types'
+import { CalendarTask, Project, TaskStatus } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { NoteShapeIcon } from './NoteShapeIcon'
-import { SelectiveChip, type SelectiveChipOption } from './ui/selective-chip'
+import { StatusChipSelect } from './ui/status-chip-select'
 import {
   getCalendarTaskBackgroundToken,
   getCalendarTaskBorderToken
 } from '../lib/calendarTaskTypeBackground'
-import { getTaskStatus, TASK_STATUS_META } from '../lib/taskStatus'
-import { TaskTagSummary } from './TaskTagSummary'
-import { Bell } from './ui/icons'
+import { getTaskStatus } from '../lib/taskStatus'
+import { isTaskDone } from '../../../shared/taskStatus'
+import { TASK_STATUS_CHIP_OPTIONS } from '../lib/statusChipMeta'
 
 interface CalendarTaskCardProps {
   task: CalendarTask
@@ -32,8 +31,8 @@ export const CalendarTaskCard = forwardRef<
   {
     task,
     project,
-    compact = false,
-    showStatusValue,
+    compact: _compact,
+    showStatusValue: _showStatusValue,
     showProject = true,
     showTime = true,
     heightMode = 'fill',
@@ -45,33 +44,14 @@ export const CalendarTaskCard = forwardRef<
   },
   ref
 ): ReactElement {
+  void _compact
+  void _showStatusValue
   const status = getTaskStatus(task.status, task.completed)
   const isDeadlineOnly = !task.date && Boolean(task.endDate)
-  const priorityMarker = task.priority === 'high' ? '!!' : task.priority === 'medium' ? '!' : null
-  const priorityMarkerClass =
-    task.priority === 'high'
-      ? 'text-destructive'
-      : task.priority === 'medium'
-        ? 'text-warning'
-        : null
-  const priorityLabel =
-    task.priority === 'high'
-      ? 'High priority'
-      : task.priority === 'medium'
-        ? 'Medium priority'
-        : null
-  const hasEnabledReminder = (task.reminders || []).some((reminder) => reminder.enabled)
   const taskTypeStyle = {
     '--calendar-task-bg': getCalendarTaskBackgroundToken(task.taskType),
     '--calendar-task-border': getCalendarTaskBorderToken(task.taskType)
   } as CSSProperties
-  const statusOptions: readonly SelectiveChipOption[] = TASK_STATUS_OPTIONS.map((option) => ({
-    value: option.value,
-    label: option.label,
-    icon: <TaskStatusIcon status={option.value} size={18} />,
-    tone: TASK_STATUS_META[option.value].tone
-  }))
-
   return (
     <div
       ref={ref}
@@ -81,18 +61,17 @@ export const CalendarTaskCard = forwardRef<
       data-task-status={status}
       {...rest}
     >
-      <div className="flex h-fit min-h-0 min-w-0 shrink-0 items-start justify-between gap-1.5">
+      <div className="flex h-fit min-h-0 min-w-0 shrink-0 items-center justify-between gap-1.5">
         <div
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <SelectiveChip
-            className="!h-4 text-[11px] leading-none text-muted-foreground hover:text-foreground"
+          <StatusChipSelect
+            className="shrink-0"
             label={`Status for ${task.title}`}
             value={status}
-            variant="plain"
-            showValue={showStatusValue ?? !compact}
-            options={statusOptions}
+            options={TASK_STATUS_CHIP_OPTIONS}
+            variant="bare"
             onValueChange={(value) => onStatusChange?.(task.id, value as TaskStatus)}
           />
         </div>
@@ -104,50 +83,19 @@ export const CalendarTaskCard = forwardRef<
       </div>
       <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
         <span
-          className={`pointer-events-none min-w-0 flex-1 truncate text-sm font-bold leading-tight text-foreground ${status === 'completed' ? 'line-through' : ''}`}
+          className={`pointer-events-none min-w-0 flex-1 truncate text-sm font-bold leading-tight text-foreground ${isTaskDone(task) ? 'line-through' : ''}`}
         >
           {task.title}
         </span>
       </div>
       {project && showProject ? (
         <div
-          className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden text-[10px] text-muted-foreground"
+          className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden text-sm text-muted-foreground"
           title={project.name}
           data-testid="calendar-task-project"
         >
-          <NoteShapeIcon icon={project.icon} size={13} />
+          <NoteShapeIcon icon={project.icon} size={18} />
           <span className="min-w-0 truncate">{project.name}</span>
-        </div>
-      ) : null}
-      {task.tags.length > 0 || priorityMarker || hasEnabledReminder ? (
-        <div className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1">
-          <div className="flex shrink-0 items-center gap-1">
-            {priorityMarker && priorityMarkerClass && priorityLabel ? (
-              <span
-                role="img"
-                aria-label={priorityLabel}
-                className={`pointer-events-none text-xs font-semibold leading-none ${priorityMarkerClass}`}
-                title={priorityLabel}
-              >
-                {priorityMarker}
-              </span>
-            ) : null}
-            {hasEnabledReminder ? (
-              <span
-                role="img"
-                aria-label="Reminder enabled"
-                className="pointer-events-none inline-flex items-center text-muted-foreground"
-                title="Reminder enabled"
-              >
-                <Bell size={12} aria-hidden="true" />
-              </span>
-            ) : null}
-          </div>
-          {task.tags.length > 0 ? (
-            <TaskTagSummary tags={task.tags} className="min-w-0 flex-1" />
-          ) : (
-            <span className="min-w-0 flex-1" aria-hidden="true" />
-          )}
         </div>
       ) : null}
     </div>

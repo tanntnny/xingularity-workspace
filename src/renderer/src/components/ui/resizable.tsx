@@ -34,9 +34,9 @@ const ResizableHandle = React.forwardRef<HTMLDivElement, ResizableHandleProps>(
   ({ className, withHandle = false, ...props }, ref) => (
     <Separator
       elementRef={ref}
+      data-resize-direction="x"
       className={cn(
-        'group relative flex w-4 cursor-ew-resize items-center justify-center bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        'after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-sidebar-border data-[separator=active]:after:bg-sidebar-border',
+        'resize-affordance group relative flex w-2 cursor-ew-resize items-center justify-center bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         className
       )}
       {...props}

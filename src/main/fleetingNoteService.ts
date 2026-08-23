@@ -40,7 +40,9 @@ export class FleetingNoteService {
       relPath,
       content,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      source: 'manual',
+      triageState: 'inbox'
     }
 
     await fs.writeFile(joinSafe(this.rootPath, relPath), serializeFleetingNote(note), {
@@ -58,6 +60,34 @@ export class FleetingNoteService {
   async delete(relPathInput: string): Promise<void> {
     const relPath = sanitizeFleetingPath(relPathInput)
     await fs.rm(joinSafe(this.rootPath, relPath))
+  }
+
+  async update(
+    relPathInput: string,
+    patch: Partial<
+      Pick<FleetingNote, 'content' | 'priority' | 'tags' | 'dueDate' | 'projectId' | 'triageState'>
+    >
+  ): Promise<FleetingNote> {
+    const current = await this.read(relPathInput)
+    const content = patch.content?.trim() ?? current.content
+    if (!content) {
+      throw new Error('Fleeting note content is required')
+    }
+    const updated: FleetingNote = {
+      ...current,
+      ...patch,
+      content,
+      tags: patch.tags
+        ? Array.from(new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 50)
+        : current.tags,
+      updatedAt: new Date().toISOString()
+    }
+    await fs.writeFile(
+      joinSafe(this.rootPath, sanitizeFleetingPath(relPathInput)),
+      serializeFleetingNote(updated),
+      'utf-8'
+    )
+    return updated
   }
 }
 

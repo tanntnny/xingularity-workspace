@@ -15,6 +15,17 @@ export type { SwitchProps } from './switch'
 
 export { Badge, badgeVariants } from './badge'
 export type { BadgeProps } from './badge'
+export { StatusChip } from './status-chip'
+export type { StatusChipItem, StatusChipProps, StatusChipVariant } from './status-chip'
+export { StatusChipSelect } from './status-chip-select'
+export type { StatusChipOption, StatusChipSelectProps } from './status-chip-select'
+export { SelectionPopover } from './selection-popover'
+export type {
+  MultipleSelectionPopoverProps,
+  SelectionPopoverOption,
+  SelectionPopoverProps,
+  SingleSelectionPopoverProps
+} from './selection-popover'
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card'
 
@@ -121,6 +132,8 @@ export type { CalendarProps } from './calendar'
 export { DatePicker, DatePickerISO } from './date-picker'
 
 export { ToggleGroup, ToggleGroupItem } from './toggle-group'
+export { TabToggleGroup, TabToggleGroupItem } from './tab-toggle-group'
+export type { TabToggleGroupItemProps, TabToggleGroupProps } from './tab-toggle-group'
 export {
   Select,
   SelectGroup,

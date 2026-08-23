@@ -62,7 +62,7 @@ export function WorkspaceCommandPalette({
       className="!top-[clamp(7rem,25vh,16rem)] !-translate-y-0 !p-3"
       onOpenChange={onOpenChange}
     >
-      <Command className="flex-1">
+      <Command className="flex-1 bg-panel text-foreground">
         <PalleteSearchBar data-cmdk-input-wrapper="">
           <CommandInput bare ref={inputRef} placeholder={placeholder} />
         </PalleteSearchBar>

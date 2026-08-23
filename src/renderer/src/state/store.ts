@@ -57,10 +57,8 @@ export const useVaultStore = create<VaultState>((set) => ({
     profile: {
       name: ''
     },
-    ai: {
-      mistralApiKey: ''
-    },
-    fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    ai: {},
+    fontFamily: 'Inter',
     pythonCondaEnvironmentPath: null,
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
@@ -75,6 +73,16 @@ export const useVaultStore = create<VaultState>((set) => ({
         zoom: 1
       },
       items: []
+    },
+    featureFlags: {
+      resources: true,
+      filesystemResources: true,
+      filesystemContentIndexing: false,
+      googleDriveResources: false,
+      googleDriveContentIndexing: false,
+      captureReview: true,
+      externalWrites: false,
+      agentContextBundles: true
     }
   },
   toasts: [],

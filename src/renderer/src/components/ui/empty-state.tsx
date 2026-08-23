@@ -42,7 +42,7 @@ const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
         <div className="flex flex-col items-center gap-3">
           <div
             aria-hidden="true"
-            className="flex size-10 items-center justify-center rounded-full border border-ring bg-accent text-primary"
+            className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground"
           >
             <Icon size={20} aria-hidden="true" />
           </div>

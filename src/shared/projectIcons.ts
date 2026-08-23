@@ -38,25 +38,27 @@ export const PROJECT_ICON_SYMBOLS: ProjectIconSymbol[] = [
 export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled']
 
 export const PROJECT_ICON_COLORS: string[] = [
-  '#0ea5e9',
-  '#0891b2',
-  '#2563eb',
-  '#4f46e5',
-  '#7c3aed',
-  '#db2777',
-  '#be123c',
-  '#ea580c',
-  '#c2410c',
-  '#d97706',
-  '#b45309',
-  '#65a30d',
-  '#16a34a',
-  '#0f766e',
-  '#475569',
-  '#334155'
+  '#38bdf8',
+  '#22d3ee',
+  '#60a5fa',
+  '#818cf8',
+  '#a78bfa',
+  '#e879f9',
+  '#f472b6',
+  '#fb7185',
+  '#fb923c',
+  '#fbbf24',
+  '#facc15',
+  '#a3e635',
+  '#4ade80',
+  '#2dd4bf',
+  '#34d399',
+  '#94a3b8'
 ]
 
 export const DEFAULT_PROJECT_ICON_COLOR = PROJECT_ICON_COLORS[0]
+const PROJECT_ICON_CONTRAST_SURFACE = '#212122'
+const PROJECT_ICON_MIN_CONTRAST_RATIO = 3
 
 export function createRandomProjectIcon(seed: string): ProjectIconStyle {
   const hash = hashString(seed)
@@ -110,7 +112,7 @@ export function normalizeProjectIcon(
     glyph,
     shape: undefined,
     variant: 'filled',
-    color: isProjectIconColor(icon.color) ? icon.color : DEFAULT_PROJECT_ICON_COLOR
+    color: normalizeProjectIconColor(icon.color, fallbackSeed)
   }
 }
 
@@ -126,6 +128,39 @@ export function resolveProjectIconGlyph(
 
 export function isProjectIconColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
+}
+
+function normalizeProjectIconColor(value: unknown, fallbackSeed: string): string {
+  if (!isProjectIconColor(value)) {
+    return DEFAULT_PROJECT_ICON_COLOR
+  }
+
+  if (getProjectIconContrastRatio(value) >= PROJECT_ICON_MIN_CONTRAST_RATIO) {
+    return value
+  }
+
+  return PROJECT_ICON_COLORS[
+    hashString(`${fallbackSeed}:${value.toLowerCase()}`) % PROJECT_ICON_COLORS.length
+  ]
+}
+
+function getProjectIconContrastRatio(color: string): number {
+  const foregroundLuminance = getRelativeLuminance(color)
+  const surfaceLuminance = getRelativeLuminance(PROJECT_ICON_CONTRAST_SURFACE)
+  const lighter = Math.max(foregroundLuminance, surfaceLuminance)
+  const darker = Math.min(foregroundLuminance, surfaceLuminance)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function getRelativeLuminance(color: string): number {
+  const channels = [0, 2, 4].map(
+    (offset) => Number.parseInt(color.slice(offset + 1, offset + 3), 16) / 255
+  )
+  const linearChannels = channels.map((channel) =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  )
+
+  return 0.2126 * linearChannels[0] + 0.7152 * linearChannels[1] + 0.0722 * linearChannels[2]
 }
 
 function hashString(value: string): number {

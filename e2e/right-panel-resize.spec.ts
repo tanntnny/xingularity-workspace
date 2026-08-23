@@ -90,6 +90,24 @@ async function getWidth(locator: Locator): Promise<number> {
   return Math.round(box.width)
 }
 
+async function getResizeAffordanceStyles(locator: Locator): Promise<{
+  cursor: string
+  lineBackgroundImage: string
+  lineOpacity: string
+  lineWidth: string
+}> {
+  return locator.evaluate((element) => {
+    const line = getComputedStyle(element, '::after')
+
+    return {
+      cursor: getComputedStyle(element).cursor,
+      lineBackgroundImage: line.backgroundImage,
+      lineOpacity: line.opacity,
+      lineWidth: line.width
+    }
+  })
+}
+
 test.describe('right workspace panel resizing', () => {
   test('supports pointer and keyboard resizing, collapse, clamping, and persistence', async () => {
     const vaultRoot = await createFixtureVault()
@@ -115,6 +133,20 @@ test.describe('right workspace panel resizing', () => {
       const panel = page.getByTestId('workspace-right-panel')
 
       await expect.poll(() => getWidth(sidebar)).toBe(256)
+      await expect
+        .poll(async () => (await getResizeAffordanceStyles(sidebarRail)).lineOpacity)
+        .toBe('0')
+      await sidebarRail.hover()
+      await expect
+        .poll(async () => (await getResizeAffordanceStyles(sidebarRail)).lineOpacity, {
+          timeout: 2_000
+        })
+        .toBe('1')
+      const sidebarAffordanceStyles = await getResizeAffordanceStyles(sidebarRail)
+      expect(sidebarAffordanceStyles.cursor).toBe('ew-resize')
+      expect(sidebarAffordanceStyles.lineWidth).toBe('1px')
+      expect(sidebarAffordanceStyles.lineBackgroundImage).toContain('linear-gradient')
+
       const sidebarRailBox = await sidebarRail.boundingBox()
       if (!sidebarRailBox) {
         throw new Error('Sidebar resize rail bounding box is not available')
@@ -132,6 +164,20 @@ test.describe('right workspace panel resizing', () => {
 
       await expect(resizeHandle).toBeVisible()
       await expect.poll(() => getWidth(panel)).toBe(300)
+      await expect
+        .poll(async () => (await getResizeAffordanceStyles(resizeHandle)).lineOpacity)
+        .toBe('0')
+      await resizeHandle.hover()
+      await expect
+        .poll(async () => (await getResizeAffordanceStyles(resizeHandle)).lineOpacity, {
+          timeout: 2_000
+        })
+        .toBe('1')
+      const affordanceStyles = await getResizeAffordanceStyles(resizeHandle)
+      expect(affordanceStyles.cursor).toBe('ew-resize')
+      expect(affordanceStyles.lineWidth).toBe('1px')
+      expect(affordanceStyles.lineBackgroundImage).toContain('linear-gradient')
+      expect(affordanceStyles.lineOpacity).toBe('1')
 
       const initialHandleBox = await resizeHandle.boundingBox()
       if (!initialHandleBox) {
@@ -149,7 +195,7 @@ test.describe('right workspace panel resizing', () => {
       )
       await page.mouse.up()
       await expect.poll(() => getWidth(panel)).toBeGreaterThan(300)
-      await expect.poll(() => getWidth(panel)).toBeLessThanOrEqual(360)
+      await expect.poll(() => getWidth(panel)).toBe(480)
       const pointerExpandedWidth = await getWidth(panel)
 
       await resizeHandle.focus()
@@ -183,7 +229,6 @@ test.describe('right workspace panel resizing', () => {
       const panelPages = [
         'notes',
         'knowledge',
-        'projects',
         'subscriptions',
         'calendar',
         'schedules',
@@ -228,6 +273,12 @@ test.describe('right workspace panel resizing', () => {
       await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
       await page.keyboard.press('Meta+B')
       await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+      await expect(page.getByTestId('project-properties-panel')).toHaveCount(0)
+      await expect(page.getByTestId('workspace-right-panel-resize')).toHaveCount(0)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

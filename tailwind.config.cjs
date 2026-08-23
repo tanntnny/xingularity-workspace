@@ -6,14 +6,20 @@ module.exports = {
       colors: {
         background: 'var(--background)',
         workspace: 'var(--workspace-background)',
+        panel: {
+          DEFAULT: 'var(--panel)',
+          hover: 'var(--panel-hover)'
+        },
         foreground: 'var(--foreground)',
         card: {
           DEFAULT: 'var(--card)',
-          foreground: 'var(--card-foreground)'
+          foreground: 'var(--card-foreground)',
+          hover: 'var(--card-hover)'
         },
         popover: {
           DEFAULT: 'var(--popover)',
-          foreground: 'var(--popover-foreground)'
+          foreground: 'var(--popover-foreground)',
+          hover: 'var(--popover-hover)'
         },
         primary: {
           DEFAULT: 'var(--primary)',
@@ -29,7 +35,19 @@ module.exports = {
         },
         accent: {
           DEFAULT: 'var(--accent)',
-          foreground: 'var(--accent-foreground)'
+          foreground: 'var(--accent-foreground)',
+          hover: 'var(--accent-hover)'
+        },
+        progress: 'var(--progress)',
+        milestone: {
+          current: 'var(--milestone-current-icon)',
+          complete: 'var(--milestone-complete-icon)',
+          unreached: 'var(--milestone-unreached-icon)'
+        },
+        'surface-subtle': {
+          DEFAULT: 'var(--surface-subtle)',
+          foreground: 'var(--surface-subtle-foreground)',
+          hover: 'var(--surface-subtle-hover)'
         },
         destructive: {
           DEFAULT: 'var(--destructive)',
@@ -80,11 +98,18 @@ module.exports = {
         }
       },
       borderRadius: {
+        dialog: 'var(--radius-dialog)',
         shell: 'var(--radius-shell)',
         surface: 'var(--radius-surface)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
+      },
+      borderWidth: {
+        DEFAULT: 'var(--border-width)'
+      },
+      divideWidth: {
+        DEFAULT: 'var(--border-width)'
       },
       fontFamily: {
         sans: ['Inter Variable', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']

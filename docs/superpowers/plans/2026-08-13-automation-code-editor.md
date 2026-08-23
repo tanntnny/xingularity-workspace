@@ -22,11 +22,13 @@
 ### Task 1: Make the editor contract and scheduling UI expectations explicit
 
 **Files:**
+
 - Modify: `src/renderer/src/components/scheduling/types.ts`
 - Modify: `tests/schedulingPage.test.ts`
 - Create: `tests/schedulingCodeEditor.test.ts`
 
 **Interfaces:**
+
 - `ScheduleEditorProps` adds `isDirty: boolean` and `onSave: () => void`, and removes `onInsertTemplate`.
 - `ScheduleCodeEditorProps` is defined by the component implementation in Task 2: `{ code: string; runtime: RuntimeType; isDirty: boolean; isSaving: boolean; onChange: (code: string) => void; onSave: () => void }`.
 - `getScheduleCodeLanguage(runtime: RuntimeType): 'python' | 'javascript'` is exported from `src/renderer/src/lib/schedulingCodeEditor.ts` for deterministic unit coverage.
@@ -70,6 +72,7 @@
 ### Task 2: Implement the focused runtime-aware CodeMirror editor
 
 **Files:**
+
 - Create: `src/renderer/src/components/scheduling/ScheduleCodeEditor.tsx`
 - Create: `src/renderer/src/lib/schedulingCodeEditor.ts`
 - Modify: `package.json`
@@ -78,6 +81,7 @@
 - Test: `tests/schedulingCodeEditor.test.ts`
 
 **Interfaces:**
+
 - Produces `ScheduleCodeEditor` with the exact props defined in Task 1.
 - Produces `getScheduleCodeLanguage(runtime)` for unit tests and runtime selection.
 
@@ -88,7 +92,6 @@
 - [ ] **Step 2: Implement the minimal CodeMirror lifecycle**
 
   In `ScheduleCodeEditor.tsx`:
-
   - Render a semantic `<section>` with `data-testid="scheduling-code-editor"`, a `Field`-compatible label area reading `Python code` or `JavaScript code`, and a toolbar containing the existing `Button` primitive with `data-testid="scheduling-save-changes"`, `aria-label="Save changes"`, and `disabled={!isDirty || isSaving}`.
   - Mount `EditorView` into a ref-backed `div` inside the section using `useEffect`, with `EditorState` initialized from `code`.
   - Configure line numbers, active-line highlighting, selection drawing, history, bracket matching, indentation, tab indentation, line wrapping, default syntax highlighting, and a `data-testid="scheduling-code-editor-surface"` mount node.
@@ -115,12 +118,14 @@
 ### Task 3: Integrate the editor and relocate Save changes
 
 **Files:**
+
 - Modify: `src/renderer/src/components/scheduling/ScheduleEditor.tsx`
 - Modify: `src/renderer/src/pages/SchedulingPage.tsx`
 - Modify: `src/renderer/src/components/scheduling/types.ts`
 - Modify: `tests/schedulingPage.test.ts`
 
 **Interfaces:**
+
 - `ScheduleEditor` receives `isDirty` and `onSave` and no longer receives `onInsertTemplate`.
 - `SchedulingHeaderActions` continues to render `SchedulingAddAutomationButton`, but no longer renders a Save changes `WorkspaceIconButton`.
 
@@ -153,6 +158,7 @@
 ### Task 4: Verify the integrated renderer and preserve unrelated work
 
 **Files:**
+
 - Inspect only: all changed files from Tasks 1–3 plus the pre-existing worktree diff.
 
 - [ ] **Step 1: Run the focused checks**
@@ -178,7 +184,6 @@
 - [ ] **Step 3: Perform a manual UI smoke check if the dev app is available**
 
   Confirm all of the following in the Automation view:
-
   - Python source shows syntax colors, line numbers, editing, scrolling, and a toolbar Save changes control.
   - JavaScript legacy source switches to JavaScript syntax highlighting.
   - Save changes is disabled when clean, enabled after a code edit, shows Saving… during persistence, and still opens the existing Python trust dialog when required.

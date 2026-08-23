@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { ChevronLeft, ChevronRight } from './icons'
-import { DayPicker } from 'react-day-picker'
+import { DayPicker, type ChevronProps } from 'react-day-picker'
 
 import { cn } from '../../lib/utils'
 import { buttonVariants } from './button'
@@ -39,25 +39,33 @@ function Calendar({
         weekdays: 'flex',
         weekday: 'w-8 rounded-md text-xs font-normal text-muted-foreground',
         week: 'mt-2 flex w-full',
-        day: 'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-[var(--radius-control)]',
+        day: [
+          'relative h-8 w-8 p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected].outside)]:bg-card-hover/50 [&:has([aria-selected])]:bg-card-hover [&:has([aria-selected])]:rounded-md',
+          '[&[aria-selected]>button]:!bg-card-hover',
+          '[&[aria-selected]>button]:!text-foreground',
+          '[&[aria-selected]>button:hover]:!bg-card-hover',
+          '[&[aria-selected]>button:hover]:!text-foreground',
+          '[&[aria-selected]>button:focus]:!bg-card-hover',
+          '[&[aria-selected]>button:focus]:!text-foreground'
+        ].join(' '),
         day_button: cn(
           buttonVariants({ variant: 'ghost' }),
-          'h-8 w-8 p-0 font-normal aria-selected:opacity-100'
+          'h-8 w-8 rounded-md p-0 font-normal text-foreground hover:!bg-card-hover hover:!text-foreground'
         ),
         range_start: 'day-range-start',
         range_end: 'day-range-end',
         selected:
-          'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
-        today: 'bg-accent text-accent-foreground',
+          'rounded-md bg-card-hover text-foreground hover:bg-card-hover hover:text-foreground focus:bg-card-hover focus:text-foreground',
+        today: 'bg-muted text-foreground',
         outside:
-          'text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground',
+          'text-muted-foreground aria-selected:bg-muted/50 aria-selected:text-muted-foreground',
         disabled: 'text-muted-foreground opacity-50',
-        range_middle: 'aria-selected:bg-accent aria-selected:text-accent-foreground',
+        range_middle: 'aria-selected:bg-card-hover aria-selected:text-foreground',
         hidden: 'invisible',
         ...classNames
       }}
       components={{
-        Chevron: ({ orientation }) =>
+        Chevron: ({ orientation }: ChevronProps) =>
           orientation === 'left' ? (
             <ChevronLeft className="h-4 w-4" />
           ) : (

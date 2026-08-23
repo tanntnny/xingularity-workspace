@@ -3,7 +3,14 @@ import type { ScriptAction } from '../shared/scheduleTypes'
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/)
-const statusSchema = z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'completed'])
+const statusSchema = z.enum([
+  'pending',
+  'backlog',
+  'in-progress',
+  'blocked',
+  'canceled',
+  'completed'
+])
 const tagsSchema = z.array(z.string().trim().min(1).max(129)).max(50).optional()
 const automationFields = {
   automationSource: z.string().trim().min(1).max(200),

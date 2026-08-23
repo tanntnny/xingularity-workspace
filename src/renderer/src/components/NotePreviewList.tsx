@@ -352,7 +352,7 @@ function NoteSection({
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
-                <ContextMenuItem destructive onClick={() => onDelete(note.relPath)}>
+                <ContextMenuItem onClick={() => onDelete(note.relPath)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                   <ContextMenuShortcut>

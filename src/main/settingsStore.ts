@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import { normalizeTaskTags } from '../shared/taskTags'
+import { isTaskDone } from '../shared/taskStatus'
 import {
   AppSettings,
   AppSettingsUpdate,
@@ -12,7 +13,9 @@ import {
   NOTE_VIM_MAPPING_MODE_VALUES,
   NoteVimKeyMapping,
   Project,
-  ProjectMilestone
+  ProjectMilestone,
+  ProjectUpdate,
+  WorkspaceFeatureFlags
 } from '../shared/types'
 import {
   deleteLegacyVaultPath,
@@ -25,6 +28,7 @@ import {
 import { ProjectStore } from './projectStore'
 import { TaskStore } from './taskStore'
 import { normalizeRecentNotebookPaths } from '../shared/recentNotebookFiles'
+import { migrateProjectResources, normalizeResourceRef } from '../shared/resourceDomain'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -72,7 +76,7 @@ function normalizeCalendarTasks(tasks: CalendarTask[]): CalendarTask[] {
       tags: normalizeTaskTags(task.tags),
       taskType: taskType === 'call' ? 'follow-up' : task.taskType,
       status,
-      completed: status === 'completed',
+      completed: isTaskDone({ status, completed: task.completed }),
       reminders: Array.isArray(task.reminders) ? task.reminders : []
     }
   })
@@ -151,10 +155,8 @@ export function createDefaultAppSettings(): AppSettings {
     profile: {
       name: ''
     },
-    ai: {
-      mistralApiKey: ''
-    },
-    fontFamily: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif",
+    ai: {},
+    fontFamily: 'Inter',
     pythonCondaEnvironmentPath: null,
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
@@ -170,6 +172,16 @@ export function createDefaultAppSettings(): AppSettings {
         zoom: 1
       },
       items: []
+    },
+    featureFlags: {
+      resources: true,
+      filesystemResources: true,
+      filesystemContentIndexing: false,
+      googleDriveResources: false,
+      googleDriveContentIndexing: false,
+      captureReview: true,
+      externalWrites: false,
+      agentContextBundles: true
     }
   }
 }
@@ -197,6 +209,10 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     ? parsed.projects.flatMap((project) => normalizeProject(project))
     : defaults.projects
   const normalizedTaskLinks = normalizeTaskMilestoneLinks(normalizedTasks, normalizedProjects)
+  const parsedFeatureFlags: Partial<WorkspaceFeatureFlags> =
+    parsed.featureFlags && typeof parsed.featureFlags === 'object'
+      ? (parsed.featureFlags as Partial<WorkspaceFeatureFlags>)
+      : {}
 
   return {
     ...defaults,
@@ -207,11 +223,14 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
           ? parsedProfile.name
           : defaults.profile.name
     },
-    ai: {
-      mistralApiKey:
-        typeof parsed.ai?.mistralApiKey === 'string'
-          ? parsed.ai.mistralApiKey
-          : defaults.ai.mistralApiKey
+    // Provider credentials are device/vault scoped and live in CredentialStore.
+    // Keep the legacy object shape readable for old callers without carrying secrets forward.
+    ai: {},
+    featureFlags: {
+      ...defaults.featureFlags,
+      ...Object.fromEntries(
+        Object.entries(parsedFeatureFlags).filter(([, value]) => typeof value === 'boolean')
+      )
     },
     pythonCondaEnvironmentPath:
       typeof parsed.pythonCondaEnvironmentPath === 'string' &&
@@ -309,46 +328,102 @@ function normalizeProject(input: unknown): Project[] {
     return []
   }
 
-  const candidate = input as Partial<Project>
+  const candidate = input as Partial<Project> & {
+    notebookPath?: unknown
+    resources?: unknown
+  }
   const name =
     typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : null
   if (!name || typeof candidate.id !== 'string' || !candidate.id.trim()) {
     return []
   }
 
-  return [
-    {
-      id: candidate.id,
-      name,
-      summary: typeof candidate.summary === 'string' ? candidate.summary.trim() : '',
-      description:
-        typeof candidate.description === 'string'
-          ? candidate.description.trim()
-          : typeof candidate.summary === 'string'
-            ? candidate.summary.trim()
-            : '',
-      folderPath:
-        typeof candidate.folderPath === 'string' && candidate.folderPath.trim()
-          ? candidate.folderPath
-          : undefined,
-      state: candidate.state === 'archived' ? 'archived' : 'active',
-      startDate: normalizeProjectDate(candidate.startDate),
-      endDate: normalizeProjectDate(candidate.endDate),
-      tags: normalizeProjectValues(candidate.tags),
-      resources: normalizeProjectValues(candidate.resources),
-      milestones: normalizeProjectMilestones(candidate.milestones),
-      updatedAt:
-        typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
-          ? candidate.updatedAt
-          : new Date().toISOString(),
-      icon: normalizeProjectIcon(
-        candidate.icon && typeof candidate.icon === 'object'
-          ? (candidate.icon as Partial<Project['icon']>)
-          : null,
-        name
-      )
+  const normalizedProject = {
+    id: candidate.id,
+    name,
+    summary: typeof candidate.summary === 'string' ? candidate.summary.trim() : '',
+    description:
+      typeof candidate.description === 'string'
+        ? candidate.description.trim()
+        : typeof candidate.summary === 'string'
+          ? candidate.summary.trim()
+          : '',
+    folderPath:
+      typeof candidate.folderPath === 'string' && candidate.folderPath.trim()
+        ? candidate.folderPath
+        : undefined,
+    state: candidate.state === 'archived' ? 'archived' : 'active',
+    startDate: normalizeProjectDate(candidate.startDate),
+    endDate: normalizeProjectDate(candidate.endDate),
+    tags: normalizeProjectValues(candidate.tags),
+    resourceRefs: Array.isArray(candidate.resourceRefs)
+      ? candidate.resourceRefs.flatMap((resource) => {
+          const normalized = normalizeResourceRef(resource)
+          return normalized ? [normalized] : []
+        })
+      : undefined,
+    milestones: normalizeProjectMilestones(candidate.milestones),
+    updates: normalizeProjectUpdates(candidate.updates, candidate.id),
+    updatedAt:
+      typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+        ? candidate.updatedAt
+        : new Date().toISOString(),
+    icon: normalizeProjectIcon(
+      candidate.icon && typeof candidate.icon === 'object'
+        ? (candidate.icon as Partial<Project['icon']>)
+        : null,
+      name
+    )
+  } as Project & { notebookPath?: unknown; resources?: unknown }
+
+  if (typeof candidate.notebookPath === 'string') {
+    normalizedProject.notebookPath = candidate.notebookPath
+  }
+  normalizedProject.resources = normalizeProjectValues(candidate.resources)
+
+  return migrateProjectResources([normalizedProject], [], [], normalizedProject.updatedAt).projects
+}
+
+function normalizeProjectUpdates(value: unknown, projectId: string): ProjectUpdate[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) {
+      return []
     }
-  ]
+
+    const candidate = item as Partial<ProjectUpdate>
+    const id = typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id : null
+    const markdown = typeof candidate.markdown === 'string' ? candidate.markdown : null
+    if (!id || markdown === null || seen.has(id)) {
+      return []
+    }
+
+    const now = new Date().toISOString()
+    seen.add(id)
+    return [
+      {
+        id,
+        projectId,
+        markdown,
+        status:
+          candidate.status === 'at-risk' || candidate.status === 'off-track'
+            ? candidate.status
+            : 'on-track',
+        createdAt:
+          typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
+            ? candidate.createdAt
+            : now,
+        updatedAt:
+          typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+            ? candidate.updatedAt
+            : now
+      }
+    ]
+  })
 }
 
 function normalizeProjectMilestones(value: unknown): ProjectMilestone[] {
@@ -787,6 +862,7 @@ export class SettingsStore {
         legacySystemTasksData !== null ||
         hasLegacyCalendarTaskTypes(resolvedTasks) ||
         hasLegacyAppearanceSettings(resolvedCore) ||
+        Boolean(resolvedCore?.ai?.mistralApiKey) ||
         resolvedCore !== coreParsed ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
@@ -838,7 +914,10 @@ export class SettingsStore {
       ...next,
       ...(nextTasks ? { tasks: nextTasks, calendarTasks: nextTasks } : {}),
       profile: next.profile ? { ...current.profile, ...next.profile } : current.profile,
-      ai: next.ai ? { ...current.ai, ...next.ai } : current.ai,
+      featureFlags: next.featureFlags
+        ? { ...current.featureFlags, ...next.featureFlags }
+        : current.featureFlags,
+      ai: {},
       lastVaultPath: vaultRoot
     })
     await this.persistVaultUpdate(vaultRoot, merged, next)
@@ -907,12 +986,13 @@ export class SettingsStore {
       favoriteNotePaths: settings.favoriteNotePaths,
       favoriteProjectIds: settings.favoriteProjectIds,
       profile: settings.profile,
-      ai: settings.ai,
+      ai: {},
       fontFamily: settings.fontFamily,
       pythonCondaEnvironmentPath: settings.pythonCondaEnvironmentPath,
       pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
+      featureFlags: settings.featureFlags,
       gridBoard: settings.gridBoard
     }
     await this.writeJsonFile(getVaultSettingsPath(vaultRoot), coreSettings)
@@ -929,6 +1009,24 @@ export class SettingsStore {
       deleteLegacyVaultPath(getLegacyRootVaultCalendarTasksPath(vaultRoot), vaultRoot),
       deleteLegacyVaultPath(getLegacySystemVaultCalendarTasksPath(vaultRoot), vaultRoot)
     ])
+  }
+
+  async readLegacyMistralApiKey(vaultRoot: string): Promise<string | null> {
+    const candidates = [
+      getVaultSettingsPath(vaultRoot),
+      getLegacyVaultSettingsPath(vaultRoot),
+      this.globalSettingsPath
+    ]
+
+    for (const candidatePath of candidates) {
+      const parsed = await this.readJsonFile<{ ai?: { mistralApiKey?: unknown } }>(candidatePath)
+      const key = parsed?.ai?.mistralApiKey
+      if (typeof key === 'string' && key.trim()) {
+        return key.trim()
+      }
+    }
+
+    return null
   }
 
   private async readJsonFile<T>(filePath: string): Promise<T | null> {

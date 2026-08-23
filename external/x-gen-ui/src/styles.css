@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Sora:wght@600;700;800&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Sora:wght@600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,7 +7,7 @@
 :root {
   color: #172033;
   background: #eef2e6;
-  font-family: "Instrument Sans", ui-sans-serif, system-ui;
+  font-family: 'Instrument Sans', ui-sans-serif, system-ui;
 }
 
 * {
@@ -32,7 +32,7 @@ select {
   border-radius: 0.75rem;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 .react-flow__node {

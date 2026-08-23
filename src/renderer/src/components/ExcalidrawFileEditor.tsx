@@ -11,10 +11,14 @@ import {
 } from 'react'
 import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
-import type { ExcalidrawSessionScene, RendererVaultApi } from '../../../shared/types'
+import type {
+  ExcalidrawMetadata,
+  ExcalidrawSessionScene,
+  RendererVaultApi
+} from '../../../shared/types'
 import { createEmptyExcalidrawFileDocument } from '../../../shared/excalidrawFile'
 
-type ExcalidrawTheme = typeof THEME.LIGHT | typeof THEME.DARK
+type ExcalidrawTheme = typeof THEME.DARK
 type ExcalidrawApi = Parameters<NonNullable<ComponentProps<typeof Excalidraw>['excalidrawAPI']>>[0]
 type ExcalidrawOnChange = NonNullable<ComponentProps<typeof Excalidraw>['onChange']>
 type ExcalidrawInitialData = NonNullable<ComponentProps<typeof Excalidraw>['initialData']>
@@ -51,10 +55,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function getSystemExcalidrawTheme(): ExcalidrawTheme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? THEME.DARK : THEME.LIGHT
-}
-
 function serializeScene(
   elements: Parameters<ExcalidrawOnChange>[0],
   appState: Parameters<ExcalidrawOnChange>[1],
@@ -79,12 +79,13 @@ export const ExcalidrawFileEditor = forwardRef<
   ExcalidrawFileEditorHandle,
   ExcalidrawFileEditorProps
 >(function ExcalidrawFileEditor({ notePath, vaultApi, pushToast }, ref): ReactElement {
-  const [theme, setTheme] = useState<ExcalidrawTheme>(getSystemExcalidrawTheme)
+  const [theme] = useState<ExcalidrawTheme>(THEME.DARK)
   const [isLoading, setIsLoading] = useState(true)
   const [activeToolType, setActiveToolType] = useState('selection')
   const [scene, setScene] = useState<ExcalidrawSessionScene>(
     createEmptyExcalidrawFileDocument().scene
   )
+  const [metadata, setMetadata] = useState<ExcalidrawMetadata | undefined>()
   const apiRef = useRef<ExcalidrawApi | null>(null)
   const saveTimerRef = useRef<number | null>(null)
   const pendingSceneRef = useRef<PendingScene | null>(null)
@@ -92,6 +93,13 @@ export const ExcalidrawFileEditor = forwardRef<
   const saveVersionRef = useRef(0)
   const skipCleanupSaveRef = useRef(false)
   const loadedNotePathRef = useRef<string | null>(null)
+  const loadGenerationRef = useRef(0)
+  const loadInFlightRef = useRef<Promise<void> | null>(null)
+  const pathMutationPendingRef = useRef(false)
+  const metadataRef = useRef<ExcalidrawMetadata | undefined>(metadata)
+  const [reloadToken, setReloadToken] = useState(0)
+
+  metadataRef.current = metadata
 
   const initialData = useMemo<ExcalidrawInitialData>(
     () =>
@@ -144,7 +152,11 @@ export const ExcalidrawFileEditor = forwardRef<
         const savePromise = (async (): Promise<void> => {
           await vaultApi.files.writeExcalidrawFileDocument(pendingScene.notePath, {
             version: 1,
-            scene: pendingScene.scene
+            scene: pendingScene.scene,
+            metadata: {
+              ...metadataRef.current,
+              updatedAt: new Date().toISOString()
+            }
           })
           if (
             saveVersion === saveVersionRef.current &&
@@ -184,35 +196,46 @@ export const ExcalidrawFileEditor = forwardRef<
     () => ({
       prepareForPathMutation: async () => {
         skipCleanupSaveRef.current = true
+        pathMutationPendingRef.current = true
+        loadGenerationRef.current += 1
         try {
+          const loadInFlight = loadInFlightRef.current
+          if (loadInFlight) {
+            await loadInFlight.catch(() => undefined)
+          }
           await flushPendingSave({ throwOnError: true })
         } catch (error) {
           skipCleanupSaveRef.current = false
+          pathMutationPendingRef.current = false
           throw error
         }
       },
       cancelPathMutation: () => {
         skipCleanupSaveRef.current = false
+        pathMutationPendingRef.current = false
+        setReloadToken((current) => current + 1)
       }
     }),
     [flushPendingSave]
   )
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const syncTheme = (): void => setTheme(getSystemExcalidrawTheme())
-
-    syncTheme()
-    mediaQuery.addEventListener('change', syncTheme)
-    return () => mediaQuery.removeEventListener('change', syncTheme)
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
+    const loadGeneration = loadGenerationRef.current + 1
+    loadGenerationRef.current = loadGeneration
     if (loadedNotePathRef.current !== notePath) {
+      const isPathChange = loadedNotePathRef.current !== null
       loadedNotePathRef.current = notePath
-      skipCleanupSaveRef.current = false
+      if (isPathChange || !pathMutationPendingRef.current) {
+        skipCleanupSaveRef.current = false
+      }
+      if (isPathChange) {
+        pathMutationPendingRef.current = false
+      }
     }
+
+    const isActiveLoad = (): boolean =>
+      !cancelled && loadGenerationRef.current === loadGeneration && !pathMutationPendingRef.current
 
     const load = async (): Promise<void> => {
       if (!vaultApi) {
@@ -223,8 +246,11 @@ export const ExcalidrawFileEditor = forwardRef<
       setIsLoading(true)
       try {
         await flushPendingSave({ throwOnError: true })
+        if (!isActiveLoad()) {
+          return
+        }
         const result = await vaultApi.files.readExcalidrawFileDocument(notePath)
-        if (cancelled) {
+        if (!isActiveLoad()) {
           return
         }
         pendingSceneRef.current = null
@@ -232,23 +258,44 @@ export const ExcalidrawFileEditor = forwardRef<
           pushToast('info', 'Drawing recovered from its last valid save')
         }
         setScene(result.document.scene)
+        setMetadata(
+          result.document.metadata ?? {
+            title: notePath
+              .split('/')
+              .pop()
+              ?.replace(/\.excalidraw$/i, '')
+          }
+        )
       } catch (error) {
-        if (!cancelled) {
+        if (isActiveLoad()) {
           pushToast('error', error instanceof Error ? error.message : 'Failed to load drawing')
         }
       } finally {
-        if (!cancelled) {
+        if (isActiveLoad()) {
           setIsLoading(false)
         }
       }
     }
 
-    void load()
+    const loadPromise = load()
+    loadInFlightRef.current = loadPromise
+    void loadPromise.then(
+      () => {
+        if (loadInFlightRef.current === loadPromise) {
+          loadInFlightRef.current = null
+        }
+      },
+      () => {
+        if (loadInFlightRef.current === loadPromise) {
+          loadInFlightRef.current = null
+        }
+      }
+    )
 
     return () => {
       cancelled = true
     }
-  }, [flushPendingSave, notePath, pushToast, vaultApi])
+  }, [flushPendingSave, notePath, pushToast, reloadToken, vaultApi])
 
   useEffect(() => {
     return () => {

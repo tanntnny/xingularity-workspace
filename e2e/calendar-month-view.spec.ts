@@ -136,8 +136,27 @@ async function openMonthlyCalendar(page: Page): Promise<void> {
   await expect(page.getByTestId('calendar-month-view')).toBeVisible()
 }
 
+async function getMonthlyResizeAffordanceStyles(locator: Locator): Promise<{
+  lineBackgroundImage: string
+  lineOpacity: string
+  lineWidth: string
+  hoverBackgroundColor: string
+}> {
+  return locator.evaluate((element) => {
+    const line = getComputedStyle(element, '::after')
+    const styles = getComputedStyle(element)
+
+    return {
+      lineBackgroundImage: line.backgroundImage,
+      lineOpacity: line.opacity,
+      lineWidth: line.width,
+      hoverBackgroundColor: styles.backgroundColor
+    }
+  })
+}
+
 test.describe('calendar monthly view', () => {
-  test('keeps period controls on the first row and view filters on the second row', async () => {
+  test('keeps page actions in the context menu and view filters on the second row', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
 
@@ -145,25 +164,29 @@ test.describe('calendar monthly view', () => {
       await openMonthlyCalendar(page)
 
       const viewToggle = page.getByTestId('calendar-view-toggle')
-      const periodToolbar = page.getByTestId('calendar-workspace-toolbar')
       const filterButton = page.getByTestId('calendar-task-filter-trigger')
       const workspaceTab = page.getByTestId('workspace-tab:workspace-tab-1')
-      const periodTitle = (await page.getByTestId('calendar-period-title').textContent())?.trim()
-      expect(periodTitle).toBeTruthy()
-      await expect(workspaceTab).toContainText(periodTitle ?? '')
-      await expect(workspaceTab).not.toContainText('Calendar')
+      const contextMenuTrigger = page.getByTestId('workspace-page-context-menu-trigger')
+      await expect(contextMenuTrigger).toBeVisible()
+      await contextMenuTrigger.click()
+      await expect(page.getByTestId('workspace-page-context-menu')).toBeVisible()
+      await expect(
+        page.getByTestId('workspace-page-context-menu-item:previous-period')
+      ).toBeVisible()
+      await expect(
+        page.getByTestId('workspace-page-context-menu-item:current-period')
+      ).toBeVisible()
+      await expect(page.getByTestId('workspace-page-context-menu-item:next-period')).toBeVisible()
+      await page.keyboard.press('Escape')
       await expect(viewToggle).toBeVisible()
-      await expect(periodToolbar).toBeVisible()
       await expect(filterButton).toBeVisible()
 
       const toggleBox = await viewToggle.boundingBox()
-      const toolbarBox = await periodToolbar.boundingBox()
       const filterButtonBox = await filterButton.boundingBox()
-      if (!toggleBox || !toolbarBox || !filterButtonBox) {
+      if (!toggleBox || !filterButtonBox) {
         throw new Error('Expected calendar header controls to have layout boxes')
       }
 
-      expect(toggleBox.y).toBeGreaterThan(toolbarBox.y + toolbarBox.height - 4)
       expect(filterButtonBox.x).toBeGreaterThan(toggleBox.x + toggleBox.width)
       expect(Math.abs(filterButtonBox.y - toggleBox.y)).toBeLessThanOrEqual(4)
 
@@ -174,15 +197,9 @@ test.describe('calendar monthly view', () => {
       await expect(page.getByTestId('calendar-month-view')).toBeVisible()
       await page.getByTestId('calendar-view-toggle').getByText('Weekly', { exact: true }).click()
       await expect(page.getByTestId('calendar-week-view')).toBeVisible()
-      const weeklyPeriodTitle = (
-        await page.getByTestId('calendar-period-title').textContent()
-      )?.trim()
-      expect(weeklyPeriodTitle).toBeTruthy()
-      await expect(secondWorkspaceTab).toContainText(weeklyPeriodTitle ?? '')
 
       await workspaceTab.click()
       await expect(page.getByTestId('calendar-month-view')).toBeVisible()
-      await expect(workspaceTab).toContainText(periodTitle ?? '')
 
       await secondWorkspaceTab.click()
       await expect(page.getByTestId('calendar-week-view')).toBeVisible()
@@ -329,6 +346,40 @@ test.describe('calendar monthly view', () => {
       expect(metrics.firstCellHeight).toBeGreaterThanOrEqual(132)
       expect(metrics.shellHeight).toBeGreaterThan(500)
       expect(metrics.lastCellBottom).toBeLessThanOrEqual(metrics.shellBottom + 1)
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('shows the expanded vertical resize affordance on monthly task handles', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const event = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      await event.hover()
+      const resizer = event.locator('.fc-event-resizer-start')
+      await expect(resizer).toBeVisible()
+      await expect
+        .poll(async () => (await getMonthlyResizeAffordanceStyles(resizer)).lineOpacity)
+        .toBe('0')
+      await resizer.hover()
+
+      await expect
+        .poll(async () => (await getMonthlyResizeAffordanceStyles(resizer)).lineOpacity, {
+          timeout: 2_000
+        })
+        .toBe('1')
+      const affordanceStyles = await getMonthlyResizeAffordanceStyles(resizer)
+      expect(affordanceStyles.lineWidth).toBe('1px')
+      expect(affordanceStyles.lineBackgroundImage).toContain('linear-gradient')
+      expect(affordanceStyles.lineOpacity).toBe('1')
+      expect(affordanceStyles.hoverBackgroundColor).toBe('rgba(0, 0, 0, 0)')
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })

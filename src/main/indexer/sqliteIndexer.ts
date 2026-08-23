@@ -147,7 +147,13 @@ export class SqliteIndexer {
       title: row.title,
       tags: JSON.parse(row.tags_json) as string[],
       updated: row.updated_at,
-      snippet: row.snippet
+      snippet: row.snippet,
+      entityType: 'note' as const,
+      target: {
+        kind: 'note' as const,
+        id: row.id,
+        relPath: row.rel_path
+      }
     }))
   }
 

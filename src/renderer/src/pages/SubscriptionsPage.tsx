@@ -23,8 +23,6 @@ import type {
   SubscriptionStatus,
   UpdateSubscriptionInput
 } from '../../../shared/types'
-import type { UiTone } from '../lib/uiTone'
-import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Field } from '../components/ui/field'
 import {
@@ -38,13 +36,8 @@ import {
 } from '../components/ui/drawer'
 import { Input } from '../components/ui/input'
 import { FloatingHoverCard } from '../components/ui/floating-hover-card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '../components/ui/select'
+import { SelectionPopover } from '../components/ui/selection-popover'
+import { StatusChipSelect } from '../components/ui/status-chip-select'
 import {
   SortableTableHead,
   Table,
@@ -57,6 +50,13 @@ import {
 import { Textarea } from '../components/ui/textarea'
 import { EmptyState } from '../components/ui/empty-state'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { StatusChip } from '../components/ui/status-chip'
+import {
+  getTagChipItem,
+  SUBSCRIPTION_REVIEW_CHIP_ITEMS,
+  SUBSCRIPTION_STATUS_CHIP_ITEMS,
+  SUBSCRIPTION_USAGE_CHIP_ITEMS
+} from '../lib/statusChipMeta'
 
 interface SubscriptionsPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -74,6 +74,10 @@ type ModalDraft = {
   billingCycle: CreateSubscriptionInput['billingCycle']
   billingIntervalMonths: string
   nextRenewalAt: string
+  renewalReminderDays: string
+  cancellationUrl: string
+  cancellationContact: string
+  usageReviewState: NonNullable<SubscriptionRecord['usageReviewState']>
   status: SubscriptionStatus
   reviewFlag: SubscriptionReviewFlag
   lastUsedAt: string
@@ -89,6 +93,7 @@ const REVIEW_OPTIONS: SubscriptionReviewFlag[] = [
   'duplicate',
   'expensive'
 ]
+const USAGE_REVIEW_OPTIONS = ['not-reviewed', 'keep', 'cancel', 'snooze'] as const
 const BILLING_CYCLE_OPTIONS: CreateSubscriptionInput['billingCycle'][] = [
   'monthly',
   'quarterly',
@@ -193,6 +198,10 @@ function emptyDraft(): ModalDraft {
     billingCycle: 'monthly',
     billingIntervalMonths: '1',
     nextRenewalAt: '',
+    renewalReminderDays: '7, 1',
+    cancellationUrl: '',
+    cancellationContact: '',
+    usageReviewState: 'not-reviewed',
     status: 'active',
     reviewFlag: 'none',
     lastUsedAt: '',
@@ -254,6 +263,10 @@ function draftFromRecord(record: SubscriptionRecord): ModalDraft {
     billingCycle: record.billingCycle,
     billingIntervalMonths: String(record.billingIntervalMonths),
     nextRenewalAt: toDateInputValue(record.nextRenewalAt),
+    renewalReminderDays: (record.renewalReminderDays ?? [7, 1]).join(', '),
+    cancellationUrl: record.cancellationUrl ?? '',
+    cancellationContact: record.cancellationContact ?? '',
+    usageReviewState: record.usageReviewState ?? 'not-reviewed',
     status: record.status,
     reviewFlag: record.reviewFlag ?? 'none',
     lastUsedAt: toDateInputValue(record.lastUsedAt),
@@ -301,29 +314,6 @@ function formatRelativeRenewal(value?: string): string {
   return `In ${diffDays}d`
 }
 
-function statusTone(status: SubscriptionStatus): UiTone {
-  if (status === 'active') {
-    return 'success'
-  }
-  if (status === 'paused') {
-    return 'warning'
-  }
-  if (status === 'cancelled') {
-    return 'danger'
-  }
-  return 'neutral'
-}
-
-function reviewTone(flag: SubscriptionReviewFlag): UiTone {
-  if (flag === 'unused' || flag === 'duplicate') {
-    return 'danger'
-  }
-  if (flag === 'expensive' || flag === 'review') {
-    return 'warning'
-  }
-  return 'neutral'
-}
-
 function buildSubscriptionTooltip(record: SubscriptionRecord): string {
   return [
     record.name,
@@ -350,6 +340,12 @@ function toCreateInput(draft: ModalDraft): CreateSubscriptionInput {
     billingCycle: draft.billingCycle,
     billingIntervalMonths,
     nextRenewalAt: draft.nextRenewalAt || undefined,
+    renewalReminderDays: draft.renewalReminderDays
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0),
+    cancellationUrl: draft.cancellationUrl.trim() || undefined,
+    cancellationContact: draft.cancellationContact.trim() || undefined,
     status: draft.status,
     reviewFlag: draft.reviewFlag,
     lastUsedAt: draft.lastUsedAt || undefined,
@@ -364,7 +360,8 @@ function toCreateInput(draft: ModalDraft): CreateSubscriptionInput {
 function toUpdateInput(draft: ModalDraft): UpdateSubscriptionInput {
   return {
     id: draft.id ?? '',
-    ...toCreateInput(draft)
+    ...toCreateInput(draft),
+    usageReviewState: draft.usageReviewState
   }
 }
 
@@ -463,44 +460,36 @@ function TreemapCard({
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Select
+              <SelectionPopover
+                selectionMode="single"
                 value={statusFilter}
+                options={[
+                  { value: 'all', label: 'All statuses' },
+                  ...STATUS_OPTIONS.map((status) => ({ value: status, label: status }))
+                ]}
                 onValueChange={(value) => onChangeStatusFilter(value as 'all' | SubscriptionStatus)}
-              >
-                <SelectTrigger
-                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
-                  aria-label="Status filter"
-                >
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
+                label="Status filter"
+                searchPlaceholder="Search statuses"
+                triggerProps={{
+                  'aria-label': 'Status filter',
+                  className: 'border border-input bg-card text-foreground h-9 min-w-[9rem]'
+                }}
+              />
+              <SelectionPopover
+                selectionMode="single"
                 value={activeCategory ?? 'all'}
+                options={[
+                  { value: 'all', label: 'All categories' },
+                  ...categories.map((category) => ({ value: category, label: category }))
+                ]}
                 onValueChange={(value) => onSelectCategory(value === 'all' ? null : value)}
-              >
-                <SelectTrigger
-                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
-                  aria-label="Category filter"
-                >
-                  <SelectValue placeholder="All categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                label="Category filter"
+                searchPlaceholder="Search categories"
+                triggerProps={{
+                  'aria-label': 'Category filter',
+                  className: 'border border-input bg-card text-foreground h-9 min-w-[9rem]'
+                }}
+              />
             </div>
             <Button onClick={onOpenCreate} className="gap-2 self-start">
               <Plus size={14} />
@@ -533,44 +522,36 @@ function TreemapCard({
           </p>
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Select
+              <SelectionPopover
+                selectionMode="single"
                 value={statusFilter}
+                options={[
+                  { value: 'all', label: 'All statuses' },
+                  ...STATUS_OPTIONS.map((status) => ({ value: status, label: status }))
+                ]}
                 onValueChange={(value) => onChangeStatusFilter(value as 'all' | SubscriptionStatus)}
-              >
-                <SelectTrigger
-                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
-                  aria-label="Status filter"
-                >
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
+                label="Status filter"
+                searchPlaceholder="Search statuses"
+                triggerProps={{
+                  'aria-label': 'Status filter',
+                  className: 'border border-input bg-card text-foreground h-9 min-w-[9rem]'
+                }}
+              />
+              <SelectionPopover
+                selectionMode="single"
                 value={activeCategory ?? 'all'}
+                options={[
+                  { value: 'all', label: 'All categories' },
+                  ...categories.map((category) => ({ value: category, label: category }))
+                ]}
                 onValueChange={(value) => onSelectCategory(value === 'all' ? null : value)}
-              >
-                <SelectTrigger
-                  className="border border-input bg-card text-foreground h-9 min-w-[9rem]"
-                  aria-label="Category filter"
-                >
-                  <SelectValue placeholder="All categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                label="Category filter"
+                searchPlaceholder="Search categories"
+                triggerProps={{
+                  'aria-label': 'Category filter',
+                  className: 'border border-input bg-card text-foreground h-9 min-w-[9rem]'
+                }}
+              />
               {statusFilter !== 'all' || activeCategory ? (
                 <Button
                   variant="ghost"
@@ -764,7 +745,7 @@ function TreemapCard({
               <div className="mb-1.5 text-sm font-semibold text-foreground">{hoverCard.name}</div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{hoverCard.category}</span>
-                <span>{hoverCard.status}</span>
+                <StatusChip item={SUBSCRIPTION_STATUS_CHIP_ITEMS[hoverCard.status]} />
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
                 Monthly: {formatCurrency(hoverCard.value)}
@@ -1163,9 +1144,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                                 {(record.tags ?? []).length ? (
                                   <div className="flex flex-wrap gap-1">
                                     {(record.tags ?? []).slice(0, 3).map((tag) => (
-                                      <Badge key={tag} variant="neutral" tone="subtle">
-                                        {tag}
-                                      </Badge>
+                                      <StatusChip key={tag} item={getTagChipItem(tag)} />
                                     ))}
                                   </div>
                                 ) : null}
@@ -1189,11 +1168,13 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
-                                <Badge tone={statusTone(record.status)}>{record.status}</Badge>
+                                <StatusChip item={SUBSCRIPTION_STATUS_CHIP_ITEMS[record.status]} />
                                 {(record.reviewFlag ?? 'none') !== 'none' ? (
-                                  <Badge tone={reviewTone(record.reviewFlag ?? 'none')}>
-                                    {record.reviewFlag}
-                                  </Badge>
+                                  <StatusChip
+                                    item={
+                                      SUBSCRIPTION_REVIEW_CHIP_ITEMS[record.reviewFlag ?? 'none']
+                                    }
+                                  />
                                 ) : null}
                               </div>
                             </TableCell>
@@ -1279,27 +1260,26 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 />
               </Field>
               <Field label="Category" htmlFor="subscription-category" className="text-sm">
-                <Select
+                <SelectionPopover
+                  selectionMode="single"
                   value={draft.category || '__none__'}
+                  options={[
+                    { value: '__none__', label: 'Select category' },
+                    ...categoryOptions.map((option) => ({ value: option, label: option }))
+                  ]}
                   onValueChange={(value) => {
                     setDraft((current) => ({
                       ...current,
                       category: value === '__none__' ? '' : value
                     }))
                   }}
-                >
-                  <SelectTrigger id="subscription-category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select category</SelectItem>
-                    {categoryOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  label="Category"
+                  searchPlaceholder="Search categories"
+                  triggerProps={{
+                    id: 'subscription-category',
+                    'aria-label': 'Category'
+                  }}
+                />
               </Field>
               <Field label="Amount" htmlFor="subscription-amount" className="text-sm">
                 <Input
@@ -1315,24 +1295,24 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 />
               </Field>
               <Field label="Billing cycle" htmlFor="subscription-billing-cycle" className="text-sm">
-                <Select
+                <SelectionPopover
+                  selectionMode="single"
                   value={draft.billingCycle}
+                  options={BILLING_CYCLE_OPTIONS.map((option) => ({
+                    value: option,
+                    label: option
+                  }))}
                   onValueChange={(value) => {
                     const billingCycle = value as CreateSubscriptionInput['billingCycle']
                     setDraft((current) => ({ ...current, billingCycle }))
                   }}
-                >
-                  <SelectTrigger id="subscription-billing-cycle">
-                    <SelectValue placeholder="Billing cycle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BILLING_CYCLE_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  label="Billing cycle"
+                  searchPlaceholder="Search billing cycles"
+                  triggerProps={{
+                    id: 'subscription-billing-cycle',
+                    'aria-label': 'Billing cycle'
+                  }}
+                />
               </Field>
               {draft.billingCycle === 'custom' ? (
                 <Field
@@ -1364,46 +1344,47 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }}
                 />
               </Field>
+              <Field label="Reminder days" htmlFor="subscription-reminder-days" className="text-sm">
+                <Input
+                  id="subscription-reminder-days"
+                  value={draft.renewalReminderDays}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setDraft((current) => ({ ...current, renewalReminderDays: value }))
+                  }}
+                  placeholder="7, 1"
+                />
+              </Field>
               <Field label="Status" htmlFor="subscription-status" className="text-sm">
-                <Select
+                <StatusChipSelect
+                  label="Subscription status"
                   value={draft.status}
+                  options={STATUS_OPTIONS.map((option) => ({
+                    ...SUBSCRIPTION_STATUS_CHIP_ITEMS[option],
+                    value: option
+                  }))}
                   onValueChange={(value) => {
                     setDraft((current) => ({ ...current, status: value as SubscriptionStatus }))
                   }}
-                >
-                  <SelectTrigger id="subscription-status">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  id="subscription-status"
+                />
               </Field>
               <Field label="Review flag" htmlFor="subscription-review-flag" className="text-sm">
-                <Select
+                <StatusChipSelect
+                  label="Subscription review flag"
                   value={draft.reviewFlag}
+                  options={REVIEW_OPTIONS.map((option) => ({
+                    ...SUBSCRIPTION_REVIEW_CHIP_ITEMS[option],
+                    value: option
+                  }))}
                   onValueChange={(value) => {
                     setDraft((current) => ({
                       ...current,
                       reviewFlag: value as SubscriptionReviewFlag
                     }))
                   }}
-                >
-                  <SelectTrigger id="subscription-review-flag">
-                    <SelectValue placeholder="Review flag" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REVIEW_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  id="subscription-review-flag"
+                />
               </Field>
               <Field label="Last used" htmlFor="subscription-last-used" className="text-sm">
                 <Input
@@ -1414,6 +1395,54 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     const value = event.currentTarget.value
                     setDraft((current) => ({ ...current, lastUsedAt: value }))
                   }}
+                />
+              </Field>
+              <Field label="Usage decision" htmlFor="subscription-usage-review" className="text-sm">
+                <StatusChipSelect
+                  label="Subscription usage decision"
+                  value={draft.usageReviewState}
+                  options={USAGE_REVIEW_OPTIONS.map((option) => ({
+                    ...SUBSCRIPTION_USAGE_CHIP_ITEMS[option],
+                    value: option
+                  }))}
+                  onValueChange={(value) => {
+                    setDraft((current) => ({
+                      ...current,
+                      usageReviewState: value as ModalDraft['usageReviewState']
+                    }))
+                  }}
+                  id="subscription-usage-review"
+                />
+              </Field>
+              <Field
+                label="Cancellation URL"
+                htmlFor="subscription-cancellation-url"
+                className="text-sm"
+              >
+                <Input
+                  id="subscription-cancellation-url"
+                  type="url"
+                  value={draft.cancellationUrl}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setDraft((current) => ({ ...current, cancellationUrl: value }))
+                  }}
+                  placeholder="https://…"
+                />
+              </Field>
+              <Field
+                label="Cancellation contact"
+                htmlFor="subscription-cancellation-contact"
+                className="text-sm"
+              >
+                <Input
+                  id="subscription-cancellation-contact"
+                  value={draft.cancellationContact}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setDraft((current) => ({ ...current, cancellationContact: value }))
+                  }}
+                  placeholder="support@example.com"
                 />
               </Field>
               <Field label="Tags" htmlFor="subscription-tags" className="text-sm md:col-span-2">

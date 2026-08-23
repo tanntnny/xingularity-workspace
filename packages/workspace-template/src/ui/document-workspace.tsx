@@ -69,7 +69,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               <div
                 key={tab.id}
                 data-active={tab.id === activeTabId ? 'true' : 'false'}
-                className="group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-background data-[active=true]:bg-accent"
+                className="workspace-tab-card group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-background data-[active=true]:bg-accent"
               >
                 <ToggleGroupItem
                   value={tab.id}
@@ -88,7 +88,9 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                       className="shrink-0 text-muted-foreground"
                     />
                   ) : null}
-                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  <span className="workspace-text-fade workspace-tab-label-fade min-w-0 flex-1">
+                    {tab.label}
+                  </span>
                   {tab.shortcut ? (
                     <Shortcut
                       keys={tab.shortcut}
@@ -205,7 +207,7 @@ const DocumentWorkspace = React.forwardRef<HTMLDivElement, DocumentWorkspaceProp
         >
           <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden p-3">{children}</div>
           <div className="app-drag-region h-8 shrink-0 border-t">
-            <div ref={setFooterSlot} className="app-no-drag flex h-full items-center px-3" />
+            <div ref={setFooterSlot} className="app-no-drag flex h-full items-center py-1" />
           </div>
         </div>
       </WorkspaceHeaderContext.Provider>
@@ -418,7 +420,7 @@ const WorkspaceHeaderActionDivider = React.forwardRef<
   <div
     ref={ref}
     aria-hidden="true"
-    className={cn('h-5 w-px shrink-0 bg-sidebar-border', className)}
+    className={cn('h-5 w-[var(--border-width)] shrink-0 bg-sidebar-border', className)}
     {...props}
   />
 ))
@@ -431,6 +433,7 @@ interface WorkspaceIconButtonProps extends Omit<
   icon: React.ReactNode
   label?: string
   active?: boolean
+  'data-testid'?: string
 }
 
 const WorkspaceIconButton = React.forwardRef<

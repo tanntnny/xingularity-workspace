@@ -1,4 +1,8 @@
-import type { ExcalidrawSessionScene, StoredExcalidrawFileDocument } from './types'
+import type {
+  ExcalidrawMetadata,
+  ExcalidrawSessionScene,
+  StoredExcalidrawFileDocument
+} from './types'
 
 export const EXCALIDRAW_FILE_EXTENSION = '.excalidraw'
 const EXCALIDRAW_FILE_VERSION = 1
@@ -46,7 +50,41 @@ export function normalizeExcalidrawFileDocument(
 ): StoredExcalidrawFileDocument {
   return {
     version: EXCALIDRAW_FILE_VERSION,
-    scene: normalizeExcalidrawScene(document.scene)
+    scene: normalizeExcalidrawScene(document.scene),
+    ...(document.metadata ? { metadata: normalizeExcalidrawMetadata(document.metadata) } : {})
+  }
+}
+
+export function normalizeExcalidrawMetadata(metadata: ExcalidrawMetadata): ExcalidrawMetadata {
+  return {
+    ...(metadata.title?.trim() ? { title: metadata.title.trim().slice(0, 200) } : {}),
+    ...(metadata.description?.trim()
+      ? { description: metadata.description.trim().slice(0, 2_000) }
+      : {}),
+    ...(metadata.tags?.length
+      ? {
+          tags: Array.from(new Set(metadata.tags.map((tag) => tag.trim()).filter(Boolean))).slice(
+            0,
+            50
+          )
+        }
+      : {}),
+    ...(metadata.projectId?.trim() ? { projectId: metadata.projectId.trim() } : {}),
+    ...(metadata.backlinks?.length
+      ? {
+          backlinks: Array.from(
+            new Set(metadata.backlinks.map((link) => link.trim()).filter(Boolean))
+          ).slice(0, 100)
+        }
+      : {}),
+    ...(metadata.assetIds?.length
+      ? {
+          assetIds: Array.from(
+            new Set(metadata.assetIds.map((asset) => asset.trim()).filter(Boolean))
+          ).slice(0, 200)
+        }
+      : {}),
+    ...(metadata.updatedAt ? { updatedAt: metadata.updatedAt } : {})
   }
 }
 
@@ -106,7 +144,10 @@ export function parseStoredExcalidrawFileDocument(raw: string): StoredExcalidraw
         typeof parsed.scene === 'object' && parsed.scene
           ? ((parsed.scene as ExcalidrawSessionScene).files ?? {})
           : {}
-    })
+    }),
+    ...(isRecord(parsed.metadata)
+      ? { metadata: normalizeExcalidrawMetadata(parsed.metadata as ExcalidrawMetadata) }
+      : {})
   }
 }
 

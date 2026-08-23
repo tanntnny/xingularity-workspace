@@ -1,5 +1,14 @@
-import { KeyboardEvent, ReactElement, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { Input } from './ui/input'
+import {
+  KeyboardEvent,
+  ReactElement,
+  ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
+import { Input, type InputVariant } from './ui/input'
 import { cn } from '../lib/utils'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
@@ -10,9 +19,11 @@ interface InlineEditableTextProps {
   displayAs?: DisplayAs
   displayClassName?: string
   inputClassName?: string
+  inputVariant?: InputVariant
   title?: string
   placeholder?: string
   allowEmpty?: boolean
+  fitInputToContent?: boolean
   normalize?: (value: string) => string
   renderDisplay?: (value: string) => ReactNode
   editToken?: number
@@ -27,9 +38,11 @@ export function InlineEditableText({
   displayAs = 'span',
   displayClassName,
   inputClassName,
+  inputVariant = 'default',
   title = 'Click to edit',
   placeholder,
   allowEmpty = false,
+  fitInputToContent = false,
   normalize,
   renderDisplay,
   editToken = 0
@@ -47,6 +60,44 @@ export function InlineEditableText({
       setDraftValue(value)
     }
   }, [value, isEditing])
+
+  useLayoutEffect(() => {
+    if (!isEditing || !fitInputToContent || !inputRef.current) {
+      return
+    }
+
+    const input = inputRef.current
+    const computedStyle = window.getComputedStyle(input)
+    const measureElement = document.createElement('span')
+    measureElement.style.position = 'absolute'
+    measureElement.style.visibility = 'hidden'
+    measureElement.style.whiteSpace = 'pre'
+    measureElement.style.font = computedStyle.font
+    measureElement.style.fontFamily = computedStyle.fontFamily
+    measureElement.style.fontSize = computedStyle.fontSize
+    measureElement.style.fontStyle = computedStyle.fontStyle
+    measureElement.style.fontWeight = computedStyle.fontWeight
+    measureElement.style.letterSpacing = computedStyle.letterSpacing
+    measureElement.style.textTransform = computedStyle.textTransform
+    measureElement.textContent = draftValue || placeholder || ' '
+    document.body.appendChild(measureElement)
+
+    const textWidth = measureElement.getBoundingClientRect().width
+    const horizontalPadding =
+      Number.parseFloat(computedStyle.paddingLeft) + Number.parseFloat(computedStyle.paddingRight)
+    const horizontalBorder =
+      Number.parseFloat(computedStyle.borderLeftWidth) +
+      Number.parseFloat(computedStyle.borderRightWidth)
+    const extraWidth =
+      computedStyle.boxSizing === 'border-box' ? horizontalPadding + horizontalBorder : 0
+
+    input.style.width = `${Math.ceil(textWidth + extraWidth + 1)}px`
+    measureElement.remove()
+
+    return () => {
+      input.style.width = ''
+    }
+  }, [draftValue, fitInputToContent, isEditing, placeholder])
 
   useEffect(() => {
     if (editToken <= 0 || editToken === handledEditTokenRef.current) {
@@ -129,6 +180,8 @@ export function InlineEditableText({
         onKeyDown={handleKeyDown}
         disabled={isCommitting}
         placeholder={placeholder}
+        size={fitInputToContent ? Math.max(draftValue.length, 1) : undefined}
+        variant={inputVariant}
         autoFocus
         className={inputClassName ?? defaultInputClassName}
       />

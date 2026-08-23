@@ -1,6 +1,6 @@
-import { UINode } from "../../../lib/schema";
+import { UINode } from '../../../lib/schema'
 
-export function TableNode({ node }: { node: Extract<UINode, { type: "table" }> }) {
+export function TableNode({ node }: { node: Extract<UINode, { type: 'table' }> }) {
   return (
     <div className="overflow-auto rounded-xl border border-slate-200 bg-white text-slate-950">
       <table className="w-full min-w-[520px] border-collapse text-left text-sm">
@@ -18,7 +18,7 @@ export function TableNode({ node }: { node: Extract<UINode, { type: "table" }> }
             <tr key={rowIndex} className="border-t border-slate-100">
               {node.columns.map((column) => (
                 <td key={column} className="px-4 py-3">
-                  {String(row[column] ?? "")}
+                  {String(row[column] ?? '')}
                 </td>
               ))}
             </tr>
@@ -26,5 +26,5 @@ export function TableNode({ node }: { node: Extract<UINode, { type: "table" }> }
         </tbody>
       </table>
     </div>
-  );
+  )
 }

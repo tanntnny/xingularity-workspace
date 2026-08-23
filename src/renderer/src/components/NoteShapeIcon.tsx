@@ -1,42 +1,59 @@
-import { createElement, ReactElement } from 'react'
+import { createElement, type CSSProperties, type ReactElement } from 'react'
 import type { ProjectIconStyle } from '../../../shared/types'
 import { resolveProjectIconGlyph } from '../../../shared/projectIcons'
 import { cn } from '../lib/utils'
 import { getProjectIconComponent } from '../lib/projectIconCatalog'
 
+export type ProjectIconSurface = 'none' | 'subtle'
+
 interface NoteShapeIconProps {
   icon: ProjectIconStyle
   size?: number | string
   className?: string
+  surface?: ProjectIconSurface
 }
 
-const PROJECT_ICON_GLYPH_RATIO = 0.58
+const PROJECT_ICON_SURFACE_GLYPH_RATIO = 0.6
 
-export function NoteShapeIcon({ icon, size = 16, className }: NoteShapeIconProps): ReactElement {
+export function NoteShapeIcon({
+  icon,
+  size = 18,
+  className,
+  surface = 'none'
+}: NoteShapeIconProps): ReactElement {
   const ProjectIcon = getProjectIconComponent(resolveProjectIconGlyph(icon))
   const glyphSize =
-    typeof size === 'number'
-      ? Math.max(1, Math.round(size * PROJECT_ICON_GLYPH_RATIO))
-      : `${PROJECT_ICON_GLYPH_RATIO}em`
+    surface === 'subtle'
+      ? typeof size === 'number'
+        ? Math.max(1, Math.round(size * PROJECT_ICON_SURFACE_GLYPH_RATIO))
+        : `${PROJECT_ICON_SURFACE_GLYPH_RATIO}em`
+      : size
+
+  const iconStyle = {
+    '--project-icon-color': icon.color,
+    width: size,
+    height: size
+  } as CSSProperties
 
   return (
     <span
       aria-hidden="true"
+      data-project-icon-surface={surface}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-md border',
+        'inline-flex shrink-0 items-center justify-center',
+        surface === 'subtle' && 'project-icon-surface rounded-[var(--radius-button)]',
         className
       )}
-      style={{
-        width: size,
-        height: size,
-        backgroundColor: icon.color,
-        borderColor: icon.color
-      }}
+      style={iconStyle}
     >
       {createElement(ProjectIcon, {
         size: glyphSize,
-        style: { width: glyphSize, height: glyphSize },
-        color: 'var(--icon-on-color)',
+        style: {
+          width: glyphSize,
+          height: glyphSize,
+          color: 'var(--project-icon-color)'
+        },
+        color: 'var(--project-icon-color)',
         'aria-hidden': true
       })}
     </span>

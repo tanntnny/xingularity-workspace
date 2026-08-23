@@ -35,16 +35,35 @@ import {
   VaultPaths
 } from './vaultManager'
 import { getVaultFleetingDir } from './vaultData'
+import { buildVaultMigrationReport } from './vaultMigrationReport'
 import { VaultWatcher, type VaultEvent } from './watcher'
 import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
 import { TrashService, TrashedEntry } from './trashService'
 import { NotebookMutationQueue } from './notebookMutationQueue'
+import { CredentialStore } from './credentialStore'
+import { ResourceService } from './resourceService'
+import { ResourceWriteService } from './resourceWriteService'
+import { GoogleDriveAdapter } from './googleDriveAdapter'
+import {
+  GOOGLE_DRIVE_CONTENT_MAX_CHARS,
+  GoogleDriveResourceService
+} from './googleDriveResourceService'
+import type {
+  ResourceWriteInput,
+  ResourceWritePreview,
+  ResourceWriteAuditRecord
+} from '../shared/types'
 import { createWarpNewTabUri } from './warp'
 import { buildFolderMarkdown } from './noteMarkdownExport'
+import { buildProjectMarkdown, type ProjectMarkdownExternalDocument } from './projectMarkdownExport'
 import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { isVaultRelativePath } from '../shared/projectFolders'
+import { getProjectNotebookPath } from '../shared/projectNotebook'
+import { notebookPathFromResource, notebookResourceUri } from '../shared/resourceDomain'
+import { applyProjectMilestoneOrder, validateTaskRelationships } from '../shared/projectPlanning'
 import { normalizeTaskTags } from '../shared/taskTags'
 import {
   AppSettings,
@@ -61,8 +80,10 @@ import {
   AppSettingsUpdate,
   AppSettingsUpdateOptions,
   CalendarTask,
+  ReminderClickTarget,
   CreateProjectInput,
   CreateProjectMilestoneInput,
+  CreateProjectUpdateInput,
   CreateTaskInput,
   DeleteProjectMilestoneInput,
   DeleteProjectMilestoneResult,
@@ -74,12 +95,16 @@ import {
   NoteImportResult,
   Project,
   ProjectMilestone,
+  ReorderProjectMilestonesInput,
+  ProjectUpdate,
   ProjectState,
   SavedVaultState,
   SearchResult,
   StoredNoteDocument,
   UpdateProjectMilestoneInput,
   UpdateProjectInput,
+  UpdateProjectUpdateInput,
+  DeleteProjectUpdateInput,
   VaultRemoveResult,
   VaultOpenResult,
   HistoryOperationResult,
@@ -92,12 +117,24 @@ import {
   NotePdfExportResult,
   FolderMarkdownExportInput,
   FolderMarkdownExportResult,
+  ProjectContextMarkdownExportInput,
+  ProjectContextMarkdownExportResult,
   FolderPdfExportInput,
   FolderPdfExportResult,
   FleetingConversionResult,
   FleetingConversionTarget,
-  FleetingNote
+  FleetingNote,
+  MutationEnvelope,
+  ResourceInput,
+  ResourceRef,
+  ResourceRelation,
+  ResourcePreview,
+  ResourceHealth,
+  ResourceContextBundle
 } from '../shared/types'
+
+const AGENT_GOOGLE_DOC_EXCERPT_MAX_CHARS = 20_000
+const AGENT_GOOGLE_DOC_TOTAL_MAX_CHARS = 100_000
 
 export class VaultRuntime {
   private currentPaths: VaultPaths | null = null
@@ -107,6 +144,11 @@ export class VaultRuntime {
   private indexer: SqliteIndexer | null = null
   private settings = new SettingsStore()
   private reminderService = new ReminderService()
+  private credentialStore = new CredentialStore()
+  private resourceService: ResourceService | null = null
+  private resourceWriteService: ResourceWriteService | null = null
+  private googleDriveService: GoogleDriveResourceService | null = null
+  private resourceSearchCache: SearchResult[] = []
   private activationQueue: Promise<void> = Promise.resolve()
   private notebookMutationQueue = new NotebookMutationQueue()
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -114,8 +156,13 @@ export class VaultRuntime {
   private treeChangeListeners: Array<() => void> = []
   private agentChatListeners: Array<(event: AgentChatEvent) => void> = []
   private agentToolInvoker: ((name: string, input: unknown) => Promise<unknown>) | null = null
+  private readonly cancelledAgentRequests = new Set<string>()
+  private readonly agentAbortControllers = new Map<string, AbortController>()
+  private reminderClickListeners: Array<(target: ReminderClickTarget) => void> = []
 
-  constructor(private readonly history = new HistoryService()) {}
+  constructor(private readonly history = new HistoryService()) {
+    this.reminderService.setReminderClickHandler((target) => this.notifyReminderClick(target))
+  }
 
   async openWithDialog(): Promise<VaultOpenResult | null> {
     const chosen = await chooseVaultFolder('Open vault folder')
@@ -170,6 +217,10 @@ export class VaultRuntime {
     )
   }
 
+  async getVaultMigrationReport(): Promise<import('../shared/types').VaultMigrationReport> {
+    return buildVaultMigrationReport(this.getCurrentVaultRoot())
+  }
+
   async toggleFavoriteSavedVault(rootPath: string): Promise<SavedVaultState> {
     const global = await this.settings.toggleFavoriteVault(path.resolve(rootPath))
     return this.buildSavedVaultState(global)
@@ -222,6 +273,20 @@ export class VaultRuntime {
     return this.currentPaths!.rootPath
   }
 
+  getVaultFileProtocolScope(): {
+    vaultRoot: string
+    attachmentRoots: readonly string[]
+  } | null {
+    if (!this.currentPaths) {
+      return null
+    }
+
+    return {
+      vaultRoot: this.currentPaths.rootPath,
+      attachmentRoots: [this.currentPaths.attachmentsPath]
+    }
+  }
+
   onVaultChange(listener: (paths: VaultPaths | null) => void): void {
     this.vaultListeners.push(listener)
   }
@@ -230,6 +295,13 @@ export class VaultRuntime {
     this.treeChangeListeners.push(listener)
     return () => {
       this.treeChangeListeners = this.treeChangeListeners.filter((item) => item !== listener)
+    }
+  }
+
+  onReminderClick(listener: (target: ReminderClickTarget) => void): () => void {
+    this.reminderClickListeners.push(listener)
+    return () => {
+      this.reminderClickListeners = this.reminderClickListeners.filter((item) => item !== listener)
     }
   }
 
@@ -258,6 +330,16 @@ export class VaultRuntime {
   async removeFleetingNote(relPath: string): Promise<void> {
     this.assertReady()
     await this.fleetingNoteService!.delete(relPath)
+  }
+
+  async updateFleetingNote(
+    relPath: string,
+    patch: Partial<
+      Pick<FleetingNote, 'content' | 'priority' | 'tags' | 'dueDate' | 'projectId' | 'triageState'>
+    >
+  ): Promise<FleetingNote> {
+    this.assertReady()
+    return this.fleetingNoteService!.update(relPath, patch)
   }
 
   async convertFleetingNote(
@@ -777,22 +859,80 @@ export class VaultRuntime {
     }
   }
 
-  async exportProject(projectName: string, content: string): Promise<string | null> {
+  async exportProjectContext(
+    input: ProjectContextMarkdownExportInput
+  ): Promise<ProjectContextMarkdownExportResult> {
     this.assertReady()
+
+    const projectId = input.projectId.trim()
+    if (!projectId) {
+      throw new Error('Project ID is required')
+    }
+
+    const settings = await this.getSettings()
+    const project = resolveProjectById(settings.projects, projectId)
+    const tasks = settings.calendarTasks.filter((task) => task.projectId === project.id)
+    const updates = (project.updates ?? []).filter((update) => update.projectId === project.id)
+    const notebookPath = getProjectNotebookPath(project)
+    let notes: Array<{ relPath: string; markdown: string }> = []
+    const warnings: string[] = []
+
+    try {
+      const folderDocuments = await this.fileService!.listNoteDocumentsInFolder(notebookPath)
+      notes = folderDocuments.notes.map(({ relPath, document }) => ({
+        relPath,
+        markdown: document.markdown
+      }))
+      warnings.push(...folderDocuments.warnings)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      warnings.push(`Unable to read linked notebook folder "${notebookPath}": ${message}`)
+    }
+
+    const resourceContext = await this.resourceService!.contextForProject(project.id)
+    const externalDocuments = await this.loadProjectGoogleDocSources(
+      resourceContext.resources,
+      GOOGLE_DRIVE_CONTENT_MAX_CHARS
+    )
+    warnings.push(...externalDocuments.warnings)
+
+    const content = buildProjectMarkdown({
+      project,
+      notebookPath,
+      tasks,
+      updates,
+      notes,
+      externalDocuments: externalDocuments.documents,
+      exportedAt: new Date().toISOString()
+    })
     const downloadsPath = app.getPath('downloads')
-    const suggestedName = `${this.sanitizeExportFileName(projectName)}.md`
+    const suggestedName = `${this.sanitizeExportFileName(project.name)} - Project Context.md`
     const result = await this.showMarkdownExportDialog(
-      'Export project',
+      'Export project context',
       downloadsPath,
       suggestedName
     )
 
     if (result.canceled || !result.filePath) {
-      return null
+      return {
+        path: null,
+        noteCount: notes.length,
+        taskCount: tasks.length,
+        updateCount: updates.length,
+        externalDocumentCount: externalDocuments.documents.length,
+        warnings
+      }
     }
 
     await fs.writeFile(result.filePath, content, 'utf-8')
-    return result.filePath
+    return {
+      path: result.filePath,
+      noteCount: notes.length,
+      taskCount: tasks.length,
+      updateCount: updates.length,
+      externalDocumentCount: externalDocuments.documents.length,
+      warnings
+    }
   }
 
   async chooseDirectory(title: string): Promise<string | null> {
@@ -808,11 +948,462 @@ export class VaultRuntime {
     return result.filePaths[0] ?? null
   }
 
+  async choosePath(title: string): Promise<string | null> {
+    const result = await dialog.showOpenDialog({
+      title,
+      properties: ['openFile', 'openDirectory']
+    })
+
+    if (result.canceled) {
+      return null
+    }
+
+    return result.filePaths[0] ?? null
+  }
+
   async openPath(targetPath: string): Promise<void> {
     const openError = await shell.openPath(targetPath)
     if (openError) {
       throw new Error(openError)
     }
+  }
+
+  async openExternal(url: string): Promise<void> {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Only HTTP and HTTPS URLs can be opened externally')
+    }
+    await shell.openExternal(parsed.toString())
+  }
+
+  async listResources(): Promise<import('./resourceStore').ResourceStoreSnapshot> {
+    this.assertReady()
+    return this.resourceService!.list()
+  }
+
+  async addResource(input: ResourceInput): Promise<ResourceRef> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    const featureFlags = {
+      ...createDefaultAppSettings().featureFlags,
+      ...(settings.featureFlags ?? {})
+    }
+    if (!featureFlags.resources) {
+      throw new Error('Resource links are disabled for this vault')
+    }
+    if (input.provider === 'filesystem' && !featureFlags.filesystemResources) {
+      throw new Error('Filesystem resources are disabled for this vault')
+    }
+    if (input.type === 'external' && input.canonicalUri) {
+      assertExternalResourceUri(input.canonicalUri)
+    }
+    const resource = await this.resourceService!.add(input)
+    await this.refreshResourceSearchCache()
+    if (input.projectId) {
+      await this.resourceService!.relate({
+        type: 'project_contains_resource',
+        fromId: input.projectId,
+        fromKind: 'project',
+        toId: resource.id,
+        toKind: 'resource'
+      })
+      await this.mutateSettings(
+        (current) => {
+          const projects = current.projects.map((project) =>
+            project.id === input.projectId
+              ? {
+                  ...project,
+                  resourceRefs: Array.from(
+                    new Map(
+                      [...(project.resourceRefs ?? []), resource].map((item) => [item.id, item])
+                    ).values()
+                  )
+                }
+              : project
+          )
+          return { next: { projects }, result: resource }
+        },
+        { label: 'Attach resource to project' }
+      )
+    }
+    return resource
+  }
+
+  async updateResource(input: {
+    resourceId: string
+    canonicalUri?: string
+    title?: string
+  }): Promise<ResourceRef> {
+    this.assertReady()
+    const snapshot = await this.resourceService!.list()
+    const existing = snapshot.resources.find((resource) => resource.id === input.resourceId)
+    if (!existing) throw new Error(`Resource not found: ${input.resourceId}`)
+    if (existing.type === 'external' && input.canonicalUri) {
+      assertExternalResourceUri(input.canonicalUri)
+    }
+    const resource = await this.resourceService!.update(input.resourceId, input)
+    await this.mutateSettings(
+      (current) => ({
+        next: {
+          projects: current.projects.map((project) => ({
+            ...project,
+            resourceRefs: project.resourceRefs?.map((ref) =>
+              ref.id === resource.id ? resource : ref
+            )
+          }))
+        },
+        result: resource
+      }),
+      { label: 'Update resource' }
+    )
+    await this.refreshResourceSearchCache()
+    return resource
+  }
+
+  async setProjectNotebook(input: {
+    projectId: string
+    notebookPath: string
+  }): Promise<ResourceRef> {
+    this.assertReady()
+    const notebookPath = input.notebookPath.trim()
+    if (!isVaultRelativePath(notebookPath)) {
+      throw new Error('Notebook path must be vault-relative')
+    }
+
+    const settings = await this.getSettings()
+    const project = resolveProjectById(settings.projects, input.projectId)
+    const existingNotebook = project.resourceRefs?.find((resource) => resource.type === 'notebook')
+    const canonicalUri = notebookResourceUri(notebookPath)
+    if (existingNotebook?.canonicalUri === canonicalUri) return existingNotebook
+
+    return this.addResource({
+      type: 'notebook',
+      canonicalUri,
+      title: notebookPath.split('/').pop() ?? project.name,
+      projectId: project.id
+    })
+  }
+
+  async detachResource(input: { projectId: string; resourceId: string }): Promise<void> {
+    this.assertReady()
+    await this.resourceService!.detachFromProject(input.projectId, input.resourceId)
+    await this.mutateSettings(
+      (current) => ({
+        next: {
+          projects: current.projects.map((project) =>
+            project.id === input.projectId
+              ? {
+                  ...project,
+                  resourceRefs: project.resourceRefs?.filter(
+                    (resource) => resource.id !== input.resourceId
+                  )
+                }
+              : project
+          )
+        },
+        result: undefined
+      }),
+      { label: 'Detach resource from project' }
+    )
+    await this.refreshResourceSearchCache()
+  }
+
+  async refreshResource(resourceId: string): Promise<ResourceHealth> {
+    this.assertReady()
+    const health = await this.resourceService!.refresh(resourceId)
+    await this.refreshResourceSearchCache()
+    return health
+  }
+
+  async locateResource(resourceId: string, nextPath: string): Promise<ResourceRef> {
+    this.assertReady()
+    const resource = await this.resourceService!.locate(resourceId, nextPath)
+    await this.refreshResourceSearchCache()
+    return resource
+  }
+
+  async previewResource(resourceId: string, allowContent = false): Promise<ResourcePreview> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    const featureFlags = {
+      ...createDefaultAppSettings().featureFlags,
+      ...(settings.featureFlags ?? {})
+    }
+    const resource = (await this.resourceService!.list()).resources.find(
+      (candidate) => candidate.id === resourceId
+    )
+    if (
+      resource?.provider === 'google-drive' &&
+      allowContent &&
+      featureFlags.googleDriveContentIndexing &&
+      this.googleDriveService
+    ) {
+      return this.googleDriveService.preview(resourceId, true)
+    }
+    return this.resourceService!.preview(
+      resourceId,
+      allowContent && featureFlags.filesystemContentIndexing
+    )
+  }
+
+  async relateResource(input: {
+    type: ResourceRelation['type']
+    fromId: string
+    fromKind: string
+    toId: string
+    toKind: string
+    confidence?: ResourceRelation['confidence']
+  }): Promise<ResourceRelation> {
+    this.assertReady()
+    return this.resourceService!.relate(input)
+  }
+
+  async getProjectResourceContext(projectId: string): Promise<ResourceContextBundle> {
+    this.assertReady()
+    const bundle = await this.resourceService!.contextForProject(projectId)
+    const externalDocuments = await this.loadProjectGoogleDocSources(
+      bundle.resources,
+      AGENT_GOOGLE_DOC_EXCERPT_MAX_CHARS,
+      AGENT_GOOGLE_DOC_TOTAL_MAX_CHARS
+    )
+    const excerpts = new Map(
+      externalDocuments.documents
+        .filter((document) => Boolean(document.markdown?.trim()))
+        .map((document) => [document.canonicalUri, document.markdown as string])
+    )
+    return {
+      ...bundle,
+      citations: bundle.citations.map((citation) => {
+        const excerpt = excerpts.get(citation.uri)
+        return excerpt ? { ...citation, excerpt } : citation
+      })
+    }
+  }
+
+  async openResource(resourceId: string): Promise<void> {
+    this.assertReady()
+    const snapshot = await this.resourceService!.list()
+    const resource = snapshot.resources.find((candidate) => candidate.id === resourceId)
+    if (!resource) throw new Error(`Resource not found: ${resourceId}`)
+    if (resource.type === 'notebook') {
+      const notebookPath = notebookPathFromResource(resource)
+      if (!notebookPath) throw new Error('Invalid notebook resource')
+      await this.openPath(assertPathInVault(this.currentPaths!, notebookPath, 'notes'))
+      return
+    }
+    if (resource.provider === 'filesystem') {
+      await this.openPath(decodeFileUri(resource.canonicalUri))
+      return
+    }
+    await shell.openExternal(assertExternalResourceUri(resource.canonicalUri))
+  }
+
+  async revealResource(resourceId: string): Promise<void> {
+    this.assertReady()
+    const snapshot = await this.resourceService!.list()
+    const resource = snapshot.resources.find((candidate) => candidate.id === resourceId)
+    if (!resource) throw new Error(`Resource not found: ${resourceId}`)
+    if (resource.type === 'notebook') {
+      const notebookPath = notebookPathFromResource(resource)
+      if (!notebookPath) throw new Error('Invalid notebook resource')
+      shell.showItemInFolder(assertPathInVault(this.currentPaths!, notebookPath, 'notes'))
+      return
+    }
+    if (resource.provider !== 'filesystem') {
+      await shell.openExternal(assertExternalResourceUri(resource.canonicalUri))
+      return
+    }
+    shell.showItemInFolder(decodeFileUri(resource.canonicalUri))
+  }
+
+  async previewResourceWrite(input: ResourceWriteInput): Promise<ResourceWritePreview> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    if (!settings.featureFlags?.externalWrites) {
+      throw new Error('External writes are disabled for this vault')
+    }
+    return this.resourceWriteService!.preview(input)
+  }
+
+  async applyResourceWrite(
+    input: ResourceWriteInput,
+    confirmation: boolean
+  ): Promise<ResourceWritePreview> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    if (!settings.featureFlags?.externalWrites) {
+      throw new Error('External writes are disabled for this vault')
+    }
+    return this.resourceWriteService!.apply(input, confirmation)
+  }
+
+  async listResourceWriteAudit(): Promise<ResourceWriteAuditRecord[]> {
+    this.assertReady()
+    return this.resourceWriteService!.audit()
+  }
+
+  async startGoogleDriveAuthorization(): Promise<
+    import('./googleDriveResourceService').StartedDriveAuthorization
+  > {
+    this.assertReady()
+    const settings = await this.getSettings()
+    if (!settings.featureFlags?.googleDriveResources) {
+      throw new Error('Google Drive resources are disabled for this vault')
+    }
+    if (!this.googleDriveService) {
+      throw new Error(
+        'Google Drive is not configured. Set XINGULARITY_GOOGLE_CLIENT_ID and XINGULARITY_GOOGLE_REDIRECT_URI.'
+      )
+    }
+    return this.googleDriveService.startAuthorization()
+  }
+
+  async completeGoogleDriveAuthorization(input: {
+    connectionId: string
+    code: string
+    state: string
+  }): Promise<void> {
+    this.assertReady()
+    if (!this.googleDriveService) throw new Error('Google Drive is not configured')
+    await this.googleDriveService.completeAuthorization(input.connectionId, input.code, input.state)
+  }
+
+  async listGoogleDriveFiles(): Promise<import('../shared/types').GoogleDriveFileCandidate[]> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    if (!settings.featureFlags?.googleDriveResources) {
+      throw new Error('Google Drive resources are disabled for this vault')
+    }
+    if (!this.googleDriveService) throw new Error('Google Drive is not configured')
+    return this.googleDriveService.listFiles()
+  }
+
+  async attachGoogleDriveResources(input: {
+    fileIds: string[]
+    projectId?: string
+  }): Promise<ResourceRef[]> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    if (!settings.featureFlags?.googleDriveResources) {
+      throw new Error('Google Drive resources are disabled for this vault')
+    }
+    if (!this.googleDriveService) throw new Error('Google Drive is not configured')
+    const resources = await this.googleDriveService.listAndAttach(input.fileIds, input.projectId)
+    if (input.projectId && resources.length > 0) {
+      await this.mutateSettings(
+        (current) => {
+          const projects = current.projects.map((project) =>
+            project.id === input.projectId
+              ? {
+                  ...project,
+                  resourceRefs: Array.from(
+                    new Map(
+                      [...(project.resourceRefs ?? []), ...resources].map((item) => [item.id, item])
+                    ).values()
+                  )
+                }
+              : project
+          )
+          return { next: { projects }, result: undefined }
+        },
+        { label: 'Attach Google Drive resources to project' }
+      )
+    }
+    await this.refreshResourceSearchCache()
+    return resources
+  }
+
+  private async loadProjectGoogleDocSources(
+    resources: readonly ResourceRef[],
+    maxCharsPerDocument: number,
+    maxTotalChars = Number.POSITIVE_INFINITY
+  ): Promise<{ documents: ProjectMarkdownExternalDocument[]; warnings: string[] }> {
+    const googleDocs = resources.filter(
+      (resource) =>
+        resource.provider === 'google-drive' &&
+        resource.kind === 'google-doc' &&
+        Boolean(resource.externalId)
+    )
+    const documents: ProjectMarkdownExternalDocument[] = googleDocs.map((resource) => ({
+      title: resource.title,
+      canonicalUri: resource.canonicalUri,
+      ...(typeof resource.metadata?.modifiedTime === 'string'
+        ? { modifiedAt: resource.metadata.modifiedTime }
+        : {})
+    }))
+    const warnings: string[] = []
+
+    if (googleDocs.length === 0) {
+      return { documents, warnings }
+    }
+
+    const settings = await this.getSettings()
+    const featureFlags = {
+      ...createDefaultAppSettings().featureFlags,
+      ...(settings.featureFlags ?? {})
+    }
+    if (!featureFlags.googleDriveContentIndexing) {
+      warnings.push(
+        'Google Drive content indexing is disabled; linked Docs were exported as sources only'
+      )
+      return { documents, warnings }
+    }
+    if (!this.googleDriveService) {
+      warnings.push('Google Drive is not configured; linked Docs were exported as sources only')
+      return { documents, warnings }
+    }
+
+    let remainingChars = Math.max(0, maxTotalChars)
+    const boundedPerDocument = Math.min(
+      Math.max(0, maxCharsPerDocument),
+      GOOGLE_DRIVE_CONTENT_MAX_CHARS
+    )
+
+    for (const [index, resource] of googleDocs.entries()) {
+      if (remainingChars === 0) {
+        warnings.push('Google Drive project context content budget was exhausted')
+        break
+      }
+
+      try {
+        const preview = await this.googleDriveService.preview(resource.id, true)
+        if (preview.error) {
+          throw new Error(preview.error)
+        }
+        const text = preview.text ?? ''
+        const maxChars = Math.min(boundedPerDocument, remainingChars)
+        documents[index] = {
+          ...documents[index],
+          ...(text ? { markdown: text.slice(0, maxChars) } : {}),
+          truncated: preview.truncated || text.length > maxChars
+        }
+        remainingChars -= Math.min(text.length, maxChars)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        warnings.push(`Unable to read linked Google Doc "${resource.title}": ${message}`)
+      }
+    }
+
+    return { documents, warnings }
+  }
+
+  async refreshGoogleDriveChanges(pageToken: string): Promise<{
+    resources: ResourceRef[]
+    nextPageToken?: string
+    newStartPageToken?: string
+  }> {
+    this.assertReady()
+    if (!this.googleDriveService) throw new Error('Google Drive is not configured')
+    const result = await this.googleDriveService.refreshChanges(pageToken)
+    await this.refreshResourceSearchCache()
+    return result
+  }
+
+  async disconnectGoogleDrive(): Promise<void> {
+    this.assertReady()
+    if (!this.googleDriveService) return
+    await this.googleDriveService.disconnect()
+    await this.refreshResourceSearchCache()
   }
 
   async openWarpAtNotePath(relPath: string): Promise<void> {
@@ -864,7 +1455,57 @@ export class VaultRuntime {
 
   search(query: string): SearchResult[] {
     this.assertReady()
-    return this.indexer!.query(query)
+    const localResults = this.indexer!.query(query)
+    const normalized = query.trim().toLocaleLowerCase()
+    if (!normalized) return localResults
+    const resourceResults = this.resourceSearchCache.filter((result) =>
+      `${result.title} ${result.snippet} ${result.provider ?? ''} ${result.state ?? ''}`
+        .toLocaleLowerCase()
+        .includes(normalized)
+    )
+    return [...localResults, ...resourceResults].slice(0, 100)
+  }
+
+  private async refreshResourceSearchCache(): Promise<void> {
+    if (!this.resourceService) {
+      this.resourceSearchCache = []
+      return
+    }
+    const settings = await this.getSettings()
+    const featureFlags = {
+      ...createDefaultAppSettings().featureFlags,
+      ...(settings.featureFlags ?? {})
+    }
+    const snapshot = await this.resourceService.list()
+    this.resourceSearchCache = await Promise.all(
+      snapshot.resources.map(async (resource) => {
+        let contentSnippet = ''
+        if (featureFlags.filesystemContentIndexing && resource.provider === 'filesystem') {
+          const preview = await this.resourceService!.preview(resource.id, true)
+          contentSnippet = preview.text?.slice(0, 1_000) ?? ''
+        }
+        return {
+          id: resource.id,
+          relPath: resource.canonicalUri,
+          title: resource.title,
+          tags: [],
+          updated: resource.updatedAt,
+          snippet: `${resource.provider} · ${resourceStateForSearch(resource.state)}${resource.lastSeenAt ? ` · observed ${resource.lastSeenAt}` : ''}${contentSnippet ? ` · ${contentSnippet}` : ''}`,
+          entityType: 'resource' as const,
+          target: {
+            kind: 'resource' as const,
+            id: resource.id,
+            relPath: resource.canonicalUri
+          },
+          resourceId: resource.id,
+          provider: resource.provider,
+          freshness: resource.freshness,
+          access: resource.access,
+          state: resource.state,
+          projectId: resource.projectIds?.[0]
+        }
+      })
+    )
   }
 
   async importAttachment(sourcePath: string): Promise<string> {
@@ -897,8 +1538,7 @@ export class VaultRuntime {
       }
     }
 
-    const settings = await this.getSettings()
-    const apiKey = settings.ai.mistralApiKey.trim()
+    const apiKey = (await this.credentialStore.get('mistral', this.getCurrentVaultRoot())) ?? ''
     try {
       if (!apiKey) {
         throw new Error('Add your Mistral API key in Settings before using AI note completion')
@@ -971,9 +1611,13 @@ export class VaultRuntime {
       }
     }
 
-    const settings = await this.getSettings()
-    const apiKey = settings.ai.mistralApiKey.trim()
+    this.cancelledAgentRequests.delete(requestId)
+    const abortController = new AbortController()
+    this.agentAbortControllers.set(requestId, abortController)
+
     try {
+      const settings = await this.getSettings()
+      const apiKey = (await this.credentialStore.get('mistral', this.getCurrentVaultRoot())) ?? ''
       this.emitAgentChatEvent({ requestId, type: 'status', status: 'started' })
       if (!apiKey) {
         throw new Error('Add your Mistral API key in Settings before using Agent Chat')
@@ -985,7 +1629,8 @@ export class VaultRuntime {
         mistral,
         model,
         buildInitialAgentChatMessages(input.message, contexts),
-        requestId
+        requestId,
+        abortController.signal
       )
       if (!content) {
         throw new Error('Mistral did not return any agent response text')
@@ -1008,16 +1653,41 @@ export class VaultRuntime {
         toolSteps
       }
     } catch (error) {
+      const cancelled = abortController.signal.aborted || this.cancelledAgentRequests.has(requestId)
       await this.recordAgentRun({
         ...baseRun,
         endedAt: new Date().toISOString(),
-        status: 'error',
-        errorMessage: error instanceof Error ? error.message : String(error)
+        status: cancelled ? 'cancelled' : 'error',
+        errorMessage: cancelled
+          ? 'Agent request cancelled'
+          : error instanceof Error
+            ? error.message
+            : String(error)
       })
+      if (cancelled) {
+        throw new Error('Agent request cancelled')
+      }
       throw error
     } finally {
+      this.agentAbortControllers.delete(requestId)
+      this.cancelledAgentRequests.delete(requestId)
       this.emitAgentChatEvent({ requestId, type: 'status', status: 'finished' })
     }
+  }
+
+  cancelAgentChat(requestId: string): boolean {
+    if (!requestId.trim()) return false
+    const abortController = this.agentAbortControllers.get(requestId)
+    if (!abortController) return false
+    this.cancelledAgentRequests.add(requestId)
+    abortController.abort()
+    this.emitAgentChatEvent({
+      requestId,
+      type: 'status',
+      status: 'thinking',
+      message: 'cancelling'
+    })
+    return true
   }
 
   async listAgentRuns(): Promise<AgentRunRecord[]> {
@@ -1154,8 +1824,7 @@ export class VaultRuntime {
         model
       }
 
-      const settings = await this.getSettings()
-      const apiKey = settings.ai.mistralApiKey.trim()
+      const apiKey = (await this.credentialStore.get('mistral', this.getCurrentVaultRoot())) ?? ''
       if (apiKey && input.sessionMessages?.length) {
         const mistral = new Mistral({ apiKey })
         const continuation = await this.runAgentChatLoopFromMessages(
@@ -1224,21 +1893,49 @@ export class VaultRuntime {
   async getSettings(): Promise<AppSettings> {
     if (!this.currentPaths) {
       console.log('[VaultRuntime] getSettings requested before vault open')
-      const defaults = createDefaultAppSettings()
-      const global = await this.settings.readGlobal()
-      return {
-        ...defaults,
-        lastVaultPath: global.lastVaultPath
-      }
+      return this.getDefaultSettings()
     }
 
     return this.enqueueSettingsUpdate(async () => {
-      console.log('[VaultRuntime] getSettings for vault', this.currentPaths?.rootPath)
-      const settings = await this.settings.readVault(this.getCurrentVaultRoot())
+      const activeRootPath = this.currentPaths?.rootPath
+      if (!activeRootPath) {
+        console.log('[VaultRuntime] getSettings requested before vault open')
+        return this.getDefaultSettings()
+      }
+
+      console.log('[VaultRuntime] getSettings for vault', activeRootPath)
+      const settings = await this.settings.readVault(activeRootPath)
       // Initialize reminder service with current tasks
       this.reminderService.updateTasks(settings.calendarTasks)
       return settings
     })
+  }
+
+  private async getDefaultSettings(): Promise<AppSettings> {
+    const defaults = createDefaultAppSettings()
+    const global = await this.settings.readGlobal()
+    return {
+      ...defaults,
+      lastVaultPath: global.lastVaultPath
+    }
+  }
+
+  async getCredentialStatus(provider: string): Promise<import('../shared/types').CredentialStatus> {
+    this.assertReady()
+    return this.credentialStore.status(provider, this.getCurrentVaultRoot())
+  }
+
+  async setCredential(
+    provider: string,
+    value: string
+  ): Promise<import('../shared/types').CredentialStatus> {
+    this.assertReady()
+    return this.credentialStore.set(provider, this.getCurrentVaultRoot(), value)
+  }
+
+  async deleteCredential(provider: string): Promise<void> {
+    this.assertReady()
+    await this.credentialStore.delete(provider, this.getCurrentVaultRoot())
   }
 
   async updateSettings(
@@ -1255,7 +1952,7 @@ export class VaultRuntime {
     return this.mutateSettings(
       (settings) => {
         const name = buildProjectName(settings.projects, input.name)
-        const description = input.description?.trim() || 'Add project details here.'
+        const description = input.description?.trim() ?? ''
         const now = new Date()
         const startDate = input.startDate ?? toLocalIsoDate(now)
         assertProjectDateRange(startDate, input.endDate)
@@ -1268,7 +1965,11 @@ export class VaultRuntime {
           startDate,
           endDate: input.endDate,
           tags: normalizeProjectValues(input.tags),
-          resources: normalizeProjectValues(input.resources),
+          resourceRefs: input.resourceRefs,
+          timeBudgetMinutes:
+            input.timeBudgetMinutes === undefined
+              ? undefined
+              : Math.max(0, Math.round(input.timeBudgetMinutes)),
           icon: normalizeProjectIcon(input.icon, name),
           updatedAt: now.toISOString()
         }
@@ -1332,10 +2033,14 @@ export class VaultRuntime {
           startDate,
           endDate,
           tags: input.tags === undefined ? existing.tags : normalizeProjectValues(input.tags),
-          resources:
-            input.resources === undefined
-              ? existing.resources
-              : normalizeProjectValues(input.resources),
+          resourceRefs:
+            input.resourceRefs === undefined ? existing.resourceRefs : input.resourceRefs,
+          timeBudgetMinutes:
+            input.timeBudgetMinutes === null
+              ? undefined
+              : input.timeBudgetMinutes === undefined
+                ? existing.timeBudgetMinutes
+                : Math.max(0, Math.round(input.timeBudgetMinutes)),
           updatedAt: new Date().toISOString()
         }
         return {
@@ -1503,6 +2208,29 @@ export class VaultRuntime {
     )
   }
 
+  async reorderProjectMilestones(input: ReorderProjectMilestonesInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        const reordered = applyProjectMilestoneOrder(project, input.milestoneIds)
+        const updatedProject: Project = {
+          ...reordered,
+          updatedAt: new Date().toISOString()
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Reorder project milestones' }
+    )
+  }
+
   async deleteProjectMilestone(
     input: DeleteProjectMilestoneInput
   ): Promise<DeleteProjectMilestoneResult> {
@@ -1546,6 +2274,102 @@ export class VaultRuntime {
     )
   }
 
+  async createProjectUpdate(input: CreateProjectUpdateInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        if (!input.markdown.trim()) {
+          throw new Error('Project update content is required before posting')
+        }
+        const now = new Date()
+        const update: ProjectUpdate = {
+          id: `update-${randomUUID()}`,
+          projectId: project.id,
+          markdown: input.markdown,
+          status: input.status,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString()
+        }
+        const updatedProject: Project = {
+          ...project,
+          updates: [...(project.updates ?? []), update],
+          updatedAt: now.toISOString()
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Create project update' }
+    )
+  }
+
+  async updateProjectUpdate(input: UpdateProjectUpdateInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        const existing = resolveProjectUpdate(project, input.updateId)
+        if (!input.markdown.trim()) {
+          throw new Error('Project update content is required before saving')
+        }
+        const updatedAt = new Date().toISOString()
+        const updatedUpdate: ProjectUpdate = {
+          ...existing,
+          markdown: input.markdown,
+          status: input.status,
+          updatedAt
+        }
+        const updatedProject: Project = {
+          ...project,
+          updates: (project.updates ?? []).map((update) =>
+            update.id === updatedUpdate.id ? updatedUpdate : update
+          ),
+          updatedAt
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Update project update' }
+    )
+  }
+
+  async deleteProjectUpdate(input: DeleteProjectUpdateInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        resolveProjectUpdate(project, input.updateId)
+        const updatedAt = new Date().toISOString()
+        const updatedProject: Project = {
+          ...project,
+          updates: (project.updates ?? []).filter((update) => update.id !== input.updateId),
+          updatedAt
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Delete project update' }
+    )
+  }
+
   async createTask(input: CreateTaskInput): Promise<CalendarTask> {
     return this.mutateSettings((settings) => {
       const project = input.projectId
@@ -1561,6 +2385,7 @@ export class VaultRuntime {
       const task: CalendarTask = {
         id: `task-${randomUUID()}`,
         title: input.title.trim(),
+        description: input.description?.trim() || undefined,
         projectId: input.projectId,
         milestoneId: input.milestoneId,
         tags: normalizeTaskTags(input.tags),
@@ -1573,8 +2398,17 @@ export class VaultRuntime {
         createdAt: new Date().toISOString(),
         priority: input.priority ?? 'low',
         taskType: input.taskType ?? 'assignment',
-        reminders: input.reminders ?? []
+        reminders: input.reminders ?? [],
+        dependencyIds: Array.from(new Set(input.dependencyIds ?? [])),
+        parentTaskId: input.parentTaskId,
+        estimateMinutes:
+          input.estimateMinutes === undefined
+            ? undefined
+            : Math.max(0, Math.round(input.estimateMinutes)),
+        updatedAt: new Date().toISOString()
       }
+
+      assertValidTaskRelationships([...settings.calendarTasks, task])
 
       return {
         next: {
@@ -1595,6 +2429,10 @@ export class VaultRuntime {
   ): Promise<AppSettings> {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
+      const nextTasks = next.tasks ?? next.calendarTasks
+      if (nextTasks) {
+        assertValidTaskRelationships(nextTasks)
+      }
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
       if (next.calendarTasks || next.tasks) {
@@ -1602,11 +2440,13 @@ export class VaultRuntime {
       }
 
       if (options.recordHistory && !sameJson(current, merged)) {
-        await this.createTrashService().archiveSettingsDeletes(current, merged)
+        const operation = createMutationEnvelope(options.label, 'settings', 'update')
+        await this.createTrashService().archiveSettingsDeletes(current, merged, operation)
         this.pushSettingsHistory(
           deriveSettingsHistoryLabel(current, merged, options.label),
           current,
-          merged
+          merged,
+          operation
         )
       }
 
@@ -1623,6 +2463,10 @@ export class VaultRuntime {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
       const { next, result } = await updater(current)
+      const nextTasks = next.tasks ?? next.calendarTasks
+      if (nextTasks) {
+        assertValidTaskRelationships(nextTasks)
+      }
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
 
       if (next.calendarTasks || next.tasks) {
@@ -1630,15 +2474,21 @@ export class VaultRuntime {
       }
 
       if (options?.recordHistory !== false && !sameJson(current, merged)) {
-        await this.createTrashService().archiveSettingsDeletes(current, merged)
+        const operation = createMutationEnvelope(
+          options?.label ?? 'Update workspace',
+          'settings',
+          'update'
+        )
+        await this.createTrashService().archiveSettingsDeletes(current, merged, operation)
         this.pushSettingsHistory(
           deriveSettingsHistoryLabel(current, merged, options?.label ?? 'Update workspace'),
           current,
-          merged
+          merged,
+          operation
         )
       }
 
-      return result
+      return resolveProjectMutationResult(result, merged)
     })
   }
 
@@ -1741,12 +2591,65 @@ export class VaultRuntime {
       getVaultFleetingDir(this.currentPaths.rootPath)
     )
 
-    const migratedLegacyPaths = await this.fileService.migrateLegacyMarkdownNotes()
-    if (Object.keys(migratedLegacyPaths).length > 0) {
-      await this.remapSettingsForMigratedNotes(migratedLegacyPaths)
-    }
+    const activeVaultRoot = this.currentPaths.rootPath
+    let vaultSettings: AppSettings
+    try {
+      const legacyMistralApiKey = await this.settings.readLegacyMistralApiKey(activeVaultRoot)
+      if (legacyMistralApiKey) {
+        // Store the secret before readVault() is allowed to remove legacy settings.
+        // If OS-backed encryption is unavailable, activation fails closed and the
+        // legacy value remains recoverable for a later migration attempt.
+        await this.credentialStore.set('mistral', activeVaultRoot, legacyMistralApiKey)
+      }
 
-    await this.settings.readVault(this.currentPaths.rootPath)
+      const migratedLegacyPaths = await this.fileService.migrateLegacyMarkdownNotes()
+      if (Object.keys(migratedLegacyPaths).length > 0) {
+        await this.remapSettingsForMigratedNotes(migratedLegacyPaths)
+      }
+      vaultSettings = await this.settings.readVault(activeVaultRoot)
+      this.resourceService = new ResourceService(activeVaultRoot)
+      this.resourceWriteService = new ResourceWriteService(activeVaultRoot)
+      const googleDriveClientId = process.env.XINGULARITY_GOOGLE_CLIENT_ID?.trim()
+      const googleDriveRedirectUri = process.env.XINGULARITY_GOOGLE_REDIRECT_URI?.trim()
+      this.googleDriveService =
+        googleDriveClientId && googleDriveRedirectUri
+          ? new GoogleDriveResourceService(
+              activeVaultRoot,
+              new GoogleDriveAdapter({
+                clientId: googleDriveClientId,
+                redirectUri: googleDriveRedirectUri
+              }),
+              this.credentialStore
+            )
+          : null
+      const resourceMigration = await this.resourceService.migrateProjects(vaultSettings.projects)
+      if (
+        resourceMigration.migrated > 0 ||
+        resourceMigration.projects.some(
+          (project, index) =>
+            JSON.stringify(project.resourceRefs ?? []) !==
+            JSON.stringify(vaultSettings.projects[index]?.resourceRefs ?? [])
+        )
+      ) {
+        vaultSettings = await this.settings.updateVault(activeVaultRoot, {
+          projects: resourceMigration.projects
+        })
+      }
+      await this.refreshResourceSearchCache()
+    } catch (error) {
+      await this.watcher?.stop()
+      this.watcher = null
+      this.currentPaths = null
+      this.fileService = null
+      this.fleetingNoteService = null
+      this.resourceService = null
+      this.resourceWriteService = null
+      this.googleDriveService = null
+      throw error
+    }
+    this.reminderService.setScope(activeVaultRoot)
+    this.reminderService.updateTasks(vaultSettings.calendarTasks)
+    this.reminderService.start()
 
     this.indexer = await initializeIndexerWithRetry(
       this.currentPaths.indexPath,
@@ -1768,6 +2671,8 @@ export class VaultRuntime {
   }
 
   private async closeCurrentVault(): Promise<void> {
+    this.reminderService.stop()
+    this.reminderService.setScope(null)
     await this.notebookMutationQueue.drain()
     this.notebookMutationQueue = new NotebookMutationQueue()
     if (this.currentPaths) {
@@ -1778,6 +2683,10 @@ export class VaultRuntime {
     this.watcher = null
     this.fileService = null
     this.fleetingNoteService = null
+    this.resourceService = null
+    this.resourceWriteService = null
+    this.googleDriveService = null
+    this.resourceSearchCache = []
     this.indexer?.close()
     this.indexer = null
     this.currentPaths = null
@@ -1821,6 +2730,16 @@ export class VaultRuntime {
         listener()
       } catch (error) {
         console.error('[VaultRuntime] tree change listener failed', error)
+      }
+    }
+  }
+
+  private notifyReminderClick(target: ReminderClickTarget): void {
+    for (const listener of this.reminderClickListeners) {
+      try {
+        listener({ ...target })
+      } catch (error) {
+        console.error('[VaultRuntime] reminder click listener failed', error)
       }
     }
   }
@@ -1954,12 +2873,14 @@ export class VaultRuntime {
   }
 
   private pushFileDeleteHistory(label: string, initialEntries: TrashedEntry[]): void {
+    const operation = createMutationEnvelope(label, 'notes', 'delete')
     const entries = initialEntries.map((entry) => ({
       activeRelPath: entry.originalRelPath,
       trashedEntry: entry as TrashedEntry | null
     }))
 
     this.history.push({
+      operation,
       label,
       affected: { notes: true },
       undo: async () => {
@@ -1990,11 +2911,17 @@ export class VaultRuntime {
     })
   }
 
-  private pushSettingsHistory(label: string, before: AppSettings, after: AppSettings): void {
+  private pushSettingsHistory(
+    label: string,
+    before: AppSettings,
+    after: AppSettings,
+    operation = createMutationEnvelope(label, 'settings', 'update')
+  ): void {
     const beforeSnapshot = cloneSettings(before)
     const afterSnapshot = cloneSettings(after)
 
     this.history.push({
+      operation,
       label,
       affected: { settings: true },
       undo: async () => {
@@ -2089,6 +3016,15 @@ export class VaultRuntime {
         if (!project) {
           continue
         }
+        let promptBlock = formatProjectContext(project)
+        const featureFlags = {
+          ...createDefaultAppSettings().featureFlags,
+          ...(settings.featureFlags ?? {})
+        }
+        if (featureFlags.agentContextBundles && this.resourceService) {
+          const bundle = await this.getProjectResourceContext(project.id)
+          promptBlock = `${promptBlock}\n\n${formatResourceContextBundle(bundle)}`
+        }
         contexts.push({
           summary: {
             id: mention.id,
@@ -2096,7 +3032,7 @@ export class VaultRuntime {
             label: mention.label,
             detail: project.summary
           },
-          promptBlock: formatProjectContext(project)
+          promptBlock
         })
       }
     }
@@ -2108,27 +3044,33 @@ export class VaultRuntime {
     mistral: Mistral,
     model: string,
     messages: MistralChatMessage[],
-    requestId: string
+    requestId: string,
+    signal?: AbortSignal
   ): Promise<{ content: string; toolSteps: AgentChatToolStep[] }> {
     const toolSteps: AgentChatToolStep[] = []
 
     let finalContent = ''
 
     for (let iteration = 0; iteration < 6; iteration += 1) {
+      this.assertAgentRequestActive(requestId)
       this.emitAgentChatEvent({ requestId, type: 'status', status: 'thinking' })
-      const stream = await mistral.chat.stream({
-        model,
-        temperature: 0.25,
-        messages,
-        tools: AGENT_CHAT_TOOLS,
-        toolChoice: 'auto',
-        parallelToolCalls: false
-      })
+      const stream = await mistral.chat.stream(
+        {
+          model,
+          temperature: 0.25,
+          messages,
+          tools: AGENT_CHAT_TOOLS,
+          toolChoice: 'auto',
+          parallelToolCalls: false
+        },
+        signal ? { fetchOptions: { signal } } : undefined
+      )
 
       let assistantContent = ''
       let toolCalls: MistralToolCall[] = []
 
       for await (const event of stream) {
+        this.assertAgentRequestActive(requestId)
         const choice = event.data?.choices?.[0]
         if (!choice) {
           continue
@@ -2158,6 +3100,7 @@ export class VaultRuntime {
       })
 
       for (const toolCall of toolCalls) {
+        this.assertAgentRequestActive(requestId)
         const toolName = toolCall.function.name
         const toolId = toolCall.id ?? `${toolName}-${Date.now()}`
         const parsedArgs = parseToolArguments(toolCall.function.arguments)
@@ -2234,6 +3177,12 @@ export class VaultRuntime {
     }
   }
 
+  private assertAgentRequestActive(requestId: string): void {
+    if (this.cancelledAgentRequests.has(requestId)) {
+      throw new Error('Agent request cancelled')
+    }
+  }
+
   private async executeAgentTool(name: string, input: unknown): Promise<unknown> {
     if (!this.agentToolInvoker) {
       throw new Error('Agent tool invoker is not registered')
@@ -2304,6 +3253,21 @@ function resolveProjectMilestone(project: Project, milestoneId: string): Project
     throw new Error(`Milestone not found: ${milestoneId}`)
   }
   return milestone
+}
+
+function resolveProjectUpdate(project: Project, updateId: string): ProjectUpdate {
+  const update = project.updates?.find((item) => item.id === updateId)
+  if (!update) {
+    throw new Error(`Project update not found: ${updateId}`)
+  }
+  return update
+}
+
+function assertValidTaskRelationships(tasks: CalendarTask[]): void {
+  const errors = validateTaskRelationships(tasks)
+  if (errors.length > 0) {
+    throw new Error(`Invalid task relationships: ${errors.join('; ')}`)
+  }
 }
 
 async function resetIndexArtifacts(indexPath: string, fileMapPath: string): Promise<void> {
@@ -2516,6 +3480,31 @@ function formatProjectContext(project: Project): string {
             (task) =>
               `- ${task.title} | due ${task.date ?? task.endDate ?? 'unscheduled'} | status ${task.status ?? (task.completed ? 'completed' : 'pending')}`
           )
+          .join('\n')
+      : '- None'
+  ].join('\n')
+}
+
+function formatResourceContextBundle(bundle: ResourceContextBundle): string {
+  return [
+    'Context kind: selected external resources',
+    bundle.resources.length > 0
+      ? bundle.resources
+          .map(
+            (resource) =>
+              `- ${resource.title} | ${resource.provider} | ${resource.state} | ${resource.canonicalUri}`
+          )
+          .join('\n')
+      : '- None selected',
+    'Citations:',
+    bundle.citations.length > 0
+      ? bundle.citations
+          .map((citation) => {
+            const citationLine = `- ${citation.title}: ${citation.uri}${citation.observedAt ? ` (observed ${citation.observedAt})` : ''}`
+            return citation.excerpt
+              ? `${citationLine}\n  Content:\n${citation.excerpt}`
+              : citationLine
+          })
           .join('\n')
       : '- None'
   ].join('\n')
@@ -2773,6 +3762,19 @@ function cloneSettings(settings: AppSettings): AppSettings {
   return JSON.parse(JSON.stringify(settings)) as AppSettings
 }
 
+function resolveProjectMutationResult<T>(result: T, merged: AppSettings): T {
+  if (!result || typeof result !== 'object') {
+    return result
+  }
+
+  const candidate = result as { id?: unknown; name?: unknown; icon?: unknown }
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || !candidate.icon) {
+    return result
+  }
+
+  return (merged.projects.find((project) => project.id === candidate.id) as T | undefined) ?? result
+}
+
 function normalizeProjectValues(values: string[] | undefined): string[] {
   return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean)))
 }
@@ -2788,6 +3790,26 @@ function toLocalIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function decodeFileUri(value: string): string {
+  try {
+    return decodeURIComponent(new URL(value).pathname)
+  } catch {
+    return value.replace(/^file:\/\//, '')
+  }
+}
+
+function assertExternalResourceUri(value: string): string {
+  const parsed = new URL(value)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS resource links can be opened externally')
+  }
+  return parsed.toString()
+}
+
+function resourceStateForSearch(value: string): string {
+  return value.replaceAll('-', ' ')
 }
 
 function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
@@ -2806,12 +3828,28 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     lastOpenedNotePath: settings.lastOpenedNotePath,
     lastOpenedProjectId: settings.lastOpenedProjectId,
     favoriteNotePaths: settings.favoriteNotePaths,
-    favoriteProjectIds: settings.favoriteProjectIds
+    favoriteProjectIds: settings.favoriteProjectIds,
+    featureFlags: settings.featureFlags
   }
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function createMutationEnvelope(
+  label: string,
+  domain: MutationEnvelope['domain'],
+  kind: MutationEnvelope['kind']
+): MutationEnvelope {
+  return {
+    id: randomUUID(),
+    kind,
+    domain,
+    label,
+    createdAt: new Date().toISOString(),
+    reversible: true
+  }
 }
 
 async function waitForPdfImages(window: BrowserWindow): Promise<string[]> {

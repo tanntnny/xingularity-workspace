@@ -1,57 +1,95 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactElement,
   type SyntheticEvent
 } from 'react'
 import type {
   CalendarTask,
+  NoteListItem,
+  NoteTreeNode,
+  NoteVimKeyMapping,
   Project,
   ProjectIconStyle,
   ProjectMilestone,
   ProjectPropertiesPatch,
-  TaskStatus
+  ProjectUpdateStatus,
+  TaskStatus,
+  ResourceRef,
+  ResourceRelation,
+  ResourcePreview,
+  ResourceInput,
+  GoogleDriveFileCandidate
 } from '../../../shared/types'
 import { normalizeTag } from '../../../shared/noteTags'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { ProjectIconPicker } from '../components/ProjectIconPicker'
-import { TaskStatusIcon } from '../components/TaskStatusIcon'
+import { ProjectLatestUpdate } from '../components/ProjectLatestUpdate'
 import { MilestoneCompletenessIcon } from '../components/MilestoneCompletenessIcon'
-import { TaskTagSummary } from '../components/TaskTagSummary'
 import { TaskContextMenu } from '../components/TaskContextMenu'
 import { ProjectMilestoneContextMenu } from '../components/ProjectContextMenus'
 import { InlineEditableText } from '../components/InlineEditableText'
-import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
-import { formatCalendarTaskScheduleLabel } from '../lib/calendarTaskScheduleLabel'
-import { cn } from '../lib/utils'
-import { Button } from '../components/ui/button'
-import { DatePickerISO } from '../components/ui/date-picker'
-import { Input } from '../components/ui/input'
-import { Textarea } from '../components/ui/textarea'
-import { TagChip } from '../components/TagChip'
 import {
-  WorkspaceHeaderSecondaryActionsRight,
+  ProjectDescriptionEditor,
+  type ProjectDescriptionEditorHandle
+} from '../components/ProjectDescriptionEditor'
+import { TagEditor } from '../components/TagEditor'
+import { ProjectPulsePage } from './ProjectPulsePage'
+import { getTaskStatus } from '../lib/taskStatus'
+import {
+  PROJECT_FAVORITE_CHIP_OPTIONS,
+  PROJECT_STATE_CHIP_OPTIONS,
+  TASK_STATUS_CHIP_OPTIONS,
+  getProjectUpdateStatusChipItem
+} from '../lib/statusChipMeta'
+import { formatCalendarDateValue, formatCalendarTimeValue } from '../lib/calendarDateTimeInput'
+import { getLatestProjectUpdate } from '../lib/projectUpdates'
+import { cn } from '../lib/utils'
+import { Button, rowActionButtonClassName } from '../components/ui/button'
+import { CalendarDateEditPopover } from '../components/ui/calendar-date-edit-popover'
+import { ChipGroup } from '../components/ui/chip-group'
+import { Input } from '../components/ui/input'
+import {
   WorkspaceHeaderActionDivider,
+  WorkspaceHeaderSecondaryActions,
   WorkspaceIconButton,
   WorkspacePanelStack
 } from '../components/ui/document-workspace'
 import { CollapsibleWorkspacePanelSection } from '../components/ui/workspace-panel-section'
 import { WorkspacePropertyRow } from '../components/ui/workspace-property-row'
-import { WorkspaceListRail, WorkspaceListRailItem } from '../components/ui/workspace-list-rail'
 import { EmptyState } from '../components/ui/empty-state'
-import { ToggleGroup, ToggleGroupItem } from '../components/ui/toggle-group'
-import { SelectiveChip, type SelectiveChipOption } from '../components/ui/selective-chip'
+import { DragSource } from '../components/ui/drag-source'
+import { DropZone } from '../components/ui/drop-zone'
+import { TabToggleGroup, TabToggleGroupItem } from '../components/ui/tab-toggle-group'
+import {
+  Breadcrumb,
+  BreadcrumbButton,
+  BreadcrumbIconLabel,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator
+} from '../components/ui/breadcrumb'
+import { StatusChip } from '../components/ui/status-chip'
+import { StatusChipSelect } from '../components/ui/status-chip-select'
+import { ProgressRing } from '../components/ui/progress-ring'
+import { TableRowList, type TableRowListColumn } from '../components/ui/table-row-list'
 import {
   filterProjectsForWorkspace,
   PROJECTS_WORKSPACE_FILTER_OPTIONS,
   type ProjectsWorkspaceFilterMode
 } from '../lib/projectTaskRows'
 import {
-  Archive,
+  CalendarCheck,
   ChevronRight,
+  ClockCheck,
+  GripVertical,
   MoreHorizontal,
   Plus,
   Star,
@@ -61,31 +99,88 @@ import {
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
 import {
   getProjectDirectTasks,
+  getCurrentProjectMilestone,
   getProjectMilestoneProgress,
-  getProjectMilestoneTasks
+  getProjectMilestoneTasks,
+  getProjectMilestoneStatus,
+  moveProjectMilestone
 } from '../lib/projectMilestones'
+import type { ProjectMilestoneStatus } from '../lib/projectMilestones'
+import { calculateProjectHealth } from '../../../shared/projectPlanning'
+import { isTaskStatusDone } from '../../../shared/taskStatus'
+import { ProjectActivityPanel } from '../components/ProjectActivityPanel'
+import { ProjectResourcesTable } from '../components/ProjectResourcesPanel'
+import { WorkspaceReadingWidth } from '../components/workspace'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { useReorderMotion } from '../hooks/useReorderMotion'
 
 export type { ProjectsWorkspaceFilterMode } from '../lib/projectTaskRows'
 
-const TASK_STATUS_CHIP_OPTIONS: readonly SelectiveChipOption[] = (
-  Object.keys(TASK_STATUS_META) as TaskStatus[]
-).map((value) => {
-  const meta = TASK_STATUS_META[value]
-  return {
-    value,
-    label: meta.label,
-    icon: <TaskStatusIcon status={value} size={18} />,
-    tone: meta.tone
-  }
-})
+export type ProjectsWorkspaceView = 'list' | 'home' | 'pulse' | 'resources'
+
+type MilestoneDropBoundary = 'top' | 'bottom'
+
+function getProjectMilestoneIds(items: readonly ProjectMilestone[]): string[] {
+  return items.map((milestone) => milestone.id)
+}
+
+function hasSameProjectMilestoneOrder(
+  left: readonly ProjectMilestone[],
+  right: readonly ProjectMilestone[]
+): boolean {
+  const leftIds = getProjectMilestoneIds(left)
+  const rightIds = getProjectMilestoneIds(right)
+  return leftIds.length === rightIds.length && leftIds.every((id, index) => id === rightIds[index])
+}
 
 interface ProjectsWorkspacePageProps {
   projects: Project[]
   tasks: CalendarTask[]
   favoriteProjectIds: string[]
   selectedProjectId: string | null
+  view: ProjectsWorkspaceView
   filterMode: ProjectsWorkspaceFilterMode
   onFilterModeChange: (mode: ProjectsWorkspaceFilterMode) => void
+  onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
+  onOpenProject: (projectId: string) => void
+  onOpenProjectUpdates: (projectId: string) => void
+  onCreateProjectUpdate: (
+    projectId: string,
+    input: { markdown: string; status: ProjectUpdateStatus }
+  ) => Promise<void>
+  onUpdateProjectUpdate: (
+    projectId: string,
+    updateId: string,
+    input: { markdown: string; status: ProjectUpdateStatus }
+  ) => Promise<void>
+  onDeleteProjectUpdate: (projectId: string, updateId: string) => Promise<void>
+  noteTree: NoteTreeNode[]
+  resources: ResourceRef[]
+  relations: ResourceRelation[]
+  onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
+  addResourceRequestProjectId?: string | null
+  onAddResourceRequestHandled?: () => void
+  onSetProjectNotebook: (projectId: string, notebookPath: string) => Promise<void>
+  onUpdateResource: (input: {
+    resourceId: string
+    canonicalUri?: string
+    title?: string
+  }) => Promise<void>
+  onDetachResource: (projectId: string, resourceId: string) => Promise<void>
+  onOpenResource: (resourceId: string) => Promise<void>
+  onOpenNotebookResource: (resourceId: string) => void
+  onLocateResource?: (resourceId: string) => Promise<void>
+  onRevealResource?: (resourceId: string) => Promise<void>
+  onRefreshResource?: (resourceId: string) => Promise<void>
+  onPreviewResource?: (resourceId: string) => Promise<ResourcePreview>
+  googleDriveEnabled?: boolean
+  googleDriveConnected?: boolean
+  onListGoogleDriveFiles?: () => Promise<GoogleDriveFileCandidate[]>
+  onAttachGoogleDriveResources?: (projectId: string, fileIds: string[]) => Promise<void>
+  notes: NoteListItem[]
+  vimModeEnabled: boolean
+  vimKeyMappings: NoteVimKeyMapping[]
+  onOpenNoteLink: (target: string) => void
   onCreateTask: (
     projectId: string | undefined,
     title: string,
@@ -94,14 +189,14 @@ interface ProjectsWorkspacePageProps {
   onCreateMilestone: (projectId: string, title: string) => Promise<ProjectMilestone>
   onUpdateMilestone: (projectId: string, milestoneId: string, title: string) => void
   onDeleteMilestone: (projectId: string, milestoneId: string) => Promise<void>
+  onReorderMilestones: (projectId: string, milestoneIds: string[]) => Promise<boolean>
   onUpdateProject: (
     projectId: string,
     draft: { name: string; description: string; icon: ProjectIconStyle }
   ) => void
-  onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
 }
 
 export function ProjectsWorkspacePage({
@@ -109,14 +204,44 @@ export function ProjectsWorkspacePage({
   tasks,
   favoriteProjectIds,
   selectedProjectId,
+  view,
   filterMode,
   onFilterModeChange,
+  onUpdateProjectProperties,
+  onOpenProject,
+  onOpenProjectUpdates,
+  onCreateProjectUpdate,
+  onUpdateProjectUpdate,
+  onDeleteProjectUpdate,
+  noteTree,
+  resources,
+  relations,
+  onAddResource,
+  addResourceRequestProjectId,
+  onAddResourceRequestHandled,
+  onSetProjectNotebook,
+  onUpdateResource,
+  onDetachResource,
+  onOpenResource,
+  onOpenNotebookResource,
+  onLocateResource,
+  onRevealResource,
+  onRefreshResource,
+  onPreviewResource,
+  googleDriveEnabled,
+  googleDriveConnected,
+  onListGoogleDriveFiles,
+  onAttachGoogleDriveResources,
+  notes,
+  vimModeEnabled,
+  vimKeyMappings,
+  onOpenNoteLink,
   onCreateTask,
   onCreateMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
+  onReorderMilestones,
   onUpdateProject,
-  onUpdateProjectProperties,
   onUpdateTask,
   onDeleteTask,
   onOpenTask
@@ -132,11 +257,7 @@ export function ProjectsWorkspacePage({
     () => filterProjectsForWorkspace(projects, favoriteProjectIds, filterMode),
     [favoriteProjectIds, filterMode, projects]
   )
-
-  const selectedProject =
-    visibleProjects.find((project) => project.id === selectedProjectId) ??
-    visibleProjects[0] ??
-    null
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
   const projectTasks = selectedProject ? getProjectDirectTasks(tasks, selectedProject.id) : []
   const projectMilestones = selectedProject?.milestones ?? []
@@ -152,7 +273,7 @@ export function ProjectsWorkspacePage({
     try {
       const task = await onCreateTask(selectedProject.id, 'New Task')
       setSelectedTaskId(task.id)
-      onOpenTask(task.id)
+      onOpenTask(task.id, { isNewTask: true })
     } catch {
       // The parent reports persistence errors.
     } finally {
@@ -195,7 +316,7 @@ export function ProjectsWorkspacePage({
       const task = await onCreateTask(selectedProject.id, 'New Task', milestoneId)
       setExpandedMilestoneIds((current) => new Set(current).add(milestoneId))
       setSelectedTaskId(task.id)
-      onOpenTask(task.id)
+      onOpenTask(task.id, { isNewTask: true })
     } catch {
       // The parent reports persistence errors.
     } finally {
@@ -235,84 +356,155 @@ export function ProjectsWorkspacePage({
     return true
   }
 
-  const toolbar = (
-    <div className="flex min-w-max items-center gap-2">
-      <ToggleGroup
-        type="single"
-        value={filterMode}
-        onValueChange={(value) => {
-          if (value) onFilterModeChange(value as ProjectsWorkspaceFilterMode)
-        }}
-        variant="outline"
-        size="sm"
-        aria-label="Project filter"
-        data-testid="project-filter"
-      >
-        {PROJECTS_WORKSPACE_FILTER_OPTIONS.map((option) => (
-          <ToggleGroupItem key={option.value} value={option.value}>
-            {option.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-    </div>
-  )
+  const toolbar =
+    view === 'list' ? (
+      <div className="flex min-w-max items-center gap-2">
+        <TabToggleGroup
+          value={filterMode}
+          onValueChange={(value) => {
+            if (value) onFilterModeChange(value as ProjectsWorkspaceFilterMode)
+          }}
+          aria-label="Project filter"
+          data-testid="project-filter"
+          className="max-w-none"
+        >
+          {PROJECTS_WORKSPACE_FILTER_OPTIONS.map((option) => (
+            <TabToggleGroupItem key={option.value} value={option.value}>
+              {option.label}
+            </TabToggleGroupItem>
+          ))}
+        </TabToggleGroup>
+      </div>
+    ) : null
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col bg-transparent">
-      <WorkspaceHeaderSecondaryActionsRight>{toolbar}</WorkspaceHeaderSecondaryActionsRight>
+    <div className={cn('flex min-h-full min-w-0 flex-col bg-transparent')}>
+      {toolbar ? (
+        <WorkspaceHeaderSecondaryActions>{toolbar}</WorkspaceHeaderSecondaryActions>
+      ) : null}
       <div className="min-h-full w-full">
-        {selectedProject ? (
-          <div className="w-full space-y-3">
-            <ProjectDetails
-              key={selectedProject.id}
+        {view === 'list' ? (
+          <AllProjectsTable
+            projects={visibleProjects}
+            tasks={tasks}
+            favoriteProjectIds={favoriteProjectIds}
+            onUpdateProjectProperties={onUpdateProjectProperties}
+            onOpenProject={onOpenProject}
+          />
+        ) : view === 'resources' && selectedProject ? (
+          <div id="project-view-panel" role="tabpanel" aria-labelledby="project-view-tab-resources">
+            <ProjectResourcesTable
               project={selectedProject}
-              onUpdateProject={onUpdateProject}
-              onUpdateProperties={(patch) => onUpdateProjectProperties(selectedProject.id, patch)}
-              dataTestId="project-main-detail-panel"
-              testIdPrefix="project-main-detail"
+              noteTree={noteTree}
+              resources={resources}
+              relations={relations}
+              onAddResource={onAddResource}
+              addResourceRequestProjectId={addResourceRequestProjectId}
+              onAddResourceRequestHandled={onAddResourceRequestHandled}
+              onSetProjectNotebook={onSetProjectNotebook}
+              onUpdateResource={onUpdateResource}
+              onDetachResource={onDetachResource}
+              onOpenResource={onOpenResource}
+              onOpenNotebookResource={onOpenNotebookResource}
+              onLocateResource={onLocateResource}
+              onRevealResource={onRevealResource}
+              onRefreshResource={onRefreshResource}
+              onPreviewResource={onPreviewResource}
+              googleDriveEnabled={googleDriveEnabled}
+              googleDriveConnected={googleDriveConnected}
+              onListGoogleDriveFiles={onListGoogleDriveFiles}
+              onAttachGoogleDriveResources={onAttachGoogleDriveResources}
             />
-            <ProjectMilestones
-              projectId={selectedProject.id}
-              milestones={projectMilestones}
-              tasks={tasks}
-              expandedMilestoneIds={expandedMilestoneIds}
-              isCreatingMilestone={isCreatingMilestone}
-              isCreatingTask={isCreatingTask}
-              selectedTaskId={selectedTaskId}
-              editingMilestoneId={editingMilestoneId}
-              milestoneEditToken={milestoneEditToken}
-              onCreateMilestone={handleCreateMilestone}
-              onCreateTask={handleCreateMilestoneTask}
-              onToggleMilestone={toggleMilestone}
-              onEditMilestone={requestMilestoneEdit}
-              onUpdateMilestone={updateMilestone}
-              onOpenTask={(taskId) => {
-                setSelectedTaskId(taskId)
-                onOpenTask(taskId)
-              }}
-              onUpdateTask={onUpdateTask}
-              onDeleteTask={onDeleteTask}
-              onDeleteMilestone={requestDeleteMilestone}
-            />
-            <ProjectTasks
-              tasks={projectTasks}
-              onCreateTask={handleCreateTask}
-              isCreatingTask={isCreatingTask}
-              onUpdateTask={onUpdateTask}
-              onDeleteTask={onDeleteTask}
-              onOpenTask={(taskId) => {
-                setSelectedTaskId(taskId)
-                onOpenTask(taskId)
-              }}
-              selectedTaskId={selectedTaskId}
+          </div>
+        ) : view === 'pulse' && selectedProject ? (
+          <div id="project-view-panel" role="tabpanel" aria-labelledby="project-view-tab-pulse">
+            <ProjectPulsePage
+              project={selectedProject}
+              notes={notes}
+              vimModeEnabled={vimModeEnabled}
+              vimKeyMappings={vimKeyMappings}
+              onOpenNoteLink={onOpenNoteLink}
+              onCreateUpdate={(input) => onCreateProjectUpdate(selectedProject.id, input)}
+              onUpdateUpdate={(updateId, input) =>
+                onUpdateProjectUpdate(selectedProject.id, updateId, input)
+              }
+              onDeleteUpdate={(updateId) => onDeleteProjectUpdate(selectedProject.id, updateId)}
             />
           </div>
         ) : (
-          <EmptyState
-            icon={APP_PAGE_ICONS.projects}
-            title="No project selected"
-            description="Create a project to start organizing tasks."
-          />
+          <WorkspaceReadingWidth className="py-4">
+            {selectedProject ? (
+              <div
+                id="project-view-panel"
+                role="tabpanel"
+                aria-labelledby="project-view-tab-home"
+                className="w-full space-y-3"
+              >
+                <ProjectDetails
+                  key={selectedProject.id}
+                  project={selectedProject}
+                  onUpdateProject={onUpdateProject}
+                  vimModeEnabled={vimModeEnabled}
+                  vimKeyMappings={vimKeyMappings}
+                  dataTestId="project-main-detail-panel"
+                  testIdPrefix="project-main-detail"
+                />
+                <ProjectLatestUpdate
+                  project={selectedProject}
+                  notes={notes}
+                  vimModeEnabled={vimModeEnabled}
+                  vimKeyMappings={vimKeyMappings}
+                  onOpenNoteLink={onOpenNoteLink}
+                  onOpenUpdates={() => onOpenProjectUpdates(selectedProject.id)}
+                />
+                <ProjectMilestones
+                  key={selectedProject.id}
+                  projectId={selectedProject.id}
+                  milestones={projectMilestones}
+                  tasks={tasks}
+                  expandedMilestoneIds={expandedMilestoneIds}
+                  isCreatingMilestone={isCreatingMilestone}
+                  isCreatingTask={isCreatingTask}
+                  selectedTaskId={selectedTaskId}
+                  editingMilestoneId={editingMilestoneId}
+                  milestoneEditToken={milestoneEditToken}
+                  onCreateMilestone={handleCreateMilestone}
+                  onCreateTask={handleCreateMilestoneTask}
+                  onToggleMilestone={toggleMilestone}
+                  onEditMilestone={requestMilestoneEdit}
+                  onUpdateMilestone={updateMilestone}
+                  onOpenTask={(taskId) => {
+                    setSelectedTaskId(taskId)
+                    onOpenTask(taskId)
+                  }}
+                  onUpdateTask={onUpdateTask}
+                  onDeleteTask={onDeleteTask}
+                  onDeleteMilestone={requestDeleteMilestone}
+                  onReorderMilestones={(milestoneIds) =>
+                    onReorderMilestones(selectedProject.id, milestoneIds)
+                  }
+                />
+                <ProjectTasks
+                  tasks={projectTasks}
+                  onCreateTask={handleCreateTask}
+                  isCreatingTask={isCreatingTask}
+                  onUpdateTask={onUpdateTask}
+                  onDeleteTask={onDeleteTask}
+                  onOpenTask={(taskId) => {
+                    setSelectedTaskId(taskId)
+                    onOpenTask(taskId)
+                  }}
+                  selectedTaskId={selectedTaskId}
+                />
+              </div>
+            ) : (
+              <EmptyState
+                icon={APP_PAGE_ICONS.projects}
+                title="No project selected"
+                description="Open a project from All Projects to start organizing tasks."
+              />
+            )}
+          </WorkspaceReadingWidth>
         )}
       </div>
     </div>
@@ -323,8 +515,6 @@ export function ProjectsWorkspaceRightPanel({
   projects,
   favoriteProjectIds,
   selectedProjectId,
-  filterMode,
-  onSelectProject,
   onToggleProjectFavorite,
   onToggleProjectArchive,
   onUpdateProjectProperties
@@ -332,52 +522,23 @@ export function ProjectsWorkspaceRightPanel({
   projects: Project[]
   favoriteProjectIds: string[]
   selectedProjectId: string | null
-  filterMode: ProjectsWorkspaceFilterMode
-  onSelectProject?: (projectId: string) => void
   onToggleProjectFavorite: (projectId: string) => void
   onToggleProjectArchive: (projectId: string) => void
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
 }): ReactElement {
-  const visibleProjects = useMemo(
-    () => filterProjectsForWorkspace(projects, favoriteProjectIds, filterMode),
-    [favoriteProjectIds, filterMode, projects]
-  )
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
+  const projectTagOptions = useMemo(() => {
+    const values = new Set<string>()
+    for (const tag of projects.flatMap((project) => project.tags ?? [])) {
+      const normalized = normalizeTag(tag)
+      if (normalized) values.add(normalized)
+    }
 
-  const selectedProject =
-    visibleProjects.find((project) => project.id === selectedProjectId) ??
-    visibleProjects[0] ??
-    null
+    return Array.from(values).sort((left, right) => left.localeCompare(right))
+  }, [projects])
 
   return (
-    <WorkspacePanelStack>
-      <CollapsibleWorkspacePanelSection
-        data-testid="projects-list-panel"
-        className="shrink-0"
-        heading="Project list"
-      >
-        <WorkspaceListRail
-          aria-label="Projects"
-          data-testid="projects-workspace-sidebar"
-          className="h-auto min-h-0 p-3"
-        >
-          {visibleProjects.map((project) => (
-            <WorkspaceListRailItem
-              key={project.id}
-              active={project.id === selectedProject?.id}
-              data-testid={`projects-sidebar-item:${project.id}`}
-              onClick={() => onSelectProject?.(project.id)}
-              leading={<NoteShapeIcon icon={project.icon} size="1.25em" aria-hidden="true" />}
-              trailing={
-                favoriteProjectIds.includes(project.id) ? (
-                  <Star size={13} className="text-warning" aria-hidden="true" />
-                ) : null
-              }
-            >
-              {project.name}
-            </WorkspaceListRailItem>
-          ))}
-        </WorkspaceListRail>
-      </CollapsibleWorkspacePanelSection>
+    <WorkspacePanelStack data-testid="projects-panel-stack">
       <ProjectPropertiesPanel
         key={selectedProject?.id ?? 'empty-project-properties'}
         project={selectedProject}
@@ -391,9 +552,351 @@ export function ProjectsWorkspaceRightPanel({
         onUpdateProperties={(patch) => {
           if (selectedProject) onUpdateProjectProperties(selectedProject.id, patch)
         }}
+        availableTags={projectTagOptions}
       />
+      {selectedProject ? <ProjectActivityPanel project={selectedProject} /> : null}
     </WorkspacePanelStack>
   )
+}
+
+export function ProjectsWorkspaceSecondaryActions({
+  view,
+  project,
+  onViewChange
+}: {
+  view: ProjectsWorkspaceView
+  project: Project | null
+  onViewChange: (view: ProjectsWorkspaceView) => void
+}): ReactElement | null {
+  if (!project || view === 'list') {
+    return null
+  }
+
+  return (
+    <div className="flex min-w-max items-center gap-1.5">
+      <TabToggleGroup
+        value={view}
+        onValueChange={(value) => {
+          if (value === 'home' || value === 'pulse' || value === 'resources') onViewChange(value)
+        }}
+        aria-label="Project view"
+        data-testid="project-view-tabs"
+        className="max-w-none"
+      >
+        <TabToggleGroupItem
+          value="home"
+          id="project-view-tab-home"
+          aria-controls="project-view-panel"
+          data-testid="project-view-tab:home"
+        >
+          Overview
+        </TabToggleGroupItem>
+        <TabToggleGroupItem
+          value="pulse"
+          id="project-view-tab-pulse"
+          aria-controls="project-view-panel"
+          data-testid="project-view-tab:pulse"
+        >
+          Activity
+        </TabToggleGroupItem>
+        <TabToggleGroupItem
+          value="resources"
+          id="project-view-tab-resources"
+          aria-controls="project-view-panel"
+          data-testid="project-view-tab:resources"
+        >
+          Resources
+        </TabToggleGroupItem>
+      </TabToggleGroup>
+    </div>
+  )
+}
+
+export function ProjectsWorkspaceBreadcrumb({
+  project,
+  view,
+  onOpenAllProjects,
+  onOpenProjectHome
+}: {
+  project: Project | null
+  view: ProjectsWorkspaceView
+  onOpenAllProjects: () => void
+  onOpenProjectHome: () => void
+}): ReactElement {
+  const viewLabel = view === 'pulse' ? 'Activity' : view === 'resources' ? 'Resources' : 'Overview'
+
+  return (
+    <Breadcrumb>
+      <BreadcrumbList className="text-muted-foreground">
+        <BreadcrumbItem>
+          {view === 'list' ? (
+            <BreadcrumbPage className="text-sm text-foreground">
+              <BreadcrumbIconLabel
+                icon={<APP_PAGE_ICONS.projects size={14} strokeWidth={1.8} aria-hidden="true" />}
+              >
+                All Projects
+              </BreadcrumbIconLabel>
+            </BreadcrumbPage>
+          ) : (
+            <BreadcrumbButton
+              onClick={onOpenAllProjects}
+              className="text-sm text-muted-foreground"
+              data-testid="projects-breadcrumb:all"
+            >
+              <BreadcrumbIconLabel
+                icon={<APP_PAGE_ICONS.projects size={14} strokeWidth={1.8} aria-hidden="true" />}
+              >
+                All Projects
+              </BreadcrumbIconLabel>
+            </BreadcrumbButton>
+          )}
+        </BreadcrumbItem>
+        {project && view !== 'list' ? (
+          <>
+            <BreadcrumbSeparator className="text-muted-foreground" />
+            <BreadcrumbItem>
+              {view === 'home' ? (
+                <BreadcrumbPage className="max-w-[220px] truncate text-sm font-bold text-foreground">
+                  <BreadcrumbIconLabel icon={<NoteShapeIcon icon={project.icon} size={16} />}>
+                    {project.name}
+                  </BreadcrumbIconLabel>
+                </BreadcrumbPage>
+              ) : (
+                <BreadcrumbButton
+                  onClick={onOpenProjectHome}
+                  className="max-w-[180px] truncate text-sm text-muted-foreground"
+                  data-testid="projects-breadcrumb:project"
+                >
+                  <BreadcrumbIconLabel icon={<NoteShapeIcon icon={project.icon} size={16} />}>
+                    {project.name}
+                  </BreadcrumbIconLabel>
+                </BreadcrumbButton>
+              )}
+            </BreadcrumbItem>
+            {view !== 'home' ? (
+              <>
+                <BreadcrumbSeparator className="text-muted-foreground" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="max-w-[180px] truncate text-sm font-semibold text-foreground">
+                    {viewLabel}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}
+
+function AllProjectsTable({
+  projects,
+  tasks,
+  favoriteProjectIds,
+  onUpdateProjectProperties,
+  onOpenProject
+}: {
+  projects: Project[]
+  tasks: CalendarTask[]
+  favoriteProjectIds: string[]
+  onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
+  onOpenProject: (projectId: string) => void
+}): ReactElement {
+  const projectRows = projects.map((project) => {
+    const taskHealth = calculateProjectHealth(project, tasks)
+    const projectMilestones = project.milestones ?? []
+    const currentMilestone = getCurrentProjectMilestone(projectMilestones, tasks, project.id)
+    const latestUpdate = getLatestProjectUpdate(project.updates)
+
+    return {
+      project,
+      taskHealth,
+      projectMilestones,
+      currentMilestone,
+      latestUpdate
+    }
+  })
+
+  type ProjectTableRow = (typeof projectRows)[number]
+
+  const columns: readonly TableRowListColumn<ProjectTableRow>[] = [
+    {
+      id: 'project',
+      header: 'Project',
+      cellClassName: 'min-w-56',
+      renderCell: ({ project, projectMilestones, currentMilestone }) => (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={(event) => {
+            event.stopPropagation()
+            onOpenProject(project.id)
+          }}
+          className="h-auto w-full min-w-0 max-w-full justify-start truncate rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+          aria-label={`Open project ${project.name}`}
+        >
+          <span className="flex w-full min-w-0 items-center gap-2.5">
+            <NoteShapeIcon icon={project.icon} size={20} aria-hidden="true" />
+            <span className="min-w-0 truncate">{project.name}</span>
+            {projectMilestones.length > 0 ? (
+              <span
+                className="all-project-milestone-summary flex min-w-0 max-w-52 shrink-0 items-center gap-1.5 text-sm"
+                data-milestone-complete={!currentMilestone ? 'true' : 'false'}
+              >
+                <MilestoneCompletenessIcon
+                  status={currentMilestone ? 'current' : 'complete'}
+                  size={16}
+                  dataTestId={`all-project-milestone-icon:${project.id}`}
+                />
+                <span className="min-w-0 truncate">{currentMilestone?.title ?? 'Complete'}</span>
+              </span>
+            ) : null}
+          </span>
+        </Button>
+      )
+    },
+    {
+      id: 'health',
+      header: 'Health',
+      cellClassName: 'whitespace-nowrap',
+      renderCell: ({ project, latestUpdate }) => (
+        <StatusChip
+          item={getProjectUpdateStatusChipItem(latestUpdate?.status)}
+          surface="hover"
+          data-testid={`all-project-health:${project.id}`}
+        />
+      )
+    },
+    {
+      id: 'progress',
+      header: 'Progress',
+      cellClassName: 'min-w-24',
+      renderCell: ({ project, taskHealth }) => {
+        const completionPercent = Math.min(
+          100,
+          Math.max(0, Math.round(taskHealth.completionRatio * 100))
+        )
+
+        return (
+          <div
+            className="flex items-center gap-2"
+            data-testid={`all-project-progress:${project.id}`}
+          >
+            <ProgressRing
+              value={completionPercent}
+              data-testid={`all-project-progress-ring:${project.id}`}
+            />
+            <span className="text-sm font-medium text-foreground">{completionPercent}%</span>
+          </div>
+        )
+      }
+    },
+    {
+      id: 'end-date',
+      header: 'End date',
+      cellClassName: 'whitespace-nowrap',
+      renderCell: ({ project }) => {
+        const endDateLabel = project.endDate ? formatProjectDate(project.endDate) : 'Set end date'
+
+        return (
+          <CalendarDateEditPopover
+            value={project.endDate}
+            label="Project end date"
+            onValueChange={(value) => {
+              onUpdateProjectProperties(project.id, { endDate: value ?? null })
+            }}
+            placeholder="Set end date"
+            displayValue={
+              project.endDate ? <time dateTime={project.endDate}>{endDateLabel}</time> : undefined
+            }
+            variant="ghost"
+            aria-label={`End date: ${endDateLabel}`}
+            title={`End date: ${endDateLabel}`}
+            data-testid={`all-project-date-chip:end-date:${project.id}`}
+            onClick={(event) => event.stopPropagation()}
+            className="h-7 w-fit rounded-[var(--radius-button-pill)] px-2 text-xs font-medium text-muted-foreground hover:bg-surface-subtle-hover focus-visible:bg-surface-subtle-hover"
+          />
+        )
+      }
+    },
+    {
+      id: 'updated',
+      header: 'Updated',
+      cellClassName: 'whitespace-nowrap',
+      renderCell: ({ project }) => {
+        const updatedDateLabel = formatProjectDate(project.updatedAt)
+
+        return (
+          <StatusChip
+            item={{
+              label: <time dateTime={project.updatedAt}>{updatedDateLabel}</time>,
+              icon: <CalendarCheck aria-hidden="true" />,
+              iconColorToken: 'var(--muted-foreground)'
+            }}
+            surface="hover-pill"
+            mutedLabel
+            className="text-xs"
+            data-testid={`all-project-date-chip:updated:${project.id}`}
+            aria-label={`Updated ${updatedDateLabel}`}
+            title={`Updated ${updatedDateLabel}`}
+          />
+        )
+      }
+    },
+    {
+      id: 'favorite',
+      header: <span className="sr-only">Favorite</span>,
+      headerClassName: 'w-10',
+      cellClassName: 'w-10 text-right',
+      renderCell: ({ project }) =>
+        favoriteProjectIds.includes(project.id) ? (
+          <Star
+            aria-hidden="true"
+            className="ml-auto text-[var(--status-chip-project-favorite-favorite-icon)]"
+            size={16}
+          />
+        ) : null
+    }
+  ]
+
+  return (
+    <section
+      className="flex min-h-full min-w-0 flex-col gap-6"
+      data-testid="all-projects-page"
+      aria-labelledby="all-projects-heading"
+    >
+      <h1 id="all-projects-heading" className="sr-only">
+        All Projects
+      </h1>
+      {projects.length === 0 ? (
+        <EmptyState
+          icon={APP_PAGE_ICONS.projects}
+          title="No projects found"
+          description="Create a project to start organizing work across milestones, tasks, and updates."
+          data-testid="all-projects-empty"
+        />
+      ) : (
+        <TableRowList
+          aria-label="Projects"
+          data-testid="all-projects-table"
+          columns={columns}
+          items={projectRows}
+          getRowKey={({ project }) => project.id}
+          getRowProps={({ project }) => ({
+            'data-testid': `all-project-row:${project.id}`,
+            onClick: () => onOpenProject(project.id)
+          })}
+        />
+      )}
+    </section>
+  )
+}
+
+function formatProjectDate(value: string): string {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function ProjectsWorkspaceHeaderActions({
@@ -425,23 +928,23 @@ export function ProjectsWorkspaceHeaderActions({
 function ProjectDetails({
   project,
   onUpdateProject,
-  onUpdateProperties,
   dataTestId,
-  testIdPrefix
+  testIdPrefix,
+  vimModeEnabled,
+  vimKeyMappings
 }: {
   project: Project | null
   onUpdateProject: (
     projectId: string,
     draft: { name: string; description: string; icon: ProjectIconStyle }
   ) => void
-  onUpdateProperties: (patch: ProjectPropertiesPatch) => void
   dataTestId: string
   testIdPrefix: string
+  vimModeEnabled: boolean
+  vimKeyMappings: NoteVimKeyMapping[]
 }): ReactElement {
   const [name, setName] = useState(project?.name ?? '')
-  const [description, setDescription] = useState(project?.description ?? project?.summary ?? '')
-  const [tagInput, setTagInput] = useState('')
-  const [resourceInput, setResourceInput] = useState('')
+  const descriptionEditorRef = useRef<ProjectDescriptionEditorHandle | null>(null)
 
   if (!project) {
     return (
@@ -459,32 +962,23 @@ function ProjectDetails({
     )
   }
 
-  const projectDraft = {
+  const initialDescription = project.description ?? project.summary ?? ''
+  const getProjectDraft = (): {
+    name: string
+    description: string
+    icon: ProjectIconStyle
+  } => ({
     name: name.trim() || project.name,
-    description: description.trim(),
+    description: (descriptionEditorRef.current?.getDraft() ?? initialDescription).trim(),
     icon: project.icon
-  }
-  const tags = project.tags ?? []
-  const resources = project.resources ?? []
-  const addValue = (field: 'tags' | 'resources', rawValue: string): void => {
-    const value = field === 'tags' ? normalizeTag(rawValue) : rawValue.trim()
-    if (!value) return
-
-    const values = field === 'tags' ? tags : resources
-    if (values.includes(value)) return
-
-    onUpdateProperties({ [field]: [...values, value] })
-    if (field === 'tags') setTagInput('')
-    else setResourceInput('')
-  }
-
+  })
   return (
     <div data-testid={dataTestId}>
       <div className="space-y-3" data-testid={`${testIdPrefix}-header`}>
         <div className="flex items-center gap-3" data-testid={`${testIdPrefix}-icon-row`}>
           <ProjectIconPicker
             icon={project.icon}
-            onChange={(icon) => onUpdateProject(project.id, { ...projectDraft, icon })}
+            onChange={(icon) => onUpdateProject(project.id, { ...getProjectDraft(), icon })}
             testId={`${testIdPrefix}-icon-trigger`}
           />
         </div>
@@ -493,49 +987,30 @@ function ProjectDetails({
           id={`${testIdPrefix}-name`}
           value={name}
           onChange={(event) => setName(event.target.value)}
-          onBlur={() => onUpdateProject(project.id, projectDraft)}
-          className="h-auto border-0 bg-transparent px-0 text-3xl font-semibold shadow-none focus-visible:ring-0"
+          onBlur={() => onUpdateProject(project.id, getProjectDraft())}
+          className="h-auto border-0 bg-transparent px-0 text-3xl font-bold shadow-none focus-visible:ring-0"
           aria-label="Project name"
         />
-        <Textarea
-          data-testid={`${testIdPrefix}-description-row`}
-          id={`${testIdPrefix}-description`}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          onBlur={() => onUpdateProject(project.id, projectDraft)}
-          className="min-h-20 resize-y text-base shadow-none focus-visible:ring-0"
-          aria-label="Project description"
-          placeholder="Describe this project"
-        />
-        <div className="grid gap-2" data-testid={`${testIdPrefix}-properties`}>
-          <WorkspacePropertyRow label="Tags" testId={`${testIdPrefix}-tags-row`}>
-            <ProjectChipEditor
-              values={tags}
-              inputValue={tagInput}
-              label="Add tag"
-              inputPlaceholder="tag name"
-              onInputChange={setTagInput}
-              onAdd={(value) => addValue('tags', value)}
-              onRemove={(value) =>
-                onUpdateProperties({ tags: tags.filter((tag) => tag !== value) })
-              }
-            />
-          </WorkspacePropertyRow>
-          <WorkspacePropertyRow label="Resources" testId={`${testIdPrefix}-resources-row`}>
-            <ProjectChipEditor
-              values={resources}
-              inputValue={resourceInput}
-              label="Add resource"
-              inputPlaceholder="resource name"
-              onInputChange={setResourceInput}
-              onAdd={(value) => addValue('resources', value)}
-              onRemove={(value) =>
-                onUpdateProperties({
-                  resources: resources.filter((resource) => resource !== value)
-                })
-              }
-            />
-          </WorkspacePropertyRow>
+        <div className="space-y-1.5" data-testid={`${testIdPrefix}-description-row`}>
+          <p
+            data-testid={`${testIdPrefix}-description-label`}
+            className="text-sm font-medium text-muted-foreground"
+          >
+            Description
+          </p>
+          <ProjectDescriptionEditor
+            ref={descriptionEditorRef}
+            initialContent={initialDescription}
+            onSave={(markdown) =>
+              onUpdateProject(project.id, {
+                ...getProjectDraft(),
+                description: markdown
+              })
+            }
+            testId={`${testIdPrefix}-description-editor`}
+            vimModeEnabled={vimModeEnabled}
+            vimKeyMappings={vimKeyMappings}
+          />
         </div>
       </div>
     </div>
@@ -544,12 +1019,14 @@ function ProjectDetails({
 
 function ProjectPropertiesPanel({
   project,
+  availableTags,
   favorite,
   onToggleFavorite,
   onToggleArchive,
   onUpdateProperties
 }: {
   project: Project | null
+  availableTags: readonly string[]
   favorite: boolean
   onToggleFavorite: () => void
   onToggleArchive: () => void
@@ -570,47 +1047,57 @@ function ProjectPropertiesPanel({
       heading="Project properties"
     >
       <div data-testid="project-property-rows">
+        <WorkspacePropertyRow label="Health" testId="project-property-health">
+          <StatusChip
+            item={getProjectUpdateStatusChipItem(getLatestProjectUpdate(project.updates)?.status)}
+            surface="pill"
+            className="text-xs"
+            data-testid="project-property-health-status"
+          />
+        </WorkspacePropertyRow>
+        <WorkspacePropertyRow label="Tags" testId="project-property-tags">
+          <TagEditor
+            value={project.tags ?? []}
+            availableTags={availableTags}
+            onChange={(tags) => onUpdateProperties({ tags })}
+            label="Project tags"
+            testId="project-tags-editor"
+            className="min-w-0 flex-wrap"
+          />
+        </WorkspacePropertyRow>
         <WorkspacePropertyRow label="Favorite" testId="project-property-favorite">
-          <Button
-            type="button"
-            variant={favorite ? 'secondary' : 'outline'}
-            size="sm"
+          <StatusChipSelect
+            label="Project favorite"
+            value={favorite ? 'favorite' : 'not-favorite'}
+            options={PROJECT_FAVORITE_CHIP_OPTIONS}
+            surface="pill"
             data-testid="project-favorite-button"
-            className="h-7 rounded-[var(--radius-button-pill)] text-xs"
-            aria-label={favorite ? 'Remove project favorite' : 'Add project favorite'}
-            aria-pressed={favorite}
-            onClick={onToggleFavorite}
-          >
-            <Star
-              aria-hidden="true"
-              className={favorite ? 'text-warning' : 'text-muted-foreground'}
-            />
-            <span>{favorite ? 'Favorite' : 'Not favorite'}</span>
-          </Button>
+            onValueChange={(value) => {
+              if (value !== 'favorite' && value !== 'not-favorite') return
+              if ((value === 'favorite') !== favorite) onToggleFavorite()
+            }}
+          />
         </WorkspacePropertyRow>
         <WorkspacePropertyRow label="Archive" testId="project-property-archive">
-          <Button
-            type="button"
-            variant={project.state === 'archived' ? 'secondary' : 'outline'}
-            size="sm"
+          <StatusChipSelect
+            label="Project archive state"
+            value={project.state}
+            options={PROJECT_STATE_CHIP_OPTIONS}
+            surface="pill"
             data-testid="project-archive-button"
-            className="h-7 rounded-[var(--radius-button-pill)] text-xs"
-            aria-label={project.state === 'archived' ? 'Unarchive project' : 'Archive project'}
-            aria-pressed={project.state === 'archived'}
-            onClick={onToggleArchive}
-          >
-            <Archive
-              aria-hidden="true"
-              className={project.state === 'archived' ? 'text-primary' : 'text-muted-foreground'}
-            />
-            <span>{project.state === 'archived' ? 'Archived' : 'Not archived'}</span>
-          </Button>
+            onValueChange={(value) => {
+              if (value !== project.state) {
+                onToggleArchive()
+              }
+            }}
+          />
         </WorkspacePropertyRow>
         <WorkspacePropertyRow label="Start Date" testId="project-property-start-date">
           <ProjectDateValue
             value={project.startDate}
             placeholder="Set start date"
-            ariaLabel="Start date"
+            ariaLabel="Project start date"
+            testId="project-property-start-date-group"
             onChange={(value) => {
               if (value && project.endDate && value > project.endDate) return
               onUpdateProperties({ startDate: value || null })
@@ -622,7 +1109,8 @@ function ProjectPropertiesPanel({
           <ProjectDateValue
             value={project.endDate}
             placeholder="Set end date"
-            ariaLabel="End date"
+            ariaLabel="Project end date"
+            testId="project-property-end-date-group"
             onChange={(value) => {
               if (value && project.startDate && value < project.startDate) return
               onUpdateProperties({ endDate: value || null })
@@ -639,117 +1127,39 @@ function ProjectDateValue({
   value,
   placeholder,
   ariaLabel,
+  testId,
   onChange,
   onClear
 }: {
   value?: string
   placeholder: string
   ariaLabel: string
-  onChange: (value: string) => void
+  testId: string
+  onChange: (value: string | undefined) => void
   onClear: () => void
 }): ReactElement {
   return (
-    <div className="flex w-max min-w-full shrink-0 flex-nowrap items-center gap-1.5">
-      <DatePickerISO
-        value={value ?? ''}
-        onChange={onChange}
+    <ChipGroup aria-label={ariaLabel} data-testid={testId}>
+      <CalendarDateEditPopover
+        value={value}
+        label={ariaLabel}
+        onValueChange={onChange}
         placeholder={placeholder}
+        variant="ghost"
         aria-label={ariaLabel}
-        className="h-7 max-w-full border-border text-xs"
+        className="h-7 w-fit rounded-none px-2"
       />
       {value ? (
         <WorkspaceIconButton
+          data-testid={`${testId}-clear`}
           aria-label={`Clear ${ariaLabel.toLowerCase()}`}
           title={`Clear ${ariaLabel.toLowerCase()}`}
-          icon={<X size={14} />}
-          className="h-7 w-7"
+          icon={<X size={14} aria-hidden="true" />}
+          className="h-7 w-7 rounded-none border-0 p-1.5"
           onClick={onClear}
         />
       ) : null}
-    </div>
-  )
-}
-
-function ProjectChipEditor({
-  values,
-  inputValue,
-  label,
-  inputPlaceholder,
-  onInputChange,
-  onAdd,
-  onRemove
-}: {
-  values: string[]
-  inputValue: string
-  label: string
-  inputPlaceholder: string
-  onInputChange: (value: string) => void
-  onAdd: (value: string) => void
-  onRemove: (value: string) => void
-}): ReactElement {
-  const [isAdding, setIsAdding] = useState(false)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  useEffect(() => {
-    if (!isAdding) return
-
-    const frameId = window.requestAnimationFrame(() => inputRef.current?.focus())
-    return () => window.cancelAnimationFrame(frameId)
-  }, [isAdding])
-
-  const handleAdd = (): void => {
-    const value = inputValue.trim()
-    if (!value) return
-
-    onAdd(value)
-    setIsAdding(true)
-  }
-
-  const closeInput = (): void => {
-    setIsAdding(false)
-    onInputChange('')
-  }
-
-  return (
-    <div className="flex w-max min-w-full shrink-0 flex-nowrap items-center gap-1.5">
-      {values.map((value) => (
-        <TagChip key={value} tag={value} onRemove={() => onRemove(value)} />
-      ))}
-      {isAdding ? (
-        <div className="inline-flex items-center gap-1.5">
-          <Input
-            ref={inputRef}
-            value={inputValue}
-            onChange={(event) => onInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                event.stopPropagation()
-                handleAdd()
-              } else if (event.key === 'Escape') {
-                event.preventDefault()
-                closeInput()
-              }
-            }}
-            onBlur={closeInput}
-            placeholder={inputPlaceholder}
-            aria-label={label}
-            autoFocus
-            className="h-7 w-32 rounded-md border border-primary bg-card px-2 py-0.5 text-xs text-foreground caret-primary"
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setIsAdding(true)}
-          className="inline-flex size-7 items-center justify-center rounded-md border border-dashed border-border bg-card p-1 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          title={label}
-          aria-label={label}
-        >
-          <Plus size={16} aria-hidden="true" />
-        </button>
-      )}
-    </div>
+    </ChipGroup>
   )
 }
 
@@ -771,7 +1181,8 @@ function ProjectMilestones({
   onOpenTask,
   onUpdateTask,
   onDeleteTask,
-  onDeleteMilestone
+  onDeleteMilestone,
+  onReorderMilestones
 }: {
   projectId: string
   milestones: ProjectMilestone[]
@@ -787,14 +1198,267 @@ function ProjectMilestones({
   onToggleMilestone: (milestoneId: string) => void
   onEditMilestone: (milestoneId: string) => void
   onUpdateMilestone: (milestoneId: string, title: string) => void
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onDeleteMilestone: (milestoneId: string) => boolean
+  onReorderMilestones: (milestoneIds: string[]) => Promise<boolean>
 }): ReactElement {
+  const [pendingOrderIds, setPendingOrderIds] = useState<string[] | null>(null)
+  const [draggedMilestoneId, setDraggedMilestoneId] = useState<string | null>(null)
+  const [dragOverMilestoneId, setDragOverMilestoneId] = useState<string | null>(null)
+  const [isPersistingOrder, setIsPersistingOrder] = useState(false)
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('')
+  const initialOrderRef = useRef<ProjectMilestone[]>(milestones)
+  const dropCommittedRef = useRef(false)
+  const milestoneListRef = useRef<HTMLUListElement | null>(null)
+  const orderedMilestones = useMemo(() => {
+    if (!pendingOrderIds) {
+      return milestones
+    }
+
+    const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]))
+    const nextMilestones = pendingOrderIds.flatMap((milestoneId) => {
+      const milestone = milestonesById.get(milestoneId)
+      return milestone ? [milestone] : []
+    })
+    return nextMilestones.length === milestones.length ? nextMilestones : milestones
+  }, [milestones, pendingOrderIds])
+
+  const orderedMilestoneIds = useMemo(
+    () => orderedMilestones.map((milestone) => milestone.id),
+    [orderedMilestones]
+  )
+  const milestoneMotionRef = useReorderMotion(orderedMilestoneIds)
+
+  const persistOrder = useCallback(
+    async (nextMilestones: ProjectMilestone[]): Promise<void> => {
+      if (hasSameProjectMilestoneOrder(nextMilestones, initialOrderRef.current)) {
+        setPendingOrderIds(null)
+        return
+      }
+
+      setIsPersistingOrder(true)
+      const persisted = await onReorderMilestones(getProjectMilestoneIds(nextMilestones))
+      setIsPersistingOrder(false)
+      setPendingOrderIds(null)
+      if (!persisted) {
+        setReorderAnnouncement('Milestone order could not be saved.')
+      }
+    },
+    [onReorderMilestones]
+  )
+
+  const applyPreviewOrder = useCallback(
+    (nextMilestones: ProjectMilestone[]): void => {
+      if (hasSameProjectMilestoneOrder(nextMilestones, orderedMilestones)) {
+        return
+      }
+
+      setPendingOrderIds(getProjectMilestoneIds(nextMilestones))
+      const movedMilestone = nextMilestones.find((item) => item.id === draggedMilestoneId)
+      const nextIndex = nextMilestones.findIndex((item) => item.id === draggedMilestoneId)
+      if (movedMilestone && nextIndex >= 0) {
+        setReorderAnnouncement(
+          `${movedMilestone.title} moved to position ${nextIndex + 1} of ${nextMilestones.length}.`
+        )
+      }
+    },
+    [draggedMilestoneId, orderedMilestones]
+  )
+
+  const completeDrop = useCallback(
+    (nextMilestones: ProjectMilestone[]): void => {
+      dropCommittedRef.current = true
+      setPendingOrderIds(getProjectMilestoneIds(nextMilestones))
+      setDraggedMilestoneId(null)
+      setDragOverMilestoneId(null)
+      void persistOrder(nextMilestones)
+    },
+    [persistOrder]
+  )
+
+  const getOutsideBoundary = useCallback(
+    (clientX: number, clientY: number): MilestoneDropBoundary | null => {
+      const bounds = milestoneListRef.current?.getBoundingClientRect()
+      if (!bounds || bounds.width === 0 || bounds.height === 0) {
+        return null
+      }
+
+      const horizontalPadding = 48
+      if (clientX < bounds.left - horizontalPadding || clientX > bounds.right + horizontalPadding) {
+        return null
+      }
+      if (clientY < bounds.top) {
+        return 'top'
+      }
+      if (clientY > bounds.bottom) {
+        return 'bottom'
+      }
+      return null
+    },
+    []
+  )
+
+  const getDropOrder = useCallback(
+    (event: ReactDragEvent<HTMLElement>, targetMilestoneId: string): ProjectMilestone[] => {
+      if (!draggedMilestoneId) {
+        return orderedMilestones
+      }
+
+      const sourceIndex = orderedMilestones.findIndex(
+        (milestone) => milestone.id === draggedMilestoneId
+      )
+      const targetIndex = orderedMilestones.findIndex(
+        (milestone) => milestone.id === targetMilestoneId
+      )
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return orderedMilestones
+      }
+
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const isAfterTarget = event.clientY > bounds.top + bounds.height / 2
+      let insertionIndex = targetIndex + (isAfterTarget ? 1 : 0)
+      if (sourceIndex < insertionIndex) {
+        insertionIndex -= 1
+      }
+
+      return moveProjectMilestone(orderedMilestones, draggedMilestoneId, insertionIndex)
+    },
+    [draggedMilestoneId, orderedMilestones]
+  )
+
+  const handleDragStart = (event: ReactDragEvent<HTMLElement>, milestoneId: string): void => {
+    if (isPersistingOrder) {
+      event.preventDefault()
+      return
+    }
+
+    const milestone = orderedMilestones.find((item) => item.id === milestoneId)
+    initialOrderRef.current = orderedMilestones
+    dropCommittedRef.current = false
+    setDraggedMilestoneId(milestoneId)
+    setDragOverMilestoneId(milestoneId)
+    setReorderAnnouncement(
+      `${milestone?.title ?? 'Milestone'} grabbed. Move vertically to reorder.`
+    )
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', milestoneId)
+  }
+
+  const handleDragOver = (event: ReactDragEvent<HTMLElement>, milestoneId: string): void => {
+    if (!draggedMilestoneId) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverMilestoneId(milestoneId)
+    const nextMilestones = getDropOrder(event, milestoneId)
+    applyPreviewOrder(nextMilestones)
+  }
+
+  useEffect(() => {
+    if (!draggedMilestoneId) {
+      return
+    }
+
+    const getBoundaryOrder = (boundary: MilestoneDropBoundary): ProjectMilestone[] =>
+      moveProjectMilestone(
+        orderedMilestones,
+        draggedMilestoneId,
+        boundary === 'top' ? 0 : orderedMilestones.length - 1
+      )
+
+    const handleBoundaryDragOver = (event: DragEvent): void => {
+      const boundary = getOutsideBoundary(event.clientX, event.clientY)
+      if (!boundary) {
+        return
+      }
+
+      event.preventDefault()
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move'
+      }
+      setDragOverMilestoneId(
+        boundary === 'top'
+          ? (orderedMilestones[0]?.id ?? null)
+          : (orderedMilestones[orderedMilestones.length - 1]?.id ?? null)
+      )
+      applyPreviewOrder(getBoundaryOrder(boundary))
+    }
+
+    const handleBoundaryDrop = (event: DragEvent): void => {
+      const boundary = getOutsideBoundary(event.clientX, event.clientY)
+      if (!boundary) {
+        return
+      }
+
+      event.preventDefault()
+      completeDrop(getBoundaryOrder(boundary))
+    }
+
+    window.addEventListener('dragover', handleBoundaryDragOver, true)
+    window.addEventListener('drop', handleBoundaryDrop, true)
+    return () => {
+      window.removeEventListener('dragover', handleBoundaryDragOver, true)
+      window.removeEventListener('drop', handleBoundaryDrop, true)
+    }
+  }, [applyPreviewOrder, completeDrop, draggedMilestoneId, getOutsideBoundary, orderedMilestones])
+
+  const handleDrop = (event: ReactDragEvent<HTMLElement>, milestoneId: string): void => {
+    if (!draggedMilestoneId) {
+      return
+    }
+
+    event.preventDefault()
+    const nextMilestones = getDropOrder(event, milestoneId)
+    completeDrop(nextMilestones)
+  }
+
+  const handleDragEnd = (): void => {
+    if (!dropCommittedRef.current) {
+      setPendingOrderIds(null)
+      setReorderAnnouncement('Milestone reordering cancelled.')
+    }
+    dropCommittedRef.current = false
+    setDraggedMilestoneId(null)
+    setDragOverMilestoneId(null)
+  }
+
+  const handleKeyboardMove = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    milestoneId: string
+  ): void => {
+    if (isPersistingOrder || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    const currentIndex = orderedMilestones.findIndex((milestone) => milestone.id === milestoneId)
+    const direction = event.key === 'ArrowUp' ? -1 : 1
+    const targetIndex = currentIndex + direction
+    const milestone = orderedMilestones[currentIndex]
+    if (!milestone || targetIndex < 0 || targetIndex >= orderedMilestones.length) {
+      setReorderAnnouncement(
+        `${milestone?.title ?? 'Milestone'} is already ${direction < 0 ? 'first' : 'last'}.`
+      )
+      return
+    }
+
+    initialOrderRef.current = orderedMilestones
+    const nextMilestones = moveProjectMilestone(orderedMilestones, milestoneId, targetIndex)
+    setPendingOrderIds(getProjectMilestoneIds(nextMilestones))
+    setReorderAnnouncement(
+      `${milestone.title} moved to position ${targetIndex + 1} of ${nextMilestones.length}.`
+    )
+    void persistOrder(nextMilestones)
+  }
+
   return (
     <section aria-labelledby="project-milestones-heading" className="space-y-3">
-      <div className="flex items-center justify-between border-t border-border pt-3">
+      <div className="flex items-center justify-between pt-4">
         <h2 id="project-milestones-heading" className="text-sm font-medium text-muted-foreground">
           Project Milestones
         </h2>
@@ -803,12 +1467,19 @@ function ProjectMilestones({
         </span>
       </div>
       {milestones.length > 0 ? (
-        <ul className="list-none" data-testid="project-milestones">
-          {milestones.map((milestone) => (
+        <ul
+          ref={milestoneListRef}
+          className="list-none"
+          data-testid="project-milestones"
+          data-drag-boundary-active={draggedMilestoneId ? 'true' : 'false'}
+        >
+          {orderedMilestones.map((milestone) => (
             <ProjectMilestoneRow
               key={milestone.id}
+              motionRef={milestoneMotionRef(milestone.id)}
               projectId={projectId}
               milestone={milestone}
+              status={getProjectMilestoneStatus(milestone, milestones, tasks, projectId)}
               tasks={tasks}
               expanded={expandedMilestoneIds.has(milestone.id)}
               editToken={editingMilestoneId === milestone.id ? milestoneEditToken : 0}
@@ -822,10 +1493,21 @@ function ProjectMilestones({
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
               onDeleteMilestone={() => onDeleteMilestone(milestone.id)}
+              isDragging={draggedMilestoneId === milestone.id}
+              isDragOver={dragOverMilestoneId === milestone.id}
+              isReordering={isPersistingOrder}
+              onDragStart={(event) => handleDragStart(event, milestone.id)}
+              onDragOver={(event) => handleDragOver(event, milestone.id)}
+              onDrop={(event) => handleDrop(event, milestone.id)}
+              onDragEnd={handleDragEnd}
+              onMoveKeyboard={(event) => handleKeyboardMove(event, milestone.id)}
             />
           ))}
         </ul>
       ) : null}
+      <span className="sr-only" aria-live="polite">
+        {reorderAnnouncement}
+      </span>
       <div className="py-2">
         <Button
           type="button"
@@ -844,8 +1526,10 @@ function ProjectMilestones({
 }
 
 function ProjectMilestoneRow({
+  motionRef,
   projectId,
   milestone,
+  status,
   tasks,
   expanded,
   editToken,
@@ -858,10 +1542,20 @@ function ProjectMilestoneRow({
   onOpenTask,
   onUpdateTask,
   onDeleteTask,
-  onDeleteMilestone
+  onDeleteMilestone,
+  isDragging,
+  isDragOver,
+  isReordering,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  onMoveKeyboard
 }: {
+  motionRef: (node: HTMLElement | null) => void
   projectId: string
   milestone: ProjectMilestone
+  status: ProjectMilestoneStatus
   tasks: CalendarTask[]
   expanded: boolean
   editToken: number
@@ -871,10 +1565,18 @@ function ProjectMilestoneRow({
   onToggle: () => void
   onEdit: () => void
   onUpdateMilestone: (milestoneId: string, title: string) => void
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onDeleteMilestone: () => void
+  isDragging: boolean
+  isDragOver: boolean
+  isReordering: boolean
+  onDragStart: (event: ReactDragEvent<HTMLElement>) => void
+  onDragOver: (event: ReactDragEvent<HTMLElement>) => void
+  onDrop: (event: ReactDragEvent<HTMLElement>) => void
+  onDragEnd: () => void
+  onMoveKeyboard: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
 }): ReactElement {
   const milestoneTasks = getProjectMilestoneTasks(tasks, projectId, milestone.id)
   const progress = getProjectMilestoneProgress(milestoneTasks)
@@ -884,133 +1586,183 @@ function ProjectMilestoneRow({
   const stopRowInteraction = (event: SyntheticEvent): void => {
     event.stopPropagation()
   }
-
-  const handleRowClick = (event: MouseEvent<HTMLDivElement>): void => {
-    const target = event.target
-    if (
-      target instanceof Element &&
-      target.closest('button,input,textarea,select,a,[role="menuitem"]')
-    ) {
-      return
-    }
-
-    onToggle()
-  }
+  const milestoneContainerRef = useRef<HTMLElement | null>(null)
 
   return (
-    <li data-testid={`project-milestone-row:${milestone.id}`}>
-      <ProjectMilestoneContextMenu
-        milestone={milestone}
-        expanded={expanded}
-        isCreatingTask={isCreatingTask}
-        onCreateTask={() => onCreateTask(milestone.id)}
-        onEdit={onEdit}
-        onToggle={onToggle}
-        onDelete={onDeleteMilestone}
+    <li
+      ref={motionRef}
+      className={cn('relative', isDragging && 'opacity-0')}
+      data-testid={`project-milestone-row:${milestone.id}`}
+      data-dragging={isDragging ? 'true' : 'false'}
+      data-drag-over={isDragOver ? 'true' : 'false'}
+    >
+      <DropZone
+        ref={milestoneContainerRef}
+        variant="row"
+        active={isDragOver}
+        disabled={!isDragging && isReordering}
+        className="relative overflow-visible rounded-[var(--radius-button)] px-2 py-1 transition-colors motion-reduce:transition-none"
+        data-expanded={expanded}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
       >
-        <div
-          className="group relative cursor-pointer rounded-[var(--radius-button)] border border-transparent px-2 py-1 transition-colors motion-reduce:transition-none hover:border-border hover:bg-accent"
-          data-expanded={expanded}
-          data-testid={`project-milestone-open:${milestone.id}`}
-          onClick={handleRowClick}
+        <ProjectMilestoneContextMenu
+          milestone={milestone}
+          expanded={expanded}
+          isCreatingTask={isCreatingTask}
+          onCreateTask={() => onCreateTask(milestone.id)}
+          onEdit={onEdit}
+          onToggle={onToggle}
+          onDelete={onDeleteMilestone}
         >
-          <div className="relative flex items-center gap-2">
-            <div className="shrink-0 px-1">
-              <MilestoneCompletenessIcon
-                completed={progress.isComplete}
-                size={18}
-                dataTestId={`project-milestone-icon:${milestone.id}`}
-              />
-            </div>
-            <div className="flex min-w-0 flex-1 items-center gap-1 px-1 py-1 text-left">
-              <div className="min-w-0" onClick={stopRowInteraction}>
-                <InlineEditableText
-                  value={milestone.title}
-                  onCommit={(title) => onUpdateMilestone(milestone.id, title)}
-                  displayClassName="block max-w-full truncate text-base font-semibold text-foreground hover:text-primary"
-                  inputClassName="h-8 w-full rounded-[var(--radius-button)] border border-ring bg-card px-2 text-base font-semibold text-foreground"
-                  title={`Edit milestone: ${milestone.title}`}
-                  editToken={editToken}
+          <div
+            className="group/milestone-header relative rounded-[var(--radius-button)] border border-transparent bg-transparent px-2 py-1"
+            data-testid={`project-milestone-open:${milestone.id}`}
+          >
+            <button
+              type="button"
+              className={cn(
+                'absolute inset-0 z-0 rounded-[var(--radius-button)] border border-transparent bg-transparent text-left outline-none transition-colors',
+                isDragOver ? 'bg-[var(--drop-zone-active-bg)]' : 'hover:bg-muted',
+                'focus-visible:border-border focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring'
+              )}
+              onClick={onToggle}
+              aria-label={`${expanded ? 'Collapse' : 'Expand'} milestone: ${milestone.title}`}
+              aria-expanded={expanded}
+              aria-controls={`project-milestone-content:${milestone.id}`}
+              data-testid={`project-milestone-toggle:${milestone.id}`}
+            >
+              <span className="sr-only">{milestone.title}</span>
+            </button>
+            <DragSource
+              as="button"
+              type="button"
+              draggable={!isReordering}
+              disabled={isReordering}
+              tabIndex={0}
+              preview="floating"
+              previewTargetRef={milestoneContainerRef}
+              previewAxis="y"
+              previewMotion="smooth"
+              previewElevation="strong"
+              hideFromPreview
+              rotation={0}
+              className={cn(
+                rowActionButtonClassName,
+                'pointer-events-auto absolute -left-6 top-1/2 z-20 flex size-7 -translate-y-1/2 items-center justify-center rounded-full border-0 p-0 opacity-0 transition-opacity group-hover/milestone-header:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[dragging=true]:opacity-100 motion-reduce:transition-none'
+              )}
+              onPointerDown={stopRowInteraction}
+              onClick={stopRowInteraction}
+              onKeyDown={onMoveKeyboard}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              aria-label={`Reorder milestone: ${milestone.title}`}
+              aria-keyshortcuts="ArrowUp ArrowDown"
+              title="Drag vertically to reorder, or use Arrow Up and Arrow Down"
+              data-testid={`project-milestone-reorder-handle:${milestone.id}`}
+            >
+              <GripVertical size={16} aria-hidden="true" />
+            </DragSource>
+            <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2">
+              <div
+                className="pointer-events-auto shrink-0 cursor-pointer px-1"
+                onClick={(event) => {
+                  stopRowInteraction(event)
+                  onToggle()
+                }}
+              >
+                <MilestoneCompletenessIcon
+                  status={status}
+                  size={18}
+                  dataTestId={`project-milestone-icon:${milestone.id}`}
                 />
               </div>
-              <div className="flex shrink-0 items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-1 px-1 py-1 text-left">
+                <div
+                  className="pointer-events-auto min-w-0 w-fit max-w-full shrink"
+                  onClick={stopRowInteraction}
+                >
+                  <InlineEditableText
+                    value={milestone.title}
+                    onCommit={(title) => onUpdateMilestone(milestone.id, title)}
+                    displayClassName="block w-full min-w-0 truncate text-base font-semibold text-foreground hover:text-primary"
+                    inputClassName="inline-block h-8 w-auto max-w-full min-w-0 rounded-none border-0 bg-transparent px-0 text-base font-semibold text-foreground shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent focus-visible:outline-none focus-visible:ring-0"
+                    title={`Edit milestone: ${milestone.title}`}
+                    fitInputToContent
+                    editToken={editToken}
+                  />
+                </div>
+                <div className="flex shrink-0 items-center" aria-hidden="true">
+                  <ChevronRight
+                    className={cn('motion-state-chevron size-3.5', expanded && 'rotate-90')}
+                  />
+                </div>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <div
+                  className="pointer-events-none flex items-center gap-1.5 opacity-0 transition-opacity motion-reduce:transition-none group-hover/milestone-header:opacity-100"
+                  data-testid={`project-milestone-progress:${milestone.id}`}
+                  aria-label={`Milestone progress: ${completionPercent}%`}
+                >
+                  <ProgressRing
+                    value={completionPercent}
+                    data-testid={`project-milestone-progress-ring:${milestone.id}`}
+                  />
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                    {completionPercent}%
+                  </span>
+                </div>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="rowAction"
                   size="icon"
-                  className="size-7 rounded-[var(--radius-button)]"
+                  shape="pill"
+                  className="pointer-events-auto size-7 shrink-0 opacity-0 transition-opacity group-hover/milestone-header:opacity-100 group-focus-within/milestone-header:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
                   onPointerDown={stopRowInteraction}
                   onClick={(event) => {
                     stopRowInteraction(event)
-                    onToggle()
+                    onCreateTask(milestone.id)
                   }}
-                  aria-label={`${expanded ? 'Collapse' : 'Expand'} milestone: ${milestone.title}`}
-                  aria-expanded={expanded}
-                  aria-controls={`project-milestone-content:${milestone.id}`}
-                  data-testid={`project-milestone-toggle:${milestone.id}`}
+                  disabled={isCreatingTask}
+                  aria-label={`Add task to milestone: ${milestone.title}`}
+                  title="Add task to milestone"
+                  data-testid={`project-milestone-add-task-icon:${milestone.id}`}
                 >
-                  <ChevronRight
-                    aria-hidden="true"
-                    className={cn('motion-state-chevron size-3.5', expanded && 'rotate-90')}
-                  />
+                  <Plus size={14} aria-hidden="true" />
                 </Button>
               </div>
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <span className="whitespace-nowrap text-xs text-muted-foreground">
-                {progress.total} Tasks
-              </span>
-              <span className="whitespace-nowrap text-xs text-muted-foreground">
-                {completionPercent}%
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7 rounded-[var(--radius-button)] text-muted-foreground hover:bg-card hover:text-foreground focus-visible:bg-card"
-                onPointerDown={stopRowInteraction}
-                onClick={(event) => {
-                  stopRowInteraction(event)
-                  onCreateTask(milestone.id)
-                }}
-                disabled={isCreatingTask}
-                aria-label={`Add task to milestone: ${milestone.title}`}
-                title="Add task to milestone"
-                data-testid={`project-milestone-add-task-icon:${milestone.id}`}
-              >
-                <Plus size={14} aria-hidden="true" />
-              </Button>
-            </div>
+          </div>
+        </ProjectMilestoneContextMenu>
+        <div
+          id={`project-milestone-content:${milestone.id}`}
+          className="motion-milestone-content"
+          data-state={expanded ? 'open' : 'closed'}
+          data-testid={`project-milestone-children:${milestone.id}`}
+          aria-hidden={!expanded}
+          inert={!expanded}
+        >
+          <div className="ml-[21px] border-l border-border pl-3">
+            {milestoneTasks.length > 0 ? (
+              <ul className="list-none">
+                {milestoneTasks.map((task) => (
+                  <TaskDetailRow
+                    key={task.id}
+                    task={task}
+                    selected={selectedTaskId === task.id}
+                    isParentDropActive={isDragOver}
+                    onUpdateTask={onUpdateTask}
+                    onDeleteTask={onDeleteTask}
+                    onOpenTask={onOpenTask}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="px-2 py-2 text-xs text-muted-foreground">No tasks in this milestone.</p>
+            )}
           </div>
         </div>
-      </ProjectMilestoneContextMenu>
-      <div
-        id={`project-milestone-content:${milestone.id}`}
-        className="motion-milestone-content"
-        data-state={expanded ? 'open' : 'closed'}
-        data-testid={`project-milestone-children:${milestone.id}`}
-        aria-hidden={!expanded}
-        inert={!expanded}
-      >
-        <div className="ml-[21px] border-l border-border pl-3">
-          {milestoneTasks.length > 0 ? (
-            <ul className="list-none">
-              {milestoneTasks.map((task) => (
-                <TaskDetailRow
-                  key={task.id}
-                  task={task}
-                  selected={selectedTaskId === task.id}
-                  onUpdateTask={onUpdateTask}
-                  onDeleteTask={onDeleteTask}
-                  onOpenTask={onOpenTask}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="px-2 py-2 text-xs text-muted-foreground">No tasks in this milestone.</p>
-          )}
-        </div>
-      </div>
+      </DropZone>
     </li>
   )
 }
@@ -1029,7 +1781,7 @@ function ProjectTasks({
   isCreatingTask: boolean
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   selectedTaskId: string | null
 }): ReactElement {
   return (
@@ -1072,16 +1824,19 @@ function TaskDetailRow({
   onUpdateTask,
   onDeleteTask,
   onOpenTask,
-  selected
+  selected,
+  isParentDropActive = false
 }: {
   task: CalendarTask
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onOpenTask: (taskId: string) => void
   selected: boolean
+  isParentDropActive?: boolean
 }): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
-  const scheduleLabel = formatCalendarTaskScheduleLabel(task)
+  const hasStartSchedule = Boolean(task.date || task.time)
+  const hasEndSchedule = Boolean(task.endDate || task.endTime)
 
   const stopRowInteraction = (event: SyntheticEvent): void => {
     event.stopPropagation()
@@ -1107,7 +1862,7 @@ function TaskDetailRow({
       onUpdateStatus={(taskId, nextStatus) =>
         onUpdateTask(taskId, {
           status: nextStatus,
-          completed: nextStatus === 'completed'
+          completed: isTaskStatusDone(nextStatus)
         })
       }
       onUpdatePriority={(taskId, priority) => onUpdateTask(taskId, { priority })}
@@ -1117,25 +1872,29 @@ function TaskDetailRow({
       onUnscheduleTask={(taskId) => onUpdateTask(taskId, { date: undefined, endDate: undefined })}
     >
       <li
-        className="group relative rounded-[var(--radius-button)] px-2 py-1"
+        className="group relative rounded-[var(--radius-button)] px-2 py-1 data-[parent-drop-active=true]:bg-[var(--drop-zone-active-bg)]"
         data-selected={selected}
+        data-parent-drop-active={isParentDropActive ? 'true' : 'false'}
         data-testid={`project-task-row:${task.id}`}
       >
         <button
           type="button"
-          className="absolute inset-0 z-0 rounded-[var(--radius-button)] border border-transparent bg-transparent text-left outline-none transition-colors group-hover:border-border group-hover:bg-accent focus-visible:border-border focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring group-data-[selected=true]:border-border group-data-[selected=true]:bg-accent"
+          className={cn(
+            'absolute inset-0 z-0 rounded-[var(--radius-button)] border border-transparent bg-transparent text-left outline-none transition-colors',
+            isParentDropActive ? 'bg-[var(--drop-zone-active-bg)]' : 'group-hover:bg-muted',
+            'focus-visible:border-border focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring group-data-[selected=true]:border-border group-data-[selected=true]:bg-muted'
+          )}
           onClick={() => onOpenTask(task.id)}
           aria-label={`Open task: ${task.title}`}
           data-testid={`project-task-open:${task.id}`}
         >
           <span className="sr-only">{task.title}</span>
         </button>
-        <div className="pointer-events-none relative z-10 grid gap-2 sm:grid-cols-[max-content_minmax(0,1fr)_max-content_2rem] sm:items-center">
-          <SelectiveChip
-            className="pointer-events-auto"
+        <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2">
+          <StatusChipSelect
+            className="pointer-events-auto shrink-0 w-32 p-0"
             label={`Status for ${task.title}`}
             value={status}
-            variant="plain"
             options={TASK_STATUS_CHIP_OPTIONS}
             data-testid={`project-task-status-chip:${task.id}`}
             onPointerDown={stopRowInteraction}
@@ -1144,28 +1903,67 @@ function TaskDetailRow({
               const nextStatus = value as TaskStatus
               onUpdateTask(task.id, {
                 status: nextStatus,
-                completed: nextStatus === 'completed'
+                completed: isTaskStatusDone(nextStatus)
               })
             }}
           />
-          <div className="min-w-0 px-1 py-1 text-left">
-            <span className="block min-w-0 truncate text-base font-semibold text-foreground">
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1 text-left">
+            <span className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
               {task.title}
             </span>
-            {task.tags.length > 0 ? (
-              <TaskTagSummary tags={task.tags} mode="full" className="mt-1" />
-            ) : null}
           </div>
-          <span
-            className="pointer-events-none whitespace-nowrap text-right text-xs text-muted-foreground"
-            title={scheduleLabel}
-          >
-            {scheduleLabel}
-          </span>
+          {hasStartSchedule || hasEndSchedule ? (
+            <div
+              className="pointer-events-none hidden min-w-max flex-none items-center gap-0.5 sm:flex"
+              data-testid={`project-task-schedule:${task.id}`}
+            >
+              {hasStartSchedule ? (
+                <>
+                  <TaskScheduleChip
+                    taskId={task.id}
+                    field="start-date"
+                    label="Start date"
+                    value={task.date}
+                    kind="date"
+                  />
+                  <TaskScheduleChip
+                    taskId={task.id}
+                    field="start-time"
+                    label="Start time"
+                    value={task.time}
+                    kind="time"
+                  />
+                </>
+              ) : null}
+              {hasStartSchedule && hasEndSchedule ? (
+                <span aria-hidden="true" className="px-0.5 text-muted-foreground">
+                  →
+                </span>
+              ) : null}
+              {hasEndSchedule ? (
+                <>
+                  <TaskScheduleChip
+                    taskId={task.id}
+                    field="end-date"
+                    label={hasStartSchedule ? 'End date' : 'Due date'}
+                    value={task.endDate}
+                    kind="date"
+                  />
+                  <TaskScheduleChip
+                    taskId={task.id}
+                    field="end-time"
+                    label={hasStartSchedule ? 'End time' : 'Due time'}
+                    value={task.endTime}
+                    kind="time"
+                  />
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <Button
-            className="pointer-events-auto text-muted-foreground hover:bg-card hover:text-foreground focus-visible:bg-card"
+            className="pointer-events-auto shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
             type="button"
-            variant="ghost"
+            variant="rowAction"
             size="icon"
             onPointerDown={stopRowInteraction}
             onClick={openContextMenu}
@@ -1178,5 +1976,40 @@ function TaskDetailRow({
         </div>
       </li>
     </TaskContextMenu>
+  )
+}
+
+function TaskScheduleChip({
+  taskId,
+  field,
+  label,
+  value,
+  kind
+}: {
+  taskId: string
+  field: 'start-date' | 'start-time' | 'end-date' | 'end-time'
+  label: string
+  value?: string
+  kind: 'date' | 'time'
+}): ReactElement | null {
+  if (!value) return null
+
+  const formattedValue =
+    kind === 'date' ? formatCalendarDateValue(value) : formatCalendarTimeValue(value)
+  const Icon = kind === 'date' ? CalendarCheck : ClockCheck
+
+  return (
+    <StatusChip
+      item={{
+        label: formattedValue,
+        icon: <Icon aria-hidden="true" />,
+        iconColorToken: 'var(--muted-foreground)'
+      }}
+      surface="hover"
+      className="group-hover:bg-card-hover pointer-events-none min-w-max max-w-none flex-none"
+      data-testid={`project-task-schedule-chip:${taskId}:${field}`}
+      title={`${label}: ${formattedValue}`}
+      aria-label={`${label}: ${formattedValue}`}
+    />
   )
 }

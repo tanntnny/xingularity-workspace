@@ -70,6 +70,10 @@ export function buildSubscriptionRecord(
     lastUsedAt: normalizeString(input.lastUsedAt),
     tags: input.tags?.map((tag) => tag.trim()).filter(Boolean) ?? [],
     notes: normalizeString(input.notes),
+    renewalReminderDays: normalizeReminderDays(input.renewalReminderDays),
+    cancellationUrl: normalizeString(input.cancellationUrl),
+    cancellationContact: normalizeString(input.cancellationContact),
+    usageReviewState: 'not-reviewed',
     createdAt: nowIso,
     updatedAt: nowIso
   }
@@ -124,8 +128,57 @@ export function applySubscriptionUpdate(
         : patch.notes !== undefined
           ? normalizeString(patch.notes)
           : current.notes,
+    renewalReminderDays:
+      patch.renewalReminderDays === undefined
+        ? current.renewalReminderDays
+        : normalizeReminderDays(patch.renewalReminderDays),
+    calendarEventId:
+      patch.calendarEventId === null
+        ? undefined
+        : patch.calendarEventId !== undefined
+          ? normalizeString(patch.calendarEventId)
+          : current.calendarEventId,
+    cancellationUrl:
+      patch.cancellationUrl === null
+        ? undefined
+        : patch.cancellationUrl !== undefined
+          ? normalizeString(patch.cancellationUrl)
+          : current.cancellationUrl,
+    cancellationContact:
+      patch.cancellationContact === null
+        ? undefined
+        : patch.cancellationContact !== undefined
+          ? normalizeString(patch.cancellationContact)
+          : current.cancellationContact,
+    usageReviewState: patch.usageReviewState ?? current.usageReviewState ?? 'not-reviewed',
     updatedAt: nowIso
   }
+}
+
+export function getSubscriptionReminderDates(
+  record: SubscriptionRecord,
+  now = new Date()
+): string[] {
+  if (!record.nextRenewalAt) {
+    return []
+  }
+  const renewal = new Date(record.nextRenewalAt)
+  if (Number.isNaN(renewal.getTime())) {
+    return []
+  }
+  return (record.renewalReminderDays ?? [7, 1])
+    .map((days) => {
+      const reminder = new Date(renewal)
+      reminder.setDate(reminder.getDate() - days)
+      return reminder.toISOString()
+    })
+    .filter((date) => new Date(date).getTime() >= now.getTime() - 86_400_000)
+}
+
+function normalizeReminderDays(value: number[] | undefined): number[] {
+  return Array.from(
+    new Set((value ?? [7, 1]).filter((days) => Number.isInteger(days) && days > 0 && days <= 365))
+  ).sort((left, right) => right - left)
 }
 
 export function getRenewalBucket(

@@ -2,22 +2,30 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import type { CalendarTask, NoteVimKeyMapping } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from '../components/Editor'
 import { InlineEditableText } from '../components/InlineEditableText'
-import { TaskStatusIcon } from '../components/TaskStatusIcon'
+import { StatusChip } from '../components/ui/status-chip'
 import { DocumentWorkspaceFooterStatus } from '../components/ui/document-workspace'
-import { getTaskStatus, TASK_STATUS_META } from '../lib/taskStatus'
+import { getTaskStatus } from '../lib/taskStatus'
+import { getTaskStatusChipItem } from '../lib/statusChipMeta'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 
 const TASK_DESCRIPTION_MAX_LENGTH = 2000
 const TASK_DESCRIPTION_AUTOSAVE_DELAY_MS = 600
-const EMPTY_NOTE_VIM_MAPPINGS: NoteVimKeyMapping[] = []
 
 interface TaskPageProps {
   task: CalendarTask
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
   onRegisterFlush?: (flush: (() => Promise<void>) | null) => void
+  vimModeEnabled: boolean
+  vimKeyMappings: NoteVimKeyMapping[]
 }
 
-export function TaskPage({ task, onUpdateTask, onRegisterFlush }: TaskPageProps): ReactElement {
+export function TaskPage({
+  task,
+  onUpdateTask,
+  onRegisterFlush,
+  vimModeEnabled,
+  vimKeyMappings
+}: TaskPageProps): ReactElement {
   const editorRef = useRef<NoteEditorHandle | null>(null)
   const descriptionRef = useRef(task.description ?? '')
   const pendingDescriptionRef = useRef(task.description ?? '')
@@ -107,7 +115,6 @@ export function TaskPage({ task, onUpdateTask, onRegisterFlush }: TaskPageProps)
   )
 
   const status = getTaskStatus(task.status, task.completed)
-  const statusMeta = TASK_STATUS_META[status]
 
   return (
     <article
@@ -125,10 +132,7 @@ export function TaskPage({ task, onUpdateTask, onRegisterFlush }: TaskPageProps)
             title="Click to rename task"
           />
           <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
-            <span className={`inline-flex items-center gap-1.5 text-sm ${statusMeta.className}`}>
-              <TaskStatusIcon status={status} size={18} />
-              {statusMeta.label}
-            </span>
+            <StatusChip item={getTaskStatusChipItem(status)} />
             <span className="text-xs text-muted-foreground">
               {isDescriptionDirty ? 'Saving description…' : 'Description saved'}
             </span>
@@ -148,8 +152,8 @@ export function TaskPage({ task, onUpdateTask, onRegisterFlush }: TaskPageProps)
                 onDropFile={async () => null}
                 onPasteImage={async () => null}
                 notes={[]}
-                vimModeEnabled={false}
-                vimKeyMappings={EMPTY_NOTE_VIM_MAPPINGS}
+                vimModeEnabled={vimModeEnabled}
+                vimKeyMappings={vimKeyMappings}
               />
             </div>
           </div>

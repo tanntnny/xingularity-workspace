@@ -1,65 +1,59 @@
 import { useMemo, useState, type ReactElement } from 'react'
 import {
-  CALENDAR_TASK_TYPE_OPTIONS,
   CalendarTask,
   CalendarTaskType,
   Project,
   TaskPriority,
   TaskReminder,
-  TaskStatus,
-  TASK_STATUS_OPTIONS
+  TaskStatus
 } from '../../../shared/types'
 import { normalizeCalendarEndDate } from '../../../shared/calendarTaskDates'
+import { isTaskStatusDone } from '../../../shared/taskStatus'
 import { TagEditor } from './TagEditor'
-import { NoteShapeIcon } from './NoteShapeIcon'
-import { TaskStatusIcon } from './TaskStatusIcon'
-import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
-import { TaskPriorityBadge } from './ui/task-priority-badge'
-import { DatePickerISO } from './ui/date-picker'
+import { CalendarDateEditPopover } from './ui/calendar-date-edit-popover'
+import { CalendarTimeEditPopover } from './ui/calendar-time-edit-popover'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { SelectiveChip, type SelectiveChipOption } from './ui/selective-chip'
+import { SelectionPopover } from './ui/selection-popover'
+import { StatusChipSelect } from './ui/status-chip-select'
 import {
   Dialog,
   DialogActionButton,
   DialogBody,
-  DialogCloseAction,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogShell,
   DialogShellFooter,
-  DialogTitle
+  DialogShellHeader
 } from './ui/dialog'
 import { CollapsibleWorkspacePanelSection } from './ui/workspace-panel-section'
 import { WorkspacePanelStack, WorkspaceIconButton } from './ui/document-workspace'
 import { WorkspacePropertyRow } from './ui/workspace-property-row'
 import { Bell, BellRing, Check, X } from './ui/icons'
-import { TASK_STATUS_META, getTaskStatus } from '../lib/taskStatus'
+import { getTaskStatus } from '../lib/taskStatus'
+import {
+  CALENDAR_TASK_TYPE_CHIP_OPTIONS,
+  NO_PROJECT_VALUE,
+  TASK_PRIORITY_CHIP_ITEMS,
+  TASK_STATUS_CHIP_OPTIONS,
+  getProjectChipOptions
+} from '../lib/statusChipMeta'
 
 const NONE_VALUE = '__none__'
-
-const TASK_STATUS_CHIP_OPTIONS: readonly SelectiveChipOption[] = TASK_STATUS_OPTIONS.map(
-  (option) => ({
-    value: option.value,
-    label: option.label,
-    icon: <TaskStatusIcon status={option.value} size={18} />,
-    tone: TASK_STATUS_META[option.value].tone
-  })
-)
 
 const TASK_PRIORITY_OPTIONS: readonly TaskPriority[] = ['low', 'medium', 'high']
 
 export interface TaskPropertiesPanelProps {
   task: CalendarTask
   projects: Project[]
+  availableTags?: readonly string[]
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
 }
 
 export function TaskPropertiesPanel({
   task,
   projects,
+  availableTags = [],
   onUpdateTask
 }: TaskPropertiesPanelProps): ReactElement {
   const selectedProject = projects.find((project) => project.id === task.projectId)
@@ -72,7 +66,7 @@ export function TaskPropertiesPanel({
   }
 
   const handleProjectChange = (value: string): void => {
-    const projectId = value === NONE_VALUE ? undefined : value
+    const projectId = value === NO_PROJECT_VALUE ? undefined : value
     const nextProject = projects.find((project) => project.id === projectId)
     const milestoneId = nextProject?.milestones?.some(
       (milestone) => milestone.id === task.milestoneId
@@ -82,13 +76,13 @@ export function TaskPropertiesPanel({
     update({ projectId, milestoneId })
   }
 
-  const handleStartDateChange = (value: string): void => {
-    const date = value || undefined
+  const handleStartDateChange = (value: string | undefined): void => {
+    const date = value
     update({ date, endDate: normalizeCalendarEndDate(date, task.endDate) })
   }
 
-  const handleEndDateChange = (value: string): void => {
-    const endDate = normalizeCalendarEndDate(task.date, value || undefined)
+  const handleEndDateChange = (value: string | undefined): void => {
+    const endDate = normalizeCalendarEndDate(task.date, value)
     update({ endDate })
   }
 
@@ -97,13 +91,13 @@ export function TaskPropertiesPanel({
       <CollapsibleWorkspacePanelSection heading="Task properties" data-testid="task-properties">
         <div data-testid="task-property-rows">
           <WorkspacePropertyRow label="Status" testId="task-property-status">
-            <SelectiveChip
+            <StatusChipSelect
               label={`Status for ${task.title}`}
               value={status}
               options={TASK_STATUS_CHIP_OPTIONS}
               onValueChange={(value) => {
                 const nextStatus = value as TaskStatus
-                update({ status: nextStatus, completed: nextStatus === 'completed' })
+                update({ status: nextStatus, completed: isTaskStatusDone(nextStatus) })
               }}
             />
           </WorkspacePropertyRow>
@@ -122,54 +116,38 @@ export function TaskPropertiesPanel({
             />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow label="Project" testId="task-property-project">
-            <Select value={task.projectId ?? NONE_VALUE} onValueChange={handleProjectChange}>
-              <SelectTrigger className="h-7 w-48 text-xs" aria-label="Task project">
-                <SelectValue placeholder="No project">
-                  {selectedProject ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <NoteShapeIcon icon={selectedProject.icon} size="1.25em" />
-                      <span className="truncate">{selectedProject.name}</span>
-                    </span>
-                  ) : null}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_VALUE}>No project</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    <span className="flex items-center gap-2">
-                      <NoteShapeIcon icon={project.icon} size="1.25em" />
-                      <span className="truncate">{project.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StatusChipSelect
+              className="w-48 justify-start"
+              label={`Task project for ${task.title}`}
+              value={task.projectId ?? NO_PROJECT_VALUE}
+              options={getProjectChipOptions(projects)}
+              onValueChange={handleProjectChange}
+            />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow label="Milestone" testId="task-property-milestone">
-            <Select
+            <SelectionPopover
+              selectionMode="single"
               value={task.milestoneId ?? NONE_VALUE}
+              options={[
+                { value: NONE_VALUE, label: 'No milestone' },
+                ...(selectedProject?.milestones ?? []).map((milestone) => ({
+                  value: milestone.id,
+                  label: milestone.title,
+                  searchText: milestone.title
+                }))
+              ]}
               onValueChange={(value) =>
                 update({ milestoneId: value === NONE_VALUE ? undefined : value })
               }
-              disabled={!selectedProject}
-            >
-              <SelectTrigger className="h-7 w-48 text-xs" aria-label="Task milestone">
-                <SelectValue placeholder="No milestone">
-                  {selectedMilestone ? (
-                    <span className="truncate">{selectedMilestone.title}</span>
-                  ) : null}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_VALUE}>No milestone</SelectItem>
-                {selectedProject?.milestones?.map((milestone) => (
-                  <SelectItem key={milestone.id} value={milestone.id}>
-                    <span className="truncate">{milestone.title}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              label="Task milestone"
+              searchPlaceholder="Search milestones"
+              placeholder={selectedMilestone?.title ?? 'No milestone'}
+              triggerProps={{
+                className: 'h-7 w-48 text-xs',
+                'aria-label': 'Task milestone',
+                disabled: !selectedProject
+              }}
+            />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow label="Start date" testId="task-property-start-date">
             <TaskDateValue
@@ -177,7 +155,7 @@ export function TaskPropertiesPanel({
               placeholder="Set start date"
               ariaLabel="Task start date"
               onChange={handleStartDateChange}
-              onClear={() => handleStartDateChange('')}
+              onClear={() => handleStartDateChange(undefined)}
             />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow
@@ -189,14 +167,14 @@ export function TaskPropertiesPanel({
               placeholder={task.date ? 'Set end date' : 'Set due date'}
               ariaLabel={task.date ? 'Task end date' : 'Task due date'}
               onChange={handleEndDateChange}
-              onClear={() => update({ endDate: undefined })}
+              onClear={() => handleEndDateChange(undefined)}
             />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow label="Start time" testId="task-property-start-time">
             <TaskTimeValue
               value={task.time}
               ariaLabel="Task start time"
-              onChange={(value) => update({ time: value || undefined })}
+              onChange={(value) => update({ time: value })}
             />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow
@@ -206,12 +184,13 @@ export function TaskPropertiesPanel({
             <TaskTimeValue
               value={task.endTime}
               ariaLabel={task.date ? 'Task end time' : 'Task due time'}
-              onChange={(value) => update({ endTime: value || undefined })}
+              onChange={(value) => update({ endTime: value })}
             />
           </WorkspacePropertyRow>
           <WorkspacePropertyRow label="Tags" testId="task-property-tags">
             <TagEditor
               value={task.tags ?? []}
+              availableTags={availableTags}
               onChange={(tags) => update({ tags })}
               label="Task tags"
               testId="task-tags-editor"
@@ -237,20 +216,12 @@ function TaskTypeSelect({
   onChange: (value: CalendarTaskType) => void
 }): ReactElement {
   return (
-    <Select value={value} onValueChange={(nextValue) => onChange(nextValue as CalendarTaskType)}>
-      <SelectTrigger className="h-7 w-36 text-xs" aria-label={`Task type for ${taskId}`}>
-        <SelectValue asChild>
-          <CalendarTaskTypeBadge taskType={value} />
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {CALENDAR_TASK_TYPE_OPTIONS.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <CalendarTaskTypeBadge taskType={option.value} />
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <StatusChipSelect
+      label={`Task type for ${taskId}`}
+      value={value}
+      options={CALENDAR_TASK_TYPE_CHIP_OPTIONS}
+      onValueChange={(nextValue) => onChange(nextValue as CalendarTaskType)}
+    />
   )
 }
 
@@ -264,20 +235,15 @@ function TaskPrioritySelect({
   onChange: (value: TaskPriority) => void
 }): ReactElement {
   return (
-    <Select value={value} onValueChange={(nextValue) => onChange(nextValue as TaskPriority)}>
-      <SelectTrigger className="h-7 w-28 text-xs" aria-label={`Task priority for ${taskId}`}>
-        <SelectValue asChild>
-          <TaskPriorityBadge priority={value} />
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {TASK_PRIORITY_OPTIONS.map((option) => (
-          <SelectItem key={option} value={option}>
-            <TaskPriorityBadge priority={option} />
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <StatusChipSelect
+      label={`Task priority for ${taskId}`}
+      value={value}
+      options={TASK_PRIORITY_OPTIONS.map((option) => ({
+        value: option,
+        ...TASK_PRIORITY_CHIP_ITEMS[option]
+      }))}
+      onValueChange={(nextValue) => onChange(nextValue as TaskPriority)}
+    />
   )
 }
 
@@ -291,17 +257,18 @@ function TaskDateValue({
   value?: string
   placeholder: string
   ariaLabel: string
-  onChange: (value: string) => void
+  onChange: (value: string | undefined) => void
   onClear: () => void
 }): ReactElement {
   return (
     <div className="flex w-max min-w-full shrink-0 flex-nowrap items-center gap-1.5">
-      <DatePickerISO
-        value={value ?? ''}
-        onChange={onChange}
+      <CalendarDateEditPopover
+        value={value}
+        label={ariaLabel}
+        onValueChange={onChange}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className="h-7 max-w-full border-border text-xs"
+        className="h-7 max-w-full border-border"
       />
       {value ? (
         <WorkspaceIconButton
@@ -323,15 +290,16 @@ function TaskTimeValue({
 }: {
   value?: string
   ariaLabel: string
-  onChange: (value: string) => void
+  onChange: (value: string | undefined) => void
 }): ReactElement {
   return (
-    <Input
-      type="time"
-      value={value ?? ''}
+    <CalendarTimeEditPopover
+      value={value}
+      label={ariaLabel}
+      onValueChange={onChange}
+      placeholder="Set time"
       aria-label={ariaLabel}
-      onChange={(event) => onChange(event.target.value)}
-      className="h-7 w-28 text-xs"
+      className="h-7 w-28"
     />
   )
 }
@@ -373,7 +341,7 @@ function TaskReminderEditor({
             key={reminder.id}
             className={`inline-flex items-center gap-1 rounded-[var(--radius-control)] border px-2 py-1 text-xs ${
               reminder.enabled
-                ? 'border-ring bg-accent text-accent-foreground'
+                ? 'border-ring bg-muted text-foreground'
                 : 'border-border bg-muted text-muted-foreground'
             }`}
           >
@@ -403,13 +371,18 @@ function TaskReminderEditor({
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" showCloseButton={false}>
+        <DialogContent showCloseButton={false}>
           <DialogShell>
-            <DialogHeader>
-              <DialogTitle>Task reminders</DialogTitle>
-              <DialogDescription>Manage notifications for this task.</DialogDescription>
-            </DialogHeader>
+            <DialogShellHeader
+              context="Task"
+              title="Task reminders"
+              closeLabel="Close reminders"
+              onClose={() => setOpen(false)}
+            />
             <DialogBody>
+              <DialogDescription className="mb-3">
+                Manage notifications for this task.
+              </DialogDescription>
               <div className="space-y-3">
                 {reminders.length > 0 ? (
                   <div className="space-y-1.5">
@@ -420,7 +393,7 @@ function TaskReminderEditor({
                       >
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() =>
                             onChange(
                               reminders.map((item) =>
@@ -461,19 +434,22 @@ function TaskReminderEditor({
                       }
                       className="h-8 w-20 text-xs"
                     />
-                    <Select
+                    <SelectionPopover
+                      selectionMode="single"
                       value={newType}
+                      options={[
+                        { value: 'minutes', label: 'minutes' },
+                        { value: 'hours', label: 'hours' },
+                        { value: 'days', label: 'days' }
+                      ]}
                       onValueChange={(value) => setNewType(value as TaskReminder['type'])}
-                    >
-                      <SelectTrigger className="h-8 flex-1 text-xs" aria-label="Reminder unit">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="minutes">minutes</SelectItem>
-                        <SelectItem value="hours">hours</SelectItem>
-                        <SelectItem value="days">days</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      label="Reminder unit"
+                      searchPlaceholder="Search reminder units"
+                      triggerProps={{
+                        className: 'h-8 flex-1 text-xs',
+                        'aria-label': 'Reminder unit'
+                      }}
+                    />
                     <Button type="button" variant="outline" size="sm" onClick={addReminder}>
                       <Check size={14} /> Add
                     </Button>
@@ -481,13 +457,14 @@ function TaskReminderEditor({
                 </div>
               </div>
             </DialogBody>
-            <DialogShellFooter closeAction={<DialogCloseAction label="Close reminders" />}>
+            <DialogShellFooter withDivider>
               <DialogActionButton
                 onClick={() => setOpen(false)}
                 title="Done"
                 aria-label="Done"
                 icon={<Check />}
-                tone="primary"
+                label="Done"
+                tone="accent"
               />
             </DialogShellFooter>
           </DialogShell>

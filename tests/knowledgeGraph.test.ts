@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildKnowledgeGraph, filterKnowledgeGraph } from '../src/renderer/src/lib/knowledgeGraph'
-import type { NoteListItem } from '../src/shared/types'
+import {
+  buildKnowledgeGraph,
+  createKnowledgeGraphEntities,
+  filterKnowledgeGraph
+} from '../src/renderer/src/lib/knowledgeGraph'
+import type { NoteListItem, ResourceRef } from '../src/shared/types'
 
 function createNote(
   overrides: Partial<NoteListItem> & Pick<NoteListItem, 'relPath' | 'name'>
@@ -19,6 +23,49 @@ function createNote(
 }
 
 describe('buildKnowledgeGraph', () => {
+  it('includes project-linked resources as typed context nodes', () => {
+    const resource: ResourceRef = {
+      id: 'resource-1',
+      type: 'external',
+      provider: 'filesystem',
+      kind: 'local-file',
+      title: 'Brief.pdf',
+      canonicalUri: 'file:///tmp/Brief.pdf',
+      sourceOfTruth: 'external',
+      access: 'read-only',
+      state: 'available',
+      projectIds: ['project-1'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    }
+    const graph = buildKnowledgeGraph(
+      [],
+      createKnowledgeGraphEntities(
+        [
+          {
+            id: 'project-1',
+            name: 'Atlas',
+            summary: '',
+            state: 'active',
+            icon: { variant: 'filled', color: '#000000' },
+            updatedAt: '2026-01-01T00:00:00.000Z'
+          }
+        ],
+        [],
+        [resource]
+      )
+    )
+
+    expect(graph.nodes.some((node) => node.kind === 'resource')).toBe(true)
+    expect(graph.links).toEqual([
+      {
+        source: 'resource:resource-1',
+        target: 'project:project-1',
+        relationType: 'project-resource'
+      }
+    ])
+  })
+
   it('resolves links by exact relative path mention', () => {
     const graph = buildKnowledgeGraph([
       createNote({

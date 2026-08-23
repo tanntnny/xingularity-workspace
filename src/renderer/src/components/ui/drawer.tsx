@@ -32,10 +32,10 @@ const DrawerContent = React.forwardRef<
   DrawerContentProps
 >(({ className, children, side = 'right', style, ...props }, ref) => {
   const sideClasses: Record<NonNullable<DrawerContentProps['side']>, string> = {
-    right: 'inset-y-0 right-0 h-full w-full border-l',
-    left: 'inset-y-0 left-0 h-full w-full border-r',
-    top: 'inset-x-0 top-0 max-h-[90vh] w-full border-b',
-    bottom: 'inset-x-0 bottom-0 max-h-[90vh] w-full border-t'
+    right: 'inset-y-0 right-0 h-full w-full rounded-l-shell border-l',
+    left: 'inset-y-0 left-0 h-full w-full rounded-r-shell border-r',
+    top: 'inset-x-0 top-0 max-h-[90vh] w-full rounded-b-shell border-b',
+    bottom: 'inset-x-0 bottom-0 max-h-[90vh] w-full rounded-t-shell border-t'
   }
 
   const dimensionStyle: React.CSSProperties =

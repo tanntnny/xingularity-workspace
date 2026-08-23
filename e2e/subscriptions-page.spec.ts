@@ -105,7 +105,12 @@ test.describe('subscriptions page', () => {
       await expect(page.getByRole('table').getByText('AI Tools')).toBeVisible()
 
       await page.getByLabel('Edit ChatGPT Plus').click()
-      await page.getByLabel('Billing cycle').selectOption('yearly')
+      await page.getByLabel('Billing cycle').click()
+      const billingCyclePopover = page.getByRole('dialog', { name: 'Billing cycle options' })
+      await billingCyclePopover
+        .getByRole('textbox', { name: 'Search billing cycles' })
+        .fill('yearly')
+      await billingCyclePopover.getByText('yearly', { exact: true }).click()
       await page.getByLabel('Amount').fill('240')
       await page.getByRole('button', { name: 'Save changes' }).click()
 

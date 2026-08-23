@@ -1,5 +1,5 @@
-import { type ReactElement } from 'react'
-import { ChevronDown, JavaScript, Python } from '../ui/icons'
+import { useState, type ReactElement } from 'react'
+import { ChevronDown, JavaScript, Python, Shield } from '../ui/icons'
 import {
   Button,
   Checkbox,
@@ -8,11 +8,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SelectionPopover,
   Switch
 } from '../ui'
 import type {
@@ -22,6 +18,7 @@ import type {
   TriggerType
 } from '../../../../shared/scheduleTypes'
 import type { SchedulePropertiesPanelProps } from './types'
+import { ScheduleSecretsDialog } from './ScheduleSecretsDialog'
 
 const PERMISSION_OPTIONS: Array<{
   value: SchedulePermission
@@ -47,6 +44,45 @@ const PERMISSION_OPTIONS: Array<{
   },
   { value: 'createNotes', label: 'Create notes', description: 'Allow note.create actions.' }
 ]
+
+const LOCAL_TIMEZONE = 'local'
+const FALLBACK_TIMEZONES = [
+  'UTC',
+  'America/Los_Angeles',
+  'America/Denver',
+  'America/Chicago',
+  'America/New_York',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Africa/Cairo',
+  'Asia/Dubai',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Pacific/Auckland'
+]
+
+function getSupportedTimezones(): string[] {
+  const intl = Intl as typeof Intl & {
+    supportedValuesOf?: (key: 'timeZone') => string[]
+  }
+  const supported = intl.supportedValuesOf?.('timeZone') ?? FALLBACK_TIMEZONES
+
+  return Array.from(new Set(['UTC', ...supported])).sort((a, b) => a.localeCompare(b))
+}
+
+const SUPPORTED_TIMEZONES = getSupportedTimezones()
+
+function formatTimezoneLabel(timezone: string): string {
+  if (timezone === LOCAL_TIMEZONE) {
+    const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return localTimezone ? `Local timezone (${localTimezone})` : 'Local timezone'
+  }
+
+  return timezone.replace(/_/g, ' ')
+}
 
 function createTrigger(type: TriggerType): TriggerConfig {
   if (type === 'daily') {
@@ -105,7 +141,7 @@ function RuntimeValue({ runtime }: { runtime: RuntimeType }): ReactElement {
       : 'shrink-0 text-[#3776ab] dark:text-[#4b9cd3]'
 
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+    <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
       <Icon
         size={14}
         className={iconClassName}
@@ -157,7 +193,7 @@ function PermissionPopover({
               return (
                 <label
                   key={option.value}
-                  className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-accent"
+                  className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-muted"
                 >
                   <Checkbox
                     checked={checked}
@@ -183,126 +219,207 @@ function PermissionPopover({
 
 export function SchedulePropertiesPanel({
   draft,
+  secretNames,
   onChange,
   onEnabledChange,
   onTriggerChange,
-  onTogglePermission
+  onTogglePermission,
+  onSaveSecret,
+  onDeleteSecret
 }: SchedulePropertiesPanelProps): ReactElement {
   const dailyTrigger = draft.trigger.type === 'daily' ? draft.trigger : null
   const showCron = draft.trigger.type === 'cron'
+  const [secretsDialogOpen, setSecretsDialogOpen] = useState(false)
+  const secretRefs = draft.secretRefs ?? []
+  const selectedTimezone = dailyTrigger?.timezone ?? LOCAL_TIMEZONE
+  const timezoneOptions = Array.from(
+    new Set(
+      selectedTimezone === LOCAL_TIMEZONE
+        ? [LOCAL_TIMEZONE, ...SUPPORTED_TIMEZONES]
+        : [LOCAL_TIMEZONE, selectedTimezone, ...SUPPORTED_TIMEZONES]
+    )
+  )
+
+  const onToggleSecretRef = (name: string, enabled: boolean): void => {
+    const nextRefs = enabled
+      ? Array.from(new Set([...secretRefs, name]))
+      : secretRefs.filter((item) => item !== name)
+    onChange({ secretRefs: nextRefs })
+  }
 
   return (
-    <CollapsibleWorkspacePanelSection
-      data-testid="scheduling-properties-panel"
-      heading="Automation properties"
-    >
-      <div data-testid="scheduling-property-rows">
-        <SchedulePropertyRow label="Runtime" testId="scheduling-property-runtime">
-          <Select
-            value={draft.runtime}
-            onValueChange={(value) => onChange({ runtime: value as RuntimeType })}
-          >
-            <SelectTrigger
-              id="scheduling-runtime"
-              data-testid="scheduling-runtime"
-              className="h-7 w-fit min-w-40 text-xs"
-            >
-              <SelectValue asChild>
-                <RuntimeValue runtime={draft.runtime} />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="python">
-                <RuntimeValue runtime="python" />
-              </SelectItem>
-              <SelectItem value="javascript">
-                <RuntimeValue runtime="javascript" />
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </SchedulePropertyRow>
-        <SchedulePropertyRow label="Frequency" testId="scheduling-property-frequency">
-          <Select
-            value={draft.trigger.type}
-            onValueChange={(value) => onTriggerChange(createTrigger(value as TriggerType))}
-          >
-            <SelectTrigger
-              id="scheduling-trigger"
-              data-testid="scheduling-trigger"
-              className="h-7 w-fit min-w-40 text-xs"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="manual">Manually</SelectItem>
-              <SelectItem value="daily">Daily</SelectItem>
-              <SelectItem value="every">At an interval</SelectItem>
-              <SelectItem value="on_app_start">When app starts</SelectItem>
-              {showCron ? <SelectItem value="cron">Cron (legacy)</SelectItem> : null}
-            </SelectContent>
-          </Select>
-        </SchedulePropertyRow>
-        {dailyTrigger ? (
-          <>
-            <SchedulePropertyRow label="Time" testId="scheduling-property-time">
-              <Input
-                id="scheduling-daily-time"
-                data-testid="scheduling-daily-time"
-                type="time"
-                value={dailyTrigger.time ?? '09:00'}
-                onChange={(event) => onTriggerChange({ ...dailyTrigger, time: event.target.value })}
-                className="h-7 w-fit min-w-40 text-xs"
-              />
-            </SchedulePropertyRow>
-            <SchedulePropertyRow label="Timezone" testId="scheduling-property-timezone">
-              <Input
-                id="scheduling-timezone"
-                data-testid="scheduling-timezone"
-                value="Local timezone"
-                readOnly
-                className="h-7 w-fit min-w-40 text-xs"
-              />
-            </SchedulePropertyRow>
-          </>
-        ) : null}
-        <SchedulePropertyRow label="Enabled" testId="scheduling-property-enabled">
-          <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-            <Switch
-              checked={draft.enabled}
-              onCheckedChange={onEnabledChange}
-              aria-label="Enable automation"
-              data-testid="scheduling-enabled"
+    <>
+      <CollapsibleWorkspacePanelSection
+        data-testid="scheduling-properties-panel"
+        heading="Automation properties"
+      >
+        <div data-testid="scheduling-property-rows">
+          <SchedulePropertyRow label="Runtime" testId="scheduling-property-runtime">
+            <SelectionPopover
+              selectionMode="single"
+              value={draft.runtime}
+              options={[
+                {
+                  value: 'python',
+                  label: <RuntimeValue runtime="python" />,
+                  searchText: 'python'
+                },
+                {
+                  value: 'javascript',
+                  label: <RuntimeValue runtime="javascript" />,
+                  searchText: 'javascript'
+                }
+              ]}
+              onValueChange={(value) => onChange({ runtime: value as RuntimeType })}
+              label="Runtime"
+              searchPlaceholder="Search runtimes"
+              triggerProps={{
+                id: 'scheduling-runtime',
+                'data-testid': 'scheduling-runtime',
+                'aria-label': 'Runtime',
+                className: 'h-7 w-fit min-w-40 text-xs'
+              }}
             />
-            <span>{draft.enabled ? 'Enabled' : 'Disabled'}</span>
-          </div>
-        </SchedulePropertyRow>
-        <SchedulePropertyRow label="Permissions" testId="scheduling-property-permissions">
-          <PermissionPopover
-            permissions={draft.permissions}
-            onTogglePermission={onTogglePermission}
-          />
-        </SchedulePropertyRow>
-        <SchedulePropertyRow label="Output" testId="scheduling-property-output">
-          <Select
-            value={draft.outputMode}
-            onValueChange={(value) =>
-              onChange({ outputMode: value as 'auto_apply' | 'review_before_apply' })
-            }
-          >
-            <SelectTrigger
-              id="scheduling-output-mode"
-              data-testid="scheduling-output-mode"
-              className="h-7 w-fit min-w-40 text-xs"
+          </SchedulePropertyRow>
+          <SchedulePropertyRow label="Frequency" testId="scheduling-property-frequency">
+            <SelectionPopover
+              selectionMode="single"
+              value={draft.trigger.type}
+              options={[
+                { value: 'manual', label: 'Manually' },
+                { value: 'daily', label: 'Daily' },
+                { value: 'every', label: 'At an interval' },
+                { value: 'on_app_start', label: 'When app starts' },
+                ...(showCron ? [{ value: 'cron', label: 'Cron (legacy)' }] : [])
+              ]}
+              onValueChange={(value) => onTriggerChange(createTrigger(value as TriggerType))}
+              label="Frequency"
+              searchPlaceholder="Search frequencies"
+              triggerProps={{
+                id: 'scheduling-trigger',
+                'data-testid': 'scheduling-trigger',
+                'aria-label': 'Frequency',
+                className: 'h-7 w-fit min-w-40 text-xs'
+              }}
+            />
+          </SchedulePropertyRow>
+          {dailyTrigger ? (
+            <>
+              <SchedulePropertyRow label="Time" testId="scheduling-property-time">
+                <Input
+                  id="scheduling-daily-time"
+                  data-testid="scheduling-daily-time"
+                  type="time"
+                  value={dailyTrigger.time ?? '09:00'}
+                  onChange={(event) =>
+                    onTriggerChange({ ...dailyTrigger, time: event.target.value })
+                  }
+                  className="h-7 w-fit min-w-40 text-xs"
+                />
+              </SchedulePropertyRow>
+              <SchedulePropertyRow label="Timezone" testId="scheduling-property-timezone">
+                <SelectionPopover
+                  selectionMode="single"
+                  value={selectedTimezone}
+                  options={timezoneOptions.map((timezone) => ({
+                    value: timezone,
+                    label: formatTimezoneLabel(timezone),
+                    searchText: `${timezone} ${formatTimezoneLabel(timezone)}`
+                  }))}
+                  onValueChange={(value) => onTriggerChange({ ...dailyTrigger, timezone: value })}
+                  label="Timezone"
+                  searchPlaceholder="Search timezones"
+                  triggerProps={{
+                    id: 'scheduling-timezone',
+                    'data-testid': 'scheduling-timezone',
+                    'aria-label': 'Timezone',
+                    className: 'h-7 w-fit min-w-40 text-xs'
+                  }}
+                />
+              </SchedulePropertyRow>
+            </>
+          ) : null}
+          <SchedulePropertyRow label="Enabled" testId="scheduling-property-enabled">
+            <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <Switch
+                checked={draft.enabled}
+                onCheckedChange={onEnabledChange}
+                aria-label="Enable automation"
+                data-testid="scheduling-enabled"
+              />
+              <span>{draft.enabled ? 'Enabled' : 'Disabled'}</span>
+            </div>
+          </SchedulePropertyRow>
+          <SchedulePropertyRow label="Permissions" testId="scheduling-property-permissions">
+            <PermissionPopover
+              permissions={draft.permissions}
+              onTogglePermission={onTogglePermission}
+            />
+          </SchedulePropertyRow>
+          <SchedulePropertyRow label="Secrets" testId="scheduling-property-secrets">
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-[var(--radius-button-pill)] text-xs"
+                onClick={() => setSecretsDialogOpen(true)}
+                data-testid="scheduling-manage-secrets"
+              >
+                <Shield aria-hidden="true" />
+                Manage secrets
+              </Button>
+              {secretRefs.length > 0 ? (
+                <span
+                  className="text-xs text-muted-foreground"
+                  data-testid="scheduling-secret-reference-count"
+                >
+                  {`${secretRefs.length} attached`}
+                </span>
+              ) : null}
+            </div>
+          </SchedulePropertyRow>
+          {draft.permissions.includes('useSecrets') && secretRefs.length === 0 ? (
+            <p
+              className="px-3 pb-2 text-xs text-destructive"
+              data-testid="scheduling-secrets-error"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="review_before_apply">Review before apply</SelectItem>
-              <SelectItem value="auto_apply">Auto apply</SelectItem>
-            </SelectContent>
-          </Select>
-        </SchedulePropertyRow>
-      </div>
-    </CollapsibleWorkspacePanelSection>
+              Attach at least one configured secret before saving this automation.
+            </p>
+          ) : null}
+          <SchedulePropertyRow label="Output" testId="scheduling-property-output">
+            <SelectionPopover
+              selectionMode="single"
+              value={draft.outputMode}
+              options={[
+                { value: 'review_before_apply', label: 'Review before apply' },
+                { value: 'auto_apply', label: 'Auto apply' }
+              ]}
+              onValueChange={(value) =>
+                onChange({ outputMode: value as 'auto_apply' | 'review_before_apply' })
+              }
+              label="Output mode"
+              searchPlaceholder="Search output modes"
+              triggerProps={{
+                id: 'scheduling-output-mode',
+                'data-testid': 'scheduling-output-mode',
+                'aria-label': 'Output mode',
+                className: 'h-7 w-fit min-w-40 text-xs'
+              }}
+            />
+          </SchedulePropertyRow>
+        </div>
+      </CollapsibleWorkspacePanelSection>
+
+      <ScheduleSecretsDialog
+        open={secretsDialogOpen}
+        onOpenChange={setSecretsDialogOpen}
+        secretNames={secretNames}
+        secretRefs={secretRefs}
+        onToggleSecretRef={onToggleSecretRef}
+        onSaveSecret={onSaveSecret}
+        onDeleteSecret={onDeleteSecret}
+      />
+    </>
   )
 }

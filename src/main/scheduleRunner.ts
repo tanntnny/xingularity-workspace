@@ -9,11 +9,13 @@ export interface RunResult {
   stderr: string
   actions: ScriptAction[]
   error?: string
+  cancelled?: boolean
 }
 
 export interface PythonRuntimeOptions {
   condaEnvironmentPath?: string | null
   condaExecutablePath?: string | null
+  signal?: AbortSignal
 }
 
 export interface PythonSpawnCommand {
@@ -30,7 +32,7 @@ export async function runScript(
   options: PythonRuntimeOptions = {}
 ): Promise<RunResult> {
   if (job.runtime === 'javascript') {
-    return runJavaScript(job, secretEnv)
+    return runJavaScript(job, secretEnv, options.signal)
   }
   if (job.runtime === 'python') {
     return runPython(job, secretEnv, options)
@@ -42,7 +44,8 @@ export async function runScript(
 
 async function runJavaScript(
   job: ScheduleJob,
-  secretEnv: Record<string, string>
+  secretEnv: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<RunResult> {
   let stdout = ''
   let stderr = ''
@@ -120,6 +123,7 @@ async function runJavaScript(
   }
 
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+  let abortHandler: (() => void) | null = null
   try {
     const execution = vm.runInNewContext(`(async () => {\n${job.code}\n})()`, sandbox, {
       timeout: SCRIPT_TIMEOUT_MS,
@@ -132,7 +136,15 @@ async function runJavaScript(
         SCRIPT_TIMEOUT_MS
       )
     })
-    await Promise.race([execution, timeoutPromise])
+    const cancellationPromise = new Promise<never>((_, reject) => {
+      abortHandler = () => reject(Object.assign(new Error('Script cancelled'), { cancelled: true }))
+      if (signal?.aborted) {
+        abortHandler()
+      } else {
+        signal?.addEventListener('abort', abortHandler, { once: true })
+      }
+    })
+    await Promise.race([execution, timeoutPromise, cancellationPromise])
     if (outputLimitExceeded) {
       return {
         stdout: redactOutput(stdout, secretEnv),
@@ -154,11 +166,15 @@ async function runJavaScript(
       stdout: redactOutput(stdout, secretEnv),
       stderr: redactOutput(stderr, secretEnv),
       actions: [],
-      error: message
+      error: message,
+      ...(isCancelledError(err) ? { cancelled: true } : {})
     }
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle)
+    }
+    if (abortHandler && signal) {
+      signal.removeEventListener('abort', abortHandler)
     }
     active = false
   }
@@ -213,6 +229,7 @@ async function runPython(
     let stdout = ''
     let stderr = ''
     let timedOut = false
+    let cancelled = false
     let outputLimitExceeded = false
 
     const child = spawn(spawnCommand.command, [...spawnCommand.args, job.code], {
@@ -241,6 +258,16 @@ async function runPython(
       }
     })
 
+    const abortHandler = (): void => {
+      cancelled = true
+      child.kill('SIGTERM')
+    }
+    if (options.signal?.aborted) {
+      abortHandler()
+    } else {
+      options.signal?.addEventListener('abort', abortHandler, { once: true })
+    }
+
     child.stdout.on('data', (data: Buffer) => {
       stdout = appendOutput(stdout, data.toString(), () => {
         outputLimitExceeded = true
@@ -260,6 +287,18 @@ async function runPython(
 
     child.on('close', (code) => {
       clearTimeout(timer)
+      options.signal?.removeEventListener('abort', abortHandler)
+
+      if (cancelled) {
+        resolve({
+          stdout: redactOutput(stdout, secretEnv),
+          stderr: redactOutput(stderr, secretEnv),
+          actions: [],
+          error: 'Script cancelled',
+          cancelled: true
+        })
+        return
+      }
 
       if (timedOut) {
         resolve({
@@ -306,6 +345,17 @@ async function runPython(
 
     child.on('error', (err) => {
       clearTimeout(timer)
+      options.signal?.removeEventListener('abort', abortHandler)
+      if (cancelled) {
+        resolve({
+          stdout: redactOutput(stdout, secretEnv),
+          stderr: redactOutput(stderr, secretEnv),
+          actions: [],
+          error: 'Script cancelled',
+          cancelled: true
+        })
+        return
+      }
       resolve({
         stdout: redactOutput(stdout, secretEnv),
         stderr: redactOutput(stderr, secretEnv),
@@ -318,6 +368,10 @@ async function runPython(
       })
     })
   })
+}
+
+function isCancelledError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'cancelled' in error)
 }
 
 function parseActionsFromStdout(stdout: string): { actions: ScriptAction[]; error?: string } {

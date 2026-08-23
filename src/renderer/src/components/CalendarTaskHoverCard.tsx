@@ -2,9 +2,8 @@ import { ReactElement, ReactNode } from 'react'
 import { CalendarTask, Project } from '../../../shared/types'
 import { FloatingHoverCard } from './ui/floating-hover-card'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
-import { CalendarTaskTypeBadge } from './ui/calendar-task-type-badge'
-import { TaskStatusIcon } from './TaskStatusIcon'
-import { getTaskStatus, TASK_STATUS_META } from '../lib/taskStatus'
+import { StatusChip } from './ui/status-chip'
+import { getCalendarTaskTypeChipItem, getTaskStatusChipItem } from '../lib/statusChipMeta'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { TaskTagSummary } from './TaskTagSummary'
 
@@ -32,10 +31,7 @@ export function CalendarTaskHoverCard({
       </div>
       <dl className="space-y-1.5">
         <CalendarTaskPropertyRow label="Status">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <TaskStatusIcon status={task.status} completed={task.completed} size={18} />
-            {TASK_STATUS_META[getTaskStatus(task.status, task.completed)].label}
-          </span>
+          <StatusChip item={getTaskStatusChipItem(task.status, task.completed)} />
         </CalendarTaskPropertyRow>
         <CalendarTaskPropertyRow label="Time">
           {formatCalendarTaskTimeLabel(task)}
@@ -43,7 +39,7 @@ export function CalendarTaskHoverCard({
         {project ? (
           <CalendarTaskPropertyRow label="Project">
             <span className="flex min-w-0 items-center gap-1.5" title={project.name}>
-              <NoteShapeIcon icon={project.icon} size={14} />
+              <NoteShapeIcon icon={project.icon} size={16} />
               <span className="min-w-0 truncate">{project.name}</span>
             </span>
           </CalendarTaskPropertyRow>
@@ -54,7 +50,7 @@ export function CalendarTaskHoverCard({
           {task.date ?? task.endDate ?? 'Unscheduled'}
         </CalendarTaskPropertyRow>
         <CalendarTaskPropertyRow label="Type">
-          <CalendarTaskTypeBadge taskType={task.taskType} />
+          <StatusChip item={getCalendarTaskTypeChipItem(task.taskType)} />
         </CalendarTaskPropertyRow>
         {task.tags.length > 0 ? (
           <CalendarTaskPropertyRow label="Tags">

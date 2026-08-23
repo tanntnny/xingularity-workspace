@@ -46,6 +46,7 @@ describe('getNotebookFolderContents', () => {
 
     expect(result.path).toBeNull()
     expect(result.name).toBe('Notebooks')
+    expect(result.folder).toBeNull()
     expect(result.children.map((node) => node.relPath)).toEqual(['root.md', 'archive'])
   })
 
@@ -54,6 +55,7 @@ describe('getNotebookFolderContents', () => {
 
     expect(result.path).toBe('archive')
     expect(result.parentPath).toBeNull()
+    expect(result.folder).toBe(tree[1])
     expect(result.children.map((node) => node.relPath)).toEqual(['archive/old.md', 'archive/2025'])
   })
 
@@ -62,5 +64,23 @@ describe('getNotebookFolderContents', () => {
 
     expect(result.path).toBe('archive')
     expect(result.children.map((node) => node.relPath)).toEqual(['archive/old.md', 'archive/2025'])
+  })
+
+  it('preserves protected-folder metadata for contextual action rules', () => {
+    const protectedFolder: NoteTreeNode = {
+      ...folder('Projects'),
+      isProtected: true,
+      protectionKind: 'projects-root'
+    }
+
+    const result = getNotebookFolderContents([protectedFolder], 'Projects')
+
+    expect(result.folder).toEqual(
+      expect.objectContaining({
+        relPath: 'Projects',
+        isProtected: true,
+        protectionKind: 'projects-root'
+      })
+    )
   })
 })
