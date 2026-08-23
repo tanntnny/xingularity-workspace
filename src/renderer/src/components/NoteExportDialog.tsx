@@ -99,7 +99,7 @@ export function NoteExportDialog({
             </fieldset>
           </DialogBody>
 
-          <DialogShellFooter withDivider>
+          <DialogShellFooter>
             <DialogActionButton
               icon={<FileDown />}
               label={isExporting ? 'Exporting…' : `Export ${format === 'pdf' ? 'PDF' : 'Markdown'}`}

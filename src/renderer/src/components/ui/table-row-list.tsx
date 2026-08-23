@@ -23,6 +23,7 @@ export interface TableRowListProps<T> extends Omit<
   columns: readonly TableRowListColumn<T>[]
   getRowKey: (item: T) => React.Key
   getRowProps?: (item: T) => TableRowListRowProps
+  rowWrapper?: (item: T, row: React.ReactElement) => React.ReactNode
   headerClassName?: string
   bodyClassName?: string
   'data-testid'?: string
@@ -36,6 +37,7 @@ export function TableRowList<T>({
   columns,
   getRowKey,
   getRowProps,
+  rowWrapper,
   headerClassName,
   bodyClassName,
   className,
@@ -57,7 +59,7 @@ export function TableRowList<T>({
           const rowProps = getRowProps?.(item)
           const { className: rowClassName, ...restRowProps } = rowProps ?? {}
 
-          return (
+          const row = (
             <TableRow
               key={getRowKey(item)}
               {...restRowProps}
@@ -84,6 +86,8 @@ export function TableRowList<T>({
               ))}
             </TableRow>
           )
+
+          return rowWrapper ? rowWrapper(item, row) : row
         })}
       </TableBody>
     </Table>

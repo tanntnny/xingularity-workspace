@@ -18,7 +18,7 @@ export type StatusChipToggleItemProps = React.ComponentPropsWithoutRef<
 
 const statusChipToggleItemClassName = cn(
   statusChipVariants({ variant: 'default', surface: 'none' }),
-  'items-center text-left hover:bg-card-hover hover:text-foreground focus-visible:bg-card-hover data-[state=on]:bg-card-hover data-[state=on]:text-foreground data-[state=on]:shadow-sm'
+  'items-center rounded-none border-0 bg-transparent text-left hover:bg-surface-subtle-hover hover:text-foreground focus-visible:bg-surface-subtle-hover data-[state=on]:bg-surface-subtle-hover data-[state=on]:text-foreground data-[state=on]:shadow-sm'
 )
 
 const StatusChipToggleGroup = React.forwardRef<
@@ -33,7 +33,10 @@ const StatusChipToggleGroup = React.forwardRef<
     onValueChange={(nextValue) => {
       if (nextValue) onValueChange(nextValue)
     }}
-    className={cn('flex min-w-0 flex-wrap items-center gap-1.5', className)}
+    className={cn(
+      'inline-flex min-w-0 max-w-full items-stretch overflow-hidden rounded-[var(--radius-button-pill)] border border-border bg-surface-subtle divide-x divide-foreground/30 [&>*]:w-fit focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background',
+      className
+    )}
   >
     {children}
   </ToggleGroupPrimitive.Root>

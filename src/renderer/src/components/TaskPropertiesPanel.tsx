@@ -457,7 +457,7 @@ function TaskReminderEditor({
                 </div>
               </div>
             </DialogBody>
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 onClick={() => setOpen(false)}
                 title="Done"

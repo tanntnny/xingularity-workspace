@@ -129,12 +129,14 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
 
     const content = (
       <>
-        <span
-          aria-hidden="true"
-          className="inline-flex shrink-0 items-center justify-center text-[var(--status-chip-icon-color)]"
-        >
-          {item.icon}
-        </span>
+        {item.icon ? (
+          <span
+            aria-hidden="true"
+            className="inline-flex shrink-0 items-center justify-center text-[var(--status-chip-icon-color)]"
+          >
+            {item.icon}
+          </span>
+        ) : null}
         <StatusChipLabel className={labelClassName} fade={resolvedLabelOverflow === 'fade'}>
           {item.label}
         </StatusChipLabel>

@@ -21,6 +21,7 @@ import type { RunStatus } from '../../../shared/scheduleTypes'
 import { TaskStatusIcon } from '../components/TaskStatusIcon'
 import {
   AlertCircle,
+  AlertCircleOutline,
   AntennaBars3,
   AntennaBars4,
   AntennaBars5,
@@ -32,16 +33,18 @@ import {
   CircleDotted,
   Circle,
   Clock,
+  ClockOutline,
   CreditCard,
   ExclamationMark,
   FolderOff,
   GitBranch,
-  HardDrive,
+  GitBranchOutline,
+  HardDriveOutline,
   Hexagon,
   Inbox,
   Loader2,
   Play,
-  Shield,
+  ShieldOutline,
   Star,
   StarOutline,
   Tag,
@@ -408,15 +411,15 @@ const RESOURCE_STATE_LABELS: Record<ResourceState, string> = {
 }
 
 const RESOURCE_STATE_ICONS: Record<ResourceState, ReactElement> = {
-  available: icon(HardDrive),
-  stale: icon(Clock),
-  moved: icon(HardDrive),
-  offline: icon(HardDrive),
-  'permission-denied': icon(Shield),
-  'reauthorization-required': icon(Shield),
-  missing: icon(AlertCircle),
-  conflict: icon(GitBranch),
-  unindexed: icon(HardDrive)
+  available: icon(HardDriveOutline),
+  stale: icon(ClockOutline),
+  moved: icon(HardDriveOutline),
+  offline: icon(HardDriveOutline),
+  'permission-denied': icon(ShieldOutline),
+  'reauthorization-required': icon(ShieldOutline),
+  missing: icon(AlertCircleOutline),
+  conflict: icon(GitBranchOutline),
+  unindexed: icon(CircleDashed)
 }
 
 export const RESOURCE_STATE_CHIP_ITEMS: Record<ResourceState, StatusChipItem> = Object.fromEntries(

@@ -810,12 +810,11 @@ function AllProjectsTable({
             displayValue={
               project.endDate ? <time dateTime={project.endDate}>{endDateLabel}</time> : undefined
             }
-            variant="ghost"
+            triggerStyle="status-chip"
             aria-label={`End date: ${endDateLabel}`}
             title={`End date: ${endDateLabel}`}
             data-testid={`all-project-date-chip:end-date:${project.id}`}
             onClick={(event) => event.stopPropagation()}
-            className="h-7 w-fit rounded-[var(--radius-button-pill)] px-2 text-xs font-medium text-muted-foreground hover:bg-surface-subtle-hover focus-visible:bg-surface-subtle-hover"
           />
         )
       }

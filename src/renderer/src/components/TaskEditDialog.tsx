@@ -253,10 +253,7 @@ export function TaskEditDialog({
               />
             }
           />
-          <div
-            data-testid="task-dialog-title-input-row"
-            className="min-w-0 border-b border-border pb-2"
-          >
+          <div data-testid="task-dialog-title-input-row" className="min-w-0 pb-2">
             <Input
               ref={titleInputRef}
               id={`task-title-${task.id}`}
@@ -434,7 +431,6 @@ export function TaskEditDialog({
             </div>
           </DialogBody>
           <DialogShellFooter
-            withDivider
             leadingAction={
               <DialogActionButton
                 onClick={handleDelete}

@@ -265,7 +265,7 @@ export function TaskContextMenu({
                 className="w-full justify-start"
               />
             </DialogBody>
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 onClick={() => {
                   onUpdateTime(task.id, timeInputValue || undefined)
@@ -373,7 +373,7 @@ export function TaskContextMenu({
                 </div>
               </div>
             </DialogBody>
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 onClick={() => setIsReminderDialogOpen(false)}
                 title="Done"

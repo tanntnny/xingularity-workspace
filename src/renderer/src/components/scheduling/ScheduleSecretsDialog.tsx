@@ -268,7 +268,7 @@ export function ScheduleSecretsDialog({
               </section>
             </DialogBody>
 
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 icon={<Check />}
                 label="Done"

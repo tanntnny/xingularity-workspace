@@ -3,7 +3,6 @@ import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import {
   bracketMatching,
-  HighlightStyle,
   indentOnInput,
   type LanguageSupport,
   syntaxHighlighting
@@ -16,9 +15,9 @@ import {
   keymap,
   lineNumbers
 } from '@codemirror/view'
-import { tags } from '@lezer/highlight'
 import { useEffect, useRef, type ReactElement } from 'react'
 import type { RuntimeType } from '../../../../shared/scheduleTypes'
+import { githubCopilotHighlightStyle } from '../../lib/codeSyntaxHighlighting'
 import { getScheduleCodeLanguage } from '../../lib/schedulingCodeEditor'
 
 export interface ScheduleCodeEditorProps {
@@ -28,50 +27,6 @@ export interface ScheduleCodeEditorProps {
 }
 
 const externalCodeChange = Annotation.define<boolean>()
-
-const githubCopilotHighlightStyle = HighlightStyle.define([
-  { tag: tags.comment, color: '#8b949e', fontStyle: 'italic' },
-  {
-    tag: [tags.string, tags.docString, tags.character, tags.attributeValue, tags.regexp],
-    color: '#a5d6ff'
-  },
-  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: '#79c0ff' },
-  {
-    tag: [
-      tags.keyword,
-      tags.operatorKeyword,
-      tags.controlKeyword,
-      tags.definitionKeyword,
-      tags.moduleKeyword
-    ],
-    color: '#ff7b72'
-  },
-  {
-    tag: [
-      tags.operator,
-      tags.arithmeticOperator,
-      tags.logicOperator,
-      tags.bitwiseOperator,
-      tags.compareOperator,
-      tags.updateOperator,
-      tags.definitionOperator,
-      tags.typeOperator,
-      tags.controlOperator
-    ],
-    color: '#ff7b72'
-  },
-  { tag: tags.function(tags.variableName), color: '#d2a8ff' },
-  { tag: tags.function(tags.propertyName), color: '#d2a8ff' },
-  { tag: [tags.typeName, tags.className], color: '#ffa657' },
-  { tag: [tags.propertyName, tags.attributeName], color: '#79c0ff' },
-  { tag: tags.definition(tags.variableName), color: '#ffa657' },
-  { tag: [tags.variableName, tags.name], color: '#c9d1d9' },
-  { tag: tags.punctuation, color: '#c9d1d9' },
-  { tag: tags.meta, color: '#d2a8ff' },
-  { tag: tags.escape, color: '#79c0ff' },
-  { tag: tags.invalid, color: '#f85149', textDecoration: 'underline wavy' },
-  { tag: tags.link, color: '#58a6ff', textDecoration: 'underline' }
-])
 
 function getLanguageExtension(runtime: RuntimeType): LanguageSupport {
   return getScheduleCodeLanguage(runtime) === 'javascript' ? javascript() : python()

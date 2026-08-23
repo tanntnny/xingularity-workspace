@@ -35,6 +35,8 @@ export type {
   SelectionPopoverProps,
   SingleSelectionPopoverProps
 } from './selection-popover'
+export { ColumnFolderPicker } from './column-folder-picker'
+export type { ColumnFolderPickerNode, ColumnFolderPickerProps } from './column-folder-picker'
 export { SelectiveChip } from './selective-chip'
 export type { SelectiveChipOption, SelectiveChipProps } from './selective-chip'
 export { CalendarTaskTypeBadge } from './calendar-task-type-badge'
@@ -151,7 +153,10 @@ export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popove
 export { Calendar } from './calendar'
 export type { CalendarProps } from './calendar'
 export { CalendarDateEditPopover } from './calendar-date-edit-popover'
-export type { CalendarDateEditPopoverProps } from './calendar-date-edit-popover'
+export type {
+  CalendarDateEditPopoverProps,
+  CalendarDateEditTriggerStyle
+} from './calendar-date-edit-popover'
 export { CalendarTimeEditPopover } from './calendar-time-edit-popover'
 export type { CalendarTimeEditPopoverProps } from './calendar-time-edit-popover'
 

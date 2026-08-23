@@ -303,8 +303,14 @@ test.describe('projects workspace', () => {
       const notebookSearch = page.getByRole('combobox', { name: 'Search notebook folders' })
       await expect(notebookSearch).toBeFocused()
       await notebookSearch.fill('Alpha')
-      await notebookSearch.press('ArrowDown')
-      await notebookSearch.press('Enter')
+      await page
+        .getByTestId('project-resource-notebook-options-search-results')
+        .getByRole('option', { name: /Projects\/Alpha Project/ })
+        .click()
+      await page
+        .getByTestId('project-resource-notebook-options')
+        .getByRole('button', { name: 'Done', exact: true })
+        .click()
       await resourceDialog.getByRole('button', { name: 'Add resource', exact: true }).click()
       await expect(
         resourcesPage.getByRole('button', { name: 'Open Alpha Project', exact: true })
@@ -313,27 +319,63 @@ test.describe('projects workspace', () => {
       await addResourceButton.click()
       await resourceDialog.getByTestId('project-resource-type:notebook').click()
       await resourceDialog.getByTestId('project-resource-notebook-picker').click()
-      await page
-        .getByTestId('project-resource-notebook-options')
+      const secondNotebookPicker = page.getByTestId('project-resource-notebook-options')
+      await secondNotebookPicker
+        .getByTestId('project-resource-notebook-options-column:root')
+        .getByRole('option', { name: 'Projects', exact: true })
+        .click()
+      await secondNotebookPicker
+        .getByTestId('project-resource-notebook-options-column:Projects')
         .getByRole('option', { name: /Projects\/Shared/ })
         .click()
+      await expect(
+        secondNotebookPicker
+          .getByTestId('project-resource-notebook-options-column:root')
+          .getByRole('option', { name: 'Projects', exact: true })
+      ).toHaveClass(/bg-card-hover/)
+      await expect(
+        secondNotebookPicker
+          .getByTestId('project-resource-notebook-options-column:Projects')
+          .getByRole('option', { name: /Projects\/Shared/ })
+      ).toHaveClass(/bg-card-hover/)
+      await secondNotebookPicker.getByRole('button', { name: 'Done', exact: true }).click()
       await resourceDialog.getByRole('button', { name: 'Add resource', exact: true }).click()
       await expect(
         resourcesPage.getByRole('button', { name: 'Open Shared', exact: true })
       ).toBeVisible()
       await expect(resourcesPage.locator('[data-testid^="project-resource-row:"]')).toHaveCount(2)
+      await expect(
+        resourcesPage.getByRole('columnheader', { name: 'Health', exact: true })
+      ).toBeVisible()
+      await expect(
+        resourcesPage.getByRole('columnheader', { name: 'Actions', exact: true })
+      ).toHaveCount(0)
+
+      const alphaRow = resourcesPage
+        .locator('[data-testid^="project-resource-row:"]')
+        .filter({ hasText: 'Alpha Project' })
+      const alphaActions = alphaRow.locator('[data-testid^="project-resource-actions-container:"]')
+      await expect(alphaActions).toHaveCSS('opacity', '0')
+      await alphaRow.hover()
+      await expect(alphaActions).toHaveCSS('opacity', '1')
+      await alphaRow.click({ button: 'right' })
+      const resourceContextMenu = page.locator('[data-testid^="project-resource-context-menu:"]')
+      await expect(resourceContextMenu).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'Edit resource', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(resourceContextMenu).toHaveCount(0)
 
       await resourcesPage.getByRole('button', { name: 'Manage Alpha Project', exact: true }).click()
       await page.getByRole('menuitem', { name: 'Edit resource', exact: true }).click()
       await resourceDialog.getByTestId('project-resource-notebook-picker').click()
-      const alphaOption = page
-        .getByTestId('project-resource-notebook-options')
-        .getByRole('option', { name: /Projects\/Alpha Project/ })
+      const editNotebookPicker = page.getByTestId('project-resource-notebook-options')
+      const projectsColumn = editNotebookPicker.getByTestId(
+        'project-resource-notebook-options-column:Projects'
+      )
+      const alphaOption = projectsColumn.getByRole('option', { name: /Projects\/Alpha Project/ })
       await expect(alphaOption).not.toHaveAttribute('aria-disabled', 'true')
-      await page
-        .getByTestId('project-resource-notebook-options')
-        .getByRole('option', { name: /Projects\/Other/ })
-        .click()
+      await projectsColumn.getByRole('option', { name: /Projects\/Other/ }).click()
+      await editNotebookPicker.getByRole('button', { name: 'Done', exact: true }).click()
       await resourceDialog.getByRole('button', { name: 'Save resource', exact: true }).click()
       await expect(
         resourcesPage.getByRole('button', { name: 'Open Alpha Project', exact: true })
@@ -743,10 +785,16 @@ test.describe('projects workspace', () => {
       ).toBeVisible()
       await resourceDialog.getByTestId('project-resource-type:notebook').click()
       await resourceDialog.getByTestId('project-resource-notebook-picker').click()
-      await page
-        .getByTestId('project-resource-notebook-options')
+      const firstResourcePicker = page.getByTestId('project-resource-notebook-options')
+      await firstResourcePicker
+        .getByTestId('project-resource-notebook-options-column:root')
+        .getByRole('option', { name: 'Projects', exact: true })
+        .click()
+      await firstResourcePicker
+        .getByTestId('project-resource-notebook-options-column:Projects')
         .getByRole('option', { name: /Projects\/Alpha Project/ })
         .click()
+      await firstResourcePicker.getByRole('button', { name: 'Done', exact: true }).click()
       await resourceDialog.getByRole('button', { name: 'Add resource', exact: true }).click()
       await expect
         .poll(async () => {
@@ -760,15 +808,19 @@ test.describe('projects workspace', () => {
       await page.getByTestId('add-resource-button').click()
       await resourceDialog.getByTestId('project-resource-type:notebook').click()
       await resourceDialog.getByTestId('project-resource-notebook-picker').click()
-      await expect(
-        page
-          .getByTestId('project-resource-notebook-options')
-          .getByRole('option', { name: /Projects\/Alpha Project/ })
-      ).toHaveAttribute('aria-disabled', 'true')
-      await page
-        .getByTestId('project-resource-notebook-options')
-        .getByRole('option', { name: /Projects\/Shared/ })
+      const secondResourcePicker = page.getByTestId('project-resource-notebook-options')
+      await secondResourcePicker
+        .getByTestId('project-resource-notebook-options-column:root')
+        .getByRole('option', { name: 'Projects', exact: true })
         .click()
+      const secondProjectsColumn = secondResourcePicker.getByTestId(
+        'project-resource-notebook-options-column:Projects'
+      )
+      await expect(
+        secondProjectsColumn.getByRole('option', { name: /Projects\/Alpha Project/ })
+      ).toHaveAttribute('aria-disabled', 'true')
+      await secondProjectsColumn.getByRole('option', { name: /Projects\/Shared/ }).click()
+      await secondResourcePicker.getByRole('button', { name: 'Done', exact: true }).click()
       await resourceDialog.getByRole('button', { name: 'Add resource', exact: true }).click()
       await expect
         .poll(async () => {

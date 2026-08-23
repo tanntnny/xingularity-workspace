@@ -1,5 +1,6 @@
 import {
   IconAdjustmentsHorizontalFilled,
+  IconAlertCircle,
   IconAlertCircleFilled,
   IconAntennaBars3,
   IconAntennaBars4,
@@ -46,11 +47,13 @@ import {
   IconCircleArrowUpRightFilled,
   IconCircleRectangle,
   IconCircleXFilled,
+  IconClock,
   IconClockCheck,
   IconClockFilled,
   IconClockOff,
   IconCopyFilled,
   IconCreditCardFilled,
+  IconDeviceDesktop,
   IconDeviceDesktopFilled,
   IconDeviceFloppyFilled,
   IconDeviceSpeakerFilled,
@@ -72,9 +75,11 @@ import {
   IconFolderOff,
   IconFolderOpenFilled,
   IconGripVertical,
+  IconGitBranch,
   IconHourglassFilled,
   IconHeartFilled,
   IconHexagon,
+  IconHexagonFilled,
   IconInbox,
   IconHomeFilled,
   IconKeyboardFilled,
@@ -100,6 +105,7 @@ import {
   IconRefresh,
   IconSendFilled,
   IconSearch,
+  IconShield,
   IconSettingsFilled,
   IconShieldFilled,
   IconSparklesFilled,
@@ -121,6 +127,7 @@ export type FilledIcon = TablerIcon
 export type FilledIconProps = IconProps
 
 export const AlertCircle = IconAlertCircleFilled
+export const AlertCircleOutline = IconAlertCircle
 export const AntennaBars3 = IconAntennaBars3
 export const AntennaBars4 = IconAntennaBars4
 export const AntennaBars5 = IconAntennaBars5
@@ -168,6 +175,7 @@ export const CircleDotted = IconCircleDotted
 export const CircleHalf2 = IconCircleHalf2
 export const CircleRectangle = IconCircleRectangle
 export const Clock = IconClockFilled
+export const ClockOutline = IconClock
 export const ClockCheck = IconClockCheck
 export const Clock3 = IconClockFilled
 export const ClockOff = IconClockOff
@@ -190,10 +198,13 @@ export const FolderOpen = IconFolderOpenFilled
 export const FolderPlus = IconFolderOpenFilled
 export const Funnel = IconFilterFilled
 export const GitBranch = IconBrandGithubFilled
+export const GitBranchOutline = IconGitBranch
 export const Globe = IconWorldFilled
 export const HardDrive = IconDeviceDesktopFilled
+export const HardDriveOutline = IconDeviceDesktop
 export const Heart = IconHeartFilled
 export const Hexagon = IconHexagon
+export const HexagonFilled = IconHexagonFilled
 export const Home = IconHomeFilled
 export const Inbox = IconInbox
 export const House = IconHomeFilled
@@ -242,6 +253,7 @@ export const Save = IconDeviceFloppyFilled
 export const Search = IconSearch
 export const Settings2 = IconSettingsFilled
 export const Shield = IconShieldFilled
+export const ShieldOutline = IconShield
 export const SlidersHorizontal = IconAdjustmentsHorizontalFilled
 export const Sparkles = IconSparklesFilled
 export const Star = IconStarFilled

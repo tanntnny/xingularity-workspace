@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactElement,
+  type ReactNode
+} from 'react'
 import { siGoogledocs, siGoogledrive, siGooglesheets, siGoogleslides } from 'simple-icons'
 import type { SimpleIcon } from 'simple-icons'
 import type {
@@ -21,8 +29,8 @@ import {
   type ProjectResourceRow
 } from '../lib/projectResources'
 import { RESOURCE_STATE_CHIP_ITEMS } from '../lib/statusChipMeta'
+import { cn } from '../lib/utils'
 import { Button } from './ui/button'
-import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
 import {
   Dialog,
@@ -41,14 +49,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from './ui/dropdown-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from './ui/context-menu'
 import { EmptyState } from './ui/empty-state'
 import { Input } from './ui/input'
 import { WorkspaceIconButton } from './ui/document-workspace'
-import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
+import { ColumnFolderPicker, type ColumnFolderPickerNode } from './ui/column-folder-picker'
 import { StatusChip } from './ui/status-chip'
 import { StatusChipToggleGroup, StatusChipToggleItem } from './ui/status-chip-toggle'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
 import {
+  CalendarCheck,
   Check,
   ChevronDown,
   Eye,
@@ -57,6 +73,7 @@ import {
   FolderOpen,
   Globe,
   HardDrive,
+  HexagonFilled,
   Link,
   Loader2,
   MoreHorizontal,
@@ -110,6 +127,98 @@ interface ProjectResourceActionHandlers {
   onReveal?: () => void
   onRefresh?: () => void
   onPreview?: () => void
+}
+
+interface ProjectResourceMenuItem {
+  id: string
+  label: string
+  icon: ReactElement
+  onSelect: () => void
+  separatorBefore?: boolean
+  testId?: string
+}
+
+function getProjectResourceMenuItems(
+  resource: ProjectResourceRow['resource'],
+  handlers: ProjectResourceActionHandlers
+): ProjectResourceMenuItem[] {
+  const items: ProjectResourceMenuItem[] = [
+    {
+      id: 'open',
+      label: 'Open',
+      icon:
+        resource.type === 'notebook' ? (
+          <FolderOpen aria-hidden="true" />
+        ) : (
+          <Link aria-hidden="true" />
+        ),
+      onSelect: handlers.onOpen
+    },
+    {
+      id: 'edit',
+      label: 'Edit resource',
+      icon: <FileText aria-hidden="true" />,
+      onSelect: handlers.onEdit
+    }
+  ]
+
+  if (handlers.onAttachGoogleDocs) {
+    items.push({
+      id: 'attach-google-docs',
+      label: 'Attach Google Docs',
+      icon: <FileText aria-hidden="true" />,
+      onSelect: handlers.onAttachGoogleDocs,
+      testId: `project-resource-attach-google-docs:${resource.id}`
+    })
+  }
+
+  if (handlers.onPreview) {
+    items.push({
+      id: 'preview',
+      label: 'Preview',
+      icon: <Eye aria-hidden="true" />,
+      onSelect: handlers.onPreview
+    })
+  }
+
+  if (handlers.onRefresh) {
+    items.push({
+      id: 'refresh',
+      label: 'Refresh status',
+      icon: <RefreshCw aria-hidden="true" />,
+      onSelect: handlers.onRefresh
+    })
+  }
+
+  if (handlers.onLocate) {
+    items.push({
+      id: 'locate',
+      label: 'Locate',
+      icon: <FolderInput aria-hidden="true" />,
+      onSelect: handlers.onLocate
+    })
+  }
+
+  if (handlers.onReveal) {
+    items.push({
+      id: 'reveal',
+      label: 'Reveal in Finder',
+      icon: <HardDrive aria-hidden="true" />,
+      onSelect: handlers.onReveal
+    })
+  }
+
+  if (handlers.onDetach) {
+    items.push({
+      id: 'detach',
+      label: 'Remove from project',
+      icon: <Unlink aria-hidden="true" />,
+      onSelect: handlers.onDetach,
+      separatorBefore: true
+    })
+  }
+
+  return items
 }
 
 export function ProjectResourcesTable({
@@ -326,7 +435,21 @@ export function ProjectResourcesTable({
     {
       id: 'health',
       header: 'Health',
-      renderCell: ({ resource }) => <StatusChip item={RESOURCE_STATE_CHIP_ITEMS[resource.state]} />
+      renderCell: ({ resource }) => {
+        const healthChip = RESOURCE_STATE_CHIP_ITEMS[resource.state]
+
+        return (
+          <StatusChip
+            item={healthChip}
+            surface="hover-pill"
+            mutedLabel
+            className="text-xs"
+            data-testid={`project-resource-health:${resource.id}`}
+            aria-label={`Health: ${healthChip.label}`}
+            title={`Health: ${healthChip.label}`}
+          />
+        )
+      }
     },
     {
       id: 'location',
@@ -345,27 +468,34 @@ export function ProjectResourcesTable({
       id: 'last-checked',
       header: 'Last checked',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
-      renderCell: ({ resource }) => {
+      renderCell: (row) => {
+        const { resource } = row
         const checkedAt = resource.lastSeenAt ?? resource.updatedAt
+        const checkedDateLabel = formatResourceDate(checkedAt)
         return (
-          <time className="whitespace-nowrap text-sm text-muted-foreground" dateTime={checkedAt}>
-            {formatResourceDate(checkedAt)}
-          </time>
+          <div className="flex items-center justify-between gap-2">
+            <StatusChip
+              item={{
+                label: <time dateTime={checkedAt}>{checkedDateLabel}</time>,
+                icon: <CalendarCheck aria-hidden="true" />,
+                iconColorToken: 'var(--muted-foreground)'
+              }}
+              surface="hover-pill"
+              mutedLabel
+              className="text-xs"
+              data-testid={`project-resource-date-chip:last-checked:${resource.id}`}
+              aria-label={`Last checked ${checkedDateLabel}`}
+              title={`Last checked ${checkedDateLabel}`}
+            />
+            <ProjectResourceActions
+              row={row}
+              busy={busyId === resource.id}
+              {...getResourceActions(row)}
+              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            />
+          </div>
         )
       }
-    },
-    {
-      id: 'actions',
-      header: 'Actions',
-      headerClassName: 'w-20',
-      cellClassName: 'w-12 text-right',
-      renderCell: (row) => (
-        <ProjectResourceActions
-          row={row}
-          busy={busyId === row.resource.id}
-          {...getResourceActions(row)}
-        />
-      )
     }
   ]
 
@@ -394,9 +524,18 @@ export function ProjectResourcesTable({
             getRowKey={({ resource }) => resource.id}
             getRowProps={(row) => ({
               'data-testid': `project-resource-row:${row.resource.id}`,
-              className: busyId === row.resource.id ? 'opacity-60' : undefined,
+              className: cn('group', busyId === row.resource.id && 'opacity-60'),
               onClick: () => openResource(row)
             })}
+            rowWrapper={(row, tableRow) => (
+              <ProjectResourceContextMenu
+                key={row.resource.id}
+                row={row}
+                {...getResourceActions(row)}
+              >
+                {tableRow}
+              </ProjectResourceContextMenu>
+            )}
           />
         )}
         {preview ? (
@@ -494,7 +633,7 @@ export function ProjectResourcesTable({
                 </div>
               )}
             </DialogBody>
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 type="button"
                 icon={<FileText size={15} aria-hidden="true" />}
@@ -522,101 +661,107 @@ export function ProjectResourcesTable({
   )
 }
 
+function ProjectResourceDropdownItems({
+  items
+}: {
+  items: readonly ProjectResourceMenuItem[]
+}): ReactElement {
+  return (
+    <>
+      {items.map((item) => (
+        <Fragment key={item.id}>
+          {item.separatorBefore ? <DropdownMenuSeparator /> : null}
+          <DropdownMenuItem data-testid={item.testId} onSelect={item.onSelect}>
+            {item.icon}
+            {item.label}
+          </DropdownMenuItem>
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+function ProjectResourceContextMenuItems({
+  items
+}: {
+  items: readonly ProjectResourceMenuItem[]
+}): ReactElement {
+  return (
+    <>
+      {items.map((item) => (
+        <Fragment key={item.id}>
+          {item.separatorBefore ? <ContextMenuSeparator /> : null}
+          <ContextMenuItem data-testid={item.testId} onSelect={item.onSelect}>
+            {item.icon}
+            {item.label}
+          </ContextMenuItem>
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
 function ProjectResourceActions({
   row,
   busy,
-  onOpen,
-  onEdit,
-  onAttachGoogleDocs,
-  onDetach,
-  onLocate,
-  onReveal,
-  onRefresh,
-  onPreview
+  className,
+  ...handlers
 }: {
   row: ProjectResourceRow
   busy: boolean
-  onOpen: () => void
-  onEdit: () => void
-  onAttachGoogleDocs?: () => void
-  onDetach?: () => void
-  onLocate?: () => void
-  onReveal?: () => void
-  onRefresh?: () => void
-  onPreview?: () => void
-}): ReactElement {
+  className?: string
+} & ProjectResourceActionHandlers): ReactElement {
   const { resource } = row
+  const items = getProjectResourceMenuItems(resource, handlers)
+
   return (
-    <div onClick={(event) => event.stopPropagation()}>
+    <div
+      className={cn('flex shrink-0 items-center gap-1', className)}
+      data-testid={`project-resource-actions-container:${resource.id}`}
+      onClick={(event) => event.stopPropagation()}
+    >
       {busy ? (
-        <Loader2 size={14} className="mr-1 inline-block animate-spin text-muted-foreground" />
+        <Loader2 size={14} className="animate-spin text-muted-foreground" aria-hidden="true" />
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <WorkspaceIconButton
             variant="rowAction"
+            borderless
+            data-testid={`project-resource-actions:${resource.id}`}
             aria-label={`Manage ${resource.title}`}
             title={`Manage ${resource.title}`}
             icon={<MoreHorizontal size={15} aria-hidden="true" />}
-            className="h-7 w-7 shrink-0"
+            className="h-7 w-7 shrink-0 bg-transparent hover:bg-card-hover focus-visible:bg-card-hover"
             disabled={busy}
             onClick={(event) => event.stopPropagation()}
           />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onOpen}>
-            {resource.type === 'notebook' ? <FolderOpen /> : <Link />}
-            Open
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onEdit}>
-            <FileText />
-            Edit resource
-          </DropdownMenuItem>
-          {onAttachGoogleDocs ? (
-            <DropdownMenuItem
-              data-testid={`project-resource-attach-google-docs:${resource.id}`}
-              onSelect={onAttachGoogleDocs}
-            >
-              <FileText />
-              Attach Google Docs
-            </DropdownMenuItem>
-          ) : null}
-          {onPreview ? (
-            <DropdownMenuItem onSelect={onPreview}>
-              <Eye />
-              Preview
-            </DropdownMenuItem>
-          ) : null}
-          {onRefresh ? (
-            <DropdownMenuItem onSelect={onRefresh}>
-              <RefreshCw />
-              Refresh status
-            </DropdownMenuItem>
-          ) : null}
-          {onLocate ? (
-            <DropdownMenuItem onSelect={onLocate}>
-              <FolderInput />
-              Locate
-            </DropdownMenuItem>
-          ) : null}
-          {onReveal ? (
-            <DropdownMenuItem onSelect={onReveal}>
-              <HardDrive />
-              Reveal in Finder
-            </DropdownMenuItem>
-          ) : null}
-          {onDetach ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onDetach}>
-                <Unlink />
-                Remove from project
-              </DropdownMenuItem>
-            </>
-          ) : null}
+          <ProjectResourceDropdownItems items={items} />
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  )
+}
+
+function ProjectResourceContextMenu({
+  row,
+  children,
+  ...handlers
+}: {
+  row: ProjectResourceRow
+  children: ReactElement
+} & ProjectResourceActionHandlers): ReactElement {
+  const items = getProjectResourceMenuItems(row.resource, handlers)
+
+  return (
+    <ContextMenu modal>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent data-testid={`project-resource-context-menu:${row.resource.id}`}>
+        <ProjectResourceContextMenuItems items={items} />
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -628,40 +773,76 @@ function formatResourceDate(value: string): string {
 
 function ResourceBrandIcon({ resource }: { resource: ResourceRef }): ReactElement {
   if (resource.type === 'notebook') {
-    return <FolderOpen size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+    return (
+      <ResourceIconFrame iconColor="var(--status-chip-resource-reference-icon)">
+        <FolderOpen size={14} aria-hidden="true" />
+      </ResourceIconFrame>
+    )
   }
 
   if (resource.externalProduct === 'canva') {
     return (
-      <span
-        className="flex size-[17px] shrink-0 items-center justify-center rounded-[5px] bg-[linear-gradient(135deg,#00c4cc,#7d2ae8_55%,#ff5a5f)] text-[10px] font-bold text-white"
-        role="img"
-        aria-label="Canva"
-      >
-        C
-      </span>
+      <ResourceIconFrame iconColor="var(--accent)" label="Canva">
+        <span className="flex size-3.5 items-center justify-center rounded-[4px] bg-[linear-gradient(135deg,#00c4cc,#7d2ae8_55%,#ff5a5f)] text-[10px] font-bold text-white">
+          C
+        </span>
+      </ResourceIconFrame>
     )
   }
 
   const icon = resource.externalProduct ? externalProductIcons[resource.externalProduct] : undefined
   if (icon) {
     return (
-      <svg
-        viewBox="0 0 24 24"
-        role="img"
-        aria-label={resourceProductLabel(resource)}
-        className="size-[17px] shrink-0"
-        fill={`#${icon.hex}`}
-      >
-        <path d={icon.path} />
-      </svg>
+      <ResourceIconFrame iconColor={`#${icon.hex}`} label={resourceProductLabel(resource)}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-3.5" fill="currentColor">
+          <path d={icon.path} />
+        </svg>
+      </ResourceIconFrame>
     )
   }
 
   if (resource.provider === 'filesystem') {
-    return <HardDrive size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+    return (
+      <ResourceIconFrame iconColor="var(--muted-foreground)">
+        <HardDrive size={14} aria-hidden="true" />
+      </ResourceIconFrame>
+    )
   }
-  return <Globe size={17} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+  return (
+    <ResourceIconFrame iconColor="var(--status-chip-resource-reference-icon)">
+      <Globe size={14} aria-hidden="true" />
+    </ResourceIconFrame>
+  )
+}
+
+function ResourceIconFrame({
+  iconColor,
+  label,
+  children
+}: {
+  iconColor: string
+  label?: string
+  children: ReactNode
+}): ReactElement {
+  return (
+    <span
+      className="relative inline-flex size-7 shrink-0 items-center justify-center"
+      style={{ color: iconColor }}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <HexagonFilled
+        aria-hidden="true"
+        className="absolute inset-0 !h-7 !w-7"
+        size={28}
+        style={{
+          color: `color-mix(in srgb, ${iconColor} var(--project-icon-surface-strength), var(--card))`
+        }}
+      />
+      <span className="relative inline-flex size-3.5 items-center justify-center">{children}</span>
+    </span>
+  )
 }
 
 function ResourceEditorDialog({
@@ -728,44 +909,41 @@ function ResourceEditorDialog({
         .map(([name]) => name)
     )
   }, [folderOptions])
-  const notebookPickerOptions = useMemo<readonly SelectionPopoverOption[]>(
-    () =>
-      folderOptions.map((folder) => {
-        const isCurrentResource = folder.path === initialNotebookPath
-        const isLinked = linkedNotebookPaths.has(folder.path)
-        const isDisabled = isLinked && !isCurrentResource
-        const showPath = duplicateFolderNames.has(folder.name)
+  const notebookPickerNodes = useMemo<readonly ColumnFolderPickerNode[]>(() => {
+    const buildNodes = (nodes: readonly NoteTreeNode[]): ColumnFolderPickerNode[] =>
+      nodes.flatMap((node) => {
+        if (node.kind !== 'folder') return []
 
-        return {
-          value: folder.path,
-          searchText: `${folder.name} ${folder.path}${isDisabled ? ' linked' : ''}`,
-          disabled: isDisabled,
-          wrapLabel: true,
-          label: (
-            <span
-              className="flex min-w-0 flex-1 items-center gap-2"
-              style={{ paddingInlineStart: `${folder.depth * 1.25}rem` }}
-            >
-              <FolderOpen size={15} aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{folder.name}</span>
-                {showPath ? (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {folder.path}
-                  </span>
-                ) : null}
-              </span>
-              {isDisabled ? (
-                <Badge variant="neutral" className="ml-auto px-1.5 py-0 text-[10px]">
-                  Linked
-                </Badge>
-              ) : null}
-            </span>
-          )
-        }
-      }),
-    [duplicateFolderNames, folderOptions, initialNotebookPath, linkedNotebookPaths]
-  )
+        const isCurrentResource = node.relPath === initialNotebookPath
+        const isDisabled = linkedNotebookPaths.has(node.relPath) && !isCurrentResource
+
+        return [
+          {
+            value: node.relPath,
+            label: node.name,
+            pathLabel: node.relPath,
+            searchText: `${node.name} ${node.relPath}`,
+            disabled: isDisabled,
+            children: buildNodes(node.children)
+          }
+        ]
+      })
+
+    const mappedNodes = buildNodes(noteTree)
+    if (!initialNotebookPath || folders.some((folder) => folder.path === initialNotebookPath)) {
+      return mappedNodes
+    }
+
+    return [
+      {
+        value: initialNotebookPath,
+        label: `Current · ${initialNotebookPath.split('/').pop() ?? initialNotebookPath}`,
+        pathLabel: initialNotebookPath,
+        searchText: initialNotebookPath
+      },
+      ...mappedNodes
+    ]
+  }, [folders, initialNotebookPath, linkedNotebookPaths, noteTree])
   const [selectedType, setSelectedType] = useState(type)
   const [notebookPath, setNotebookPath] = useState(initialNotebookPath ?? '')
   const [externalUrl, setExternalUrl] = useState(resource?.canonicalUri ?? '')
@@ -865,15 +1043,14 @@ function ResourceEditorDialog({
                   <label htmlFor="project-resource-notebook" className="text-sm font-medium">
                     Notebook folder
                   </label>
-                  <SelectionPopover
-                    selectionMode="single"
+                  <ColumnFolderPicker
+                    nodes={notebookPickerNodes}
                     value={notebookPath}
-                    options={notebookPickerOptions}
                     onValueChange={setNotebookPath}
                     label="Notebook folder"
+                    placeholder="Select a notebook folder"
                     searchPlaceholder="Search notebook folders"
                     testId="project-resource-notebook-options"
-                    contentClassName="w-[min(32rem,calc(100vw-2rem))]"
                   >
                     <Button
                       id="project-resource-notebook"
@@ -904,7 +1081,12 @@ function ResourceEditorDialog({
                       </span>
                       <ChevronDown className="shrink-0 opacity-60" aria-hidden="true" />
                     </Button>
-                  </SelectionPopover>
+                  </ColumnFolderPicker>
+                  {folderOptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No notebook folders are available in this vault.
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -937,7 +1119,7 @@ function ResourceEditorDialog({
               )}
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
             </DialogBody>
-            <DialogShellFooter withDivider>
+            <DialogShellFooter>
               <DialogActionButton
                 type="submit"
                 icon={<Check />}

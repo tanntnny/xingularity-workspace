@@ -58,7 +58,13 @@ const DialogHeader = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>): React.ReactElement => (
-  <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />
+  <div
+    className={cn(
+      'flex flex-col space-y-1.5 border-b border-border pb-3 text-center sm:text-left',
+      className
+    )}
+    {...props}
+  />
 )
 DialogHeader.displayName = 'DialogHeader'
 
@@ -138,7 +144,10 @@ const DialogFooter = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>): React.ReactElement => (
   <div
-    className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', className)}
+    className={cn(
+      'flex flex-col-reverse border-t border-border pt-3 sm:flex-row sm:justify-end sm:space-x-2',
+      className
+    )}
     {...props}
   />
 )
@@ -147,14 +156,12 @@ DialogFooter.displayName = 'DialogFooter'
 interface DialogShellFooterProps extends React.HTMLAttributes<HTMLDivElement> {
   closeAction?: React.ReactNode
   leadingAction?: React.ReactNode
-  withDivider?: boolean
 }
 
 const DialogShellFooter = ({
   className,
   closeAction,
   leadingAction,
-  withDivider = false,
   children,
   ...props
 }: DialogShellFooterProps): React.ReactElement => {
@@ -164,8 +171,7 @@ const DialogShellFooter = ({
     <div
       data-dialog-footer
       className={cn(
-        'flex items-center justify-between gap-3 [&_button]:rounded-[var(--radius-button-pill)]',
-        withDivider && 'border-t border-border pt-3',
+        'flex items-center justify-between gap-3 border-t border-border pt-3 [&_button]:rounded-[var(--radius-button-pill)]',
         className
       )}
       {...props}

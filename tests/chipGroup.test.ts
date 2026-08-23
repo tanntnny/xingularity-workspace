@@ -55,4 +55,23 @@ describe('ChipGroup', () => {
     expect(dateMarkup).not.toContain('text-xs font-normal')
     expect(timeMarkup).not.toContain('text-xs font-normal')
   })
+
+  it('can use a status chip as an interactive date trigger', () => {
+    const markup = renderToStaticMarkup(
+      createElement(CalendarDateEditPopover, {
+        label: 'Project end date',
+        value: '2026-08-22',
+        onValueChange: () => undefined,
+        triggerStyle: 'status-chip',
+        'data-testid': 'end-date-trigger'
+      })
+    )
+
+    expect(markup).toContain('<button')
+    expect(markup).toContain('data-testid="end-date-trigger"')
+    expect(markup).toContain('ui-compact-control')
+    expect(markup).toContain('rounded-[var(--radius-button-pill)]')
+    expect(markup).toContain('hover:bg-surface-subtle-hover')
+    expect(markup).toContain('aria-haspopup="dialog"')
+  })
 })

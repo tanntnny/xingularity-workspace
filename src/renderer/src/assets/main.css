@@ -207,12 +207,12 @@
     --status-chip-resource-reference-icon: var(--info);
     --status-chip-resource-state-stale-icon: var(--warning);
     --status-chip-resource-state-moved-icon: var(--warning);
-    --status-chip-resource-state-offline-icon: var(--warning);
-    --status-chip-resource-state-permission-denied-icon: var(--destructive);
-    --status-chip-resource-state-reauthorization-required-icon: var(--destructive);
-    --status-chip-resource-state-missing-icon: var(--destructive);
-    --status-chip-resource-state-conflict-icon: var(--destructive);
-    --status-chip-resource-state-unindexed-icon: var(--warning);
+    --status-chip-resource-state-offline-icon: var(--destructive-strong);
+    --status-chip-resource-state-permission-denied-icon: var(--destructive-strong);
+    --status-chip-resource-state-reauthorization-required-icon: var(--warning);
+    --status-chip-resource-state-missing-icon: var(--destructive-strong);
+    --status-chip-resource-state-conflict-icon: var(--destructive-strong);
+    --status-chip-resource-state-unindexed-icon: var(--info);
     --status-chip-schedule-job-disabled-icon: var(--muted-foreground);
     --status-chip-schedule-job-error-icon: var(--destructive);
     --status-chip-schedule-job-review-icon: var(--warning);
@@ -417,12 +417,12 @@
     --status-chip-resource-reference-icon: var(--info);
     --status-chip-resource-state-stale-icon: var(--warning);
     --status-chip-resource-state-moved-icon: var(--warning);
-    --status-chip-resource-state-offline-icon: var(--warning);
-    --status-chip-resource-state-permission-denied-icon: var(--destructive);
-    --status-chip-resource-state-reauthorization-required-icon: var(--destructive);
-    --status-chip-resource-state-missing-icon: var(--destructive);
-    --status-chip-resource-state-conflict-icon: var(--destructive);
-    --status-chip-resource-state-unindexed-icon: var(--warning);
+    --status-chip-resource-state-offline-icon: var(--destructive-strong);
+    --status-chip-resource-state-permission-denied-icon: var(--destructive-strong);
+    --status-chip-resource-state-reauthorization-required-icon: var(--warning);
+    --status-chip-resource-state-missing-icon: var(--destructive-strong);
+    --status-chip-resource-state-conflict-icon: var(--destructive-strong);
+    --status-chip-resource-state-unindexed-icon: var(--info);
     --status-chip-schedule-job-disabled-icon: var(--muted-foreground);
     --status-chip-schedule-job-error-icon: var(--destructive);
     --status-chip-schedule-job-review-icon: var(--warning);
@@ -1353,15 +1353,20 @@
 
 .note-editor-surface .milkdown-code-block,
 .note-editor-surface .note-fenced-code-block {
+  position: relative;
   background: transparent !important;
   border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-shadow: none;
 }
 
+.note-editor-surface .note-fenced-code-block {
+  padding: 8px !important;
+}
+
 .note-editor-surface .milkdown .ProseMirror pre {
   background: transparent !important;
-  border: var(--border-width) solid var(--note-block-border) !important;
+  border: none !important;
   border-radius: var(--note-block-radius);
   box-shadow: none;
 }
@@ -1579,11 +1584,131 @@
   background: transparent !important;
 }
 
+.note-editor-surface .milkdown-code-block .note-code-block-body,
+.note-editor-surface .note-fenced-code-block .note-code-block-body {
+  box-sizing: border-box;
+  min-height: 1.5rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+
 .note-editor-surface .milkdown-code-block .note-code-block-content,
 .note-editor-surface .note-fenced-code-block .note-code-block-content,
 .note-editor-surface .milkdown .ProseMirror pre code {
+  display: block;
+  min-height: 1.5rem;
   color: var(--foreground);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+}
+
+.note-editor-surface .code-token-comment,
+.scheduling-code-editor-surface .code-token-comment {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.note-editor-surface .code-token-string,
+.scheduling-code-editor-surface .code-token-string {
+  color: #a5d6ff;
+}
+
+.note-editor-surface .code-token-number,
+.scheduling-code-editor-surface .code-token-number,
+.note-editor-surface .code-token-property,
+.scheduling-code-editor-surface .code-token-property,
+.note-editor-surface .code-token-escape,
+.scheduling-code-editor-surface .code-token-escape {
+  color: #79c0ff;
+}
+
+.note-editor-surface .code-token-keyword,
+.scheduling-code-editor-surface .code-token-keyword,
+.note-editor-surface .code-token-operator,
+.scheduling-code-editor-surface .code-token-operator {
+  color: #ff7b72;
+}
+
+.note-editor-surface .code-token-function,
+.scheduling-code-editor-surface .code-token-function,
+.note-editor-surface .code-token-meta,
+.scheduling-code-editor-surface .code-token-meta {
+  color: #d2a8ff;
+}
+
+.note-editor-surface .code-token-type,
+.scheduling-code-editor-surface .code-token-type,
+.note-editor-surface .code-token-definition,
+.scheduling-code-editor-surface .code-token-definition {
+  color: #ffa657;
+}
+
+.note-editor-surface .code-token-variable,
+.scheduling-code-editor-surface .code-token-variable,
+.note-editor-surface .code-token-punctuation,
+.scheduling-code-editor-surface .code-token-punctuation {
+  color: #c9d1d9;
+}
+
+.note-editor-surface .code-token-invalid,
+.scheduling-code-editor-surface .code-token-invalid {
+  color: #f85149;
+  text-decoration: underline wavy;
+}
+
+.note-editor-surface .code-token-link,
+.scheduling-code-editor-surface .code-token-link {
+  color: #58a6ff;
+  text-decoration: underline;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 !important;
+  border: var(--border-width) solid var(--input) !important;
+  border-radius: var(--radius-button-pill);
+  background: var(--secondary) !important;
+  color: var(--muted-foreground) !important;
+  font-size: var(--control-font-size);
+  line-height: 1;
+  opacity: 1;
+  cursor: pointer;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button:hover,
+.note-editor-surface .note-fenced-code-block > .copy-button:focus-visible {
+  background: var(--surface-subtle-hover) !important;
+  color: var(--foreground) !important;
+  opacity: 1;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button[data-state='copied'] {
+  color: var(--success) !important;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button[data-state='error'] {
+  color: var(--destructive) !important;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button .note-code-block-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.note-editor-surface .note-fenced-code-block > .copy-button svg {
+  width: var(--control-icon-size);
+  height: var(--control-icon-size);
 }
 
 .note-editor-surface

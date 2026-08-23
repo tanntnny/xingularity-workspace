@@ -72,6 +72,7 @@ import {
 } from '../lib/noteSlashMenu'
 import { resolveArrowReplacementForTextInput } from '../lib/noteArrowInputRules'
 import { registerNoteCodeBlockView } from '../lib/noteCodeBlockView'
+import { createNoteCodeBlockSyntaxPlugin } from '../lib/noteCodeBlockSyntax'
 import { createNoteVimModePlugin, type NoteVimMode } from '../lib/noteVimMode'
 import { cn } from '../lib/utils'
 
@@ -1340,6 +1341,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         ...plugins,
         inlineLatexPreviewPlugin(),
         noteCalloutPlugin(),
+        createNoteCodeBlockSyntaxPlugin(),
         createNoteVimModePlugin({
           isEnabled: () => vimModeEnabledRef.current,
           getKeyMappings: () => vimKeyMappingsRef.current,

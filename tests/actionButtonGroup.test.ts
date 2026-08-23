@@ -193,6 +193,7 @@ describe('ActionButtonGroup', () => {
 
     expect(markup).toContain('data-dialog-body')
     expect(markup).toContain('--radius-control:var(--radius-button)')
+    expect(markup).toContain('border-t border-border pt-3')
     expect(markup.indexOf('aria-label="Close"')).toBeLessThan(markup.indexOf('aria-label="Done"'))
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
   })
@@ -215,7 +216,7 @@ describe('ActionButtonGroup', () => {
     expect(markup).not.toContain('aria-label="Close"')
   })
 
-  it('renders the task-style dialog header and divided footer regions', () => {
+  it('renders the shared dialog header and divided footer regions by default', () => {
     const headerMarkup = renderToStaticMarkup(
       createElement(
         Dialog,
@@ -237,8 +238,7 @@ describe('ActionButtonGroup', () => {
           leadingAction: createElement(DialogActionButton, {
             icon: 'Delete',
             'aria-label': 'Delete'
-          }),
-          withDivider: true
+          })
         },
         createElement(DialogActionButton, {
           icon: 'Done',
@@ -252,6 +252,7 @@ describe('ActionButtonGroup', () => {
     expect(headerMarkup).toContain('>Example task</span>')
     expect(headerMarkup).toContain('data-testid="header-action"')
     expect(headerMarkup).toContain('data-testid="dialog-close"')
+    expect(headerMarkup).toContain('border-b border-border pb-3')
     expect(headerMarkup.indexOf('data-testid="header-action"')).toBeLessThan(
       headerMarkup.indexOf('data-testid="dialog-close"')
     )

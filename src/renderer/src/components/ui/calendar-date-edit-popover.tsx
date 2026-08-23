@@ -9,6 +9,9 @@ import { Calendar } from './calendar'
 import { CalendarCheck, CalendarOff } from './icons'
 import { Input } from './input'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import { StatusChip } from './status-chip'
+
+export type CalendarDateEditTriggerStyle = 'button' | 'status-chip'
 
 export interface CalendarDateEditPopoverProps extends Omit<
   React.ComponentProps<typeof Button>,
@@ -21,6 +24,7 @@ export interface CalendarDateEditPopoverProps extends Omit<
   placeholder?: string
   displayValue?: React.ReactNode
   showIcon?: boolean
+  triggerStyle?: CalendarDateEditTriggerStyle
 }
 
 export const CalendarDateEditPopover = React.forwardRef<
@@ -35,9 +39,11 @@ export const CalendarDateEditPopover = React.forwardRef<
       placeholder = 'Set date',
       displayValue,
       showIcon = true,
+      triggerStyle = 'button',
       className,
       variant = 'outline',
       size = 'sm',
+      shape,
       'aria-label': ariaLabel,
       ...props
     },
@@ -88,35 +94,57 @@ export const CalendarDateEditPopover = React.forwardRef<
       setOpen(false)
     }
 
+    const triggerLabel = value ? (displayValue ?? formatCalendarDateValue(value)) : placeholder
+    const triggerIcon = showIcon ? (
+      value ? (
+        <CalendarCheck aria-hidden="true" />
+      ) : (
+        <CalendarOff aria-hidden="true" />
+      )
+    ) : null
+
     return (
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
-          <Button
-            {...props}
-            ref={ref}
-            type="button"
-            variant={variant}
-            size={size}
-            className={cn(
-              'max-w-full justify-start text-left text-sm font-semibold',
-              !value && 'text-muted-foreground',
-              className
-            )}
-            aria-label={ariaLabel ?? label}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-          >
-            {showIcon ? (
-              value ? (
-                <CalendarCheck aria-hidden="true" />
-              ) : (
-                <CalendarOff aria-hidden="true" />
-              )
-            ) : null}
-            <span className="truncate">
-              {value ? (displayValue ?? formatCalendarDateValue(value)) : placeholder}
-            </span>
-          </Button>
+          {triggerStyle === 'status-chip' ? (
+            <StatusChip
+              {...props}
+              ref={ref}
+              as="button"
+              type="button"
+              item={{
+                label: triggerLabel,
+                icon: triggerIcon,
+                iconColorToken: 'var(--muted-foreground)'
+              }}
+              surface="hover-pill"
+              mutedLabel
+              className={cn('text-xs', className)}
+              aria-label={ariaLabel ?? label}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            />
+          ) : (
+            <Button
+              {...props}
+              ref={ref}
+              type="button"
+              variant={variant}
+              size={size}
+              shape={shape}
+              className={cn(
+                'max-w-full justify-start text-left text-sm font-semibold',
+                !value && 'text-muted-foreground',
+                className
+              )}
+              aria-label={ariaLabel ?? label}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              {triggerIcon}
+              <span className="truncate">{triggerLabel}</span>
+            </Button>
+          )}
         </PopoverTrigger>
         <PopoverContent
           align="start"

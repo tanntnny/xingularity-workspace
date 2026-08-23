@@ -1906,13 +1906,23 @@ test.describe('note page block editor switching', () => {
       await insertCodeBlockFromSlash(page)
       await focusFirstCodeBlock(page)
 
-      const codeBlock = page
-        .locator('[data-testid="note-block-editor"] .ProseMirror pre[data-language]')
+      const codeBlockRoot = page
+        .locator('[data-testid="note-block-editor"] .milkdown-code-block')
         .first()
+      const codeBlock = codeBlockRoot.locator('.note-code-block-body')
+      const expectedBorderWidth = await codeBlock.evaluate((element) =>
+        getComputedStyle(element).getPropertyValue('--border-width').trim()
+      )
       await expect(codeBlock).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
       await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
-      await expect(codeBlock).toHaveCSS('border-top-width', '1px')
+      await expect(codeBlock).toHaveCSS('border-top-width', expectedBorderWidth)
       await expect(codeBlock.locator('code')).toHaveCSS('font-family', /JetBrains Mono/)
+      await expect(codeBlockRoot.locator('.tools')).toHaveCount(0)
+
+      const copyButton = codeBlockRoot.locator('> .copy-button')
+      await expect(copyButton).toHaveCSS('position', 'absolute')
+      await expect(copyButton).toHaveCSS('width', '28px')
+      await expect(copyButton).toHaveCSS('height', '28px')
 
       await page.keyboard.type('const value = 42')
       await page.keyboard.press('Enter')
@@ -1922,11 +1932,13 @@ test.describe('note page block editor switching', () => {
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
         .toContain('```\nconst value = 42\nconsole.log(value)\n```')
 
-      const copyButton = page
-        .locator('[data-testid="note-block-editor"] .milkdown-code-block .copy-button')
-        .first()
       await expect(copyButton).toBeVisible()
+      await expect(copyButton).toHaveAttribute('aria-label', 'Copy code block')
+      await expect(copyButton).toHaveAttribute('title', 'Copy code block')
+      await expect(copyButton).not.toContainText('Copy')
       await copyButton.click()
+
+      await expect(copyButton).toHaveAttribute('data-state', 'copied')
 
       await expect
         .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
@@ -1939,6 +1951,48 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
         .toContain('```\nconst value = 42\nconsole.log(value)\nreturn value\n```')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('highlights Python and JavaScript fenced code blocks', async () => {
+    const initialMarkdown = [
+      '```py',
+      '# python comment',
+      'def greet(name):',
+      '    return "hello"',
+      '```',
+      '',
+      '```js',
+      '// javascript comment',
+      'function greet(name) {',
+      '  const message = "hello " + name',
+      '  return message',
+      '}',
+      '```'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const pythonBlock = editor.locator('.milkdown-code-block[data-language="py"]')
+      const javascriptBlock = editor.locator('.milkdown-code-block[data-language="js"]')
+
+      await expect(pythonBlock).toBeVisible({ timeout: 15_000 })
+      await expect(javascriptBlock).toBeVisible({ timeout: 15_000 })
+      await expect(pythonBlock.locator('.code-token-comment')).toContainText('python comment')
+      await expect(pythonBlock.getByText('def', { exact: true })).toBeVisible()
+      await expect(pythonBlock.locator('.code-token-string')).toContainText('"hello"')
+      await expect(javascriptBlock.locator('.code-token-comment')).toContainText(
+        'javascript comment'
+      )
+      await expect(javascriptBlock.getByText('const', { exact: true })).toBeVisible()
+      await expect(javascriptBlock.getByText('greet', { exact: true })).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

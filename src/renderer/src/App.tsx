@@ -17,7 +17,8 @@ import {
   FileText,
   PenTool,
   Folder,
-  ListTodo
+  ListTodo,
+  RefreshCw
 } from './components/ui/icons'
 import {
   CalendarTask,
@@ -136,6 +137,7 @@ import {
   ProjectsWorkspaceSecondaryActions,
   type ProjectsWorkspaceView
 } from './pages/ProjectsWorkspacePage'
+import { getProjectResourceRows } from './lib/projectResources'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import {
@@ -605,6 +607,7 @@ function App(): ReactElement {
   const [resourceAddRequestProjectId, setResourceAddRequestProjectId] = useState<string | null>(
     null
   )
+  const [isRefreshingResourceHealth, setIsRefreshingResourceHealth] = useState(false)
   const handleResourceAddRequestHandled = useCallback((): void => {
     setResourceAddRequestProjectId(null)
   }, [])
@@ -6091,6 +6094,53 @@ function App(): ReactElement {
     [pushToast, refreshResourceSnapshot, vaultApi]
   )
 
+  const refreshAllProjectResourceHealth = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !selectedProjectForHeader || isRefreshingResourceHealth) return
+
+    const rows = getProjectResourceRows(
+      selectedProjectForHeader,
+      resourceSnapshot.resources,
+      resourceSnapshot.relations
+    )
+    if (rows.length === 0) {
+      pushToast('success', 'No project resources to refresh')
+      return
+    }
+
+    setIsRefreshingResourceHealth(true)
+    try {
+      const results = await Promise.allSettled(
+        rows.map(({ resource }) => vaultApi.resources.refresh(resource.id))
+      )
+      await refreshResourceSnapshot()
+
+      const failedCount = results.filter((result) => result.status === 'rejected').length
+      if (failedCount > 0) {
+        pushToast(
+          'error',
+          `${failedCount} ${failedCount === 1 ? 'resource' : 'resources'} failed to refresh`
+        )
+      } else {
+        pushToast(
+          'success',
+          `Refreshed health for ${rows.length} ${rows.length === 1 ? 'resource' : 'resources'}`
+        )
+      }
+    } catch (error) {
+      pushToast('error', String(error))
+    } finally {
+      setIsRefreshingResourceHealth(false)
+    }
+  }, [
+    isRefreshingResourceHealth,
+    pushToast,
+    refreshResourceSnapshot,
+    resourceSnapshot.relations,
+    resourceSnapshot.resources,
+    selectedProjectForHeader,
+    vaultApi
+  ])
+
   const previewResource = useCallback(
     async (resourceId: string) => {
       if (!vaultApi) {
@@ -6853,21 +6903,44 @@ function App(): ReactElement {
                       }
                       secondaryActions={
                         activeTask ? null : activePage === 'projects' ? (
-                          <ProjectsWorkspaceSecondaryActions
-                            project={selectedProjectForHeader}
-                            view={projectView}
-                            onViewChange={(nextView) => {
-                              if (selectedProjectForHeader) {
-                                if (nextView === 'pulse') {
-                                  openProjectPulse(selectedProjectForHeader.id)
-                                } else if (nextView === 'resources') {
-                                  openProjectResources(selectedProjectForHeader.id)
-                                } else {
-                                  openProject(selectedProjectForHeader.id)
+                          <>
+                            <ProjectsWorkspaceSecondaryActions
+                              project={selectedProjectForHeader}
+                              view={projectView}
+                              onViewChange={(nextView) => {
+                                if (selectedProjectForHeader) {
+                                  if (nextView === 'pulse') {
+                                    openProjectPulse(selectedProjectForHeader.id)
+                                  } else if (nextView === 'resources') {
+                                    openProjectResources(selectedProjectForHeader.id)
+                                  } else {
+                                    openProject(selectedProjectForHeader.id)
+                                  }
                                 }
-                              }
-                            }}
-                          />
+                              }}
+                            />
+                            {projectView === 'resources' && selectedProjectForHeader ? (
+                              <WorkspaceHeaderSecondaryActionsRight>
+                                <WorkspaceIconButton
+                                  icon={
+                                    <RefreshCw
+                                      size={18}
+                                      aria-hidden="true"
+                                      className={
+                                        isRefreshingResourceHealth ? 'animate-spin' : undefined
+                                      }
+                                    />
+                                  }
+                                  aria-label="Refresh all resource health"
+                                  title="Refresh all resource health"
+                                  data-testid="refresh-all-resource-health-button"
+                                  bordered
+                                  disabled={!vaultApi || isRefreshingResourceHealth}
+                                  onClick={() => void refreshAllProjectResourceHealth()}
+                                />
+                              </WorkspaceHeaderSecondaryActionsRight>
+                            ) : null}
+                          </>
                         ) : activePage === 'schedules' ? (
                           <>
                             <div className="flex min-w-max items-center gap-1.5">
@@ -7460,7 +7533,7 @@ function App(): ReactElement {
                                   <WorkspacePanelStack data-testid="notes-panel-stack">
                                     <CollapsibleWorkspacePanelSection
                                       data-testid="note-file-tree-panel"
-                                      heading="File tree"
+                                      heading="Explorer"
                                       className="min-h-0 shrink-0 overflow-hidden p-0 data-[state=open]:min-h-[12rem] data-[state=open]:flex-1"
                                       contentClassName="min-h-0 flex-1 overflow-hidden"
                                     >
