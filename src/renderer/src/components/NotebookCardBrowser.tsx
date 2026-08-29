@@ -16,16 +16,8 @@ import { normalizeNoteTreeSelection, type NoteTreeSelection } from '../lib/noteT
 import { getNotebookFolderContents } from '../lib/notebookFolderContents'
 import { cn } from '../lib/utils'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger
-} from './ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
+import { ActionMenuItems, type ActionMenuGroup } from './ui/action-menu'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
@@ -365,6 +357,91 @@ function NotebookCard({
     }
   }
 
+  const menuGroups: ActionMenuGroup[] = [
+    {
+      id: 'creation',
+      items: canCreateChildren
+        ? [
+            {
+              id: 'create-note',
+              label: 'New note',
+              icon: <FileText aria-hidden="true" />,
+              onSelect: () => onCreateNote(parentDir)
+            },
+            {
+              id: 'create-excalidraw',
+              label: 'New drawing',
+              icon: <PenTool aria-hidden="true" />,
+              onSelect: () => onCreateExcalidraw(parentDir)
+            },
+            {
+              id: 'create-folder',
+              label: 'New folder',
+              icon: <FolderPlus aria-hidden="true" />,
+              onSelect: () => onCreateFolder(parentDir)
+            }
+          ]
+        : []
+    },
+    {
+      id: 'folder-actions',
+      items:
+        isFolder && !isProtected
+          ? [
+              {
+                id: 'export-folder',
+                label: 'Export nested notes',
+                icon: <FileDown aria-hidden="true" />,
+                testId: `notebook-card-export-folder-context:${node.relPath}`,
+                submenu: [
+                  {
+                    id: 'export-pdf',
+                    label: 'as PDF',
+                    icon: <FileDown aria-hidden="true" />,
+                    testId: `notebook-card-export-folder-pdf-context:${node.relPath}`,
+                    onSelect: () => onExportFolderPdf(node.relPath)
+                  },
+                  {
+                    id: 'export-markdown',
+                    label: 'as Markdown',
+                    icon: <FileText aria-hidden="true" />,
+                    testId: `notebook-card-export-folder-markdown-context:${node.relPath}`,
+                    onSelect: () => onExportFolderMarkdown(node.relPath)
+                  }
+                ]
+              }
+            ]
+          : []
+    },
+    {
+      id: 'editing',
+      items: !isProtected
+        ? [
+            {
+              id: 'rename',
+              label: 'Rename',
+              icon: <Pencil aria-hidden="true" />,
+              onSelect: startRename
+            }
+          ]
+        : []
+    },
+    {
+      id: 'destructive',
+      items: !isProtected
+        ? [
+            {
+              id: 'delete',
+              label: 'Delete',
+              icon: <Trash2 aria-hidden="true" />,
+              destructive: true,
+              onSelect: () => onDeleteEntries(getDeleteEntries())
+            }
+          ]
+        : []
+    }
+  ]
+
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -407,16 +484,14 @@ function NotebookCard({
             draggable={!node.isProtected}
             preview="floating"
             previewVariant="content"
-            rotation={-2}
             data-testid={`notebook-card:${node.relPath}`}
             className="flex min-h-28 w-36 max-w-full min-w-0 flex-col overflow-hidden rounded-xl"
             onDragStart={(event) => {
               const entries = getDragEntries()
+              const serializedEntries = JSON.stringify(entries)
               event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData(
-                'application/x-xingularity-note-tree',
-                JSON.stringify(entries)
-              )
+              event.dataTransfer.setData('application/x-xingularity-note-tree', serializedEntries)
+              event.dataTransfer.setData('text/plain', serializedEntries)
             }}
             onDragEnd={() => setIsDragOver(false)}
           >
@@ -488,56 +563,7 @@ function NotebookCard({
           }
         }}
       >
-        {canCreateChildren ? (
-          <NotebookCreateContextMenuItems
-            parentDir={parentDir}
-            onCreateNote={onCreateNote}
-            onCreateExcalidraw={onCreateExcalidraw}
-            onCreateFolder={onCreateFolder}
-          />
-        ) : null}
-        {isFolder && !isProtected ? (
-          <>
-            {canCreateChildren ? <ContextMenuSeparator /> : null}
-            <ContextMenuSub>
-              <ContextMenuSubTrigger
-                data-testid={`notebook-card-export-folder-context:${node.relPath}`}
-              >
-                <FileDown className="mr-2 h-4 w-4" />
-                Export nested notes
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                <ContextMenuItem
-                  data-testid={`notebook-card-export-folder-pdf-context:${node.relPath}`}
-                  onSelect={() => onExportFolderPdf(node.relPath)}
-                >
-                  <FileDown className="mr-2 h-4 w-4" />
-                  as PDF
-                </ContextMenuItem>
-                <ContextMenuItem
-                  data-testid={`notebook-card-export-folder-markdown-context:${node.relPath}`}
-                  onSelect={() => onExportFolderMarkdown(node.relPath)}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  as Markdown
-                </ContextMenuItem>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-          </>
-        ) : null}
-        {!isProtected ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onSelect={startRename}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Rename
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => onDeleteEntries(getDeleteEntries())}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </ContextMenuItem>
-          </>
-        ) : null}
+        <ActionMenuItems variant="context" groups={menuGroups} />
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -557,20 +583,34 @@ function NotebookCreateContextMenuItems({
   onCreateFolder
 }: NotebookCreateContextMenuItemsProps): ReactElement {
   return (
-    <>
-      <ContextMenuItem onSelect={() => onCreateNote(parentDir)}>
-        <FileText className="mr-2 h-4 w-4" />
-        New note
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onCreateExcalidraw(parentDir)}>
-        <PenTool className="mr-2 h-4 w-4" />
-        New drawing
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onCreateFolder(parentDir)}>
-        <FolderPlus className="mr-2 h-4 w-4" />
-        New folder
-      </ContextMenuItem>
-    </>
+    <ActionMenuItems
+      variant="context"
+      groups={[
+        {
+          id: 'creation',
+          items: [
+            {
+              id: 'create-note',
+              label: 'New note',
+              icon: <FileText aria-hidden="true" />,
+              onSelect: () => onCreateNote(parentDir)
+            },
+            {
+              id: 'create-excalidraw',
+              label: 'New drawing',
+              icon: <PenTool aria-hidden="true" />,
+              onSelect: () => onCreateExcalidraw(parentDir)
+            },
+            {
+              id: 'create-folder',
+              label: 'New folder',
+              icon: <FolderPlus aria-hidden="true" />,
+              onSelect: () => onCreateFolder(parentDir)
+            }
+          ]
+        }
+      ]}
+    />
   )
 }
 

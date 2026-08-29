@@ -126,10 +126,12 @@ import {
   FleetingNote,
   MutationEnvelope,
   ResourceInput,
+  ResourceProjectLinksInput,
   ResourceRef,
   ResourceRelation,
   ResourcePreview,
   ResourceHealth,
+  ResourceUpdateInput,
   ResourceContextBundle
 } from '../shared/types'
 
@@ -997,43 +999,21 @@ export class VaultRuntime {
     if (input.type === 'external' && input.canonicalUri) {
       assertExternalResourceUri(input.canonicalUri)
     }
-    const resource = await this.resourceService!.add(input)
-    await this.refreshResourceSearchCache()
-    if (input.projectId) {
-      await this.resourceService!.relate({
-        type: 'project_contains_resource',
-        fromId: input.projectId,
-        fromKind: 'project',
-        toId: resource.id,
-        toKind: 'resource'
-      })
-      await this.mutateSettings(
-        (current) => {
-          const projects = current.projects.map((project) =>
-            project.id === input.projectId
-              ? {
-                  ...project,
-                  resourceRefs: Array.from(
-                    new Map(
-                      [...(project.resourceRefs ?? []), resource].map((item) => [item.id, item])
-                    ).values()
-                  )
-                }
-              : project
-          )
-          return { next: { projects }, result: resource }
-        },
-        { label: 'Attach resource to project' }
-      )
+    const projectIds = Array.from(
+      new Set([...(input.projectId ? [input.projectId] : []), ...(input.projectIds ?? [])])
+    )
+    for (const projectId of projectIds) {
+      resolveProjectById(settings.projects, projectId)
     }
+    const resource = await this.resourceService!.add(input)
+    if (projectIds.length > 0) {
+      return this.setResourceProjectLinks({ resourceId: resource.id, projectIds })
+    }
+    await this.refreshResourceSearchCache()
     return resource
   }
 
-  async updateResource(input: {
-    resourceId: string
-    canonicalUri?: string
-    title?: string
-  }): Promise<ResourceRef> {
+  async updateResource(input: ResourceUpdateInput): Promise<ResourceRef> {
     this.assertReady()
     const snapshot = await this.resourceService!.list()
     const existing = snapshot.resources.find((resource) => resource.id === input.resourceId)
@@ -1058,6 +1038,73 @@ export class VaultRuntime {
     )
     await this.refreshResourceSearchCache()
     return resource
+  }
+
+  async setResourceProjectLinks(input: ResourceProjectLinksInput): Promise<ResourceRef> {
+    this.assertReady()
+    const settings = await this.getSettings()
+    const projectIds = Array.from(new Set(input.projectIds.map((projectId) => projectId.trim())))
+    for (const projectId of projectIds) {
+      resolveProjectById(settings.projects, projectId)
+    }
+
+    const resource = await this.resourceService!.setProjectLinks({
+      resourceId: input.resourceId,
+      projectIds
+    })
+    const projectIdSet = new Set(projectIds)
+    await this.mutateSettings(
+      (current) => ({
+        next: {
+          projects: current.projects.map((project) => {
+            const refs = project.resourceRefs ?? []
+            if (projectIdSet.has(project.id)) {
+              return {
+                ...project,
+                resourceRefs: Array.from(
+                  new Map(
+                    [...refs.filter((ref) => ref.id !== resource.id), resource].map((ref) => [
+                      ref.id,
+                      ref
+                    ])
+                  ).values()
+                )
+              }
+            }
+            return {
+              ...project,
+              resourceRefs: refs.filter((ref) => ref.id !== resource.id)
+            }
+          })
+        },
+        result: resource
+      }),
+      { label: 'Update resource project links' }
+    )
+    await this.refreshResourceSearchCache()
+    return resource
+  }
+
+  async removeResource(resourceId: string): Promise<void> {
+    this.assertReady()
+    const snapshot = await this.resourceService!.list()
+    if (!snapshot.resources.some((resource) => resource.id === resourceId)) {
+      throw new Error(`Resource not found: ${resourceId}`)
+    }
+    await this.resourceService!.remove(resourceId)
+    await this.mutateSettings(
+      (current) => ({
+        next: {
+          projects: current.projects.map((project) => ({
+            ...project,
+            resourceRefs: project.resourceRefs?.filter((resource) => resource.id !== resourceId)
+          }))
+        },
+        result: undefined
+      }),
+      { label: 'Delete resource' }
+    )
+    await this.refreshResourceSearchCache()
   }
 
   async setProjectNotebook(input: {
@@ -2155,6 +2202,7 @@ export class VaultRuntime {
         const milestone: ProjectMilestone = {
           id: `milestone-${randomUUID()}`,
           title: input.title.trim(),
+          endDate: input.endDate,
           createdAt: now,
           updatedAt: now
         }
@@ -2185,6 +2233,7 @@ export class VaultRuntime {
         const updated: ProjectMilestone = {
           ...existing,
           title: input.title.trim(),
+          ...(input.endDate !== undefined ? { endDate: input.endDate ?? undefined } : {}),
           updatedAt: new Date().toISOString()
         }
         const updatedProject: Project = {

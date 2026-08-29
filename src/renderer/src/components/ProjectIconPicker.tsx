@@ -18,6 +18,10 @@ import {
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { PROJECT_ICON_CATALOG } from '../lib/projectIconCatalog'
 
+function getIconVariantLabel(variant: 'filled' | 'outlined'): string {
+  return variant === 'filled' ? 'Filled' : 'Outline'
+}
+
 interface ProjectIconPickerProps {
   icon: ProjectIconStyle
   onChange: (icon: ProjectIconStyle) => void
@@ -41,11 +45,15 @@ export function ProjectIconPicker({
     return PROJECT_ICON_CATALOG.filter(
       (entry) =>
         entry.label.toLowerCase().includes(normalizedQuery) ||
-        entry.glyph.toLowerCase().includes(normalizedQuery)
+        entry.glyph.toLowerCase().includes(normalizedQuery) ||
+        entry.variant.includes(normalizedQuery)
     )
   }, [query])
 
-  const handleIconChange = (glyph: ProjectIconStyle['glyph']): void => {
+  const handleIconChange = (
+    glyph: ProjectIconStyle['glyph'],
+    variant: 'filled' | 'outlined'
+  ): void => {
     if (!glyph) return
 
     onChange({
@@ -53,7 +61,7 @@ export function ProjectIconPicker({
       set: 'tabler',
       glyph,
       shape: undefined,
-      variant: 'filled'
+      variant
     })
   }
 
@@ -129,17 +137,19 @@ export function ProjectIconPicker({
             </CommandEmpty>
             <div className="grid grid-cols-6 gap-1 p-2">
               {filteredIcons.map((entry) => {
-                const isCurrent = entry.glyph === icon.glyph
+                const variantLabel = getIconVariantLabel(entry.variant)
+                const isCurrent = entry.glyph === icon.glyph && entry.variant === icon.variant
                 const Icon = entry.Icon
 
                 return (
                   <CommandItem
-                    key={entry.glyph}
-                    value={`${entry.label} ${entry.glyph}`}
-                    onSelect={() => handleIconChange(entry.glyph)}
-                    aria-label={`${entry.label}${isCurrent ? ', selected' : ''}`}
-                    title={entry.label}
-                    data-testid={`project-icon-option:${entry.glyph}`}
+                    key={`${entry.glyph}:${entry.variant}`}
+                    value={`${entry.label} ${entry.glyph} ${entry.variant}`}
+                    onSelect={() => handleIconChange(entry.glyph, entry.variant)}
+                    aria-label={`${entry.label}, ${variantLabel}${isCurrent ? ', selected' : ''}`}
+                    title={`${entry.label} · ${variantLabel}`}
+                    data-testid={`project-icon-option:${entry.glyph}:${entry.variant}`}
+                    data-icon-variant={entry.variant}
                     data-current={isCurrent}
                     className={cn(
                       'flex size-10 cursor-pointer items-center justify-center rounded-md p-0 [&_svg]:size-5',

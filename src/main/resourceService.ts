@@ -5,7 +5,9 @@ import type {
   Project,
   ResourceHealth,
   ResourceInput,
+  ResourceLabel,
   ResourcePreview,
+  ResourceProjectLinksInput,
   ResourceRef,
   ResourceRelation,
   ResourceRelationType
@@ -98,7 +100,12 @@ export class ResourceService {
 
   async update(
     resourceId: string,
-    input: { canonicalUri?: string; title?: string }
+    input: {
+      canonicalUri?: string
+      title?: string
+      labels?: ResourceLabel[]
+      projectIds?: string[]
+    }
   ): Promise<ResourceRef> {
     const snapshot = await this.store.read()
     const existing = snapshot.resources.find((resource) => resource.id === resourceId)
@@ -121,16 +128,53 @@ export class ResourceService {
       sourceOfTruth: existing.sourceOfTruth,
       access: existing.access,
       projectId: undefined,
+      projectIds: input.projectIds ?? existing.projectIds,
+      labels: input.labels ?? existing.labels,
       metadata: existing.metadata
     })
 
     return this.store.update(resourceId, {
       ...normalized,
       id: resourceId,
-      projectIds: existing.projectIds,
       createdAt: existing.createdAt,
-      state: 'unindexed'
+      state: 'unindexed',
+      labels: input.labels ?? existing.labels,
+      projectIds: input.projectIds ?? existing.projectIds
     })
+  }
+
+  async setProjectLinks(input: ResourceProjectLinksInput): Promise<ResourceRef> {
+    const snapshot = await this.store.read()
+    const existing = snapshot.resources.find((resource) => resource.id === input.resourceId)
+    if (!existing) throw new Error(`Resource not found: ${input.resourceId}`)
+
+    const projectIds = Array.from(new Set(input.projectIds.map((projectId) => projectId.trim())))
+    const relationIds = new Set(
+      snapshot.relations
+        .filter(
+          (relation) =>
+            relation.type === 'project_contains_resource' && relation.toId === input.resourceId
+        )
+        .map((relation) => relation.fromId)
+    )
+
+    for (const projectId of relationIds) {
+      if (projectIds.includes(projectId)) continue
+      await this.detachFromProject(projectId, input.resourceId)
+    }
+
+    for (const projectId of projectIds) {
+      if (relationIds.has(projectId)) continue
+      await this.relate({
+        type: 'project_contains_resource',
+        fromId: projectId,
+        fromKind: 'project',
+        toId: input.resourceId,
+        toKind: 'resource'
+      })
+    }
+
+    return this.store.update(input.resourceId, { projectIds })
   }
 
   async refresh(resourceId: string): Promise<ResourceHealth> {
@@ -343,6 +387,10 @@ export class ResourceService {
         projectIds: resource.projectIds?.filter((id) => id !== projectId)
       })
     }
+  }
+
+  async remove(resourceId: string): Promise<void> {
+    await this.store.remove(resourceId)
   }
 
   async contextForProject(

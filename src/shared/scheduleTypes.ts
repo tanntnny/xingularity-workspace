@@ -50,6 +50,7 @@ export interface TaskCreateAction {
   date?: string
   endDate?: string
   time?: string
+  endTime?: string
   priority?: 'low' | 'medium' | 'high'
   taskType?: string
   status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'canceled' | 'completed'
@@ -67,6 +68,7 @@ export interface TaskUpdateAction {
   tags?: string[]
   date?: string
   endDate?: string | null
+  endTime?: string | null
   completed?: boolean
   status?: 'pending' | 'backlog' | 'in-progress' | 'blocked' | 'canceled' | 'completed'
 }

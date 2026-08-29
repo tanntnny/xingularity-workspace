@@ -16,6 +16,7 @@ import {
   SchedulingAddAutomationButton,
   SchedulingPage,
   SchedulingRightPanel,
+  SchedulingTopbarActions,
   SchedulingWorkspaceProvider
 } from '../src/renderer/src/pages/SchedulingPage'
 import { SchedulingApiGuidePage } from '../src/renderer/src/pages/SchedulingApiGuidePage'
@@ -93,7 +94,7 @@ describe('Scheduling page UI', () => {
     expect(markup).not.toContain('data-testid="scheduling-run-history"')
   })
 
-  it('renders automations as a table beneath the Scheduling heading', () => {
+  it('renders automations as a table', () => {
     const markup = renderToStaticMarkup(
       createElement(ScheduleJobList, {
         jobs: [
@@ -115,19 +116,19 @@ describe('Scheduling page UI', () => {
         selectedJobId: 'daily-planning',
         loading: false,
         onSelect: () => undefined,
-        onCreate: () => undefined
+        onCreate: () => undefined,
+        onRunJob: () => undefined,
+        onRequestDeleteJob: () => undefined,
+        isRunning: false
       })
     )
 
-    expect(markup).toContain('<h1 id="scheduling-job-list-heading"')
-    expect(markup).toContain('>Scheduling</h1>')
     expect(markup).not.toContain('Manage the automations that run in this vault.')
     expect(markup).not.toContain('1 automation')
     expect(markup).toContain('aria-label="Automations"')
+    expect(markup).toContain('data-testid="scheduling-job-menu:daily-planning"')
     expect(markup).toContain('<th')
-    expect(markup).toContain(
-      'cursor-pointer rounded-xl border-0 bg-transparent hover:bg-panel-hover'
-    )
+    expect(markup).toContain('cursor-pointer rounded-xl border-0 bg-transparent hover:bg-muted')
     expect(markup).toContain('data-[state=selected]:bg-muted')
     expect(markup).toContain('[&amp;_tr]:border-0')
     expect(markup).toContain('rounded-xl')
@@ -254,6 +255,50 @@ describe('Scheduling page UI', () => {
     expect(markup).toContain('data-testid="scheduling-add-automation"')
     expect(markup).toContain('aria-label="Add automation"')
     expect(markup).toContain('<span>Add automation</span>')
+    expect(markup).toContain('bg-accent')
+  })
+
+  it('renders save before the accent Run now action in the topbar', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SchedulingWorkspaceProvider,
+        {
+          enabled: false,
+          vaultApi: {} as RendererVaultApi,
+          pushToast: () => undefined
+        },
+        createElement(SchedulingTopbarActions, { activeView: 'automation' })
+      )
+    )
+
+    expect(markup.indexOf('data-testid="scheduling-topbar-save"')).toBeLessThan(
+      markup.indexOf('data-testid="scheduling-topbar-run"')
+    )
+    const saveButton = markup.match(/<button[^>]*data-testid="scheduling-topbar-save"[^>]*>/)?.[0]
+    const runButton = markup.match(/<button[^>]*data-testid="scheduling-topbar-run"[^>]*>/)?.[0]
+
+    expect(saveButton).toContain('bg-transparent')
+    expect(saveButton).toContain('text-muted-foreground')
+    expect(runButton).toContain('bg-accent')
+    expect(markup).toContain('>Run now</span>')
+  })
+
+  it('does not render detail actions from the schedules list topbar', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SchedulingWorkspaceProvider,
+        {
+          enabled: false,
+          vaultApi: {} as RendererVaultApi,
+          pushToast: () => undefined
+        },
+        createElement(SchedulingTopbarActions, { activeView: 'list' })
+      )
+    )
+
+    expect(markup).not.toContain('data-testid="scheduling-topbar-save"')
+    expect(markup).not.toContain('data-testid="scheduling-topbar-run"')
+    expect(markup).not.toContain('data-testid="scheduling-topbar-api-guide"')
   })
 
   it('renders the Python trust guidance as an icon-only attention control', () => {
@@ -265,6 +310,7 @@ describe('Scheduling page UI', () => {
     expect(markup).toContain('aria-label="Read local Python trust guidance"')
     expect(markup).toContain('data-testid="scheduling-python-trust-attention"')
     expect(markup).toContain('Review Python safety')
+    expect(markup).toContain('bg-warning-muted')
     expect(markup).toContain('data-testid="scheduling-python-trust-dismiss"')
     expect(PYTHON_TRUST_TITLE).toBe('Local Python trust boundary')
     expect(PYTHON_TRUST_DESCRIPTION).toBe(

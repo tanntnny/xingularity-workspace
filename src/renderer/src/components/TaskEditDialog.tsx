@@ -8,14 +8,13 @@ import {
   TaskStatus
 } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from './Editor'
-import { Check, Maximize, Trash2 } from './ui/icons'
-import { Input } from './ui/input'
 import { TagEditor } from './TagEditor'
-import { WorkspaceIconButton } from './ui/document-workspace'
 import { getTaskStatus } from '../lib/taskStatus'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import {
   CALENDAR_TASK_TYPE_CHIP_OPTIONS,
+  getMilestoneChipOptions,
+  NO_MILESTONE_VALUE,
   NO_PROJECT_VALUE,
   TASK_PRIORITY_CHIP_ITEMS,
   TASK_STATUS_CHIP_OPTIONS,
@@ -23,21 +22,12 @@ import {
 } from '../lib/statusChipMeta'
 import { normalizeCalendarEndDate } from '../../../shared/calendarTaskDates'
 import { isTaskStatusDone } from '../../../shared/taskStatus'
-import {
-  Dialog,
-  DialogActionButton,
-  DialogBody,
-  DialogContent,
-  DialogShell,
-  DialogShellHeader,
-  DialogShellFooter
-} from './ui/dialog'
 import { ChipGroup } from './ui/chip-group'
 import { CalendarDateEditPopover } from './ui/calendar-date-edit-popover'
 import { CalendarTimeEditPopover } from './ui/calendar-time-edit-popover'
 import { StatusChipSelect } from './ui/status-chip-select'
+import { WorkspaceCenterEditDialog } from './WorkspaceCenterEditDialog'
 
-const NO_MILESTONE_VALUE = '__none__'
 const TASK_DIALOG_STATUS_CHIP_CLASS_NAME =
   'max-w-full justify-start rounded-[var(--radius-button-pill)]'
 const TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME =
@@ -47,6 +37,7 @@ export interface TaskEditDialogProps {
   task: CalendarTask
   isNewTask?: boolean
   projects?: Project[]
+  tasks: CalendarTask[]
   availableTags?: readonly string[]
   onClose: () => void
   onSave: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
@@ -60,6 +51,7 @@ export function TaskEditDialog({
   task,
   isNewTask = false,
   projects = [],
+  tasks,
   availableTags = [],
   onClose,
   onSave,
@@ -85,21 +77,7 @@ export function TaskEditDialog({
   const closeHandledRef = useRef(false)
   const selectedProject = projects.find((project) => project.id === projectId)
   const dialogTitle = titleDraft.trim() || (isNewTask ? 'New task' : task.title)
-  const milestoneOptions = [
-    {
-      value: NO_MILESTONE_VALUE,
-      label: 'No milestone',
-      icon: null,
-      iconColorToken: 'var(--muted-foreground)',
-      mutedTrigger: true
-    },
-    ...(selectedProject?.milestones ?? []).map((milestone) => ({
-      value: milestone.id,
-      label: milestone.title,
-      icon: null,
-      iconColorToken: 'var(--muted-foreground)'
-    }))
-  ]
+  const milestoneOptions = getMilestoneChipOptions(selectedProject, tasks)
 
   const buildPatch = (): Partial<CalendarTask> => {
     const patch: Partial<CalendarTask> = {}
@@ -216,241 +194,187 @@ export function TaskEditDialog({
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) void handleClose()
-      }}
+    <WorkspaceCenterEditDialog
+      context="Edit Task"
+      title={<span data-testid="task-dialog-title">{dialogTitle}</span>}
+      titleValue={titleDraft}
+      titleInputId={`task-title-${task.id}`}
+      titleInputLabel="Task name"
+      titleInputPlaceholder="Task name"
+      titleInputTestId="task-dialog-title-input"
+      titleInputRef={titleInputRef}
+      isNew={isNewTask}
+      dialogTestId="task-center-dialog"
+      headerTestId="task-dialog-header"
+      closeTestId="task-dialog-close"
+      openFullPageTestId="task-open-full-page"
+      onTitleChange={setTitleDraft}
+      onClose={handleClose}
+      onOpenFullPage={handleOpenFullPage}
+      onDelete={handleDelete}
+      onSave={handleClose}
+      closeLabel="Close task editor"
+      deleteLabel="Delete task"
+      saveLabel="Save changes"
     >
-      <DialogContent
-        className="max-h-[min(760px,calc(100vh-2rem))] overflow-hidden"
-        data-testid="task-center-dialog"
-        showCloseButton={false}
-        onOpenAutoFocus={(event) => {
-          if (!isNewTask) return
-          event.preventDefault()
-          window.requestAnimationFrame(() => titleInputRef.current?.focus())
-        }}
-      >
-        <DialogShell>
-          <DialogShellHeader
-            data-testid="task-dialog-header"
-            context="Edit Task"
-            title={<span data-testid="task-dialog-title">{dialogTitle}</span>}
-            closeLabel="Close task editor"
-            onClose={() => void handleClose()}
-            closeTestId="task-dialog-close"
-            actions={
-              <WorkspaceIconButton
-                onClick={() => {
-                  void handleOpenFullPage()
-                }}
-                aria-label="Open full page"
-                title="Open full page"
-                icon={<Maximize />}
-                borderless
-                data-testid="task-open-full-page"
-              />
-            }
+      <div className="space-y-5">
+        <div data-testid="task-description-editor" className="note-editor-surface min-w-0">
+          <Editor
+            ref={editorRef}
+            key={task.id}
+            initialContent={task.description ?? ''}
+            density="compact"
+            onDirty={() => undefined}
+            onSnapshotChange={handleDescriptionSnapshot}
+            onDropFile={async () => null}
+            onPasteImage={async () => null}
+            notes={[]}
+            vimModeEnabled={vimModeEnabled}
+            vimKeyMappings={vimKeyMappings}
           />
-          <div data-testid="task-dialog-title-input-row" className="min-w-0 pb-2">
-            <Input
-              ref={titleInputRef}
-              id={`task-title-${task.id}`}
-              data-testid="task-dialog-title-input"
-              type="text"
-              variant="plain"
-              value={titleDraft}
-              onChange={(event) => setTitleDraft(event.target.value)}
-              aria-label="Task name"
-              placeholder="Task name"
-              autoFocus={isNewTask}
-              className="h-auto min-h-9 text-2xl font-semibold leading-tight tracking-tight text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <DialogBody className="overflow-y-auto pr-1">
-            <div className="space-y-5">
-              <div data-testid="task-description-editor" className="note-editor-surface min-w-0">
-                <Editor
-                  ref={editorRef}
-                  key={task.id}
-                  initialContent={task.description ?? ''}
-                  density="compact"
-                  onDirty={() => undefined}
-                  onSnapshotChange={handleDescriptionSnapshot}
-                  onDropFile={async () => null}
-                  onPasteImage={async () => null}
-                  notes={[]}
-                  vimModeEnabled={vimModeEnabled}
-                  vimKeyMappings={vimKeyMappings}
-                />
-              </div>
-              <div
-                data-testid="task-dialog-properties"
-                className="flex min-w-0 flex-wrap items-center gap-2"
-              >
-                <StatusChipSelect
-                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
-                  data-testid="task-dialog-status-chip"
-                  id={`task-status-${task.id}`}
-                  label={`Task status for ${dialogTitle}`}
-                  value={status}
-                  options={TASK_STATUS_CHIP_OPTIONS}
-                  surface="pill"
-                  wrapLabel
-                  onValueChange={(value) => setStatus(value as TaskStatus)}
-                />
-                <StatusChipSelect
-                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
-                  data-testid="task-dialog-task-type-chip"
-                  id={`task-type-${task.id}`}
-                  label={`Task type for ${dialogTitle}`}
-                  value={taskType}
-                  options={CALENDAR_TASK_TYPE_CHIP_OPTIONS}
-                  surface="pill"
-                  wrapLabel
-                  onValueChange={(value) => setTaskType(value as CalendarTaskType)}
-                />
-                <StatusChipSelect
-                  className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
-                  data-testid="task-dialog-priority-chip"
-                  id={`task-priority-${task.id}`}
-                  label={`Task priority for ${dialogTitle}`}
-                  value={priority}
-                  options={(['low', 'medium', 'high'] as TaskPriority[]).map((option) => ({
-                    value: option,
-                    ...TASK_PRIORITY_CHIP_ITEMS[option]
-                  }))}
-                  surface="pill"
-                  wrapLabel
-                  onValueChange={(value) => setPriority(value as TaskPriority)}
-                />
-                <ChipGroup
-                  aria-label={`Task start date and time for ${dialogTitle}`}
-                  data-testid="task-dialog-start-datetime-group"
-                >
-                  <CalendarDateEditPopover
-                    id={`task-start-date-${task.id}`}
-                    label="Task start date"
-                    value={date || undefined}
-                    onValueChange={(value) => setDate(value ?? '')}
-                    placeholder="Start date"
-                    variant="ghost"
-                    aria-label="Task start date"
-                    className="h-7 w-fit rounded-none px-2"
-                  />
-                  <CalendarTimeEditPopover
-                    id={`task-start-time-${task.id}`}
-                    label="Task start time"
-                    value={time || undefined}
-                    onValueChange={(value) => setTime(value ?? '')}
-                    placeholder="Start time"
-                    variant="ghost"
-                    aria-label="Task start time"
-                    className="h-7 w-fit rounded-none px-2"
-                  />
-                </ChipGroup>
-                <span aria-hidden="true" className="shrink-0 text-muted-foreground">
-                  →
-                </span>
-                <ChipGroup
-                  aria-label={`Task end date and time for ${dialogTitle}`}
-                  data-testid="task-dialog-end-datetime-group"
-                >
-                  <CalendarDateEditPopover
-                    id={`task-end-date-${task.id}`}
-                    label={date ? 'Task end date' : 'Task due date'}
-                    value={endDate || undefined}
-                    onValueChange={(value) => setEndDate(value ?? '')}
-                    placeholder="End date"
-                    variant="ghost"
-                    aria-label={date ? 'Task end date' : 'Task due date'}
-                    className="h-7 w-fit rounded-none px-2"
-                  />
-                  <CalendarTimeEditPopover
-                    id={`task-end-time-${task.id}`}
-                    label={date ? 'Task end time' : 'Task due time'}
-                    value={endTime || undefined}
-                    onValueChange={(value) => setEndTime(value ?? '')}
-                    placeholder="End time"
-                    variant="ghost"
-                    aria-label={date ? 'Task end time' : 'Task due time'}
-                    className="h-7 w-fit rounded-none px-2"
-                  />
-                </ChipGroup>
-                <ChipGroup
-                  aria-label={`Task project and milestone for ${dialogTitle}`}
-                  data-testid="task-dialog-project-milestone-group"
-                >
-                  <StatusChipSelect
-                    className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
-                    data-testid="task-dialog-project-chip"
-                    id={`task-project-${task.id}`}
-                    label={`Task project for ${dialogTitle}`}
-                    value={projectId || NO_PROJECT_VALUE}
-                    options={getProjectChipOptions(projects)}
-                    surface="none"
-                    wrapLabel
-                    onValueChange={(value) => {
-                      const nextProjectId = value === NO_PROJECT_VALUE ? '' : value
-                      setProjectId(nextProjectId)
-                      if (
-                        !projects
-                          .find((project) => project.id === nextProjectId)
-                          ?.milestones?.some((milestone) => milestone.id === milestoneId)
-                      ) {
-                        setMilestoneId('')
-                      }
-                    }}
-                  />
-                  <StatusChipSelect
-                    className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
-                    data-testid="task-dialog-milestone-chip"
-                    id={`task-milestone-${task.id}`}
-                    label={`Task milestone for ${dialogTitle}`}
-                    value={milestoneId || NO_MILESTONE_VALUE}
-                    options={milestoneOptions}
-                    surface="none"
-                    wrapLabel
-                    onValueChange={(value) =>
-                      setMilestoneId(value === NO_MILESTONE_VALUE ? '' : value)
-                    }
-                    disabled={!selectedProject}
-                  />
-                </ChipGroup>
-                <TagEditor
-                  value={tags}
-                  availableTags={availableTags}
-                  onChange={setTags}
-                  label="Task tags"
-                  testId="task-tags-editor"
-                  surface="pill"
-                  className="min-w-0 max-w-full"
-                />
-              </div>
-            </div>
-          </DialogBody>
-          <DialogShellFooter
-            leadingAction={
-              <DialogActionButton
-                onClick={handleDelete}
-                title="Delete task"
-                aria-label="Delete task"
-                icon={<Trash2 />}
-              />
-            }
+        </div>
+        <div
+          data-testid="task-dialog-properties"
+          className="flex min-w-0 flex-wrap items-center gap-2"
+        >
+          <StatusChipSelect
+            className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+            data-testid="task-dialog-status-chip"
+            id={`task-status-${task.id}`}
+            label={`Task status for ${dialogTitle}`}
+            value={status}
+            options={TASK_STATUS_CHIP_OPTIONS}
+            surface="pill"
+            wrapLabel
+            onValueChange={(value) => setStatus(value as TaskStatus)}
+          />
+          <StatusChipSelect
+            className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+            data-testid="task-dialog-task-type-chip"
+            id={`task-type-${task.id}`}
+            label={`Task type for ${dialogTitle}`}
+            value={taskType}
+            options={CALENDAR_TASK_TYPE_CHIP_OPTIONS}
+            surface="pill"
+            wrapLabel
+            onValueChange={(value) => setTaskType(value as CalendarTaskType)}
+          />
+          <StatusChipSelect
+            className={TASK_DIALOG_STATUS_CHIP_CLASS_NAME}
+            data-testid="task-dialog-priority-chip"
+            id={`task-priority-${task.id}`}
+            label={`Task priority for ${dialogTitle}`}
+            value={priority}
+            options={(['low', 'medium', 'high'] as TaskPriority[]).map((option) => ({
+              value: option,
+              ...TASK_PRIORITY_CHIP_ITEMS[option]
+            }))}
+            surface="pill"
+            wrapLabel
+            onValueChange={(value) => setPriority(value as TaskPriority)}
+          />
+          <ChipGroup
+            aria-label={`Task start date and time for ${dialogTitle}`}
+            data-testid="task-dialog-start-datetime-group"
           >
-            <DialogActionButton
-              onClick={handleClose}
-              title="Save changes"
-              aria-label="Save changes"
-              icon={<Check />}
-              label="Save changes"
-              tone="accent"
+            <CalendarDateEditPopover
+              id={`task-start-date-${task.id}`}
+              label="Task start date"
+              value={date || undefined}
+              onValueChange={(value) => setDate(value ?? '')}
+              placeholder="Start date"
+              variant="ghost"
+              aria-label="Task start date"
+              className="h-7 w-fit rounded-none px-2"
             />
-          </DialogShellFooter>
-        </DialogShell>
-      </DialogContent>
-    </Dialog>
+            <CalendarTimeEditPopover
+              id={`task-start-time-${task.id}`}
+              label="Task start time"
+              value={time || undefined}
+              onValueChange={(value) => setTime(value ?? '')}
+              placeholder="Start time"
+              variant="ghost"
+              aria-label="Task start time"
+              className="h-7 w-fit rounded-none px-2"
+            />
+          </ChipGroup>
+          <span aria-hidden="true" className="shrink-0 text-muted-foreground">
+            →
+          </span>
+          <ChipGroup
+            aria-label={`Task end date and time for ${dialogTitle}`}
+            data-testid="task-dialog-end-datetime-group"
+          >
+            <CalendarDateEditPopover
+              id={`task-end-date-${task.id}`}
+              label={date ? 'Task end date' : 'Task due date'}
+              value={endDate || undefined}
+              onValueChange={(value) => setEndDate(value ?? '')}
+              placeholder="End date"
+              variant="ghost"
+              aria-label={date ? 'Task end date' : 'Task due date'}
+              className="h-7 w-fit rounded-none px-2"
+            />
+            <CalendarTimeEditPopover
+              id={`task-end-time-${task.id}`}
+              label={date ? 'Task end time' : 'Task due time'}
+              value={endTime || undefined}
+              onValueChange={(value) => setEndTime(value ?? '')}
+              placeholder="End time"
+              variant="ghost"
+              aria-label={date ? 'Task end time' : 'Task due time'}
+              className="h-7 w-fit rounded-none px-2"
+            />
+          </ChipGroup>
+          <ChipGroup
+            aria-label={`Task project and milestone for ${dialogTitle}`}
+            data-testid="task-dialog-project-milestone-group"
+          >
+            <StatusChipSelect
+              className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
+              data-testid="task-dialog-project-chip"
+              id={`task-project-${task.id}`}
+              label={`Task project for ${dialogTitle}`}
+              value={projectId || NO_PROJECT_VALUE}
+              options={getProjectChipOptions(projects)}
+              surface="none"
+              wrapLabel
+              onValueChange={(value) => {
+                const nextProjectId = value === NO_PROJECT_VALUE ? '' : value
+                setProjectId(nextProjectId)
+                if (
+                  !projects
+                    .find((project) => project.id === nextProjectId)
+                    ?.milestones?.some((milestone) => milestone.id === milestoneId)
+                ) {
+                  setMilestoneId('')
+                }
+              }}
+            />
+            <StatusChipSelect
+              className={TASK_DIALOG_GROUPED_STATUS_CHIP_CLASS_NAME}
+              data-testid="task-dialog-milestone-chip"
+              id={`task-milestone-${task.id}`}
+              label={`Task milestone for ${dialogTitle}`}
+              value={milestoneId || NO_MILESTONE_VALUE}
+              options={milestoneOptions}
+              surface="none"
+              wrapLabel
+              onValueChange={(value) => setMilestoneId(value === NO_MILESTONE_VALUE ? '' : value)}
+              disabled={!selectedProject}
+            />
+          </ChipGroup>
+          <TagEditor
+            value={tags}
+            availableTags={availableTags}
+            onChange={setTags}
+            label="Task tags"
+            testId="task-tags-editor"
+            surface="pill"
+            className="min-w-0 max-w-full"
+          />
+        </div>
+      </div>
+    </WorkspaceCenterEditDialog>
   )
 }

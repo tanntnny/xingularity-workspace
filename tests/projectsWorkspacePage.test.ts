@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ProjectDescriptionEditor } from '../src/renderer/src/components/ProjectDescriptionEditor'
 import {
   ProjectsWorkspacePage,
@@ -8,6 +8,7 @@ import {
   ProjectsWorkspaceSecondaryActions
 } from '../src/renderer/src/pages/ProjectsWorkspacePage'
 import { normalizeResourceInput, notebookResourceUri } from '../src/shared/resourceDomain'
+import { formatProjectUpdatedDate } from '../src/renderer/src/lib/projectDateLabels'
 import type {
   CalendarTask,
   NoteTreeNode,
@@ -42,6 +43,7 @@ const task: CalendarTask = {
 const milestone: ProjectMilestone = {
   id: 'milestone-1',
   title: 'Launch',
+  endDate: '2026-08-31',
   createdAt: '2026-08-20T00:00:00.000Z',
   updatedAt: '2026-08-20T00:00:00.000Z'
 }
@@ -76,6 +78,10 @@ function renderProjectsPage(
       onFilterModeChange: () => undefined,
       onUpdateProjectProperties: () => undefined,
       onOpenProject: () => undefined,
+      onToggleProjectFavorite: () => undefined,
+      onToggleProjectArchive: () => undefined,
+      onExportProjectContext: () => undefined,
+      onDeleteProject: () => undefined,
       onOpenProjectUpdates: () => undefined,
       onCreateProjectUpdate: async () => undefined,
       onUpdateProjectUpdate: async () => undefined,
@@ -99,6 +105,7 @@ function renderProjectsPage(
       onUpdateMilestone: () => undefined,
       onDeleteMilestone: async () => undefined,
       onReorderMilestones: async () => true,
+      onOpenMilestoneDialog: () => undefined,
       onUpdateProject: () => undefined,
       onUpdateTask: () => undefined,
       onDeleteTask: () => undefined,
@@ -111,15 +118,21 @@ function renderProjectsList(): string {
   return renderProjectsPage('list')
 }
 
-function renderProjectsRightPanel(projectToRender: Project): string {
+function renderProjectsRightPanel(
+  projectToRender: Project,
+  tasksToRender: CalendarTask[] = [task]
+): string {
   return renderToStaticMarkup(
     createElement(ProjectsWorkspaceRightPanel, {
       projects: [projectToRender],
+      tasks: tasksToRender,
       favoriteProjectIds: [],
       selectedProjectId: projectToRender.id,
       onToggleProjectFavorite: () => undefined,
       onToggleProjectArchive: () => undefined,
-      onUpdateProjectProperties: () => undefined
+      onUpdateProjectProperties: () => undefined,
+      onCreateMilestone: async () => undefined,
+      onOpenMilestone: () => undefined
     })
   )
 }
@@ -134,6 +147,7 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('aria-label="Projects"')
     expect(markup).toContain('border-separate border-spacing-y-1')
     expect(markup).toMatch(/<button[^>]*aria-label="Open project Alpha Project"/)
+    expect(markup).toContain('data-testid="all-project-menu:project-1"')
     expect(markup).toContain('>Alpha Project</span>')
     expect(markup).toMatch(/<span class="sr-only">Favorite<\/span>/)
     expect(markup).toContain('tabler-icon-star-filled')
@@ -171,7 +185,7 @@ describe('Projects workspace list UI', () => {
     }
     const markup = renderProjectsPage('list', projectWithUpdates)
 
-    expect(markup).toContain('>Health</th>')
+    expect(markup).toContain('>Health</span>')
     expect(markup).toContain('data-testid="all-project-health:project-1"')
     expect(markup).toContain('>At risk</span>')
     expect(markup).toContain('hover:bg-card-hover')
@@ -183,7 +197,7 @@ describe('Projects workspace list UI', () => {
   it('renders a muted No update chip when a project has no updates', () => {
     const markup = renderProjectsPage('list')
 
-    expect(markup).toContain('>Health</th>')
+    expect(markup).toContain('>Health</span>')
     expect(markup).toContain('>No update</span>')
     expect(markup).toContain('data-testid="all-project-health:project-1"')
     expect(markup).toContain('tabler-icon-circle-dashed')
@@ -202,10 +216,10 @@ describe('Projects workspace list UI', () => {
     }
     const markup = renderProjectsPage('list', datedProject, [], false, [completedTask])
 
-    expect(markup).toContain('>Project</th>')
-    expect(markup).toContain('>Progress</th>')
-    expect(markup).toContain('>End date</th>')
-    expect(markup).toContain('>Updated</th>')
+    expect(markup).toContain('>Project</span>')
+    expect(markup).toContain('>Progress</span>')
+    expect(markup).toContain('>End date</span>')
+    expect(markup).toContain('>Updated</span>')
     expect(markup).not.toContain('>State</th>')
     expect(markup).not.toContain('>Attention</th>')
     expect(markup).toContain('data-testid="all-project-progress-ring:project-1"')
@@ -226,6 +240,25 @@ describe('Projects workspace list UI', () => {
     const missingEndDateMarkup = renderProjectsList()
     expect(missingEndDateMarkup).toContain('Set end date')
     expect(missingEndDateMarkup).toContain('tabler-icon-calendar-off')
+  })
+
+  it('renders a semantic relative Updated label with exact accessible context', () => {
+    const now = new Date(2026, 7, 24, 12, 0, 0)
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+
+    try {
+      const markup = renderProjectsPage('list', project)
+      const updatedDate = formatProjectUpdatedDate(project.updatedAt, now)
+
+      expect(markup).toContain(`>${updatedDate.label}</time>`)
+      expect(markup).toContain(
+        `aria-label="Updated ${updatedDate.label}; ${updatedDate.exactLabel}"`
+      )
+      expect(markup).toContain(`title="Updated ${updatedDate.exactLabel}"`)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows the current milestone in the project cell instead of a separate column', () => {
@@ -252,7 +285,9 @@ describe('Projects workspace list UI', () => {
     const currentTask: CalendarTask = {
       ...task,
       id: 'current-task',
-      milestoneId: currentMilestone.id
+      title: 'Prepare current launch',
+      milestoneId: currentMilestone.id,
+      priority: 'high'
     }
     const markup = renderProjectsPage('list', currentProject, [], false, [
       completedTask,
@@ -264,6 +299,17 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('data-testid="all-project-milestone-icon:project-1"')
     expect(markup).toContain('data-milestone-complete="false"')
     expect(markup).toContain('all-project-milestone-summary flex')
+    expect(markup).toContain('data-testid="all-project-urgent-task:project-1"')
+    expect(markup).toContain('>Prepare current launch</span>')
+    expect(markup).toContain('all-project-urgent-task-status')
+    expect(markup).toContain('data-status="pending"')
+    expect(markup).not.toContain('>·</span>')
+    expect(markup.indexOf('all-project-urgent-task-status')).toBeLessThan(
+      markup.indexOf('data-testid="all-project-urgent-task:project-1"')
+    )
+    expect(markup.indexOf('all-project-milestone-summary')).toBeLessThan(
+      markup.indexOf('all-project-urgent-task:project-1')
+    )
     expect(markup).toContain('text-muted-foreground')
     expect(markup).toContain('tabler-icon-diamonds shrink-0 text-milestone-current')
     expect(markup).not.toContain('>1/2</span>')
@@ -278,7 +324,47 @@ describe('Projects workspace list UI', () => {
 
     expect(completeMarkup).toContain('>Complete</span>')
     expect(completeMarkup).toContain('data-milestone-complete="true"')
+    expect(completeMarkup).not.toContain('data-testid="all-project-urgent-task:project-1"')
     expect(completeMarkup).toContain('tabler-icon-diamonds-filled shrink-0 text-milestone-complete')
+  })
+
+  it('keeps the project hierarchy on one fixed fading text track', () => {
+    const longProjectName = 'Alpha Project with a very long planning workspace name'
+    const longMilestoneTitle = 'Current launch milestone with a very long title'
+    const longTaskTitle = 'Prepare the current launch task with a very long title'
+    const longMilestone: ProjectMilestone = {
+      ...milestone,
+      title: longMilestoneTitle
+    }
+    const longProject: Project = {
+      ...project,
+      name: longProjectName,
+      milestones: [longMilestone]
+    }
+    const longTask: CalendarTask = {
+      ...task,
+      title: longTaskTitle,
+      milestoneId: longMilestone.id
+    }
+    const markup = renderProjectsPage('list', longProject, [], false, [longTask])
+    const rowStart = markup.indexOf('data-testid="all-project-row:project-1"')
+    const rowEnd = markup.indexOf('</tr>', rowStart)
+    const rowMarkup = markup.slice(rowStart, rowEnd)
+    const projectCellStart = rowMarkup.indexOf('<td')
+    const projectCellEnd = rowMarkup.indexOf('</td>', projectCellStart)
+    const projectCellMarkup = rowMarkup.slice(projectCellStart, projectCellEnd)
+
+    expect(projectCellMarkup).toContain('w-[clamp(20rem,42vw,40rem)]')
+    expect(projectCellMarkup).toContain('data-testid="all-project-summary:project-1"')
+    expect(projectCellMarkup).toContain('workspace-text-fade')
+    expect(projectCellMarkup).toContain(
+      `title="${longProjectName} · ${longMilestoneTitle} · ${longTaskTitle}"`
+    )
+    expect(projectCellMarkup).toContain(longProjectName)
+    expect(projectCellMarkup).toContain(longMilestoneTitle)
+    expect(projectCellMarkup).toContain(longTaskTitle)
+    expect(projectCellMarkup).not.toContain('max-w-52')
+    expect(projectCellMarkup).not.toContain('truncate')
   })
 
   it('colors project milestone rows by completion and persisted order', () => {
@@ -371,10 +457,20 @@ describe('Projects workspace list UI', () => {
     expect(markup).not.toContain('>1 Tasks</span>')
   })
 
-  it('reveals milestone add-task and task actions on row hover or focus', () => {
+  it('reveals the milestone add-task action only on row hover', () => {
     const markup = renderProjectsPage('home', { ...project, milestones: [milestone] })
 
-    expect(markup).toContain('data-testid="project-milestone-add-task-icon:milestone-1"')
+    const addTaskTestId = 'data-testid="project-milestone-add-task-icon:milestone-1"'
+    const addTaskStart = markup.indexOf(addTaskTestId)
+    const addTaskMarkup = markup.slice(
+      markup.lastIndexOf('<button', addTaskStart),
+      markup.indexOf('>', addTaskStart)
+    )
+
+    expect(addTaskMarkup).toContain(addTaskTestId)
+    expect(addTaskMarkup).toContain('group-hover/milestone-header:opacity-100')
+    expect(addTaskMarkup).not.toContain('group-focus-within/milestone-header:opacity-100')
+    expect(addTaskMarkup).not.toContain('focus-visible:opacity-100')
     expect(markup).toContain(
       'hover:bg-card-hover hover:text-foreground focus-visible:bg-card-hover focus-visible:text-foreground'
     )
@@ -382,6 +478,15 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain(
       'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100'
     )
+  })
+
+  it('does not retain a selected background on task rows after opening a task', () => {
+    const markup = renderProjectsPage('home', { ...project, milestones: [milestone] })
+
+    expect(markup).toContain('group-hover:bg-muted')
+    expect(markup).toContain('focus-visible:bg-muted')
+    expect(markup).not.toContain('data-selected="true"')
+    expect(markup).not.toContain('group-data-[selected=true]:bg-muted')
   })
 
   it('uses stronger title weights across the project list and editor', () => {
@@ -650,11 +755,32 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('data-testid="project-activity-panel"')
     expect(markup).toContain('data-testid="project-activity-table"')
     expect(markup).toContain('aria-label="Project update history"')
+    const activityTableStart = markup.indexOf('data-testid="project-activity-table"')
+    const activityTableEnd = markup.indexOf('</table>', activityTableStart)
+    const activityTableMarkup = markup.slice(activityTableStart, activityTableEnd)
+    expect(activityTableMarkup).not.toContain('<thead')
+    expect(activityTableMarkup).not.toContain('aria-sort')
+    expect(activityTableMarkup).not.toContain('<button')
     expect(markup).toContain('data-testid="project-activity-row:activity-new"')
     expect(markup).toContain('data-testid="project-activity-row:activity-old"')
+    expect(markup.indexOf('data-testid="project-activity-row:activity-new"')).toBeLessThan(
+      markup.indexOf('data-testid="project-activity-row:activity-old"')
+    )
     expect(markup).toContain('data-testid="project-activity-status:activity-new"')
     expect(markup).toContain('data-testid="project-activity-time:activity-new"')
     expect(markup).not.toContain('data-testid="project-activity-text:activity-new"')
+    const activityStatusTestId = 'data-testid="project-activity-status:activity-new"'
+    const activityStatusStart = markup.indexOf(activityStatusTestId)
+    const activityStatusMarkup = markup.slice(
+      activityStatusStart,
+      markup.indexOf('>', activityStatusStart)
+    )
+    expect(activityStatusMarkup).toContain('text-sm')
+    expect(activityStatusMarkup).not.toContain('text-xs')
+    expect(activityStatusMarkup).toContain('bg-transparent')
+    expect(activityStatusMarkup).toContain('px-0')
+    expect(activityStatusMarkup).not.toContain('bg-surface-subtle')
+    expect(activityStatusMarkup).not.toContain('border-border')
     expect(markup).toContain('data-testid="project-activity-author:activity-new"')
     expect(markup.indexOf('data-testid="project-activity-status:activity-new"')).toBeLessThan(
       markup.indexOf('data-testid="project-activity-time:activity-new"')
@@ -663,7 +789,6 @@ describe('Projects workspace list UI', () => {
       markup.indexOf('data-testid="project-activity-author:activity-new"')
     )
     expect(markup).toContain('>By You</span>')
-    expect(markup).toContain('class="p-3"')
     expect(markup.indexOf('data-testid="project-activity-panel"')).toBeGreaterThan(
       markup.indexOf('data-testid="project-properties-panel"')
     )
@@ -680,6 +805,43 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('data-testid="project-activity-panel"')
     expect(markup).toContain('data-testid="project-activity-empty"')
     expect(markup).not.toContain('data-testid="project-activity-table"')
+  })
+
+  it('renders the collapsible milestone panel between properties and activity', () => {
+    const panelProject = { ...project, milestones: [milestone] }
+    const completedMilestoneTask: CalendarTask = {
+      ...task,
+      milestoneId: milestone.id,
+      completed: true,
+      status: 'completed'
+    }
+    const markup = renderProjectsRightPanel(panelProject, [completedMilestoneTask])
+
+    expect(markup).toContain('data-testid="project-milestones-panel"')
+    expect(markup).toContain('data-testid="project-milestones-table"')
+    const milestoneTableStart = markup.indexOf('data-testid="project-milestones-table"')
+    const milestoneTableEnd = markup.indexOf('</table>', milestoneTableStart)
+    const milestoneTableMarkup = markup.slice(milestoneTableStart, milestoneTableEnd)
+    expect(milestoneTableMarkup).not.toContain('<thead')
+    expect(markup).toContain('data-testid="project-milestone-panel-row:milestone-1"')
+    const milestoneEndDateTestId = 'data-testid="project-milestone-end-date:milestone-1"'
+    const milestoneEndDateStart = markup.indexOf(milestoneEndDateTestId)
+    const milestoneEndDateMarkup = markup.slice(
+      markup.lastIndexOf('<span', milestoneEndDateStart),
+      markup.indexOf('>', milestoneEndDateStart)
+    )
+    expect(milestoneEndDateMarkup).toContain('bg-transparent')
+    expect(milestoneEndDateMarkup).toContain('px-0')
+    expect(milestoneEndDateMarkup).not.toContain('bg-surface-subtle')
+    expect(milestoneEndDateMarkup).not.toContain('border-border')
+    expect(markup).toContain('data-testid="project-milestone-panel-progress-ring:milestone-1"')
+    expect(markup).toContain('>100%</span>')
+    expect(markup.indexOf('data-testid="project-milestones-panel"')).toBeGreaterThan(
+      markup.indexOf('data-testid="project-properties-panel"')
+    )
+    expect(markup.indexOf('data-testid="project-milestones-panel"')).toBeLessThan(
+      markup.indexOf('data-testid="project-activity-panel"')
+    )
   })
 
   it('renders recognizable product marks for typed external resources', () => {
@@ -700,11 +862,11 @@ describe('Projects workspace list UI', () => {
 
     expect(markup).toContain('data-testid="project-resources-table"')
     expect(markup).toContain('aria-label="Resources"')
-    expect(markup).toContain('>Name</th>')
-    expect(markup).toContain('>Source</th>')
-    expect(markup).toContain('>Health</th>')
-    expect(markup).toContain('>Location</th>')
-    expect(markup).toContain('>Last checked</th>')
+    expect(markup).toContain('>Name</span>')
+    expect(markup).toContain('>Source</span>')
+    expect(markup).toContain('>Health</span>')
+    expect(markup).toContain('>Location</span>')
+    expect(markup).toContain('>Last checked</span>')
     expect(markup).not.toContain('>Actions</th>')
     expect(markup).toContain('border-separate border-spacing-y-1')
     expect(markup).toContain(`data-testid="project-resource-row:${docs.id}"`)

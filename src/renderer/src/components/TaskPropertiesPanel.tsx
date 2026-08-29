@@ -87,7 +87,7 @@ export function TaskPropertiesPanel({
   }
 
   return (
-    <WorkspacePanelStack data-testid="task-properties-panel" className="h-full">
+    <WorkspacePanelStack data-testid="task-properties-panel">
       <CollapsibleWorkspacePanelSection heading="Task properties" data-testid="task-properties">
         <div data-testid="task-property-rows">
           <WorkspacePropertyRow label="Status" testId="task-property-status">

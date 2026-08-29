@@ -47,4 +47,33 @@ describe('ResourceStore', () => {
     expect(snapshot.locators[0].deviceId).toBe('mac-test')
     expect(snapshot.relations[0].toId).toBe(resource.id)
   })
+
+  it('serializes concurrent resource mutations without losing updates', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-resources-'))
+    temporaryRoots.push(root)
+    const store = new ResourceStore(root)
+    const first = await store.upsert({
+      provider: 'filesystem',
+      canonicalUri: '/tmp/first.md',
+      title: 'First'
+    })
+    const second = await store.upsert({
+      provider: 'filesystem',
+      canonicalUri: '/tmp/second.md',
+      title: 'Second'
+    })
+
+    await Promise.all([
+      store.update(first.id, { state: 'available' }),
+      store.update(second.id, { state: 'stale' })
+    ])
+
+    const snapshot = await store.read()
+    expect(snapshot.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.id, state: 'available' }),
+        expect.objectContaining({ id: second.id, state: 'stale' })
+      ])
+    )
+  })
 })

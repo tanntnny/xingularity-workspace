@@ -6,6 +6,7 @@ import {
   notebookPathFromResource,
   notebookResourceUri,
   normalizeResourceInput,
+  normalizeResourceLabels,
   normalizeResourceRelation,
   resourceIdForCanonicalUri
 } from '../src/shared/resourceDomain'
@@ -19,6 +20,26 @@ describe('resource domain', () => {
     expect(second.id).toBe(first.id)
     expect(first.kind).toBe('local-file')
     expect(first.sourceOfTruth).toBe('external')
+  })
+
+  it('normalizes labels into bounded, searchable key-value pairs', () => {
+    const resource = normalizeResourceInput({
+      canonicalUri: 'https://example.com/brief',
+      labels: [
+        { key: ' Status ', value: ' active ' },
+        { key: 'status', value: 'active' },
+        { key: 'owner.name', value: 'Amy' },
+        { key: 'not valid', value: 'ignored' }
+      ],
+      projectIds: ['project-1', 'project-1']
+    })
+
+    expect(resource.labels).toEqual([
+      { key: 'status', value: 'active' },
+      { key: 'owner.name', value: 'Amy' }
+    ])
+    expect(resource.projectIds).toEqual(['project-1'])
+    expect(normalizeResourceLabels(null)).toEqual([])
   })
 
   it('infers web and Drive providers without exposing credentials', () => {

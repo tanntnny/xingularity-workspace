@@ -297,6 +297,7 @@ describe('ScheduleService action application', () => {
           type: 'task.create',
           title: 'Submit MCV assignment',
           date: '2026-04-06',
+          endTime: '23:59',
           tags: ['mcv'],
           automationSource: 'mcv',
           automationSourceKey: 'assignment:abc-123'
@@ -305,6 +306,7 @@ describe('ScheduleService action application', () => {
           type: 'task.update',
           title: 'Submit MCV assignment',
           endDate: '2026-04-08',
+          endTime: '22:30',
           status: 'completed',
           tags: ['mcv'],
           automationSource: 'mcv',
@@ -327,6 +329,7 @@ describe('ScheduleService action application', () => {
       status: 'completed',
       completed: true,
       endDate: '2026-04-08',
+      endTime: '22:30',
       tags: ['mcv'],
       automationSource: 'mcv',
       automationSourceKey: 'assignment:abc-123'
@@ -341,6 +344,59 @@ describe('ScheduleService action application', () => {
     expect(resolvedRepeatRun.status).toBe('success')
     expect(resolvedRepeatRun.actionErrors).toEqual([])
     expect(repeatedSettings.calendarTasks).toHaveLength(1)
+  })
+
+  it('backfills endTime on an existing automation task during task.create', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    await runtime.updateSettings({
+      calendarTasks: [
+        {
+          id: 'task-existing-mcv',
+          title: 'Submit MCV assignment',
+          tags: ['mcv'],
+          date: '2026-04-08',
+          completed: false,
+          status: 'pending',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          priority: 'medium',
+          taskType: 'assignment',
+          reminders: [],
+          automationSource: 'mcv',
+          automationSourceKey: 'assignment:abc-123'
+        }
+      ]
+    })
+
+    const service = new ScheduleService(runtime as never)
+    await service.handleVaultChange(tempRoot)
+
+    const job = await service.saveJob({
+      name: 'Backfill MCV end time',
+      enabled: true,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      outputMode: 'auto_apply',
+      permissions: ['createTasks', 'updateTasks'],
+      code: `beacon.emit({
+        type: 'task.create',
+        title: 'Submit MCV assignment',
+        endDate: '2026-04-08',
+        endTime: '23:59',
+        automationSource: 'mcv',
+        automationSourceKey: 'assignment:abc-123'
+      })`
+    })
+
+    const run = await service.runNow(job.id)
+    expect(run.status).toBe('review')
+    await service.applyActions(run.id)
+
+    const settings = await runtime.getSettings()
+    expect(settings.calendarTasks).toHaveLength(1)
+    expect(settings.calendarTasks[0]).toMatchObject({
+      id: 'task-existing-mcv',
+      endTime: '23:59'
+    })
   })
 
   it('runs Python jobs and applies their JSON action output', async () => {

@@ -46,6 +46,7 @@ describe('ProjectStore', () => {
         {
           id: 'milestone-1',
           title: 'First',
+          endDate: '2026-08-31',
           createdAt: '2026-08-20T08:00:00.000Z',
           updatedAt: '2026-08-20T08:00:00.000Z'
         },
@@ -70,6 +71,7 @@ describe('ProjectStore', () => {
       'milestone-1',
       'milestone-2'
     ])
+    expect(snapshot.projects[0]?.milestones?.[0]?.endDate).toBe('2026-08-31')
     expect(snapshot.projects[0]).not.toHaveProperty('pulseEvents')
   })
 })

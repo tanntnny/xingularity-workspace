@@ -43,6 +43,7 @@ describe('Project update feed', () => {
     expect(markup).toContain('data-testid="project-update-card:update-old"')
     expect(markup).toContain('data-testid="project-update-feed-item:update-new"')
     expect(markup).toContain('data-testid="project-update-feed-item:update-old"')
+    expect(markup).toContain('data-testid="project-update-menu:update-new"')
     expect(markup).not.toContain('divide-y')
   })
 })

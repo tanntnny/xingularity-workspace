@@ -1,6 +1,7 @@
 import { createElement, type ReactElement } from 'react'
 
 import type {
+  CalendarTask,
   CalendarTaskType,
   Project,
   ProjectState,
@@ -18,6 +19,7 @@ import {
 } from '../../../shared/types'
 import { RESOURCE_STATES } from '../../../shared/resourceDomain'
 import type { RunStatus } from '../../../shared/scheduleTypes'
+import { MilestoneCompletenessIcon } from '../components/MilestoneCompletenessIcon'
 import { TaskStatusIcon } from '../components/TaskStatusIcon'
 import {
   AlertCircle,
@@ -57,6 +59,7 @@ import { ProjectUpdateStatusIcon } from '../components/ProjectUpdateStatusIcon'
 import type { StatusChipItem } from '../components/ui/status-chip'
 import type { StatusChipOption } from '../components/ui/status-chip-select'
 import { getTagColorIndex } from '../utils/tagColor'
+import { getProjectMilestoneStatus, type ProjectMilestoneStatus } from './projectMilestones'
 import { TASK_STATUS_META, getTaskStatus } from './taskStatus'
 
 function icon(Icon: FilledIcon): ReactElement {
@@ -72,6 +75,46 @@ function token(domain: string, value: string): string {
 }
 
 export const NO_PROJECT_VALUE = '__none__'
+export const NO_MILESTONE_VALUE = '__none__'
+
+const MILESTONE_ICON_COLOR_TOKENS: Record<ProjectMilestoneStatus, string> = {
+  current: 'var(--milestone-current-icon)',
+  complete: 'var(--milestone-complete-icon)',
+  unreached: 'var(--milestone-unreached-icon)'
+}
+
+function milestoneIcon(status: ProjectMilestoneStatus): ReactElement {
+  return createElement(MilestoneCompletenessIcon, { status, size: 16 })
+}
+
+export function getMilestoneChipOptions(
+  project: Project | undefined,
+  tasks: CalendarTask[]
+): readonly StatusChipOption[] {
+  const milestones = project?.milestones ?? []
+
+  return [
+    {
+      value: NO_MILESTONE_VALUE,
+      label: 'No milestone',
+      icon: milestoneIcon('unreached'),
+      iconColorToken: MILESTONE_ICON_COLOR_TOKENS.unreached,
+      mutedTrigger: true
+    },
+    ...milestones.map((milestone) => {
+      const status = project
+        ? getProjectMilestoneStatus(milestone, milestones, tasks, project.id)
+        : 'unreached'
+
+      return {
+        value: milestone.id,
+        label: milestone.title,
+        icon: milestoneIcon(status),
+        iconColorToken: MILESTONE_ICON_COLOR_TOKENS[status]
+      }
+    })
+  ]
+}
 
 const NO_PROJECT_CHIP_OPTION: StatusChipOption = {
   value: NO_PROJECT_VALUE,

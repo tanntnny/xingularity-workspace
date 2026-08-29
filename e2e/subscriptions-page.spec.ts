@@ -15,7 +15,7 @@ declare global {
 }
 
 function getSubscriptionsPath(vaultRoot: string): string {
-  return path.join(vaultRoot, 'subscriptions.json')
+  return path.join(vaultRoot, 'subscriptions', 'data.json')
 }
 
 async function createFixtureVault(): Promise<string> {
@@ -64,24 +64,31 @@ test.describe('subscriptions page', () => {
       ;({ electronApp } = await launchWithFixture(vaultRoot))
       const page = await electronApp.firstWindow()
 
-      await page.getByRole('button', { name: 'Open command palette' }).click()
-      await page.getByPlaceholder('Search notes and projects...').fill('>subscriptions')
-      await expect(page.getByText('Go to Subscriptions')).toBeVisible()
-      await page.keyboard.press('Escape')
-
       await page.getByTestId('sidebar-page:subscriptions').click()
       await expect(page.getByTestId('subscriptions-page')).toBeVisible()
       await expect(
         page.getByRole('table').getByRole('heading', { name: 'No subscriptions yet' })
       ).toBeVisible()
 
-      await page.getByRole('button', { name: '+ New subscription' }).click()
+      await page.getByRole('button', { name: 'Add subscription' }).first().click()
       await page.getByLabel('Name').fill('ChatGPT Plus')
       await page.getByLabel('Provider').fill('OpenAI')
-      await page.getByRole('textbox', { name: 'Category' }).fill('AI Tools')
+      await page.getByRole('button', { name: 'Category', exact: true }).click()
+      await page
+        .getByRole('dialog', { name: 'Category options' })
+        .getByRole('option', { name: 'AI', exact: true })
+        .click()
       await page.getByLabel('Amount').fill('20')
       await page.getByLabel('Next renewal').fill('2026-04-18')
-      await page.getByLabel('Tags').fill('ai, assistant')
+      await page.getByTestId('subscription-tags-editor-trigger').click()
+      const tagsPopover = page.getByTestId('subscription-tags-editor-popover')
+      const tagsInput = tagsPopover.getByRole('combobox', {
+        name: 'Search or add subscription tags'
+      })
+      await tagsInput.fill('ai')
+      await tagsInput.press('Enter')
+      await tagsInput.fill('assistant')
+      await tagsInput.press('Enter')
       await page.getByRole('button', { name: 'Add subscription' }).last().click()
 
       await expect
@@ -91,24 +98,26 @@ test.describe('subscriptions page', () => {
             name: string
             currency: string
             normalizedMonthlyAmount: number
+            tags: string[]
           }>
         })
         .toEqual([
           expect.objectContaining({
             name: 'ChatGPT Plus',
             currency: 'THB',
-            normalizedMonthlyAmount: 20
+            normalizedMonthlyAmount: 20,
+            tags: ['ai', 'assistant']
           })
         ])
 
       await expect(page.getByRole('table').getByText('ChatGPT Plus')).toBeVisible()
-      await expect(page.getByRole('table').getByText('AI Tools')).toBeVisible()
+      await expect(page.getByRole('table').getByText('AI', { exact: true })).toBeVisible()
 
       await page.getByLabel('Edit ChatGPT Plus').click()
       await page.getByLabel('Billing cycle').click()
       const billingCyclePopover = page.getByRole('dialog', { name: 'Billing cycle options' })
       await billingCyclePopover
-        .getByRole('textbox', { name: 'Search billing cycles' })
+        .getByRole('combobox', { name: 'Search billing cycles' })
         .fill('yearly')
       await billingCyclePopover.getByText('yearly', { exact: true }).click()
       await page.getByLabel('Amount').fill('240')

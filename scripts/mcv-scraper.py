@@ -33,6 +33,12 @@ ASSIGNMENT_ID_PATTERN = re.compile(
 )
 ISO_DATE_PATTERN = re.compile(r"\b(20\d{2}-\d{1,2}-\d{1,2})\b")
 SLASH_DATE_PATTERN = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b")
+TEXT_DATE_PATTERN = re.compile(r"\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2})\b")
+TIME_PATTERN = re.compile(
+    r"(?<!\d)(?P<hour>\d{1,2})[:.](?P<minute>\d{2})"
+    r"\s*(?P<meridiem>a\.?m\.?|p\.?m\.?|น\.)?(?!\d)",
+    re.IGNORECASE,
+)
 LOGIN_PATTERN = re.compile(r"login|log in|sign in|เข้าสู่ระบบ", re.IGNORECASE)
 COMPLETED_PATTERN = re.compile(
     r"\b(?:completed|submitted|done)\b|เสร็จ|ส่งแล้ว|ส่งงานแล้ว", re.IGNORECASE
@@ -83,6 +89,7 @@ class Assignment:
     course: str
     url: str
     due_date: str | None
+    end_time: str | None
     completed: bool
 
 
@@ -253,24 +260,64 @@ def extract_remote_id(href: str, assignment_id: str | None = None) -> str | None
 
 
 def parse_due_date(text: str) -> str | None:
-    iso_match = ISO_DATE_PATTERN.search(text)
-    if iso_match:
-        try:
-            return date.fromisoformat(iso_match.group(1)).isoformat()
-        except ValueError:
-            pass
+    candidates: list[tuple[int, date]] = []
 
-    slash_match = SLASH_DATE_PATTERN.search(text)
-    if not slash_match:
-        return None
-
-    first, second, year = map(int, slash_match.groups())
-    for month, day in ((first, second), (second, first)):
+    for match in ISO_DATE_PATTERN.finditer(text):
         try:
-            return date(year, month, day).isoformat()
+            candidates.append((match.start(), date.fromisoformat(match.group(1))))
         except ValueError:
             continue
-    return None
+
+    for match in SLASH_DATE_PATTERN.finditer(text):
+        first, second, year = map(int, match.groups())
+        for month, day in ((first, second), (second, first)):
+            try:
+                candidates.append((match.start(), date(year, month, day)))
+                break
+            except ValueError:
+                continue
+
+    for match in TEXT_DATE_PATTERN.finditer(text):
+        day, month_name, year = match.groups()
+        for format_name in ("%d %b %Y", "%d %B %Y"):
+            try:
+                parsed = datetime.strptime(
+                    f"{day} {month_name} {year}",
+                    format_name,
+                ).date()
+                candidates.append((match.start(), parsed))
+                break
+            except ValueError:
+                continue
+
+    return max(candidates, key=lambda candidate: candidate[0])[1].isoformat() if candidates else None
+
+
+def parse_due_time(text: str) -> str | None:
+    """Extract the last visible clock time and normalize it to HH:mm."""
+    candidates: list[tuple[int, str]] = []
+
+    for match in TIME_PATTERN.finditer(text):
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute"))
+        meridiem = (match.group("meridiem") or "").lower().replace(".", "")
+
+        if minute > 59:
+            continue
+
+        if meridiem in {"am", "pm"}:
+            if hour < 1 or hour > 12:
+                continue
+            if meridiem == "am":
+                hour = 0 if hour == 12 else hour
+            else:
+                hour = 12 if hour == 12 else hour + 12
+        elif hour > 23:
+            continue
+
+        candidates.append((match.start(), f"{hour:02d}:{minute:02d}"))
+
+    return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else None
 
 
 def text_from(locator) -> str:
@@ -334,7 +381,19 @@ def assignment_rows(page):
         return rows
 
     links = page.locator('a[href*="assignment" i]').all()
-    return [link.locator("xpath=..").first for link in links]
+    assignment_cards = []
+    for link in links:
+        card = link.locator(
+            'xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " bg-light ")][1]'
+        ).first
+        try:
+            if card.count() > 0:
+                assignment_cards.append(card)
+                continue
+        except Exception:
+            pass
+        assignment_cards.append(link.locator("xpath=..").first)
+    return assignment_cards
 
 
 def scrape_assignments(page, include_archived: bool) -> list[Assignment]:
@@ -377,6 +436,7 @@ def scrape_assignments(page, include_archived: bool) -> list[Assignment]:
                 course=course,
                 url=href or MCV_ASSIGNMENTS_URL,
                 due_date=parse_due_date(text),
+                end_time=parse_due_time(text),
                 completed=row_is_completed(row, text),
             )
         )
@@ -401,6 +461,7 @@ def action_for(assignment: Assignment) -> tuple[dict, dict]:
         "description": description[:2_000],
         "tags": ["mcv"],
         "date": assignment.due_date,
+        "endTime": assignment.end_time,
         "priority": "medium",
         "taskType": "assignment",
         "status": status,
@@ -415,6 +476,7 @@ def action_for(assignment: Assignment) -> tuple[dict, dict]:
         "description": description[:2_000],
         "tags": ["mcv"],
         "date": assignment.due_date,
+        "endTime": assignment.end_time,
         "status": status,
         "automationSource": "mcv",
         "automationSourceKey": source_key,
@@ -424,6 +486,13 @@ def action_for(assignment: Assignment) -> tuple[dict, dict]:
 
 
 def emit_actions(assignments: list[Assignment]) -> None:
+    missing_times = [assignment.remote_id for assignment in assignments if assignment.end_time is None]
+    if missing_times:
+        raise RuntimeError(
+            "Refusing to emit actions without endTime for assignments: "
+            + ", ".join(missing_times)
+        )
+
     actions: list[dict] = []
     for assignment in assignments:
         create, update = action_for(assignment)

@@ -21,7 +21,7 @@ export function NoteShapeIcon({
   className,
   surface = 'none'
 }: NoteShapeIconProps): ReactElement {
-  const ProjectIcon = getProjectIconComponent(resolveProjectIconGlyph(icon))
+  const ProjectIcon = getProjectIconComponent(resolveProjectIconGlyph(icon), icon.variant)
   const glyphSize =
     surface === 'subtle'
       ? typeof size === 'number'

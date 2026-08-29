@@ -33,6 +33,7 @@ import {
   Project,
   ProjectIconStyle,
   ProjectMilestone,
+  UpdateProjectMilestoneInput,
   ProjectPropertiesPatch,
   ProjectState,
   ProjectUpdateStatus,
@@ -47,6 +48,7 @@ import {
   ResourceRelation,
   ResourceLocator,
   ResourceInput,
+  ResourceUpdateInput,
   GoogleDriveFileCandidate,
   WorkspaceFeatureFlags
 } from '../../shared/types'
@@ -97,13 +99,9 @@ import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from './components/ui/dropdown-menu'
+import { ActionMenuItems } from './components/ui/action-menu'
 import {
   DocumentWorkspace,
   DocumentWorkspaceMain,
@@ -118,8 +116,8 @@ import {
   WorkspaceFooter,
   WorkspaceTabManager,
   WorkspaceIconButton,
-  WorkspaceHeaderActions,
   WorkspaceHeaderActionGroup,
+  WorkspaceHeaderActions,
   WorkspaceHeaderSecondaryActionsRight,
   WorkspacePageContextMenu
 } from './components/ui/document-workspace'
@@ -139,12 +137,14 @@ import {
 } from './pages/ProjectsWorkspacePage'
 import { getProjectResourceRows } from './lib/projectResources'
 import { SearchPage } from './pages/SearchPage'
+import { ResourcesPage } from './pages/ResourcesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import {
   SchedulingContextMenuItems,
   SchedulingAddAutomationButton,
   SchedulingPage,
   SchedulingRightPanel,
+  SchedulingTopbarActions,
   SchedulingWorkspaceBreadcrumb,
   SchedulingWorkspaceProvider
 } from './pages/SchedulingPage'
@@ -165,8 +165,11 @@ import {
 } from './components/KnowledgeWorkspaceRightPanels'
 import { DesignAuditPage } from './pages/DesignAuditPage'
 import { TaskPage } from './pages/TaskPage'
+import { MilestonePage } from './pages/MilestonePage'
 import { NoVaultPage } from './pages/NoVaultPage'
 import { CapturePage } from './pages/CapturePage'
+import type { ProjectMenuActionHandlers } from './lib/projectMenu'
+import { getProjectMenuGroups } from './lib/projectMenu'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
 import { useVaultStore } from './state/store'
 import { usePersistentState } from './hooks/usePersistentState'
@@ -230,6 +233,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
+  resources: 'Resources',
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
   schedules: 'Scheduling',
@@ -257,9 +261,11 @@ type TaskOrigin =
       contentFilter: CalendarContentFilter
       tags: string[]
     }
-  | { source: 'projects'; projectId: string | null }
+  | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
-type TaskOriginRequest = { source: 'calendar' } | { source: 'projects'; projectId: string | null }
+type TaskOriginRequest =
+  | { source: 'calendar' }
+  | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
 const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
 
@@ -285,6 +291,21 @@ const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 300
 const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 220
 const WORKSPACE_RIGHT_PANEL_MAX_WIDTH = 480
 const WORKSPACE_RIGHT_PANEL_STORAGE_KEY = 'workspace_right_panel_width'
+const WORKSPACE_RIGHT_PANEL_PAGES: AppPage[] = [
+  'capture',
+  'knowledge',
+  'notes',
+  'projects',
+  'subscriptions',
+  'calendar',
+  'schedules',
+  'schedulingGuide',
+  'designAudit',
+  'settings'
+]
+
+type WorkspaceRightPanelWidthMap = Partial<Record<AppPage, number>>
+type StoredWorkspaceRightPanelWidth = number | WorkspaceRightPanelWidthMap
 
 function clampWorkspaceRightPanelWidth(width: number): number {
   if (!Number.isFinite(width)) {
@@ -297,13 +318,49 @@ function clampWorkspaceRightPanelWidth(width: number): number {
   )
 }
 
-function isStoredWorkspaceRightPanelWidth(value: unknown): value is number {
+function isValidWorkspaceRightPanelWidth(value: unknown): value is number {
   return (
     typeof value === 'number' &&
     Number.isFinite(value) &&
     value >= WORKSPACE_RIGHT_PANEL_MIN_WIDTH &&
     value <= WORKSPACE_RIGHT_PANEL_MAX_WIDTH
   )
+}
+
+function isStoredWorkspaceRightPanelWidth(value: unknown): value is StoredWorkspaceRightPanelWidth {
+  if (isValidWorkspaceRightPanelWidth(value)) {
+    return true
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return Object.entries(value).every(
+    ([page, width]) =>
+      WORKSPACE_RIGHT_PANEL_PAGES.includes(page as AppPage) &&
+      isValidWorkspaceRightPanelWidth(width)
+  )
+}
+
+function seedWorkspaceRightPanelWidths(width: number): WorkspaceRightPanelWidthMap {
+  const seededWidth = clampWorkspaceRightPanelWidth(width)
+
+  return WORKSPACE_RIGHT_PANEL_PAGES.reduce<WorkspaceRightPanelWidthMap>((widths, page) => {
+    widths[page] = seededWidth
+    return widths
+  }, {})
+}
+
+function getWorkspaceRightPanelWidth(
+  storedWidth: StoredWorkspaceRightPanelWidth,
+  page: AppPage
+): number {
+  if (typeof storedWidth === 'number') {
+    return clampWorkspaceRightPanelWidth(storedWidth)
+  }
+
+  return clampWorkspaceRightPanelWidth(storedWidth[page] ?? WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH)
 }
 
 type PageLeaveSaveDebug = {
@@ -416,6 +473,8 @@ function App(): ReactElement {
   const [taskDialogIsNewTask, setTaskDialogIsNewTask] = useState(false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [taskOrigin, setTaskOrigin] = useState<TaskOrigin | null>(null)
+  const [openMilestoneDialogId, setOpenMilestoneDialogId] = useState<string | null>(null)
+  const [milestoneDialogIsNew, setMilestoneDialogIsNew] = useState(false)
   const taskOriginRef = useRef<TaskOrigin | null>(null)
   const [isTaskDeleteDialogOpen, setIsTaskDeleteDialogOpen] = useState(false)
   const [schedulingReviewCount, setSchedulingReviewCount] = useState(0)
@@ -607,6 +666,7 @@ function App(): ReactElement {
   const [resourceAddRequestProjectId, setResourceAddRequestProjectId] = useState<string | null>(
     null
   )
+  const [resourceAddRequest, setResourceAddRequest] = useState(false)
   const [isRefreshingResourceHealth, setIsRefreshingResourceHealth] = useState(false)
   const handleResourceAddRequestHandled = useCallback((): void => {
     setResourceAddRequestProjectId(null)
@@ -616,6 +676,11 @@ function App(): ReactElement {
     if (activePage === 'projects' && projectView === 'resources' && selectedProjectId) return
     setResourceAddRequestProjectId(null)
   }, [activePage, projectView, selectedProjectId])
+
+  useEffect(() => {
+    if (activePage === 'resources') return
+    setResourceAddRequest(false)
+  }, [activePage])
 
   const projectMutationVersionRef = useRef(new Map<string, number>())
   const projectMilestoneMutationVersionRef = useRef(new Map<string, number>())
@@ -633,11 +698,22 @@ function App(): ReactElement {
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
-  const [rightPanelWidth, setRightPanelWidth] = usePersistentState<number>(
-    WORKSPACE_RIGHT_PANEL_STORAGE_KEY,
-    WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
-    { validate: isStoredWorkspaceRightPanelWidth }
-  )
+  const [storedRightPanelWidth, setStoredRightPanelWidth] =
+    usePersistentState<StoredWorkspaceRightPanelWidth>(
+      WORKSPACE_RIGHT_PANEL_STORAGE_KEY,
+      WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
+      { validate: isStoredWorkspaceRightPanelWidth }
+    )
+  const rightPanelWidth = getWorkspaceRightPanelWidth(storedRightPanelWidth, activePage)
+
+  useEffect(() => {
+    if (typeof storedRightPanelWidth !== 'number') {
+      return
+    }
+
+    setStoredRightPanelWidth(seedWorkspaceRightPanelWidths(storedRightPanelWidth))
+  }, [setStoredRightPanelWidth, storedRightPanelWidth])
+
   const commandPaletteSearchRequestRef = useRef(0)
   const noteActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const createNoteRef = useRef<(() => Promise<void>) | null>(null)
@@ -666,6 +742,7 @@ function App(): ReactElement {
   const hasRightPanel =
     activePage !== 'designAudit' &&
     activePage !== 'capture' &&
+    activePage !== 'resources' &&
     activePage !== 'schedulingGuide' &&
     activePage !== 'settings' &&
     !(activePage === 'schedules' && schedulingView === 'list') &&
@@ -1024,6 +1101,8 @@ function App(): ReactElement {
       const previousProjectId = selectedProjectIdRef.current
       selectedProjectIdRef.current = projectId
       setSelectedProjectId(projectId)
+      setOpenMilestoneDialogId(null)
+      setMilestoneDialogIsNew(false)
       const currentSettings = useVaultStore.getState().settings
       setSettings({ ...currentSettings, lastOpenedProjectId: projectId })
 
@@ -1072,6 +1151,8 @@ function App(): ReactElement {
     selectedProjectIdRef.current = null
     setSelectedProjectId(null)
     setProjectView('list')
+    setOpenMilestoneDialogId(null)
+    setMilestoneDialogIsNew(false)
   }, [])
 
   const noteIsOpen = Boolean(currentNotePath)
@@ -1315,6 +1396,29 @@ function App(): ReactElement {
         : null,
     [projects, taskOrigin]
   )
+  const milestoneDialogProject = useMemo(
+    () =>
+      selectedProjectId
+        ? (projects.find((project) => project.id === selectedProjectId) ?? null)
+        : null,
+    [projects, selectedProjectId]
+  )
+  const milestoneDialogMilestone = useMemo(
+    () =>
+      milestoneDialogProject && openMilestoneDialogId
+        ? ((milestoneDialogProject.milestones ?? []).find(
+            (milestone) => milestone.id === openMilestoneDialogId
+          ) ?? null)
+        : null,
+    [milestoneDialogProject, openMilestoneDialogId]
+  )
+
+  useEffect(() => {
+    if (openMilestoneDialogId && !milestoneDialogMilestone) {
+      setOpenMilestoneDialogId(null)
+      setMilestoneDialogIsNew(false)
+    }
+  }, [milestoneDialogMilestone, openMilestoneDialogId])
 
   useEffect(() => {
     taskOriginRef.current = taskOrigin
@@ -1355,6 +1459,21 @@ function App(): ReactElement {
     },
     []
   )
+
+  const openMilestoneDialog = useCallback(
+    (projectId: string, milestoneId: string, isNew = false): void => {
+      selectProject(projectId)
+      setProjectView('home')
+      setOpenMilestoneDialogId(milestoneId)
+      setMilestoneDialogIsNew(isNew)
+    },
+    [selectProject]
+  )
+
+  const closeMilestoneDialog = useCallback((): void => {
+    setOpenMilestoneDialogId(null)
+    setMilestoneDialogIsNew(false)
+  }, [])
 
   const openTaskPage = useCallback(
     (taskId: string, origin: TaskOriginRequest): void => {
@@ -2136,6 +2255,8 @@ function App(): ReactElement {
         taskOriginRef.current = null
         setOpenTaskId(null)
         setTaskOrigin(null)
+        setOpenMilestoneDialogId(null)
+        setMilestoneDialogIsNew(false)
         if (targetPage === currentPage) {
           return
         }
@@ -2239,6 +2360,8 @@ function App(): ReactElement {
         taskOriginRef.current = null
         setOpenTaskId(null)
         setTaskOrigin(null)
+        setOpenMilestoneDialogId(null)
+        setMilestoneDialogIsNew(false)
         await captureActiveWorkspaceSession()
         await stageCurrentNoteForBackgroundSave()
 
@@ -2838,39 +2961,39 @@ function App(): ReactElement {
     }
   }
 
-  const updateProjectMilestone = (projectId: string, milestoneId: string, title: string): void => {
-    if (!vaultApi) {
-      return
-    }
+  const updateProjectMilestone = async (
+    projectId: string,
+    milestoneId: string,
+    patch: Pick<UpdateProjectMilestoneInput, 'title' | 'endDate'>
+  ): Promise<void> => {
+    if (!vaultApi) return
 
-    const normalizedTitle = title.trim()
-    if (!normalizedTitle) {
-      return
-    }
+    const normalizedTitle = patch.title.trim()
+    if (!normalizedTitle) return
 
     const currentSettings = useVaultStore.getState().settings
     const previousProject = currentSettings.projects.find((project) => project.id === projectId)
     const previousMilestone = previousProject?.milestones?.find(
       (milestone) => milestone.id === milestoneId
     )
-    if (!previousProject || !previousMilestone) {
-      return
-    }
+    if (!previousProject || !previousMilestone) return
 
     const mutationKey = projectId
     const mutationVersion = (projectMilestoneMutationVersionRef.current.get(mutationKey) ?? 0) + 1
     projectMilestoneMutationVersionRef.current.set(mutationKey, mutationVersion)
+    const updatedAt = new Date().toISOString()
     const optimisticMilestone = {
       ...previousMilestone,
       title: normalizedTitle,
-      updatedAt: new Date().toISOString()
+      ...(patch.endDate !== undefined ? { endDate: patch.endDate ?? undefined } : {}),
+      updatedAt
     }
     const optimisticProject = {
       ...previousProject,
       milestones: (previousProject.milestones ?? []).map((milestone) =>
         milestone.id === milestoneId ? optimisticMilestone : milestone
       ),
-      updatedAt: optimisticMilestone.updatedAt
+      updatedAt
     }
     setSettings({
       ...currentSettings,
@@ -2879,26 +3002,38 @@ function App(): ReactElement {
       )
     })
 
-    void vaultApi.projects
-      .updateMilestone({ projectId, milestoneId, title: normalizedTitle })
-      .then(async () => {
-        if (projectMilestoneMutationVersionRef.current.get(mutationKey) !== mutationVersion) {
-          return
-        }
-        setSettings(await vaultApi.settings.get())
+    try {
+      await vaultApi.projects.updateMilestone({
+        projectId,
+        milestoneId,
+        title: normalizedTitle,
+        endDate: patch.endDate
       })
-      .catch((error: unknown) => {
-        if (projectMilestoneMutationVersionRef.current.get(mutationKey) === mutationVersion) {
-          const latestSettings = useVaultStore.getState().settings
-          setSettings({
-            ...latestSettings,
-            projects: latestSettings.projects.map((project) =>
-              project.id === projectId ? previousProject : project
-            )
-          })
-        }
-        pushToast('error', String(error))
-      })
+      if (projectMilestoneMutationVersionRef.current.get(mutationKey) !== mutationVersion) {
+        return
+      }
+      setSettings(await vaultApi.settings.get())
+    } catch (error: unknown) {
+      if (projectMilestoneMutationVersionRef.current.get(mutationKey) === mutationVersion) {
+        const latestSettings = useVaultStore.getState().settings
+        setSettings({
+          ...latestSettings,
+          projects: latestSettings.projects.map((project) =>
+            project.id === projectId ? previousProject : project
+          )
+        })
+      }
+      pushToast('error', String(error))
+    }
+  }
+
+  const createProjectMilestoneFromPanel = async (projectId: string): Promise<void> => {
+    try {
+      const milestone = await createProjectMilestone(projectId, 'New Milestone')
+      openMilestoneDialog(projectId, milestone.id, true)
+    } catch {
+      // The parent reports persistence errors.
+    }
   }
 
   const deleteProjectMilestone = async (projectId: string, milestoneId: string): Promise<void> => {
@@ -4210,7 +4345,7 @@ function App(): ReactElement {
       return
     }
 
-    if (currentNoteTags.includes(normalized)) {
+    if (currentNoteTagsRef.current.includes(normalized)) {
       pushToast('info', `Tag #${normalized} already exists`)
       return
     }
@@ -4236,7 +4371,7 @@ function App(): ReactElement {
     }
 
     await checkpointCurrentNote()
-    const next = currentNoteTags.filter((item) => item !== tag)
+    const next = currentNoteTagsRef.current.filter((item) => item !== tag)
     currentNoteTagsRef.current = next
     setCurrentNoteTagsState(next)
     const relPath = currentNotePathRef.current
@@ -5952,6 +6087,22 @@ function App(): ReactElement {
     [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
   )
 
+  const createResource = useCallback(
+    async (input: ResourceInput): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.add(input)
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Resource added')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
   const listGoogleDriveFiles = useCallback(async (): Promise<GoogleDriveFileCandidate[]> => {
     if (!vaultApi) throw new Error('No vault is open')
     return vaultApi.resources.drive.listFiles()
@@ -5996,13 +6147,45 @@ function App(): ReactElement {
   )
 
   const updateProjectResource = useCallback(
-    async (input: { resourceId: string; canonicalUri?: string; title?: string }): Promise<void> => {
+    async (input: ResourceUpdateInput): Promise<void> => {
       if (!vaultApi) return
       try {
         await vaultApi.resources.update(input)
         await refreshResourceSnapshot()
         setSettings(await vaultApi.settings.get())
         pushToast('success', 'Resource updated')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const setResourceProjectLinks = useCallback(
+    async (input: { resourceId: string; projectIds: string[] }): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.setProjectLinks(input)
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Resource project links updated')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [pushToast, refreshResourceSnapshot, setSettings, vaultApi]
+  )
+
+  const removeResource = useCallback(
+    async (resourceId: string): Promise<void> => {
+      if (!vaultApi) return
+      try {
+        await vaultApi.resources.remove(resourceId)
+        await refreshResourceSnapshot()
+        setSettings(await vaultApi.settings.get())
+        pushToast('success', 'Resource deleted')
       } catch (error) {
         pushToast('error', String(error))
         throw error
@@ -6138,6 +6321,49 @@ function App(): ReactElement {
     resourceSnapshot.relations,
     resourceSnapshot.resources,
     selectedProjectForHeader,
+    vaultApi
+  ])
+
+  const refreshAllResourceHealth = useCallback(async (): Promise<void> => {
+    if (!vaultApi || isRefreshingResourceHealth) return
+
+    const resourcesToRefresh = resourceSnapshot.resources
+    if (resourcesToRefresh.length === 0) {
+      pushToast('success', 'No resources to refresh')
+      return
+    }
+
+    setIsRefreshingResourceHealth(true)
+    try {
+      const results = await Promise.allSettled(
+        resourcesToRefresh.map((resource) => vaultApi.resources.refresh(resource.id))
+      )
+      await refreshResourceSnapshot()
+
+      const failedCount = results.filter((result) => result.status === 'rejected').length
+      if (failedCount > 0) {
+        pushToast(
+          'error',
+          `${failedCount} ${failedCount === 1 ? 'resource' : 'resources'} failed to refresh`
+        )
+      } else {
+        pushToast(
+          'success',
+          `Refreshed health for ${resourcesToRefresh.length} ${
+            resourcesToRefresh.length === 1 ? 'resource' : 'resources'
+          }`
+        )
+      }
+    } catch (error) {
+      pushToast('error', String(error))
+    } finally {
+      setIsRefreshingResourceHealth(false)
+    }
+  }, [
+    isRefreshingResourceHealth,
+    pushToast,
+    refreshResourceSnapshot,
+    resourceSnapshot.resources,
     vaultApi
   ])
 
@@ -6391,14 +6617,76 @@ function App(): ReactElement {
     </div>
   )
 
+  const calendarPeriodNoun =
+    calendarViewMode === 'week' ? 'week' : calendarViewMode === 'day' ? 'day' : 'month'
+  const calendarPeriodLabels = {
+    previous: `Previous ${calendarPeriodNoun}`,
+    current: `Current ${calendarPeriodNoun}`,
+    next: `Next ${calendarPeriodNoun}`
+  }
+  const calendarPeriodNavigation =
+    !activeTask && activePage === 'calendar' ? (
+      <WorkspaceHeaderActionGroup
+        size="sm"
+        aria-label="Calendar period navigation"
+        data-testid="calendar-period-navigation"
+      >
+        <WorkspaceIconButton
+          icon={<ChevronLeft size={16} aria-hidden="true" />}
+          aria-label={calendarPeriodLabels.previous}
+          title={calendarPeriodLabels.previous}
+          data-testid="calendar-period-previous"
+          onClick={goToPrevCalendarPeriod}
+        />
+        <WorkspaceIconButton
+          icon={<CalendarDays size={16} aria-hidden="true" />}
+          label={calendarPeriodLabels.current}
+          aria-label={calendarPeriodLabels.current}
+          title={calendarPeriodLabels.current}
+          data-testid="calendar-period-current"
+          onClick={goToToday}
+        />
+        <WorkspaceIconButton
+          icon={<ChevronRight size={16} aria-hidden="true" />}
+          aria-label={calendarPeriodLabels.next}
+          title={calendarPeriodLabels.next}
+          data-testid="calendar-period-next"
+          onClick={goToNextCalendarPeriod}
+        />
+      </WorkspaceHeaderActionGroup>
+    ) : null
+
+  const projectPageMenuHandlers: ProjectMenuActionHandlers | null = selectedProjectForHeader
+    ? {
+        isFavorite: favoriteProjectIds.includes(selectedProjectForHeader.id),
+        isExporting: isProjectContextExporting,
+        onOpen: (project) => openProject(project.id),
+        onToggleFavorite: (project) => toggleProjectFavoriteById(project.id),
+        onToggleArchive: (project) => toggleProjectArchiveById(project.id),
+        onExport: (project) => void exportProjectContext(project),
+        onDelete: (project) => void removeProjectById(project.id)
+      }
+    : null
+
   const pageContextMenuItems = activeTask ? (
-    <DropdownMenuItem
-      data-testid="workspace-page-context-menu-item:delete-task"
-      onSelect={() => setIsTaskDeleteDialogOpen(true)}
-    >
-      <Trash2 aria-hidden="true" />
-      Delete task
-    </DropdownMenuItem>
+    <ActionMenuItems
+      variant="dropdown"
+      groups={[
+        {
+          id: 'destructive',
+          items: [
+            {
+              id: 'delete-task',
+              label: 'Delete task',
+              icon: <Trash2 aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:delete-task',
+              destructive: true,
+              onSelect: () => setIsTaskDeleteDialogOpen(true)
+            }
+          ]
+        }
+      ]}
+    />
   ) : activePage === 'schedules' ? (
     <SchedulingContextMenuItems
       activeView={schedulingView}
@@ -6407,145 +6695,163 @@ function App(): ReactElement {
       }}
     />
   ) : noteIsOpen && activePage === 'notes' && !searchQuery.trim() ? (
-    <>
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger data-testid="workspace-page-context-menu-item:backlinks">
-          <Link2 aria-hidden="true" />
-          Backlinks
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="w-72">
-          {currentNoteBacklinks.length > 0 ? (
-            currentNoteBacklinks.map((note) => (
-              <DropdownMenuItem
-                key={note.relPath}
-                onSelect={() => {
-                  void openNote(note.relPath)
-                }}
-                className="flex flex-col items-start gap-0.5"
-              >
-                <span className="max-w-full truncate font-medium">
-                  {getNoteDisplayName(note.relPath)}
-                </span>
-                <span className="max-w-full truncate text-xs text-muted-foreground">
-                  {stripNoteExtension(note.relPath)}
-                </span>
-              </DropdownMenuItem>
-            ))
-          ) : (
-            <DropdownMenuItem disabled>No backlinks yet</DropdownMenuItem>
-          )}
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:copy-markdown"
-        onSelect={() => {
-          void copyCurrentNoteMarkdown()
-        }}
-      >
-        <Copy aria-hidden="true" />
-        Copy raw Markdown
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:export-note"
-        onSelect={() => setIsNoteExportDialogOpen(true)}
-      >
-        <Download aria-hidden="true" />
-        Export note
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:favorite-note"
-        onSelect={toggleCurrentNoteFavorite}
-      >
-        <Star className={currentNoteIsFavorite ? 'fill-current' : undefined} aria-hidden="true" />
-        {currentNoteIsFavorite ? 'Remove from favorites' : 'Add to favorites'}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:delete-note"
-        onSelect={() => {
-          void deleteCurrentNote()
-        }}
-      >
-        <Trash2 aria-hidden="true" />
-        Delete note
-      </DropdownMenuItem>
-    </>
+    <ActionMenuItems
+      variant="dropdown"
+      groups={[
+        {
+          id: 'navigation',
+          items: [
+            {
+              id: 'backlinks',
+              label: 'Backlinks',
+              icon: <Link2 aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:backlinks',
+              submenuClassName: 'w-72',
+              submenu:
+                currentNoteBacklinks.length > 0
+                  ? currentNoteBacklinks.map((note) => ({
+                      id: `backlink:${note.relPath}`,
+                      label: (
+                        <>
+                          <span className="max-w-full truncate font-medium">
+                            {getNoteDisplayName(note.relPath)}
+                          </span>
+                          <span className="max-w-full truncate text-xs text-muted-foreground">
+                            {stripNoteExtension(note.relPath)}
+                          </span>
+                        </>
+                      ),
+                      className: 'flex flex-col items-start gap-0.5',
+                      onSelect: () => {
+                        void openNote(note.relPath)
+                      }
+                    }))
+                  : [{ id: 'empty', label: 'No backlinks yet', disabled: true }]
+            }
+          ]
+        },
+        {
+          id: 'content',
+          items: [
+            {
+              id: 'copy-markdown',
+              label: 'Copy raw Markdown',
+              icon: <Copy aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:copy-markdown',
+              onSelect: () => {
+                void copyCurrentNoteMarkdown()
+              }
+            },
+            {
+              id: 'export-note',
+              label: 'Export note',
+              icon: <Download aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:export-note',
+              onSelect: () => setIsNoteExportDialogOpen(true)
+            }
+          ]
+        },
+        {
+          id: 'state',
+          items: [
+            {
+              id: 'favorite-note',
+              label: currentNoteIsFavorite ? 'Remove from favorites' : 'Add to favorites',
+              icon: (
+                <Star
+                  className={currentNoteIsFavorite ? 'fill-current' : undefined}
+                  aria-hidden="true"
+                />
+              ),
+              testId: 'workspace-page-context-menu-item:favorite-note',
+              onSelect: toggleCurrentNoteFavorite
+            }
+          ]
+        },
+        {
+          id: 'destructive',
+          items: [
+            {
+              id: 'delete-note',
+              label: 'Delete note',
+              icon: <Trash2 aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:delete-note',
+              destructive: true,
+              onSelect: () => {
+                void deleteCurrentNote()
+              }
+            }
+          ]
+        }
+      ]}
+    />
   ) : activePage === 'projects' ? (
-    <>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:new-project"
-        disabled={isCreatingProject}
-        onSelect={() => void createProjectFromToolbar()}
-      >
-        <Plus aria-hidden="true" />
-        New project
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:export-project-context"
-        disabled={!selectedProjectForHeader || isProjectContextExporting}
-        onSelect={() => {
-          if (selectedProjectForHeader) {
-            void exportProjectContext(selectedProjectForHeader)
-          }
-        }}
-      >
-        <Download aria-hidden="true" />
-        Export project context
-      </DropdownMenuItem>
-      {selectedProjectForHeader ? (
-        <DropdownMenuItem
-          data-testid="workspace-page-context-menu-item:delete-project"
-          onSelect={() => {
-            void removeProjectById(selectedProjectForHeader.id)
-          }}
-        >
-          <Trash2 aria-hidden="true" />
-          Delete project
-        </DropdownMenuItem>
-      ) : null}
-    </>
+    <ActionMenuItems
+      variant="dropdown"
+      groups={[
+        {
+          id: 'creation',
+          items: [
+            {
+              id: 'new-project',
+              label: 'New project',
+              icon: <Plus aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:new-project',
+              disabled: isCreatingProject,
+              onSelect: () => {
+                void createProjectFromToolbar()
+              }
+            }
+          ]
+        },
+        ...(selectedProjectForHeader && projectPageMenuHandlers
+          ? getProjectMenuGroups(selectedProjectForHeader, projectPageMenuHandlers, {
+              includeOpen: false
+            })
+          : [])
+      ]}
+    />
   ) : activePage === 'calendar' ? (
-    <>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:previous-period"
-        onSelect={goToPrevCalendarPeriod}
-      >
-        <ChevronLeft aria-hidden="true" />
-        {calendarViewMode === 'week'
-          ? 'Previous week'
-          : calendarViewMode === 'day'
-            ? 'Previous day'
-            : 'Previous month'}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:current-period"
-        onSelect={goToToday}
-      >
-        <CalendarDays aria-hidden="true" />
-        {calendarViewMode === 'week'
-          ? 'Current week'
-          : calendarViewMode === 'day'
-            ? 'Today'
-            : 'Current month'}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="workspace-page-context-menu-item:next-period"
-        onSelect={goToNextCalendarPeriod}
-      >
-        <ChevronRight aria-hidden="true" />
-        {calendarViewMode === 'week'
-          ? 'Next week'
-          : calendarViewMode === 'day'
-            ? 'Next day'
-            : 'Next month'}
-      </DropdownMenuItem>
-    </>
+    <ActionMenuItems
+      variant="dropdown"
+      groups={[
+        {
+          id: 'navigation',
+          items: [
+            {
+              id: 'previous-period',
+              label: calendarPeriodLabels.previous,
+              icon: <ChevronLeft aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:previous-period',
+              onSelect: goToPrevCalendarPeriod
+            },
+            {
+              id: 'current-period',
+              label: calendarPeriodLabels.current,
+              icon: <CalendarDays aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:current-period',
+              onSelect: goToToday
+            },
+            {
+              id: 'next-period',
+              label: calendarPeriodLabels.next,
+              icon: <ChevronRight aria-hidden="true" />,
+              testId: 'workspace-page-context-menu-item:next-period',
+              onSelect: goToNextCalendarPeriod
+            }
+          ]
+        }
+      ]}
+    />
   ) : null
 
   const pageContextMenu = pageContextMenuItems ? (
     <WorkspacePageContextMenu>{pageContextMenuItems}</WorkspacePageContextMenu>
   ) : null
+  const calendarCurrentPeriodLabel =
+    !activeTask && activePage === 'calendar'
+      ? formatCalendarTabPeriodTitle(selectedCalendarDate, calendarViewMode)
+      : null
 
   return (
     <div className="flex h-screen">
@@ -6858,7 +7164,19 @@ function App(): ReactElement {
                         </div>
                       }
                       primaryRightActions={
-                        !activeTask && activePage === 'projects' ? (
+                        !activeTask && activePage === 'resources' ? (
+                          <WorkspaceIconButton
+                            icon={<Plus size={18} aria-hidden="true" />}
+                            label="Add resource"
+                            variant="accent"
+                            data-testid="add-resource-button"
+                            aria-label="Add resource"
+                            title="Add resource"
+                            borderless
+                            disabled={!vaultApi}
+                            onClick={() => setResourceAddRequest(true)}
+                          />
+                        ) : !activeTask && activePage === 'projects' ? (
                           projectView === 'resources' && selectedProjectForHeader ? (
                             <WorkspaceIconButton
                               icon={<Plus size={18} aria-hidden="true" />}
@@ -6899,6 +7217,14 @@ function App(): ReactElement {
                               onClick={() => void createProjectFromToolbar()}
                             />
                           ) : null
+                        ) : !activeTask && activePage === 'schedules' ? (
+                          schedulingView === 'list' ? (
+                            <SchedulingAddAutomationButton
+                              onCreate={() => setSchedulingView('automation')}
+                            />
+                          ) : (
+                            <SchedulingTopbarActions activeView={schedulingView} />
+                          )
                         ) : null
                       }
                       secondaryActions={
@@ -6941,6 +7267,26 @@ function App(): ReactElement {
                               </WorkspaceHeaderSecondaryActionsRight>
                             ) : null}
                           </>
+                        ) : activePage === 'resources' ? (
+                          <WorkspaceHeaderSecondaryActionsRight>
+                            <WorkspaceIconButton
+                              icon={
+                                <RefreshCw
+                                  size={18}
+                                  aria-hidden="true"
+                                  className={
+                                    isRefreshingResourceHealth ? 'animate-spin' : undefined
+                                  }
+                                />
+                              }
+                              aria-label="Refresh all resource health"
+                              title="Refresh all resource health"
+                              data-testid="refresh-all-resource-health-button"
+                              bordered
+                              disabled={!vaultApi || isRefreshingResourceHealth}
+                              onClick={() => void refreshAllResourceHealth()}
+                            />
+                          </WorkspaceHeaderSecondaryActionsRight>
                         ) : activePage === 'schedules' ? (
                           <>
                             <div className="flex min-w-max items-center gap-1.5">
@@ -6955,39 +7301,59 @@ function App(): ReactElement {
                                 <SchedulingPythonTrustPopover vaultRoot={vault?.rootPath ?? null} />
                               ) : null}
                             </div>
-                            <WorkspaceHeaderSecondaryActionsRight>
-                              <WorkspaceHeaderActionGroup>
-                                <SchedulingAddAutomationButton
-                                  onCreate={() => setSchedulingView('automation')}
-                                />
-                              </WorkspaceHeaderActionGroup>
-                            </WorkspaceHeaderSecondaryActionsRight>
                           </>
                         ) : activePage === 'calendar' ? (
-                          <div className="flex min-w-max items-center gap-1.5">
-                            {calendarViewToggle}
-                            <CalendarTaskFilter
-                              tagOptions={calendarTaskTagOptions}
-                              contentFilterOptions={calendarContentFilterOptions}
-                              contentFilter={calendarContentFilter}
-                              onContentFilterChange={setCalendarContentFilter}
-                              selectedTags={activeCalendarTaskTags}
-                              onSelectedTagsChange={setCalendarTaskTagSettings}
-                            />
-                          </div>
+                          <>
+                            <div className="flex min-w-max items-center gap-1.5">
+                              {calendarViewToggle}
+                              <CalendarTaskFilter
+                                tagOptions={calendarTaskTagOptions}
+                                contentFilterOptions={calendarContentFilterOptions}
+                                contentFilter={calendarContentFilter}
+                                onContentFilterChange={setCalendarContentFilter}
+                                selectedTags={activeCalendarTaskTags}
+                                onSelectedTagsChange={setCalendarTaskTagSettings}
+                              />
+                            </div>
+                            <WorkspaceHeaderSecondaryActionsRight>
+                              {calendarPeriodNavigation}
+                            </WorkspaceHeaderSecondaryActionsRight>
+                          </>
                         ) : null
                       }
                       pageContextMenu={pageContextMenu}
+                      pageContextMenuTrailing={
+                        calendarCurrentPeriodLabel ? (
+                          <span
+                            className="truncate text-sm font-semibold text-foreground"
+                            data-testid="calendar-current-period"
+                            title={calendarCurrentPeriodLabel}
+                          >
+                            {calendarCurrentPeriodLabel}
+                          </span>
+                        ) : null
+                      }
                     />
 
                     <DocumentWorkspaceMain className={paletteSurfaceClass}>
                       <WorkspaceResizableLayout
+                        key={`${activePage}:${hasRightPanel ? 'panel' : 'no-panel'}`}
                         hasPanel={hasRightPanel}
                         panelWidth={rightPanelWidth}
                         panelCollapsed={isRightPanelCollapsed}
                         panelHidden={isFocusMode}
                         onPanelWidthChange={(width) => {
-                          setRightPanelWidth(clampWorkspaceRightPanelWidth(width))
+                          setStoredRightPanelWidth((current) => {
+                            const pageWidths =
+                              typeof current === 'number'
+                                ? seedWorkspaceRightPanelWidths(current)
+                                : current
+
+                            return {
+                              ...pageWidths,
+                              [activePage]: clampWorkspaceRightPanelWidth(width)
+                            }
+                          })
                         }}
                         onPanelCollapsedChange={setIsRightPanelCollapsed}
                       >
@@ -7145,6 +7511,27 @@ function App(): ReactElement {
                                   }
                                 }}
                               />
+                            ) : activePage === 'resources' ? (
+                              <ResourcesPage
+                                projects={projects}
+                                noteTree={noteTree}
+                                resources={resourceSnapshot.resources}
+                                relations={resourceSnapshot.relations}
+                                addResourceRequest={resourceAddRequest}
+                                onAddResourceRequestHandled={() => setResourceAddRequest(false)}
+                                onCreateResource={createResource}
+                                onUpdateResource={updateProjectResource}
+                                onSetResourceProjectLinks={setResourceProjectLinks}
+                                onRemoveResource={removeResource}
+                                onOpenResource={openResource}
+                                onOpenNotebookResource={(resourceId) => {
+                                  void openNotebookResource(resourceId)
+                                }}
+                                onLocateResource={locateResource}
+                                onRevealResource={revealResource}
+                                onRefreshResource={refreshResource}
+                                onPreviewResource={previewResource}
+                              />
                             ) : activePage === 'projects' ? (
                               <ProjectsWorkspacePage
                                 projects={projects}
@@ -7156,6 +7543,13 @@ function App(): ReactElement {
                                 onFilterModeChange={setProjectFilterMode}
                                 onUpdateProjectProperties={saveProjectProperties}
                                 onOpenProject={openProject}
+                                onToggleProjectFavorite={toggleProjectFavoriteById}
+                                onToggleProjectArchive={toggleProjectArchiveById}
+                                onExportProjectContext={(project) =>
+                                  void exportProjectContext(project)
+                                }
+                                onDeleteProject={(projectId) => void removeProjectById(projectId)}
+                                isProjectContextExporting={isProjectContextExporting}
                                 onOpenProjectUpdates={openProjectPulse}
                                 onCreateProjectUpdate={createProjectUpdate}
                                 onUpdateProjectUpdate={updateProjectUpdate}
@@ -7192,6 +7586,7 @@ function App(): ReactElement {
                                 onUpdateMilestone={updateProjectMilestone}
                                 onDeleteMilestone={deleteProjectMilestone}
                                 onReorderMilestones={reorderProjectMilestones}
+                                onOpenMilestoneDialog={openMilestoneDialog}
                                 onUpdateProject={(projectId, draft) =>
                                   saveProject(projectId, {
                                     name: draft.name,
@@ -7272,6 +7667,10 @@ function App(): ReactElement {
                                         onOpenTask={(taskId) => {
                                           openTaskDialog(taskId, { source: 'calendar' })
                                         }}
+                                        onDeleteTask={(taskId) => {
+                                          void removeCalendarTask(taskId)
+                                        }}
+                                        onUpdateTask={updateProjectTask}
                                       />
                                     ) : (
                                       <CalendarMonthView
@@ -7471,34 +7870,53 @@ function App(): ReactElement {
                                             />
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent align="start">
-                                            <DropdownMenuItem
-                                              onClick={() => {
-                                                void createNoteFromTree()
-                                              }}
-                                            >
-                                              New note
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              onClick={() => {
-                                                void createExcalidrawFromTree()
-                                              }}
-                                            >
-                                              New drawing
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              onClick={() => {
-                                                void createFolderFromTree()
-                                              }}
-                                            >
-                                              New folder
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                              onClick={() => {
-                                                void importNotes()
-                                              }}
-                                            >
-                                              Import markdown
-                                            </DropdownMenuItem>
+                                            <ActionMenuItems
+                                              variant="dropdown"
+                                              groups={[
+                                                {
+                                                  id: 'creation',
+                                                  items: [
+                                                    {
+                                                      id: 'new-note',
+                                                      label: 'New note',
+                                                      icon: <FileText aria-hidden="true" />,
+                                                      onSelect: () => {
+                                                        void createNoteFromTree()
+                                                      }
+                                                    },
+                                                    {
+                                                      id: 'new-drawing',
+                                                      label: 'New drawing',
+                                                      icon: <PenTool aria-hidden="true" />,
+                                                      onSelect: () => {
+                                                        void createExcalidrawFromTree()
+                                                      }
+                                                    },
+                                                    {
+                                                      id: 'new-folder',
+                                                      label: 'New folder',
+                                                      icon: <Folder aria-hidden="true" />,
+                                                      onSelect: () => {
+                                                        void createFolderFromTree()
+                                                      }
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  id: 'import',
+                                                  items: [
+                                                    {
+                                                      id: 'import-markdown',
+                                                      label: 'Import markdown',
+                                                      icon: <Download aria-hidden="true" />,
+                                                      onSelect: () => {
+                                                        void importNotes()
+                                                      }
+                                                    }
+                                                  ]
+                                                }
+                                              ]}
+                                            />
                                           </DropdownMenuContent>
                                         </DropdownMenu>
                                       )}
@@ -7512,10 +7930,10 @@ function App(): ReactElement {
                                 data-testid="workspace-right-panel-content"
                               >
                                 {!hasVault ? (
-                                  <WorkspacePanelStack className="h-full">
+                                  <WorkspacePanelStack>
                                     <WorkspacePanelSection>
                                       <EmptyState
-                                        className="m-0 h-full border-0 bg-transparent p-3"
+                                        className="m-0 border-0 bg-transparent p-3"
                                         icon={LayoutGrid}
                                         title="Context"
                                         description="Select a vault to see workspace properties and secondary tools."
@@ -7534,8 +7952,7 @@ function App(): ReactElement {
                                     <CollapsibleWorkspacePanelSection
                                       data-testid="note-file-tree-panel"
                                       heading="Explorer"
-                                      className="min-h-0 shrink-0 overflow-hidden p-0 data-[state=open]:min-h-[12rem] data-[state=open]:flex-1"
-                                      contentClassName="min-h-0 flex-1 overflow-hidden"
+                                      className="overflow-hidden p-0"
                                     >
                                       <NotesTreeView
                                         tree={visibleNoteTree}
@@ -7610,11 +8027,14 @@ function App(): ReactElement {
                                 ) : activePage === 'projects' ? (
                                   <ProjectsWorkspaceRightPanel
                                     projects={projects}
+                                    tasks={calendarTasks}
                                     favoriteProjectIds={favoriteProjectIds}
                                     selectedProjectId={selectedProjectId}
                                     onToggleProjectFavorite={toggleProjectFavoriteById}
                                     onToggleProjectArchive={toggleProjectArchiveById}
                                     onUpdateProjectProperties={saveProjectProperties}
+                                    onCreateMilestone={createProjectMilestoneFromPanel}
+                                    onOpenMilestone={openMilestoneDialog}
                                   />
                                 ) : activePage === 'calendar' ? (
                                   <CalendarTaskPanel
@@ -7664,10 +8084,10 @@ function App(): ReactElement {
                                 ) : activePage === 'schedules' ? (
                                   <SchedulingRightPanel activeView={schedulingView} />
                                 ) : (
-                                  <WorkspacePanelStack className="h-full">
+                                  <WorkspacePanelStack>
                                     <WorkspacePanelSection>
                                       <EmptyState
-                                        className="m-0 h-full border-0 bg-transparent p-3"
+                                        className="m-0 border-0 bg-transparent p-3"
                                         icon={LayoutGrid}
                                         title="Context"
                                         description="Properties, activity, and secondary tools for this workspace will appear here."
@@ -7715,6 +8135,7 @@ function App(): ReactElement {
           task={taskDialogTask}
           isNewTask={taskDialogIsNewTask}
           projects={projects}
+          tasks={calendarTasks}
           availableTags={calendarTaskTagValues}
           vimModeEnabled={editorVimModeEnabled}
           vimKeyMappings={editorVimKeyMappings}
@@ -7737,6 +8158,54 @@ function App(): ReactElement {
 
             openTaskPage(taskDialogTask.id, taskDialogOrigin)
           }}
+        />
+      ) : null}
+      {milestoneDialogProject && milestoneDialogMilestone ? (
+        <MilestonePage
+          key={`${milestoneDialogMilestone.id}:${milestoneDialogIsNew ? 'new' : 'existing'}`}
+          project={milestoneDialogProject}
+          milestone={milestoneDialogMilestone}
+          tasks={calendarTasks}
+          isNewMilestone={milestoneDialogIsNew}
+          onClose={closeMilestoneDialog}
+          onUpdateMilestone={(milestoneId, patch) =>
+            updateProjectMilestone(milestoneDialogProject.id, milestoneId, patch)
+          }
+          onDeleteMilestone={() => {
+            const childTaskCount = calendarTasks.filter(
+              (task) =>
+                task.projectId === milestoneDialogProject.id &&
+                task.milestoneId === milestoneDialogMilestone.id
+            ).length
+            if (
+              childTaskCount > 0 &&
+              !window.confirm(
+                `Delete milestone "${milestoneDialogMilestone.title}" and move its ${childTaskCount} ${childTaskCount === 1 ? 'task' : 'tasks'} to the project?`
+              )
+            ) {
+              return false
+            }
+
+            void deleteProjectMilestone(milestoneDialogProject.id, milestoneDialogMilestone.id)
+            return true
+          }}
+          onCreateTask={(milestoneId) =>
+            createProjectTask(milestoneDialogProject.id, 'New Task', milestoneId)
+          }
+          onOpenTask={(taskId, options) => {
+            closeMilestoneDialog()
+            openTaskDialog(
+              taskId,
+              {
+                source: 'projects',
+                projectId: milestoneDialogProject.id,
+                milestoneId: milestoneDialogMilestone.id
+              },
+              options
+            )
+          }}
+          onUpdateTask={updateProjectTask}
+          onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
         />
       ) : null}
       <AlertDialog open={isTaskDeleteDialogOpen} onOpenChange={setIsTaskDeleteDialogOpen}>

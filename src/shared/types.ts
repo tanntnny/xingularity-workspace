@@ -123,7 +123,7 @@ export interface ProjectIconStyle {
   glyph?: ProjectIconSymbol
   // Compatibility alias for legacy stored shape icons.
   shape?: ProjectIconShape
-  variant: 'filled'
+  variant: ProjectIconVariant
   color: string
 }
 
@@ -243,6 +243,11 @@ export type ResourceFreshness = 'live' | 'periodic' | 'manual' | 'unknown'
 
 export type ResourceSourceOfTruth = 'xingularity' | 'external'
 
+export interface ResourceLabel {
+  key: string
+  value: string
+}
+
 export interface ResourceRef {
   id: string
   type: ResourceType
@@ -263,6 +268,7 @@ export interface ResourceRef {
   lastIndexedAt?: string
   sourceModifiedAt?: string
   freshness?: ResourceFreshness
+  labels?: ResourceLabel[]
   metadata?: Record<string, string | number | boolean | null>
 }
 
@@ -327,8 +333,22 @@ export interface ResourceInput {
   mimeType?: string
   sourceOfTruth?: ResourceSourceOfTruth
   access?: ResourceAccess
+  labels?: ResourceLabel[]
   metadata?: Record<string, string | number | boolean | null>
   projectId?: string
+  projectIds?: string[]
+}
+
+export interface ResourceUpdateInput {
+  resourceId: string
+  canonicalUri?: string
+  title?: string
+  labels?: ResourceLabel[]
+}
+
+export interface ResourceProjectLinksInput {
+  resourceId: string
+  projectIds: string[]
 }
 
 export interface ResourceHealth {
@@ -692,6 +712,7 @@ export type ProjectState = 'active' | 'archived'
 export interface ProjectMilestone {
   id: string
   title: string
+  endDate?: string
   createdAt: string
   updatedAt: string
 }
@@ -798,12 +819,14 @@ export interface DeleteProjectResult {
 export interface CreateProjectMilestoneInput {
   projectId: string
   title: string
+  endDate?: string
 }
 
 export interface UpdateProjectMilestoneInput {
   projectId: string
   milestoneId: string
   title: string
+  endDate?: string | null
 }
 
 export interface ReorderProjectMilestonesInput {
@@ -1257,6 +1280,11 @@ export interface SubscriptionRecord {
   attachments?: string[]
 }
 
+export interface SubscriptionListResult {
+  records: SubscriptionRecord[]
+  migrationWarnings: string[]
+}
+
 export interface CreateSubscriptionInput {
   name: string
   provider?: string
@@ -1334,7 +1362,7 @@ export interface SubscriptionAnalytics {
 }
 
 export interface RendererSubscriptionsApi {
-  list: () => Promise<SubscriptionRecord[]>
+  list: () => Promise<SubscriptionListResult>
   get: (id: string) => Promise<Maybe<SubscriptionRecord>>
   create: (input: CreateSubscriptionInput) => Promise<SubscriptionRecord>
   update: (input: UpdateSubscriptionInput) => Promise<SubscriptionRecord>
@@ -1773,13 +1801,11 @@ export interface RendererVaultApi {
       locators: ResourceLocator[]
     }>
     add: (input: ResourceInput) => Promise<ResourceRef>
-    update: (input: {
-      resourceId: string
-      canonicalUri?: string
-      title?: string
-    }) => Promise<ResourceRef>
+    update: (input: ResourceUpdateInput) => Promise<ResourceRef>
+    setProjectLinks: (input: ResourceProjectLinksInput) => Promise<ResourceRef>
     setProjectNotebook: (input: { projectId: string; notebookPath: string }) => Promise<ResourceRef>
     detachFromProject: (input: { projectId: string; resourceId: string }) => Promise<void>
+    remove: (resourceId: string) => Promise<void>
     refresh: (resourceId: string) => Promise<ResourceHealth>
     locate: (resourceId: string, nextPath: string) => Promise<ResourceRef>
     preview: (resourceId: string, allowContent?: boolean) => Promise<ResourcePreview>

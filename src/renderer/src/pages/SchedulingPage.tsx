@@ -23,11 +23,11 @@ import {
   Play,
   Plus,
   Save,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
+  ActionMenuItems,
   WorkspaceIconButton,
   WorkspacePanelStack,
-  Trash2
+  Trash2,
+  type ActionMenuGroup
 } from '../components/ui'
 import type { RendererVaultApi } from '../../../shared/types'
 import type {
@@ -50,7 +50,7 @@ import { SchedulingBreadcrumb as SchedulingBreadcrumbView } from '../components/
 import type { ScheduleDraft, SchedulingView } from '../components/scheduling/types'
 import { WorkspacePage } from '../components/workspace'
 
-type ToastKind = 'info' | 'error' | 'success'
+type ToastKind = 'info' | 'error' | 'success' | 'warning'
 
 export interface SchedulingWorkspaceProviderProps {
   enabled: boolean
@@ -85,8 +85,10 @@ interface SchedulingWorkspaceValue {
   togglePermission: (permission: SchedulePermission, enabled: boolean) => void
   handleSave: () => void
   handleRun: () => void
+  handleRunJob: (jobId: string) => void
   handleSelectJob: (jobId: string) => void
   handleCreate: () => void
+  requestDeleteJob: (jobId: string) => void
   handleDelete: () => Promise<void>
   handleRunAction: (runId: string, action: 'apply' | 'dismiss') => Promise<void>
   handleTrustConfirm: () => void
@@ -177,6 +179,7 @@ export function SchedulingWorkspaceProvider({
   const [trustAcknowledged, setTrustAcknowledged] = useState(false)
   const [trustDialogOpen, setTrustDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [pendingDeleteJobId, setPendingDeleteJobId] = useState<string | null>(null)
   const trustActionRef = useRef<(() => Promise<void>) | null>(null)
   const isNewDraftRef = useRef(false)
   const jobsRef = useRef(jobs)
@@ -441,7 +444,7 @@ export function SchedulingWorkspaceProvider({
         if (run.status === 'error') {
           pushToast('error', run.errorMessage ?? 'Automation failed.')
         } else if (run.status === 'review') {
-          pushToast('info', 'Automation finished with actions ready for review.')
+          pushToast('warning', 'Automation finished with actions ready for review.')
         } else {
           pushToast('success', 'Automation finished.')
         }
@@ -455,8 +458,8 @@ export function SchedulingWorkspaceProvider({
   )
 
   const runWithTrustCheck = useCallback(
-    (action: () => Promise<void>): void => {
-      if (draft.runtime !== 'python' || trustAcknowledged) {
+    (action: () => Promise<void>, runtime = draft.runtime): void => {
+      if (runtime !== 'python' || trustAcknowledged) {
         void action()
         return
       }
@@ -510,6 +513,18 @@ export function SchedulingWorkspaceProvider({
     runWithTrustCheck(action)
   }, [draft.id, isDirty, runSavedJob, runWithTrustCheck, saveDraft])
 
+  const handleRunJob = useCallback(
+    (jobId: string): void => {
+      const job = jobsRef.current.find((candidate) => candidate.id === jobId)
+      if (!job) {
+        return
+      }
+
+      runWithTrustCheck(() => runSavedJob(jobId), job.runtime)
+    },
+    [runSavedJob, runWithTrustCheck]
+  )
+
   const handleSelectJob = useCallback((jobId: string): void => {
     isNewDraftRef.current = false
     setSelectedJobId(jobId)
@@ -525,27 +540,36 @@ export function SchedulingWorkspaceProvider({
     setSelectedRunId(null)
   }, [])
 
+  const requestDeleteJob = useCallback((jobId: string): void => {
+    setPendingDeleteJobId(jobId)
+    setDeleteDialogOpen(true)
+  }, [])
+
   const handleDelete = useCallback(async (): Promise<void> => {
-    if (!vaultApi || !draft.id) {
+    const jobId = pendingDeleteJobId ?? draft.id
+    if (!vaultApi || !jobId) {
       return
     }
 
     try {
-      await vaultApi.schedules.deleteJob(draft.id)
-      isNewDraftRef.current = true
-      setSelectedJobId(null)
-      setDraft(createNewDraft())
-      setIsNewDraft(true)
-      setIsDirty(false)
-      setRuns([])
-      setSelectedRunId(null)
+      await vaultApi.schedules.deleteJob(jobId)
+      if (jobId === selectedJobId) {
+        isNewDraftRef.current = true
+        setSelectedJobId(null)
+        setDraft(createNewDraft())
+        setIsNewDraft(true)
+        setIsDirty(false)
+        setRuns([])
+        setSelectedRunId(null)
+      }
+      setPendingDeleteJobId(null)
       setDeleteDialogOpen(false)
       await loadJobs()
       pushToast('success', 'Automation deleted.')
     } catch (error) {
       pushToast('error', `Could not delete automation: ${String(error)}`)
     }
-  }, [draft.id, loadJobs, pushToast, vaultApi])
+  }, [draft.id, loadJobs, pendingDeleteJobId, pushToast, selectedJobId, vaultApi])
 
   const handleRunAction = useCallback(
     async (runId: string, action: 'apply' | 'dismiss'): Promise<void> => {
@@ -611,8 +635,10 @@ export function SchedulingWorkspaceProvider({
     togglePermission,
     handleSave,
     handleRun,
+    handleRunJob,
     handleSelectJob,
     handleCreate,
+    requestDeleteJob,
     handleDelete,
     handleRunAction,
     handleTrustConfirm,
@@ -674,6 +700,9 @@ export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps
     isLoading,
     handleSelectJob,
     handleCreate,
+    handleRunJob,
+    requestDeleteJob,
+    isRunning,
     handleRunAction,
     handleTrustConfirm,
     handleDelete
@@ -740,6 +769,9 @@ export function SchedulingPage({ activeView, onViewChange }: SchedulingPageProps
                 className="h-full"
                 onSelect={openAutomation}
                 onCreate={createAutomation}
+                onRunJob={handleRunJob}
+                onRequestDeleteJob={requestDeleteJob}
+                isRunning={isRunning}
               />
             </div>
           ) : activeView === 'automation' ? (
@@ -806,49 +838,115 @@ export function SchedulingContextMenuItems({
   onOpenApiGuide,
   activeView = 'automation'
 }: SchedulingContextMenuItemsProps): ReactElement {
-  const { isNewDraft, isDirty, isSaving, isRunning, handleSave, handleRun, setDeleteDialogOpen } =
-    useSchedulingWorkspace()
+  const {
+    draft,
+    isNewDraft,
+    isDirty,
+    isSaving,
+    isRunning,
+    handleSave,
+    handleRun,
+    requestDeleteJob
+  } = useSchedulingWorkspace()
   const isDetailView = activeView !== 'list'
+  const groups: ActionMenuGroup[] = [
+    {
+      id: 'primary',
+      items: [
+        {
+          id: 'api-guide',
+          label: 'API guide',
+          icon: <BookOpen aria-hidden="true" />,
+          testId: 'scheduling-context-menu-item:api-guide',
+          onSelect: onOpenApiGuide
+        }
+      ]
+    },
+    {
+      id: 'workflow',
+      items: isDetailView
+        ? [
+            {
+              id: 'run',
+              label: isRunning ? 'Running…' : 'Run now',
+              icon: <Play aria-hidden="true" />,
+              testId: 'scheduling-context-menu-item:run',
+              disabled: isRunning || isSaving,
+              onSelect: handleRun
+            },
+            {
+              id: 'save',
+              label: isSaving ? 'Saving…' : 'Save changes',
+              icon: <Save aria-hidden="true" />,
+              testId: 'scheduling-context-menu-item:save',
+              disabled: !isDirty || isSaving,
+              onSelect: handleSave
+            }
+          ]
+        : []
+    },
+    {
+      id: 'destructive',
+      items:
+        isDetailView && !isNewDraft
+          ? [
+              {
+                id: 'delete',
+                label: 'Delete automation',
+                icon: <Trash2 aria-hidden="true" />,
+                testId: 'scheduling-context-menu-item:delete',
+                destructive: true,
+                onSelect: () => {
+                  if (draft.id) requestDeleteJob(draft.id)
+                }
+              }
+            ]
+          : []
+    }
+  ]
+
+  return <ActionMenuItems variant="dropdown" groups={groups} />
+}
+
+export interface SchedulingTopbarActionsProps {
+  activeView?: SchedulingView
+}
+
+export function SchedulingTopbarActions({
+  activeView = 'automation'
+}: SchedulingTopbarActionsProps): ReactElement | null {
+  const { isDirty, isSaving, isRunning, handleSave, handleRun } = useSchedulingWorkspace()
+
+  if (activeView === 'list') {
+    return null
+  }
 
   return (
     <>
-      <DropdownMenuItem
-        data-testid="scheduling-context-menu-item:api-guide"
-        onSelect={onOpenApiGuide}
-      >
-        <BookOpen aria-hidden="true" />
-        API guide
-      </DropdownMenuItem>
-      {isDetailView ? <DropdownMenuSeparator /> : null}
-      {isDetailView ? (
-        <DropdownMenuItem
-          data-testid="scheduling-context-menu-item:run"
-          disabled={isRunning || isSaving}
-          onSelect={handleRun}
-        >
-          <Play aria-hidden="true" />
-          {isRunning ? 'Running…' : 'Run now'}
-        </DropdownMenuItem>
-      ) : null}
-      {isDetailView && !isNewDraft ? (
-        <DropdownMenuItem
-          data-testid="scheduling-context-menu-item:delete"
-          onSelect={() => setDeleteDialogOpen(true)}
-        >
-          <Trash2 aria-hidden="true" />
-          Delete automation
-        </DropdownMenuItem>
-      ) : null}
-      {isDetailView ? (
-        <DropdownMenuItem
-          data-testid="scheduling-context-menu-item:save"
-          disabled={!isDirty || isSaving}
-          onSelect={handleSave}
-        >
-          <Save aria-hidden="true" />
-          {isSaving ? 'Saving…' : 'Save changes'}
-        </DropdownMenuItem>
-      ) : null}
+      <WorkspaceIconButton
+        type="button"
+        data-testid="scheduling-topbar-save"
+        aria-label="Save changes"
+        title="Save changes"
+        icon={<Save aria-hidden="true" />}
+        label={isSaving ? 'Saving…' : 'Save changes'}
+        variant="muted"
+        borderless
+        disabled={!isDirty || isSaving}
+        onClick={handleSave}
+      />
+      <WorkspaceIconButton
+        type="button"
+        data-testid="scheduling-topbar-run"
+        aria-label="Run now"
+        title="Run now"
+        icon={<Play aria-hidden="true" />}
+        label={isRunning ? 'Running…' : 'Run now'}
+        variant="accent"
+        borderless
+        disabled={isRunning || isSaving}
+        onClick={handleRun}
+      />
     </>
   )
 }
@@ -874,7 +972,8 @@ export function SchedulingAddAutomationButton({
       title="Add automation"
       icon={<Plus size={16} />}
       label="Add automation"
-      bordered
+      variant="accent"
+      borderless
     />
   )
 }
@@ -905,7 +1004,7 @@ export function SchedulingRightPanel({
   }
 
   return (
-    <WorkspacePanelStack>
+    <WorkspacePanelStack data-testid="scheduling-panel-stack">
       {activeView === 'history' ? (
         <ScheduleRunHistoryList
           runs={runs}

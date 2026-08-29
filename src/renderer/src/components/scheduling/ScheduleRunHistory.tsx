@@ -79,7 +79,7 @@ export function ScheduleRunHistoryList({
     >
       <WorkspaceListRail
         aria-label="Automation run history"
-        className="h-auto min-h-0 p-3"
+        className="p-3"
         emptyState={
           <EmptyState
             icon={Clock3}

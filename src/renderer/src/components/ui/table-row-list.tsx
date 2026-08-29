@@ -1,7 +1,22 @@
 import * as React from 'react'
 
 import { cn } from '../../lib/utils'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
+import {
+  getNextTableSortState,
+  sortTableItems,
+  type TableSortDirection,
+  type TableSortState,
+  type TableSortValue
+} from '../../lib/tableSort'
+import {
+  SortableTableHead,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from './table'
 
 export interface TableRowListColumn<T> {
   id: string
@@ -9,6 +24,8 @@ export interface TableRowListColumn<T> {
   headerClassName?: string
   cellClassName?: string | ((item: T) => string | undefined)
   renderCell: (item: T) => React.ReactNode
+  sortValue?: (item: T) => TableSortValue
+  sortDefaultDirection?: TableSortDirection
 }
 
 type TableRowListRowProps = Omit<React.HTMLAttributes<HTMLTableRowElement>, 'children'> & {
@@ -24,8 +41,11 @@ export interface TableRowListProps<T> extends Omit<
   getRowKey: (item: T) => React.Key
   getRowProps?: (item: T) => TableRowListRowProps
   rowWrapper?: (item: T, row: React.ReactElement) => React.ReactNode
+  hideHeader?: boolean
   headerClassName?: string
   bodyClassName?: string
+  sortState?: TableSortState | null
+  onSortChange?: (sortState: TableSortState) => void
   'data-testid'?: string
 }
 
@@ -38,24 +58,54 @@ export function TableRowList<T>({
   getRowKey,
   getRowProps,
   rowWrapper,
+  hideHeader,
   headerClassName,
   bodyClassName,
+  sortState,
+  onSortChange,
   className,
   ...tableProps
 }: TableRowListProps<T>): React.ReactElement {
+  const sortedItems = sortTableItems(items, columns, sortState)
+
   return (
     <Table {...tableProps} className={cn('border-separate border-spacing-y-1', className)}>
-      <TableHeader className={cn('[&_tr]:border-0', headerClassName)}>
-        <TableRow>
-          {columns.map((column) => (
-            <TableHead key={column.id} className={column.headerClassName}>
-              {column.header}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
+      {!hideHeader ? (
+        <TableHeader className={cn('[&_tr]:border-0', headerClassName)}>
+          <TableRow>
+            {columns.map((column) => {
+              const isSortable = Boolean(column.sortValue && onSortChange)
+              const isActive = sortState?.columnId === column.id
+
+              return isSortable ? (
+                <SortableTableHead
+                  key={column.id}
+                  className={column.headerClassName}
+                  isActive={isActive}
+                  sortDirection={sortState?.direction}
+                  onToggleSort={() => {
+                    onSortChange?.(
+                      getNextTableSortState(
+                        sortState,
+                        column.id,
+                        column.sortDefaultDirection ?? 'asc'
+                      )
+                    )
+                  }}
+                >
+                  {column.header}
+                </SortableTableHead>
+              ) : (
+                <TableHead key={column.id} className={column.headerClassName}>
+                  {column.header}
+                </TableHead>
+              )
+            })}
+          </TableRow>
+        </TableHeader>
+      ) : null}
       <TableBody className={cn('[&_tr]:border-0', bodyClassName)}>
-        {items.map((item) => {
+        {sortedItems.map((item) => {
           const rowProps = getRowProps?.(item)
           const { className: rowClassName, ...restRowProps } = rowProps ?? {}
 

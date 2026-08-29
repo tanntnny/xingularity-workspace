@@ -8,6 +8,19 @@ import type {
   SubscriptionStatus,
   UpdateSubscriptionInput
 } from './types'
+import { normalizeTag } from './noteTags'
+
+export const SUBSCRIPTION_TAG_MAX_COUNT = 20
+export const SUBSCRIPTION_TAG_MAX_LENGTH = 60
+
+export interface NormalizedSubscriptionTags {
+  tags: string[]
+  changed: boolean
+  canonicalizedCount: number
+  invalidCount: number
+  duplicateCount: number
+  overflowCount: number
+}
 
 const ACTIVE_SPEND_STATUSES: SubscriptionStatus[] = ['active']
 const REVIEW_FLAGS_WITH_SAVINGS: SubscriptionReviewFlag[] = [
@@ -20,6 +33,60 @@ const REVIEW_FLAGS_WITH_SAVINGS: SubscriptionReviewFlag[] = [
 function normalizeString(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
+}
+
+export function normalizeSubscriptionTags(value: unknown): string[] {
+  return normalizeSubscriptionTagsWithDetails(value).tags
+}
+
+export function normalizeSubscriptionTagsWithDetails(value: unknown): NormalizedSubscriptionTags {
+  const source = Array.isArray(value) ? value : []
+  const tags: string[] = []
+  const seen = new Set<string>()
+  let canonicalizedCount = 0
+  let invalidCount = 0
+  let duplicateCount = 0
+  let overflowCount = 0
+
+  for (const candidate of source) {
+    if (typeof candidate !== 'string') {
+      invalidCount += 1
+      continue
+    }
+
+    const trimmed = candidate.trim()
+    const normalized = normalizeTag(trimmed)
+    if (!normalized || normalized.length > SUBSCRIPTION_TAG_MAX_LENGTH) {
+      invalidCount += 1
+      continue
+    }
+    if (normalized !== trimmed) canonicalizedCount += 1
+    if (seen.has(normalized)) {
+      duplicateCount += 1
+      continue
+    }
+    if (tags.length >= SUBSCRIPTION_TAG_MAX_COUNT) {
+      overflowCount += 1
+      continue
+    }
+
+    seen.add(normalized)
+    tags.push(normalized)
+  }
+
+  const changed =
+    !Array.isArray(value) ||
+    value.length !== tags.length ||
+    value.some((candidate, index) => candidate !== tags[index])
+
+  return {
+    tags,
+    changed,
+    canonicalizedCount,
+    invalidCount,
+    duplicateCount,
+    overflowCount
+  }
 }
 
 export function getBillingIntervalMonths(
@@ -68,7 +135,7 @@ export function buildSubscriptionRecord(
     status: input.status,
     reviewFlag: input.reviewFlag ?? 'none',
     lastUsedAt: normalizeString(input.lastUsedAt),
-    tags: input.tags?.map((tag) => tag.trim()).filter(Boolean) ?? [],
+    tags: normalizeSubscriptionTags(input.tags),
     notes: normalizeString(input.notes),
     renewalReminderDays: normalizeReminderDays(input.renewalReminderDays),
     cancellationUrl: normalizeString(input.cancellationUrl),
@@ -120,8 +187,7 @@ export function applySubscriptionUpdate(
         : patch.lastUsedAt !== undefined
           ? normalizeString(patch.lastUsedAt)
           : current.lastUsedAt,
-    tags:
-      patch.tags === undefined ? current.tags : patch.tags.map((tag) => tag.trim()).filter(Boolean),
+    tags: patch.tags === undefined ? current.tags : normalizeSubscriptionTags(patch.tags),
     notes:
       patch.notes === null
         ? undefined

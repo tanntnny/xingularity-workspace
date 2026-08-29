@@ -21,7 +21,7 @@ function Calendar({
         months: 'relative flex flex-col gap-4 sm:flex-row',
         month: 'flex w-full flex-col gap-4',
         month_caption: 'flex h-7 items-center justify-center px-8',
-        caption_label: 'select-none whitespace-nowrap text-sm font-medium',
+        caption_label: 'select-none whitespace-nowrap text-sm font-semibold',
         dropdowns: 'flex h-7 items-center justify-center gap-1.5 whitespace-nowrap',
         dropdown_root:
           'relative inline-flex items-center whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card shadow-sm has-[select:focus-visible]:outline-none has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-ring has-[select:focus-visible]:ring-offset-2 has-[select:focus-visible]:ring-offset-background',
@@ -50,15 +50,26 @@ function Calendar({
         ].join(' '),
         day_button: cn(
           buttonVariants({ variant: 'ghost' }),
-          'h-8 w-8 rounded-md p-0 font-normal text-foreground hover:!bg-card-hover hover:!text-foreground'
+          'h-8 w-8 rounded-md p-0 font-normal text-foreground hover:!bg-popover-hover hover:!text-foreground'
         ),
         range_start: 'day-range-start',
         range_end: 'day-range-end',
         selected:
           'rounded-md bg-card-hover text-foreground hover:bg-card-hover hover:text-foreground focus:bg-card-hover focus:text-foreground',
-        today: 'bg-muted text-foreground',
-        outside:
-          'text-muted-foreground aria-selected:bg-muted/50 aria-selected:text-muted-foreground',
+        today: [
+          'rounded-md bg-popover-hover text-foreground',
+          '[&>button]:bg-popover-hover',
+          '[&>button:hover]:!bg-popover-hover',
+          '[&>button:focus]:!bg-popover-hover'
+        ].join(' '),
+        outside: [
+          'text-muted-foreground',
+          '[&>button]:!text-muted-foreground',
+          '[&>button:hover]:!text-muted-foreground',
+          '[&>button:focus]:!text-muted-foreground',
+          '[&.outside[aria-selected]>button]:!text-muted-foreground',
+          'aria-selected:bg-muted/50 aria-selected:text-muted-foreground'
+        ].join(' '),
         disabled: 'text-muted-foreground opacity-50',
         range_middle: 'aria-selected:bg-card-hover aria-selected:text-foreground',
         hidden: 'invisible',

@@ -1,25 +1,16 @@
 import { ReactElement, useMemo } from 'react'
-import { Copy, FileText, FolderInput, Link, Pencil, Search, Trash2 } from './ui/icons'
+import { FileText, Pencil, Search } from './ui/icons'
 import { stripNoteExtension } from '../../../shared/noteDocument'
-import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
+import type { NoteListItem } from '../../../shared/types'
 import { TagChip } from './TagChip'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuShortcut,
-  ContextMenuTrigger
-} from './ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
+import { ActionMenuItems } from './ui/action-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import { Shortcut } from './ui/kbd'
+import { buildNoteNativeMenuItems, getNoteMenuGroups } from '../lib/noteMenu'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
@@ -225,7 +216,17 @@ function NoteSection({
           const visibleTags = noteTags.slice(0, 2)
           const hiddenTagCount = Math.max(0, noteTags.length - visibleTags.length)
           const updatedLabel = `${new Date(note.updatedAt).toLocaleDateString()}`
-          const menuItems = buildNoteMenuItems({
+          const menuGroups = getNoteMenuGroups(
+            {
+              onDelete: () => onDelete(note.relPath),
+              onRename: onRename ? () => onRename(note.relPath) : undefined,
+              onDuplicate: onDuplicate ? () => onDuplicate(note.relPath) : undefined,
+              onMoveTo: onMoveTo ? (folder) => onMoveTo(note.relPath, folder) : undefined,
+              onCopyLink: onCopyLink ? () => onCopyLink(note.relPath) : undefined
+            },
+            onMoveTo ? folders : []
+          )
+          const menuItems = buildNoteNativeMenuItems({
             canRename: Boolean(onRename),
             canDuplicate: Boolean(onDuplicate),
             canCopyLink: Boolean(onCopyLink),
@@ -315,50 +316,7 @@ function NoteSection({
             <ContextMenu key={note.relPath}>
               <ContextMenuTrigger asChild>{noteButton}</ContextMenuTrigger>
               <ContextMenuContent>
-                {onRename && (
-                  <ContextMenuItem onClick={() => onRename(note.relPath)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Rename
-                  </ContextMenuItem>
-                )}
-                {onDuplicate && (
-                  <ContextMenuItem onClick={() => onDuplicate(note.relPath)}>
-                    <Copy className="mr-2 h-4 w-4" />
-                    Duplicate
-                  </ContextMenuItem>
-                )}
-                {onMoveTo && folders.length > 0 && (
-                  <ContextMenuSub>
-                    <ContextMenuSubTrigger>
-                      <FolderInput className="mr-2 h-4 w-4" />
-                      Move to...
-                    </ContextMenuSubTrigger>
-                    <ContextMenuSubContent>
-                      {folders.map((folder) => (
-                        <ContextMenuItem
-                          key={folder}
-                          onClick={() => onMoveTo(note.relPath, folder)}
-                        >
-                          {folder}
-                        </ContextMenuItem>
-                      ))}
-                    </ContextMenuSubContent>
-                  </ContextMenuSub>
-                )}
-                {onCopyLink && (
-                  <ContextMenuItem onClick={() => onCopyLink(note.relPath)}>
-                    <Link className="mr-2 h-4 w-4" />
-                    Copy link
-                  </ContextMenuItem>
-                )}
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => onDelete(note.relPath)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                  <ContextMenuShortcut>
-                    <Shortcut keys={['cmd', 'backspace']} />
-                  </ContextMenuShortcut>
-                </ContextMenuItem>
+                <ActionMenuItems variant="context" groups={menuGroups} />
               </ContextMenuContent>
             </ContextMenu>
           )
@@ -366,31 +324,4 @@ function NoteSection({
       )}
     </WorkspacePanelSection>
   )
-}
-
-function buildNoteMenuItems(options: {
-  canRename: boolean
-  canDuplicate: boolean
-  canCopyLink: boolean
-  moveFolders: string[]
-}): NativeMenuItemDescriptor[] {
-  return [
-    ...(options.canRename ? [{ id: 'rename', label: 'Rename' }] : []),
-    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
-    ...(options.moveFolders.length
-      ? [
-          {
-            type: 'submenu' as const,
-            label: 'Move to...',
-            submenu: options.moveFolders.map((folder) => ({
-              id: `move:${folder}`,
-              label: folder
-            }))
-          }
-        ]
-      : []),
-    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
-    { type: 'separator' as const },
-    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
-  ]
 }

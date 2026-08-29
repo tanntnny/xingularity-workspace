@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type {
   Project,
@@ -44,9 +45,20 @@ export interface ResourceStoreSnapshot {
 }
 
 export class ResourceStore {
+  private mutationQueue: Promise<void> = Promise.resolve()
+
   constructor(private readonly vaultRoot: string) {}
 
   async read(): Promise<ResourceStoreSnapshot> {
+    await this.mutationQueue
+    return this.readSnapshot()
+  }
+
+  async write(snapshot: ResourceStoreSnapshot): Promise<void> {
+    return this.enqueueMutation(() => this.writeSnapshot(snapshot))
+  }
+
+  private async readSnapshot(): Promise<ResourceStoreSnapshot> {
     const [resources, relations, locators] = await Promise.all([
       readJson<ResourceFilePayload>(getVaultResourcesPath(this.vaultRoot)),
       readJson<RelationFilePayload>(getVaultRelationsPath(this.vaultRoot)),
@@ -72,7 +84,7 @@ export class ResourceStore {
     }
   }
 
-  async write(snapshot: ResourceStoreSnapshot): Promise<void> {
+  private async writeSnapshot(snapshot: ResourceStoreSnapshot): Promise<void> {
     await fs.mkdir(getVaultResourcesDir(this.vaultRoot), { recursive: true })
     await Promise.all([
       writeJsonAtomically(getVaultResourcesPath(this.vaultRoot), {
@@ -91,110 +103,135 @@ export class ResourceStore {
   }
 
   async migrateProjects(projects: readonly Project[]): Promise<ResourceMigrationResult> {
-    const current = await this.read()
-    const migration = migrateProjectResources(projects, current.resources, current.relations)
-    const nextSnapshot = {
-      resources: migration.resources,
-      relations: migration.relations,
-      locators: current.locators
-    }
-    if (
-      migration.migrated > 0 ||
-      migration.resources.length !== current.resources.length ||
-      migration.relations.length !== current.relations.length
-    ) {
-      await this.write(nextSnapshot)
-    }
-    return migration
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      const migration = migrateProjectResources(projects, current.resources, current.relations)
+      const nextSnapshot = {
+        resources: migration.resources,
+        relations: migration.relations,
+        locators: current.locators
+      }
+      if (
+        migration.migrated > 0 ||
+        migration.resources.length !== current.resources.length ||
+        migration.relations.length !== current.relations.length
+      ) {
+        await this.writeSnapshot(nextSnapshot)
+      }
+      return migration
+    })
   }
 
   async upsert(input: ResourceInput | ResourceRef): Promise<ResourceRef> {
-    const current = await this.read()
-    const next = isResourceRef(input) ? normalizeResourceRef(input) : normalizeResourceInput(input)
-    if (!next) throw new Error('Invalid resource')
-    const existing = current.resources.find(
-      (resource) => resource.id === next.id || resource.canonicalUri === next.canonicalUri
-    )
-    const merged: ResourceRef = existing
-      ? {
-          ...existing,
-          ...next,
-          id: existing.id,
-          createdAt: existing.createdAt,
-          updatedAt: new Date().toISOString(),
-          projectIds: mergeStrings(existing.projectIds, next.projectIds)
-        }
-      : next
-    await this.write({
-      ...current,
-      resources: [merged, ...current.resources.filter((resource) => resource.id !== merged.id)]
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      const next = isResourceRef(input)
+        ? normalizeResourceRef(input)
+        : normalizeResourceInput(input)
+      if (!next) throw new Error('Invalid resource')
+      const existing = current.resources.find(
+        (resource) => resource.id === next.id || resource.canonicalUri === next.canonicalUri
+      )
+      const merged: ResourceRef = existing
+        ? {
+            ...existing,
+            ...next,
+            id: existing.id,
+            createdAt: existing.createdAt,
+            updatedAt: new Date().toISOString(),
+            projectIds: mergeStrings(existing.projectIds, next.projectIds)
+          }
+        : next
+      await this.writeSnapshot({
+        ...current,
+        resources: [merged, ...current.resources.filter((resource) => resource.id !== merged.id)]
+      })
+      return merged
     })
-    return merged
   }
 
   async update(resourceId: string, patch: Partial<ResourceRef>): Promise<ResourceRef> {
-    const current = await this.read()
-    const existing = current.resources.find((resource) => resource.id === resourceId)
-    if (!existing) throw new Error(`Resource not found: ${resourceId}`)
-    const updated = normalizeResourceRef({
-      ...existing,
-      ...patch,
-      id: existing.id,
-      updatedAt: new Date().toISOString()
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      const existing = current.resources.find((resource) => resource.id === resourceId)
+      if (!existing) throw new Error(`Resource not found: ${resourceId}`)
+      const updated = normalizeResourceRef({
+        ...existing,
+        ...patch,
+        id: existing.id,
+        updatedAt: new Date().toISOString()
+      })
+      if (!updated) throw new Error(`Invalid resource update: ${resourceId}`)
+      await this.writeSnapshot({
+        ...current,
+        resources: current.resources.map((resource) =>
+          resource.id === resourceId ? updated : resource
+        )
+      })
+      return updated
     })
-    if (!updated) throw new Error(`Invalid resource update: ${resourceId}`)
-    await this.write({
-      ...current,
-      resources: current.resources.map((resource) =>
-        resource.id === resourceId ? updated : resource
-      )
-    })
-    return updated
   }
 
   async remove(resourceId: string): Promise<void> {
-    const current = await this.read()
-    await this.write({
-      resources: current.resources.filter((resource) => resource.id !== resourceId),
-      relations: current.relations.filter(
-        (relation) => relation.fromId !== resourceId && relation.toId !== resourceId
-      ),
-      locators: current.locators.filter((locator) => locator.resourceId !== resourceId)
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      await this.writeSnapshot({
+        resources: current.resources.filter((resource) => resource.id !== resourceId),
+        relations: current.relations.filter(
+          (relation) => relation.fromId !== resourceId && relation.toId !== resourceId
+        ),
+        locators: current.locators.filter((locator) => locator.resourceId !== resourceId)
+      })
     })
   }
 
   async relate(relation: ResourceRelation): Promise<ResourceRelation> {
-    const current = await this.read()
-    const normalized = normalizeResourceRelation(relation)
-    if (!normalized) throw new Error('Invalid resource relation')
-    const relations = [
-      normalized,
-      ...current.relations.filter((candidate) => candidate.id !== normalized.id)
-    ]
-    await this.write({ ...current, relations })
-    return normalized
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      const normalized = normalizeResourceRelation(relation)
+      if (!normalized) throw new Error('Invalid resource relation')
+      const relations = [
+        normalized,
+        ...current.relations.filter((candidate) => candidate.id !== normalized.id)
+      ]
+      await this.writeSnapshot({ ...current, relations })
+      return normalized
+    })
   }
 
   async unrelate(relationId: string): Promise<void> {
-    const current = await this.read()
-    await this.write({
-      ...current,
-      relations: current.relations.filter((relation) => relation.id !== relationId)
+    return this.enqueueMutation(async () => {
+      const current = await this.readSnapshot()
+      await this.writeSnapshot({
+        ...current,
+        relations: current.relations.filter((relation) => relation.id !== relationId)
+      })
     })
   }
 
   async setLocator(locator: ResourceLocator): Promise<void> {
-    if (!isLocator(locator)) throw new Error('Invalid resource locator')
-    const current = await this.read()
-    await this.write({
-      ...current,
-      locators: [
-        locator,
-        ...current.locators.filter(
-          (item) => item.resourceId !== locator.resourceId || item.deviceId !== locator.deviceId
-        )
-      ]
+    return this.enqueueMutation(async () => {
+      if (!isLocator(locator)) throw new Error('Invalid resource locator')
+      const current = await this.readSnapshot()
+      await this.writeSnapshot({
+        ...current,
+        locators: [
+          locator,
+          ...current.locators.filter(
+            (item) => item.resourceId !== locator.resourceId || item.deviceId !== locator.deviceId
+          )
+        ]
+      })
     })
+  }
+
+  private async enqueueMutation<T>(action: () => Promise<T>): Promise<T> {
+    const queued = this.mutationQueue.then(action, action)
+    this.mutationQueue = queued.then(
+      () => undefined,
+      () => undefined
+    )
+    return queued
   }
 }
 
@@ -234,7 +271,7 @@ async function readJson<T>(filePath: string): Promise<T | null> {
 
 async function writeJsonAtomically(filePath: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true })
-  const tempPath = `${filePath}.tmp-${process.pid}`
+  const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`
   await fs.writeFile(tempPath, JSON.stringify(value, null, 2), 'utf-8')
   await fs.rename(tempPath, filePath)
 }

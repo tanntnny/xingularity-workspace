@@ -85,6 +85,7 @@ export function SchedulingPythonTrustPopover({
                 icon: <AlertCircle aria-hidden="true" />,
                 iconColorToken: 'var(--warning)'
               }}
+              surface="attention"
             />
             <button
               type="button"

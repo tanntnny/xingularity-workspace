@@ -9,7 +9,7 @@ import {
 
 export interface Toast {
   id: string
-  kind: 'info' | 'error' | 'success'
+  kind: 'info' | 'error' | 'success' | 'warning'
   message: string
 }
 

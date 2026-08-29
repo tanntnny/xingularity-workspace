@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { CalendarTask, Project, ProjectUpdate } from '../src/shared/types'
+import { expectSingleRightPanelScrollport } from './right-panel-scrollport'
 
 function createFixtureProject(
   id: string,
@@ -279,6 +280,39 @@ test.describe('projects workspace', () => {
     }
   })
 
+  test('opens the organized project menu from an All Projects row', async () => {
+    const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      const row = page.getByTestId('all-project-row:project-1')
+      await expect(row).toBeVisible()
+
+      await row.click({ button: 'right' })
+      const contextMenu = page.getByTestId('project-context-menu:project-1')
+      await expect(contextMenu).toBeVisible()
+      await expect(contextMenu.getByRole('menuitem', { name: 'Open project' })).toBeVisible()
+      await expect(contextMenu.getByRole('menuitem', { name: 'Add to favorites' })).toBeVisible()
+      await expect(contextMenu.getByRole('menuitem', { name: 'Archive project' })).toBeVisible()
+      await expect(
+        contextMenu.getByRole('menuitem', { name: 'Export project context' })
+      ).toBeVisible()
+      await expect(contextMenu.getByRole('menuitem', { name: 'Delete project' })).toBeVisible()
+      await expect(contextMenu.getByRole('separator')).toHaveCount(2)
+      await page.keyboard.press('Escape')
+
+      await page.getByTestId('all-project-menu:project-1').click()
+      const dropdownMenu = page.locator('[role="menu"][data-state="open"]')
+      await expect(dropdownMenu.getByRole('menuitem', { name: 'Open project' })).toBeVisible()
+      await expect(dropdownMenu.getByRole('menuitem', { name: 'Delete project' })).toBeVisible()
+      await expect(dropdownMenu.getByRole('separator')).toHaveCount(2)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('adds and opens multiple notebook resources from the Resources topbar', async () => {
     const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
     await fs.mkdir(path.join(vaultRoot, 'notebooks', 'Projects', 'Other'), { recursive: true })
@@ -350,6 +384,12 @@ test.describe('projects workspace', () => {
       await expect(
         resourcesPage.getByRole('columnheader', { name: 'Actions', exact: true })
       ).toHaveCount(0)
+      const refreshAllResourceHealthButton = page.getByTestId('refresh-all-resource-health-button')
+      await expect(refreshAllResourceHealthButton).toBeVisible()
+      await refreshAllResourceHealthButton.click()
+      await expect(
+        page.getByText('Refreshed health for 2 resources', { exact: true })
+      ).toBeVisible()
 
       const alphaRow = resourcesPage
         .locator('[data-testid^="project-resource-row:"]')
@@ -577,23 +617,20 @@ test.describe('projects workspace', () => {
       await expect(popover.getByText('Color', { exact: true })).toBeVisible()
 
       await popover.getByPlaceholder('Search icon names...').fill('rocket')
-      await expect(popover.getByTestId('project-icon-option:rocket')).toBeVisible()
-      await expect(popover.getByTestId('project-icon-option:briefcase')).toHaveCount(0)
+      const filledRocket = popover.getByTestId('project-icon-option:rocket:filled')
+      const outlinedRocket = popover.getByTestId('project-icon-option:rocket:outlined')
+      await expect(filledRocket).toBeVisible()
+      await expect(outlinedRocket).toBeVisible()
+      await expect(popover.getByTestId('project-icon-option:briefcase:filled')).toHaveCount(0)
 
-      await popover.getByTestId('project-icon-option:rocket').click()
+      await outlinedRocket.click()
       await expect(popover).toBeVisible()
-      await expect(popover.getByTestId('project-icon-option:rocket')).toHaveAttribute(
-        'data-current',
-        'true'
-      )
+      await expect(outlinedRocket).toHaveAttribute('data-current', 'true')
 
       const colorOption = popover.getByLabel('Select #f472b6 icon color')
       await colorOption.click()
       await expect(popover).toBeVisible()
-      await expect(popover.getByTestId('project-icon-option:rocket')).toHaveAttribute(
-        'data-current',
-        'true'
-      )
+      await expect(outlinedRocket).toHaveAttribute('data-current', 'true')
       await expect(popover.getByLabel('Select #f472b6 icon color')).toHaveAttribute(
         'data-state',
         'on'
@@ -606,10 +643,10 @@ test.describe('projects workspace', () => {
       await page.getByTestId('all-project-row:project-1').click()
       await page.getByTestId('project-main-detail-icon-trigger').click()
       const afterReloadPopover = page.getByRole('dialog', { name: 'Choose project icon' })
-      await expect(afterReloadPopover.getByTestId('project-icon-option:rocket')).toHaveAttribute(
-        'data-current',
-        'true'
-      )
+      await afterReloadPopover.getByPlaceholder('Search icon names...').fill('rocket')
+      await expect(
+        afterReloadPopover.getByTestId('project-icon-option:rocket:outlined')
+      ).toHaveAttribute('data-current', 'true')
       await expect(afterReloadPopover.getByLabel('Select #f472b6 icon color')).toHaveAttribute(
         'data-state',
         'on'
@@ -875,6 +912,45 @@ test.describe('projects workspace', () => {
       await projectPropertiesToggle.focus()
       await projectPropertiesToggle.press('Space')
       await expect(projectPropertiesFavorite).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps long project sections in the shared panel scrollport', async () => {
+    const now = '2026-08-20T00:00:00.000Z'
+    const project = createFixtureProject('project-1', 'Alpha Project')
+    project.milestones = Array.from({ length: 28 }, (_, index) => ({
+      id: `milestone-${index + 1}`,
+      title: `Milestone ${index + 1}`,
+      endDate: '2026-09-30',
+      createdAt: now,
+      updatedAt: now
+    }))
+    project.updates = Array.from({ length: 28 }, (_, index) => ({
+      id: `update-${index + 1}`,
+      projectId: project.id,
+      markdown: `Progress update ${index + 1}`,
+      status: 'on-track',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const vaultRoot = await createFixtureVault([project])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openProjectHome(page)
+      const panelStack = page.getByTestId('projects-panel-stack')
+      await expect(panelStack).toBeVisible()
+      await expectSingleRightPanelScrollport(page)
+      await expect
+        .poll(() => panelStack.evaluate((element) => element.scrollHeight > element.clientHeight))
+        .toBe(true)
+
+      const lastMilestone = page.getByTestId('project-milestone-panel-row:milestone-28')
+      await lastMilestone.scrollIntoViewIfNeeded()
+      await expect(lastMilestone).toBeVisible()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -2341,7 +2417,7 @@ test.describe('projects workspace', () => {
         await page.evaluate(() =>
           getComputedStyle(document.documentElement).getPropertyValue('--scrollbar-size').trim()
         )
-      ).toBe('2px')
+      ).toBe('5px')
       await startTimeInput.fill('11am')
       await startTimeInput.press('Enter')
       await expect(startTimeTrigger).toContainText('11:00 AM')

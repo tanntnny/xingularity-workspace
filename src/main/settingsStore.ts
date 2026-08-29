@@ -451,6 +451,7 @@ function normalizeProjectMilestones(value: unknown): ProjectMilestone[] {
       {
         id,
         title,
+        endDate: normalizeProjectDate(candidate.endDate),
         createdAt:
           typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
             ? candidate.createdAt

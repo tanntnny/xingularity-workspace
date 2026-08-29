@@ -4,6 +4,7 @@ import type {
   ResourceAccess,
   ResourceFreshness,
   ResourceInput,
+  ResourceLabel,
   ResourceKind,
   ResourceProvider,
   ResourceRef,
@@ -99,6 +100,10 @@ const LOCAL_FILE_EXTENSIONS: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp'
 }
+
+const RESOURCE_LABEL_KEY_REGEX = /^[a-z0-9][a-z0-9._-]{0,63}$/
+export const RESOURCE_LABEL_LIMIT = 50
+export const RESOURCE_LABEL_VALUE_MAX_LENGTH = 500
 
 export function resourceIdForCanonicalUri(
   provider: ResourceProvider,
@@ -213,6 +218,11 @@ export function normalizeResourceInput(
     type === 'external'
       ? (input.externalProduct ?? inferExternalProduct(canonicalUri, input.mimeType))
       : undefined
+  const projectIds = normalizeStringArray([
+    ...(input.projectId ? [input.projectId] : []),
+    ...(input.projectIds ?? [])
+  ])
+  const labels = normalizeResourceLabels(input.labels)
   const resource: ResourceRef = {
     id: resourceIdForCanonicalUri(provider, canonicalUri),
     type,
@@ -228,11 +238,12 @@ export function normalizeResourceInput(
     sourceOfTruth,
     access,
     state: 'unindexed',
-    ...(input.projectId ? { projectIds: [input.projectId] } : {}),
+    ...(projectIds.length ? { projectIds } : {}),
     createdAt: now,
     updatedAt: now,
     lastSeenAt: now,
     freshness: provider === 'xingularity' ? 'live' : 'manual',
+    ...(labels.length ? { labels } : {}),
     ...(input.metadata ? { metadata: sanitizeResourceMetadata(input.metadata) } : {})
   }
   return resource
@@ -267,11 +278,14 @@ export function normalizeResourceRef(
         type === 'notebook' || input.sourceOfTruth === 'xingularity' ? 'xingularity' : 'external',
       access: isResourceAccess(input.access) ? input.access : undefined,
       projectId: undefined,
+      projectIds: normalizeStringArray(input.projectIds),
+      labels: normalizeResourceLabels(input.labels),
       metadata: isRecord(input.metadata) ? sanitizeResourceMetadata(input.metadata) : undefined
     },
     typeof input.createdAt === 'string' ? input.createdAt : now
   )
   const projectIds = normalizeStringArray(input.projectIds)
+  const labels = normalizeResourceLabels(input.labels)
   const state = isResourceState(input.state) ? input.state : base.state
   const freshness = isResourceFreshness(input.freshness) ? input.freshness : base.freshness
   return {
@@ -281,6 +295,7 @@ export function normalizeResourceRef(
     state,
     freshness,
     ...(projectIds.length ? { projectIds } : {}),
+    ...(labels.length ? { labels } : {}),
     ...(typeof input.updatedAt === 'string' ? { updatedAt: input.updatedAt } : {}),
     ...(typeof input.lastSeenAt === 'string' ? { lastSeenAt: input.lastSeenAt } : {}),
     ...(typeof input.lastIndexedAt === 'string' ? { lastIndexedAt: input.lastIndexedAt } : {}),
@@ -333,6 +348,34 @@ export function relationId(
   toId: string
 ): string {
   return `relation-${stableDigest(`${type}:${fromKind}:${fromId}:${toKind}:${toId}`)}`
+}
+
+export function normalizeResourceLabels(value: unknown): ResourceLabel[] {
+  if (!Array.isArray(value)) return []
+
+  const labels: ResourceLabel[] = []
+  for (const candidate of value.slice(0, RESOURCE_LABEL_LIMIT)) {
+    if (!isRecord(candidate)) continue
+    const key = normalizeResourceLabelKey(candidate.key)
+    const rawValue = typeof candidate.value === 'string' ? candidate.value.trim() : ''
+    if (!key || !rawValue) continue
+
+    const label = {
+      key,
+      value: rawValue.slice(0, RESOURCE_LABEL_VALUE_MAX_LENGTH)
+    }
+    if (!labels.some((existing) => existing.key === label.key && existing.value === label.value)) {
+      labels.push(label)
+    }
+  }
+
+  return labels
+}
+
+export function normalizeResourceLabelKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const key = value.trim().toLowerCase()
+  return RESOURCE_LABEL_KEY_REGEX.test(key) ? key : null
 }
 
 export function migrateProjectResources(

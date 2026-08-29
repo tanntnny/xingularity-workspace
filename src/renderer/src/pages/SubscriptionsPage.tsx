@@ -13,7 +13,9 @@ import { APP_PAGE_ICONS } from '../lib/pageIcons'
 import {
   deriveSubscriptionAnalytics,
   getBillingIntervalMonths,
-  getRenewalBucket
+  getRenewalBucket,
+  SUBSCRIPTION_TAG_MAX_COUNT,
+  SUBSCRIPTION_TAG_MAX_LENGTH
 } from '../../../shared/subscriptions'
 import type {
   CreateSubscriptionInput,
@@ -51,12 +53,14 @@ import { Textarea } from '../components/ui/textarea'
 import { EmptyState } from '../components/ui/empty-state'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { StatusChip } from '../components/ui/status-chip'
+import { TagEditor } from '../components/TagEditor'
 import {
   getTagChipItem,
   SUBSCRIPTION_REVIEW_CHIP_ITEMS,
   SUBSCRIPTION_STATUS_CHIP_ITEMS,
   SUBSCRIPTION_USAGE_CHIP_ITEMS
 } from '../lib/statusChipMeta'
+import { sortTableItems, type TableSortColumn, type TableSortDirection } from '../lib/tableSort'
 
 interface SubscriptionsPageProps {
   vaultApi: RendererVaultApi | undefined
@@ -64,7 +68,6 @@ interface SubscriptionsPageProps {
 }
 
 type SortField = 'name' | 'category' | 'amount' | 'nextRenewalAt' | 'status'
-type SortDirection = 'asc' | 'desc'
 type ModalDraft = {
   id?: string
   name: string
@@ -81,9 +84,17 @@ type ModalDraft = {
   status: SubscriptionStatus
   reviewFlag: SubscriptionReviewFlag
   lastUsedAt: string
-  tags: string
+  tags: string[]
   notes: string
 }
+
+const SUBSCRIPTION_SORT_COLUMNS: readonly TableSortColumn<SubscriptionRecord>[] = [
+  { id: 'name', sortValue: (record) => record.name },
+  { id: 'category', sortValue: (record) => record.category },
+  { id: 'amount', sortValue: (record) => record.normalizedMonthlyAmount },
+  { id: 'nextRenewalAt', sortValue: (record) => record.nextRenewalAt },
+  { id: 'status', sortValue: (record) => record.status }
+]
 
 const STATUS_OPTIONS: SubscriptionStatus[] = ['active', 'paused', 'cancelled', 'archived']
 const REVIEW_OPTIONS: SubscriptionReviewFlag[] = [
@@ -159,7 +170,7 @@ interface SubscriptionTablePreferences {
   statusFilter: 'all' | SubscriptionStatus
   categoryFilter: string | null
   sortField: SortField
-  sortDirection: SortDirection
+  sortDirection: TableSortDirection
 }
 
 const defaultSubscriptionTablePreferences: SubscriptionTablePreferences = {
@@ -205,7 +216,7 @@ function emptyDraft(): ModalDraft {
     status: 'active',
     reviewFlag: 'none',
     lastUsedAt: '',
-    tags: '',
+    tags: [],
     notes: ''
   }
 }
@@ -270,7 +281,7 @@ function draftFromRecord(record: SubscriptionRecord): ModalDraft {
     status: record.status,
     reviewFlag: record.reviewFlag ?? 'none',
     lastUsedAt: toDateInputValue(record.lastUsedAt),
-    tags: (record.tags ?? []).join(', '),
+    tags: [...(record.tags ?? [])],
     notes: record.notes ?? ''
   }
 }
@@ -349,10 +360,7 @@ function toCreateInput(draft: ModalDraft): CreateSubscriptionInput {
     status: draft.status,
     reviewFlag: draft.reviewFlag,
     lastUsedAt: draft.lastUsedAt || undefined,
-    tags: draft.tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean),
+    tags: draft.tags,
     notes: draft.notes.trim() || undefined
   }
 }
@@ -808,12 +816,13 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
     setIsLoading(true)
     void subscriptionsApi
       .list()
-      .then((items) => {
+      .then(({ records: items, migrationWarnings }) => {
         if (!active) {
           return
         }
         setRecords(items)
         setSelectedId(items[0]?.id ?? null)
+        migrationWarnings.forEach((warning) => pushToast('info', warning))
       })
       .catch((error) => pushToast('error', String(error)))
       .finally(() => {
@@ -841,6 +850,13 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
       ).sort((left, right) => left.localeCompare(right)),
     [categories, draft.category]
   )
+  const subscriptionTagOptions = useMemo(
+    () =>
+      Array.from(new Set([...records.flatMap((record) => record.tags ?? []), ...draft.tags])).sort(
+        (left, right) => left.localeCompare(right)
+      ),
+    [draft.tags, records]
+  )
 
   const filteredRecords = useMemo(() => {
     const filtered = records.filter((record) => {
@@ -853,20 +869,9 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
       return true
     })
 
-    return filtered.sort((left, right) => {
-      let comparison = 0
-      if (sortField === 'name') {
-        comparison = left.name.localeCompare(right.name)
-      } else if (sortField === 'category') {
-        comparison = left.category.localeCompare(right.category)
-      } else if (sortField === 'status') {
-        comparison = left.status.localeCompare(right.status)
-      } else if (sortField === 'nextRenewalAt') {
-        comparison = (left.nextRenewalAt ?? '9999').localeCompare(right.nextRenewalAt ?? '9999')
-      } else {
-        comparison = left.normalizedMonthlyAmount - right.normalizedMonthlyAmount
-      }
-      return sortDirection === 'asc' ? comparison : -comparison
+    return sortTableItems(filtered, SUBSCRIPTION_SORT_COLUMNS, {
+      columnId: sortField,
+      direction: sortDirection
     })
   }, [categoryFilter, records, sortDirection, sortField, statusFilter])
 
@@ -1446,15 +1451,22 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 />
               </Field>
               <Field label="Tags" htmlFor="subscription-tags" className="text-sm md:col-span-2">
-                <Input
-                  id="subscription-tags"
+                <TagEditor
                   value={draft.tags}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, tags: value }))
-                  }}
-                  placeholder="team, ai, annual"
+                  availableTags={subscriptionTagOptions}
+                  onChange={(tags) => setDraft((current) => ({ ...current, tags }))}
+                  label="Subscription tags"
+                  searchPlaceholder="Search or add subscription tags"
+                  testId="subscription-tags-editor"
+                  triggerId="subscription-tags"
+                  maxTagCount={SUBSCRIPTION_TAG_MAX_COUNT}
+                  maxTagLength={SUBSCRIPTION_TAG_MAX_LENGTH}
+                  surface="pill"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Tags are lowercase and support one namespace, for example{' '}
+                  <code className="font-mono">team:ai</code>.
+                </p>
               </Field>
               <Field label="Notes" htmlFor="subscription-notes" className="text-sm md:col-span-2">
                 <Textarea

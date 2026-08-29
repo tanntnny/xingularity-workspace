@@ -100,6 +100,26 @@ describe('project icon helpers', () => {
     })
   })
 
+  it('preserves outlined Tabler icon variants', () => {
+    expect(
+      normalizeProjectIcon(
+        {
+          set: 'tabler',
+          glyph: 'access-point',
+          variant: 'outlined',
+          color: '#38bdf8'
+        },
+        'outlined-project'
+      )
+    ).toEqual({
+      set: 'tabler',
+      glyph: 'access-point',
+      shape: undefined,
+      variant: 'outlined',
+      color: '#38bdf8'
+    })
+  })
+
   it('remaps low-contrast project colors deterministically', () => {
     const first = normalizeProjectIcon(
       { glyph: 'rocket', variant: 'filled', color: '#334155' },

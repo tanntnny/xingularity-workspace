@@ -55,6 +55,7 @@ import {
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
+import { TaskContextMenu } from './TaskContextMenu'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
@@ -356,8 +357,30 @@ export function CalendarWeekView({
     }
   }, [currentDateTime, timeScaleMetrics, todayIso, weekDays])
   const safeDeleteTask = onDeleteTask ?? (() => undefined)
+  const safeUpdateTask = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskStatus = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? NOOP_UPDATE_TASK_SCHEDULE
+  const wrapTaskContextMenu = (task: CalendarTask, content: ReactElement): ReactElement => (
+    <TaskContextMenu
+      key={task.id}
+      task={task}
+      selectedDate={selectedDate}
+      onDelete={safeDeleteTask}
+      onUpdateStatus={(taskId, status) =>
+        safeUpdateTask(taskId, { status, completed: isTaskStatusDone(status) })
+      }
+      onUpdatePriority={(taskId, priority) => safeUpdateTask(taskId, { priority })}
+      onUpdateTaskType={(taskId, taskType) => safeUpdateTask(taskId, { taskType })}
+      onUpdateTime={(taskId, time) => safeUpdateTask(taskId, { time })}
+      onUpdateReminders={(taskId, reminders) => safeUpdateTask(taskId, { reminders })}
+      onScheduleTask={onRescheduleTask}
+      onUnscheduleTask={
+        onRescheduleTask ? (taskId) => onRescheduleTask(taskId, undefined) : undefined
+      }
+    >
+      {content}
+    </TaskContextMenu>
+  )
 
   useEffect(() => {
     const node = timedScrollerRef.current
@@ -708,70 +731,72 @@ export function CalendarWeekView({
           width: `calc(${widthPercent}% - ${horizontalPadding}px)`
         }}
       >
-        <DragSource
-          as="article"
-          rotation={0}
-          preview="floating"
-          previewVariant="content"
-          previewSizing="fit-content"
-          tabIndex={0}
-          role="group"
-          aria-label={`Task ${task.title}`}
-          data-testid={`calendar-week-all-day-task:${task.id}`}
-          data-span-days={layout.columnSpan}
-          data-start-date={layout.startDate}
-          data-end-date={layout.endDate}
-          onDragStart={(event) => handleTaskDragStart(event, task, 'all-day')}
-          onDragEnd={handleTaskDragEnd}
-          onClick={(event) => {
-            event.stopPropagation()
-            setHoveredTaskCard(null)
-            onOpenTask?.(task.id)
-          }}
-          onMouseMove={(event) => {
-            const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
-            setHoveredTaskCard((current) => {
-              if (!current || current.task.id !== task.id) {
-                return { task, x, y }
+        {wrapTaskContextMenu(
+          task,
+          <DragSource
+            as="article"
+            preview="floating"
+            previewVariant="content"
+            previewSizing="fit-content"
+            tabIndex={0}
+            role="group"
+            aria-label={`Task ${task.title}`}
+            data-testid={`calendar-week-all-day-task:${task.id}`}
+            data-span-days={layout.columnSpan}
+            data-start-date={layout.startDate}
+            data-end-date={layout.endDate}
+            onDragStart={(event) => handleTaskDragStart(event, task, 'all-day')}
+            onDragEnd={handleTaskDragEnd}
+            onClick={(event) => {
+              event.stopPropagation()
+              setHoveredTaskCard(null)
+              onOpenTask?.(task.id)
+            }}
+            onMouseMove={(event) => {
+              const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
+              setHoveredTaskCard((current) => {
+                if (!current || current.task.id !== task.id) {
+                  return { task, x, y }
+                }
+                return { ...current, x, y }
+              })
+            }}
+            onMouseLeave={() => setHoveredTaskCard(null)}
+            onKeyDown={(event) => {
+              if (isDeleteShortcut(event)) {
+                event.preventDefault()
+                safeDeleteTask(task.id)
+                return
               }
-              return { ...current, x, y }
-            })
-          }}
-          onMouseLeave={() => setHoveredTaskCard(null)}
-          onKeyDown={(event) => {
-            if (isDeleteShortcut(event)) {
+
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              if (event.target instanceof HTMLElement && event.target.closest('button')) {
+                return
+              }
+
               event.preventDefault()
-              safeDeleteTask(task.id)
-              return
-            }
-
-            if (event.key !== 'Enter' && event.key !== ' ') {
-              return
-            }
-            if (event.target instanceof HTMLElement && event.target.closest('button')) {
-              return
-            }
-
-            event.preventDefault()
-            setHoveredTaskCard(null)
-            onOpenTask?.(task.id)
-          }}
-          className={`pointer-events-auto w-full transition-colors ${isTaskDone(task) ? 'line-through' : ''}`}
-        >
-          <CalendarTaskCard
-            ref={(element) => registerAllDayTaskElement(task.id, element)}
-            task={task}
-            compact
-            showStatusValue
-            heightMode="content"
-            project={task.projectId ? projectsById.get(task.projectId) : undefined}
-            showProject={Boolean(task.projectId)}
-            showTime={Boolean(task.time || task.endTime)}
-            onStatusChange={(taskId, status) =>
-              safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
-            }
-          />
-        </DragSource>
+              setHoveredTaskCard(null)
+              onOpenTask?.(task.id)
+            }}
+            className={`pointer-events-auto w-full transition-colors ${isTaskDone(task) ? 'line-through' : ''}`}
+          >
+            <CalendarTaskCard
+              ref={(element) => registerAllDayTaskElement(task.id, element)}
+              task={task}
+              compact
+              showStatusValue
+              heightMode="content"
+              project={task.projectId ? projectsById.get(task.projectId) : undefined}
+              showProject={Boolean(task.projectId)}
+              showTime={Boolean(task.time || task.endTime)}
+              onStatusChange={(taskId, status) =>
+                safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
+              }
+            />
+          </DragSource>
+        )}
       </div>
     )
   }
@@ -796,11 +821,9 @@ export function CalendarWeekView({
             left: '0px'
           }
 
-    return (
+    return wrapTaskContextMenu(
+      task,
       <DragSource
-        as="article"
-        key={task.id}
-        rotation={0}
         preview="floating"
         previewVariant="content"
         tabIndex={0}

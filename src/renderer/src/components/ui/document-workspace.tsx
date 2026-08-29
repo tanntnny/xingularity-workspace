@@ -9,6 +9,7 @@ import { Button, type ButtonProps } from './button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './dropdown-menu'
 import { Shortcut, type ShortcutKey } from './kbd'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
+import { Separator } from './separator'
 import { ToggleGroup, ToggleGroupItem } from './toggle-group'
 
 type WorkspaceTab = {
@@ -401,8 +402,9 @@ const WorkspaceRightPanel = React.forwardRef<HTMLDivElement, WorkspaceRightPanel
         ref={ref}
         data-panel-state={isOpen ? 'open' : 'collapsed'}
         data-panel-resizable={hasPanel ? 'true' : undefined}
+        data-workspace-scrollport="true"
         className={cn(
-          'motion-workspace-panel flex h-full min-h-0 w-full min-w-0 basis-auto shrink-0 flex-col gap-3 overflow-y-auto',
+          'motion-workspace-panel flex h-full min-h-0 w-full min-w-0 basis-auto shrink-0 flex-col gap-3 overflow-y-auto scrollbar-none',
           isOpen ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-full opacity-0',
           className
         )}
@@ -607,6 +609,7 @@ const WorkspacePanelStack = React.forwardRef<HTMLDivElement, React.HTMLAttribute
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
+      data-workspace-scrollport="true"
       className={cn(
         'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto scrollbar-none',
         className
@@ -620,6 +623,7 @@ WorkspacePanelStack.displayName = 'WorkspacePanelStack'
 interface DocumentWorkspaceMainHeaderProps extends React.HTMLAttributes<HTMLElement> {
   breadcrumb?: React.ReactNode
   pageContextMenu?: React.ReactNode
+  pageContextMenuTrailing?: React.ReactNode
   primaryRightActions?: React.ReactNode
   secondaryActions?: React.ReactNode
 }
@@ -656,7 +660,15 @@ const WorkspacePageContextMenu = ({
 
 const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorkspaceMainHeaderProps>(
   (
-    { className, breadcrumb, pageContextMenu, primaryRightActions, secondaryActions, ...props },
+    {
+      className,
+      breadcrumb,
+      pageContextMenu,
+      pageContextMenuTrailing,
+      primaryRightActions,
+      secondaryActions,
+      ...props
+    },
     ref
   ) => {
     const {
@@ -692,7 +704,14 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           >
             <div className="app-no-drag flex min-w-0 items-center gap-1.5">
               <div className="min-w-0">{breadcrumb}</div>
-              {pageContextMenu ? <div className="shrink-0">{pageContextMenu}</div> : null}
+              {pageContextMenu || pageContextMenuTrailing ? (
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {pageContextMenu ? <div className="shrink-0">{pageContextMenu}</div> : null}
+                  {pageContextMenuTrailing ? (
+                    <div className="min-w-0 truncate">{pageContextMenuTrailing}</div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {primaryRightActions ? (
               <div
@@ -874,17 +893,19 @@ WorkspaceHeaderActions.displayName = 'WorkspaceHeaderActions'
 const WorkspaceHeaderActionGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof ActionButtonGroup>
->(({ className, ...props }, ref) => {
+>(({ className, dividers, ...props }, ref) => {
   const actionAppearance = React.useContext(WorkspaceHeaderActionAppearanceContext)
   const isPlainAppearance = actionAppearance === 'plain'
+  const showDividers = dividers ?? !isPlainAppearance
 
   return (
     <ActionButtonGroup
       ref={ref}
+      dividers={showDividers}
       className={cn(
         'ui-compact-control rounded-[var(--radius-button-pill)]',
         workspaceTopbarControlClass,
-        isPlainAppearance && 'border-0 bg-transparent [&>*:not(:first-child)]:border-l-0',
+        isPlainAppearance && 'border-0 bg-transparent',
         className
       )}
       {...props}
@@ -897,10 +918,10 @@ const WorkspaceHeaderActionDivider = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div
+  <Separator
     ref={ref}
-    aria-hidden="true"
-    className={cn('h-5 w-[var(--border-width)] shrink-0 bg-sidebar-border', className)}
+    orientation="vertical"
+    className={cn('h-5 bg-sidebar-border', className)}
     {...props}
   />
 ))
@@ -927,7 +948,7 @@ const DocumentWorkspacePanelContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-none', className)}
+    className={cn('flex min-h-0 flex-1 flex-col overflow-hidden scrollbar-none', className)}
     {...props}
   />
 ))

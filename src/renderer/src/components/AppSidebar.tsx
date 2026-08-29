@@ -69,6 +69,7 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
       { id: 'notes', label: 'Notebooks', icon: APP_PAGE_ICONS.notes },
       { id: 'projects', label: 'Projects', icon: APP_PAGE_ICONS.projects },
       { id: 'calendar', label: 'Calendar', icon: APP_PAGE_ICONS.calendar },
+      { id: 'resources', label: 'Resources', icon: APP_PAGE_ICONS.resources },
       { id: 'knowledge', label: 'Knowledge', icon: APP_PAGE_ICONS.knowledge }
     ]
   },

@@ -30,4 +30,16 @@ describe('NoteShapeIcon', () => {
     expect(markup).toContain('project-icon-surface')
     expect(markup).toContain('--project-icon-color:#38bdf8')
   })
+
+  it('renders the selected Tabler icon variant', () => {
+    const filledMarkup = renderToStaticMarkup(createElement(NoteShapeIcon, { icon, size: 18 }))
+    const outlinedMarkup = renderToStaticMarkup(
+      createElement(NoteShapeIcon, {
+        icon: { ...icon, variant: 'outlined' },
+        size: 18
+      })
+    )
+
+    expect(outlinedMarkup).not.toBe(filledMarkup)
+  })
 })

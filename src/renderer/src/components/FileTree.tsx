@@ -1,24 +1,15 @@
 import { ReactElement, ReactNode, useMemo } from 'react'
-import { Copy, FileText, Folder, FolderInput, Link, Pencil, Tag, Trash2 } from './ui/icons'
+import { FileText, Folder, Tag } from './ui/icons'
 import { isNotePath, stripNoteExtension } from '../../../shared/noteDocument'
-import type { NativeMenuItemDescriptor, NoteListItem } from '../../../shared/types'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger
-} from './ui/context-menu'
+import type { NoteListItem } from '../../../shared/types'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
+import { ActionMenuItems } from './ui/action-menu'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
-import { Shortcut } from './ui/kbd'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
+import { buildNoteNativeMenuItems, getNoteMenuGroups } from '../lib/noteMenu'
 
 interface FileTreeProps {
   notes: NoteListItem[]
@@ -158,7 +149,18 @@ export function FileTree({
           />
         ) : (
           sorted.map((note) => {
-            const menuItems = buildNoteMenuItems({
+            const menuGroups = getNoteMenuGroups(
+              {
+                onDelete: () => onDelete(note.relPath),
+                onRename: () => onRename(note.relPath),
+                onDuplicate: onDuplicate ? () => onDuplicate(note.relPath) : undefined,
+                onMoveTo: onMoveTo ? (folder) => onMoveTo(note.relPath, folder) : undefined,
+                onCopyLink: onCopyLink ? () => onCopyLink(note.relPath) : undefined
+              },
+              onMoveTo ? folderNames : []
+            )
+            const menuItems = buildNoteNativeMenuItems({
+              canRename: true,
               canDuplicate: Boolean(onDuplicate),
               canCopyLink: Boolean(onCopyLink),
               moveFolders: onMoveTo ? folderNames : []
@@ -223,48 +225,7 @@ export function FileTree({
               <ContextMenu key={note.relPath}>
                 <ContextMenuTrigger asChild>{noteRow}</ContextMenuTrigger>
                 <ContextMenuContent>
-                  <ContextMenuItem onClick={() => onRename(note.relPath)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Rename
-                  </ContextMenuItem>
-                  {onDuplicate && (
-                    <ContextMenuItem onClick={() => onDuplicate(note.relPath)}>
-                      <Copy className="mr-2 h-4 w-4" />
-                      Duplicate
-                    </ContextMenuItem>
-                  )}
-                  {onMoveTo && folderNames.length > 0 && (
-                    <ContextMenuSub>
-                      <ContextMenuSubTrigger>
-                        <FolderInput className="mr-2 h-4 w-4" />
-                        Move to...
-                      </ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        {folderNames.map((folder) => (
-                          <ContextMenuItem
-                            key={folder}
-                            onClick={() => onMoveTo(note.relPath, folder)}
-                          >
-                            {folder}
-                          </ContextMenuItem>
-                        ))}
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                  )}
-                  {onCopyLink && (
-                    <ContextMenuItem onClick={() => onCopyLink(note.relPath)}>
-                      <Link className="mr-2 h-4 w-4" />
-                      Copy link
-                    </ContextMenuItem>
-                  )}
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={() => onDelete(note.relPath)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                    <ContextMenuShortcut>
-                      <Shortcut keys={['cmd', 'backspace']} />
-                    </ContextMenuShortcut>
-                  </ContextMenuItem>
+                  <ActionMenuItems variant="context" groups={menuGroups} />
                 </ContextMenuContent>
               </ContextMenu>
             )
@@ -282,30 +243,4 @@ function Section({ title, children }: { title: string; children: ReactNode }): R
       <div className="flex flex-col gap-1">{children}</div>
     </section>
   )
-}
-
-function buildNoteMenuItems(options: {
-  canDuplicate: boolean
-  canCopyLink: boolean
-  moveFolders: string[]
-}): NativeMenuItemDescriptor[] {
-  return [
-    { id: 'rename', label: 'Rename' },
-    ...(options.canDuplicate ? [{ id: 'duplicate', label: 'Duplicate' }] : []),
-    ...(options.moveFolders.length > 0
-      ? [
-          {
-            id: 'move',
-            label: 'Move to...',
-            submenu: options.moveFolders.map((folder) => ({
-              id: `move:${folder}`,
-              label: folder
-            }))
-          }
-        ]
-      : []),
-    ...(options.canCopyLink ? [{ id: 'copy-link', label: 'Copy link' }] : []),
-    { type: 'separator' },
-    { id: 'delete', label: 'Delete', accelerator: 'Command+Backspace' }
-  ]
 }

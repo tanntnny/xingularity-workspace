@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { SUBSCRIPTION_CHANNELS } from '../shared/ipc'
+import { SUBSCRIPTION_TAG_MAX_COUNT, SUBSCRIPTION_TAG_MAX_LENGTH } from '../shared/subscriptions'
 import { SubscriptionsService } from './subscriptionsService'
 import { handleIpc } from './errorReporting'
 
@@ -21,7 +22,10 @@ const createSubscriptionSchema = z.object({
   status: subscriptionStatusSchema,
   reviewFlag: reviewFlagSchema.optional(),
   lastUsedAt: isoDateSchema.optional(),
-  tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  tags: z
+    .array(z.string().trim().min(1).max(SUBSCRIPTION_TAG_MAX_LENGTH))
+    .max(SUBSCRIPTION_TAG_MAX_COUNT)
+    .optional(),
   notes: z.string().trim().max(4000).optional(),
   renewalReminderDays: reminderDaysSchema,
   cancellationUrl: z.string().trim().url().max(1000).optional(),
@@ -41,7 +45,10 @@ const updateSubscriptionSchema = z.object({
   status: subscriptionStatusSchema.optional(),
   reviewFlag: reviewFlagSchema.optional(),
   lastUsedAt: isoDateSchema.optional().nullable(),
-  tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  tags: z
+    .array(z.string().trim().min(1).max(SUBSCRIPTION_TAG_MAX_LENGTH))
+    .max(SUBSCRIPTION_TAG_MAX_COUNT)
+    .optional(),
   notes: z.string().trim().max(4000).optional().nullable(),
   renewalReminderDays: reminderDaysSchema,
   calendarEventId: z.string().trim().max(200).optional().nullable(),

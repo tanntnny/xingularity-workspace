@@ -17,6 +17,9 @@ export interface ScheduleJobListProps {
   className?: string
   onSelect: (jobId: string) => void
   onCreate: () => void
+  onRunJob?: (jobId: string) => void
+  onRequestDeleteJob?: (jobId: string) => void
+  isRunning?: boolean
 }
 
 export interface ScheduleEditorProps {

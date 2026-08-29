@@ -78,6 +78,38 @@ describe('ResourceService', () => {
     expect(snapshot.resources[0]?.projectIds).toBeUndefined()
     expect(snapshot.relations).toEqual([])
   })
+
+  it('synchronizes global project links and removes resources with their relations', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-resource-service-'))
+    temporaryRoots.push(root)
+    const service = new ResourceService(root)
+    const resource = await service.add({
+      type: 'external',
+      canonicalUri: 'https://example.com/linked'
+    })
+
+    const linked = await service.setProjectLinks({
+      resourceId: resource.id,
+      projectIds: ['project-1', 'project-2']
+    })
+    expect(linked.projectIds).toEqual(['project-1', 'project-2'])
+    expect((await service.list()).relations).toHaveLength(2)
+
+    const unassigned = await service.setProjectLinks({ resourceId: resource.id, projectIds: [] })
+    expect(unassigned.projectIds).toBeUndefined()
+    expect((await service.list()).relations).toEqual([])
+
+    await service.relate({
+      type: 'project_contains_resource',
+      fromId: 'project-1',
+      fromKind: 'project',
+      toId: resource.id,
+      toKind: 'resource'
+    })
+    await service.remove(resource.id)
+    expect((await service.list()).resources).toEqual([])
+    expect((await service.list()).relations).toEqual([])
+  })
 })
 
 async function serviceRootFolder(root: string): Promise<string> {

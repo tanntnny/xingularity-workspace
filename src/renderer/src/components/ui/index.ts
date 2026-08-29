@@ -35,6 +35,9 @@ export type {
   SelectionPopoverProps,
   SingleSelectionPopoverProps
 } from './selection-popover'
+export { ResponsivePicker } from './responsive-picker'
+export { useResponsivePickerOpen } from './responsive-picker-context'
+export type { ResponsivePickerProps } from './responsive-picker'
 export { ColumnFolderPicker } from './column-folder-picker'
 export type { ColumnFolderPickerNode, ColumnFolderPickerProps } from './column-folder-picker'
 export { SelectiveChip } from './selective-chip'
@@ -148,6 +151,14 @@ export {
   ContextMenuRadioGroup
 } from './context-menu'
 
+export { ActionMenuItems } from './action-menu'
+export type {
+  ActionMenuGroup,
+  ActionMenuItemDefinition,
+  ActionMenuItemsProps,
+  ActionMenuVariant
+} from './action-menu'
+
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'
 
 export { Calendar } from './calendar'
@@ -183,6 +194,8 @@ export {
 } from './select'
 export { ActionButtonGroup, ButtonGroup } from './button-group'
 export type { ActionButtonGroupProps } from './button-group'
+export { Separator } from './separator'
+export type { SeparatorOrientation, SeparatorProps } from './separator'
 export { ChipGroup } from './chip-group'
 export type { ChipGroupProps } from './chip-group'
 
@@ -199,6 +212,7 @@ export {
 } from './table'
 export { TableRowList } from './table-row-list'
 export type { TableRowListColumn, TableRowListProps } from './table-row-list'
+export type { TableSortDirection, TableSortState, TableSortValue } from '../../lib/tableSort'
 
 export { Toaster } from './sonner'
 

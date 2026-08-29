@@ -1,24 +1,30 @@
 import { FormEvent, KeyboardEvent, ReactElement, useMemo, useState } from 'react'
-import { FileText, ListTodo, MoreHorizontal, Trash2, Link, Loader2 } from '../components/ui/icons'
 import {
+  FileText,
+  Flag,
+  ListTodo,
+  MoreHorizontal,
+  Trash2,
+  Link,
+  Loader2
+} from '../components/ui/icons'
+import {
+  ActionMenuItems,
   Badge,
   Card,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
   Button,
   Input,
-  Shortcut,
-  StatusChip
+  StatusChip,
+  type ActionMenuGroup
 } from '../components/ui'
 import { ActionButtonGroup } from '../components/ui/button-group'
+import { Shortcut } from '../components/ui/kbd'
 import { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard } from '../components/workspace'
 import type {
   FleetingConversionResult,
@@ -407,6 +413,94 @@ function FleetingNoteCard({
         minute: '2-digit'
       })
 
+  const menuGroups: ActionMenuGroup[] = [
+    {
+      id: 'conversion',
+      items: [
+        {
+          id: 'to-note',
+          label: 'To Note',
+          icon: <FileText aria-hidden="true" />,
+          disabled: isBusy,
+          onSelect: () => void onConvert(note.relPath, 'note')
+        },
+        {
+          id: 'to-task',
+          label: 'To Task',
+          icon: <ListTodo aria-hidden="true" />,
+          disabled: isBusy,
+          onSelect: () => void onConvert(note.relPath, 'task')
+        }
+      ]
+    },
+    {
+      id: 'triage',
+      items: [
+        {
+          id: 'in-progress',
+          label: 'Mark in progress',
+          disabled: isBusy,
+          onSelect: () => void onUpdate(note.relPath, { triageState: 'in-progress' })
+        },
+        {
+          id: 'inbox',
+          label: 'Return to inbox',
+          disabled: isBusy,
+          onSelect: () => void onUpdate(note.relPath, { triageState: 'inbox' })
+        },
+        {
+          id: 'archive',
+          label: 'Archive',
+          disabled: isBusy,
+          onSelect: () => void onUpdate(note.relPath, { triageState: 'archived' })
+        }
+      ]
+    },
+    {
+      id: 'priority',
+      items: [
+        {
+          id: 'set-priority',
+          label: 'Set priority',
+          icon: <Flag aria-hidden="true" />,
+          submenu: [
+            {
+              id: 'high',
+              label: 'High',
+              disabled: isBusy,
+              onSelect: () => void onUpdate(note.relPath, { priority: 'high' })
+            },
+            {
+              id: 'medium',
+              label: 'Medium',
+              disabled: isBusy,
+              onSelect: () => void onUpdate(note.relPath, { priority: 'medium' })
+            },
+            {
+              id: 'low',
+              label: 'Low',
+              disabled: isBusy,
+              onSelect: () => void onUpdate(note.relPath, { priority: 'low' })
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'destructive',
+      items: [
+        {
+          id: 'remove',
+          label: 'Remove',
+          icon: <Trash2 aria-hidden="true" />,
+          destructive: true,
+          disabled: isBusy,
+          onSelect: () => void onRemove(note.relPath)
+        }
+      ]
+    }
+  ]
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -486,94 +580,14 @@ function FleetingNoteCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onConvert(note.relPath, 'note')}
-                >
-                  <FileText aria-hidden="true" />
-                  To Note
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onConvert(note.relPath, 'task')}
-                >
-                  <ListTodo aria-hidden="true" />
-                  To Task
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { triageState: 'in-progress' })}
-                >
-                  Mark in progress
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { triageState: 'inbox' })}
-                >
-                  Return to inbox
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { triageState: 'archived' })}
-                >
-                  Archive
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { priority: 'high' })}
-                >
-                  Set high priority
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { priority: 'medium' })}
-                >
-                  Set medium priority
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isBusy}
-                  onSelect={() => void onUpdate(note.relPath, { priority: 'low' })}
-                >
-                  Set low priority
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled={isBusy} onSelect={() => void onRemove(note.relPath)}>
-                  <Trash2 aria-hidden="true" />
-                  Remove
-                </DropdownMenuItem>
+                <ActionMenuItems variant="dropdown" groups={menuGroups} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </Card>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem disabled={isBusy} onSelect={() => void onConvert(note.relPath, 'note')}>
-          <FileText aria-hidden="true" />
-          To Note
-        </ContextMenuItem>
-        <ContextMenuItem disabled={isBusy} onSelect={() => void onConvert(note.relPath, 'task')}>
-          <ListTodo aria-hidden="true" />
-          To Task
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={isBusy}
-          onSelect={() => void onUpdate(note.relPath, { triageState: 'in-progress' })}
-        >
-          Mark in progress
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={isBusy}
-          onSelect={() => void onUpdate(note.relPath, { triageState: 'archived' })}
-        >
-          Archive
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem disabled={isBusy} onSelect={() => void onRemove(note.relPath)}>
-          <Trash2 aria-hidden="true" />
-          Remove
-        </ContextMenuItem>
+      <ContextMenuContent data-testid={`fleeting-context-menu:${note.id}`}>
+        <ActionMenuItems variant="context" groups={menuGroups} />
       </ContextMenuContent>
     </ContextMenu>
   )

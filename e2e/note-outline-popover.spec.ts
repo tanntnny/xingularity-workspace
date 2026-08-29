@@ -187,7 +187,7 @@ test.describe('note outline panel', () => {
       await expect(fileTreePanel).toBeVisible()
       await expect(outlinePanel).toBeVisible()
       await expect(
-        fileTreePanel.getByRole('button', { name: 'File tree', exact: true })
+        fileTreePanel.getByRole('button', { name: 'Explorer', exact: true })
       ).toHaveAttribute('aria-expanded', 'true')
       await expect(
         outlinePanel.getByRole('button', { name: 'Outline', exact: true })
@@ -216,18 +216,19 @@ test.describe('note outline panel', () => {
       await openNote(page, 'alpha.md')
       const fileTreePanel = page.getByTestId('note-file-tree-panel')
       const fileTreeToggle = fileTreePanel.getByRole('button', {
-        name: 'File tree',
+        name: 'Explorer',
         exact: true
       })
       const outlineToggle = page
         .getByTestId('note-outline-panel')
         .getByRole('button', { name: 'Outline', exact: true })
 
-      await expect(fileTreePanel).toHaveCSS('flex-grow', '1')
+      await expect(fileTreePanel).toHaveCSS('flex-grow', '0')
+      await expect(fileTreePanel).toHaveCSS('flex-shrink', '0')
       await fileTreeToggle.press('Enter')
       await expect(fileTreeToggle).toHaveAttribute('aria-expanded', 'false')
       await expect(fileTreePanel).toHaveCSS('flex-grow', '0')
-      await expect(fileTreePanel).toHaveCSS('min-height', '0px')
+      await expect(fileTreePanel).toHaveCSS('flex-shrink', '0')
       await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true')
 
       await outlineToggle.press('Space')
@@ -235,7 +236,8 @@ test.describe('note outline panel', () => {
 
       await fileTreeToggle.press('Space')
       await expect(fileTreeToggle).toHaveAttribute('aria-expanded', 'true')
-      await expect(fileTreePanel).toHaveCSS('flex-grow', '1')
+      await expect(fileTreePanel).toHaveCSS('flex-grow', '0')
+      await expect(fileTreePanel).toHaveCSS('flex-shrink', '0')
       await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false')
 
       await outlineToggle.press('Enter')
@@ -310,6 +312,7 @@ test.describe('note outline panel', () => {
       const outlineList = page.getByTestId('note-outline-list')
       const notesPanelStack = page.getByTestId('notes-panel-stack')
       await expect(outlineList).toBeVisible()
+      await expect(page.locator('[data-workspace-scrollport="true"]')).toHaveCount(1)
       await expect
         .poll(
           () =>
@@ -327,6 +330,13 @@ test.describe('note outline panel', () => {
       }))
       expect(stackMetrics.overflowY).toBe('auto')
       expect(stackMetrics.scrollHeight).toBeGreaterThan(stackMetrics.clientHeight)
+      const nestedScrollableElements = await notesPanelStack.evaluate((element) =>
+        Array.from(element.querySelectorAll<HTMLElement>('*'))
+          .filter((candidate) => /(auto|scroll)/.test(getComputedStyle(candidate).overflowY))
+          .filter((candidate) => candidate.scrollHeight > candidate.clientHeight + 1)
+          .map((candidate) => candidate.dataset.testid ?? candidate.tagName.toLowerCase())
+      )
+      expect(nestedScrollableElements).toEqual([])
       await expect(page.getByTestId('note-outline-item:35')).toContainText('Section 36')
     } finally {
       await electronApp.close()

@@ -10,6 +10,7 @@ import type {
   Maybe,
   SubscriptionAnalytics,
   SubscriptionAnalyticsFilters,
+  SubscriptionListResult,
   SubscriptionRecord,
   UpdateSubscriptionInput
 } from '../shared/types'
@@ -23,14 +24,17 @@ export class SubscriptionsService {
     this.store = vaultRoot ? new SubscriptionsStore(vaultRoot) : null
   }
 
-  async list(): Promise<SubscriptionRecord[]> {
+  async list(): Promise<SubscriptionListResult> {
     await this.mutationQueue
-    const records = await this.assertStore().read()
-    return records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    const result = await this.assertStore().read()
+    return {
+      records: result.records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+      migrationWarnings: result.migrationWarnings
+    }
   }
 
   async get(id: string): Promise<Maybe<SubscriptionRecord>> {
-    const records = await this.list()
+    const { records } = await this.list()
     return records.find((record) => record.id === id) ?? null
   }
 
@@ -115,7 +119,7 @@ export class SubscriptionsService {
   }
 
   async getAnalytics(filters: SubscriptionAnalyticsFilters = {}): Promise<SubscriptionAnalytics> {
-    const records = await this.list()
+    const { records } = await this.list()
     return deriveSubscriptionAnalytics(records, filters)
   }
 

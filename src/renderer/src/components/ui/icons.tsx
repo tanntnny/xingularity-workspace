@@ -68,6 +68,7 @@ import {
   IconFileDownloadFilled,
   IconFiles,
   IconFileTextFilled,
+  IconFilter2,
   IconFilterFilled,
   IconFlagFilled,
   IconFlaskFilled,
@@ -113,6 +114,7 @@ import {
   IconStarFilled,
   IconTag,
   IconTagFilled,
+  IconTable,
   IconTrash,
   IconTrendingDown,
   IconTrophyFilled,
@@ -190,6 +192,7 @@ export const Files = IconFiles
 export const FileText = IconFileTextFilled
 export const Flag = IconFlagFilled
 export const FlaskConical = IconFlaskFilled
+export const Filter2 = IconFilter2
 export const Folder = IconFolderFilled
 export const FolderInput = IconFolderOpenFilled
 export const FolderKanban = IconLayoutKanbanFilled
@@ -260,6 +263,7 @@ export const Star = IconStarFilled
 export const StarOutline = IconStar
 export const Tag = IconTagFilled
 export const TagOutline = IconTag
+export const Table = IconTable
 export const Terminal = IconDeviceDesktopFilled
 export const Target = IconCircleDotFilled
 export const Trash2 = IconTrash

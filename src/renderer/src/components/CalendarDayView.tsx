@@ -1,16 +1,19 @@
 import { DragEvent, ReactElement, useMemo, useState } from 'react'
-import { CalendarTask } from '../../../shared/types'
-import { isTaskDone } from '../../../shared/taskStatus'
+import type { CalendarTask } from '../../../shared/types'
+import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { getTaskStatus } from '../lib/taskStatus'
+import { TaskContextMenu } from './TaskContextMenu'
 import { ChevronLeft, ChevronRight, WorkspaceIconButton } from './ui'
 
 interface CalendarDayViewProps {
   selectedDate: string
   tasks: CalendarTask[]
   onSelectDate: (date: string) => void
-  onRescheduleTask?: (taskId: string, newDate: string) => void
+  onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onOpenTask?: (taskId: string) => void
+  onDeleteTask?: (taskId: string) => void
+  onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
 }
 
 // Time slots from 6 AM to 11 PM
@@ -28,7 +31,9 @@ export function CalendarDayView({
   tasks,
   onSelectDate,
   onRescheduleTask,
-  onOpenTask
+  onOpenTask,
+  onDeleteTask,
+  onUpdateTask
 }: CalendarDayViewProps): ReactElement {
   const selected = useMemo(() => parseIsoDate(selectedDate), [selectedDate])
   const todayIso = toIsoDate(new Date())
@@ -64,6 +69,29 @@ export function CalendarDayView({
   }, [tasks])
 
   const allDayTasks = tasksByHour[-1] || []
+  const safeDeleteTask = onDeleteTask ?? (() => undefined)
+  const safeUpdateTask = onUpdateTask ?? (() => undefined)
+  const wrapTask = (task: CalendarTask, content: ReactElement): ReactElement => (
+    <TaskContextMenu
+      key={task.id}
+      task={task}
+      selectedDate={selectedDate}
+      onDelete={safeDeleteTask}
+      onUpdateStatus={(taskId, status) =>
+        safeUpdateTask(taskId, { status, completed: isTaskStatusDone(status) })
+      }
+      onUpdatePriority={(taskId, priority) => safeUpdateTask(taskId, { priority })}
+      onUpdateTaskType={(taskId, taskType) => safeUpdateTask(taskId, { taskType })}
+      onUpdateTime={(taskId, time) => safeUpdateTask(taskId, { time })}
+      onUpdateReminders={(taskId, reminders) => safeUpdateTask(taskId, { reminders })}
+      onScheduleTask={onRescheduleTask}
+      onUnscheduleTask={
+        onRescheduleTask ? (taskId) => onRescheduleTask(taskId, undefined) : undefined
+      }
+    >
+      {content}
+    </TaskContextMenu>
+  )
 
   const goToPrevDay = (): void => {
     const prev = new Date(selected)
@@ -114,18 +142,21 @@ export function CalendarDayView({
             All Day / No Time Set
           </h3>
           <div className="flex flex-wrap gap-2">
-            {allDayTasks.map((task) => (
-              <button
-                type="button"
-                key={task.id}
-                onClick={() => onOpenTask?.(task.id)}
-                className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
-              >
-                <span className="truncate text-base font-semibold text-foreground">
-                  {task.title}
-                </span>
-              </button>
-            ))}
+            {allDayTasks.map((task) =>
+              wrapTask(
+                task,
+                <button
+                  type="button"
+                  key={task.id}
+                  onClick={() => onOpenTask?.(task.id)}
+                  className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
+                >
+                  <span className="truncate text-base font-semibold text-foreground">
+                    {task.title}
+                  </span>
+                </button>
+              )
+            )}
           </div>
         </div>
       )}
@@ -172,21 +203,24 @@ export function CalendarDayView({
                     isDragOver ? 'bg-muted' : ''
                   }`}
                 >
-                  {slotTasks.map((task) => (
-                    <button
-                      type="button"
-                      key={task.id}
-                      onClick={() => onOpenTask?.(task.id)}
-                      className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
-                    >
-                      <span className="truncate text-base font-semibold text-foreground">
-                        {task.title}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatCalendarTaskTimeLabel(task)}
-                      </span>
-                    </button>
-                  ))}
+                  {slotTasks.map((task) =>
+                    wrapTask(
+                      task,
+                      <button
+                        type="button"
+                        key={task.id}
+                        onClick={() => onOpenTask?.(task.id)}
+                        className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
+                      >
+                        <span className="truncate text-base font-semibold text-foreground">
+                          {task.title}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatCalendarTaskTimeLabel(task)}
+                        </span>
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             )

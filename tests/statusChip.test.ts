@@ -71,6 +71,14 @@ describe('StatusChip', () => {
     expect(markup).toContain('focus-visible:bg-surface-subtle-hover')
   })
 
+  it('supports an attention surface with warning tone', () => {
+    const markup = renderToStaticMarkup(createElement(StatusChip, { item, surface: 'attention' }))
+
+    expect(markup).toContain('border-warning-border')
+    expect(markup).toContain('bg-warning-muted')
+    expect(markup).toContain('text-warning-muted-foreground')
+  })
+
   it('supports a transparent surface that gains a background on hover', () => {
     const markup = renderToStaticMarkup(createElement(StatusChip, { item, surface: 'hover' }))
 
@@ -147,7 +155,10 @@ describe('StatusChip', () => {
     const markup = renderToStaticMarkup(createElement(StatusChip, { item, mutedLabel: true }))
 
     expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*">Completed<\/span>/)
-    expect(markup).not.toMatch(/<span class="[^"]*text-foreground[^"]*">Completed<\/span>/)
+    expect(markup).toContain('group/status-chip')
+    expect(markup).toContain('group-hover/status-chip:text-foreground')
+    expect(markup).toContain('group-focus-visible/status-chip:text-foreground')
+    expect(markup).not.toContain(' text-foreground">Completed')
     expect(markup).toContain('ui-control')
   })
 

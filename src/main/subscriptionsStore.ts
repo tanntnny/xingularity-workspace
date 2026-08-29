@@ -3,17 +3,60 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { SubscriptionRecord } from '../shared/types'
 import {
+  normalizeSubscriptionTagsWithDetails,
+  SUBSCRIPTION_TAG_MAX_COUNT,
+  SUBSCRIPTION_TAG_MAX_LENGTH
+} from '../shared/subscriptions'
+import {
   deleteLegacyVaultPath,
   getLegacyRootVaultSubscriptionsPath,
   getLegacySystemVaultSubscriptionsPath,
   getVaultSubscriptionsPath
 } from './vaultData'
 
-function normalizeState(records: unknown): SubscriptionRecord[] {
+export interface SubscriptionStoreReadResult {
+  records: SubscriptionRecord[]
+  migrationWarnings: string[]
+  changed: boolean
+}
+
+function normalizeState(records: unknown): SubscriptionStoreReadResult {
   if (!Array.isArray(records)) {
-    return []
+    return { records: [], migrationWarnings: [], changed: false }
   }
-  return records.filter((record): record is SubscriptionRecord => Boolean(record))
+
+  const migrationWarnings: string[] = []
+  let changed = false
+  const normalizedRecords = records
+    .filter((record): record is SubscriptionRecord => Boolean(record))
+    .map((record) => {
+      if (record.tags === undefined) return record
+      const details = normalizeSubscriptionTagsWithDetails(record.tags)
+      if (!details.changed) return record
+
+      changed = true
+      const removedCount = details.invalidCount + details.duplicateCount + details.overflowCount
+      const changes: string[] = []
+      if (details.canonicalizedCount > 0) {
+        changes.push(
+          `${details.canonicalizedCount} tag${details.canonicalizedCount === 1 ? '' : 's'} normalized`
+        )
+      }
+      if (removedCount > 0) {
+        changes.push(
+          `${removedCount} invalid, duplicate, or over-limit tag${removedCount === 1 ? '' : 's'} removed`
+        )
+      }
+      if (changes.length === 0) {
+        changes.push('invalid tag data replaced')
+      }
+      migrationWarnings.push(
+        `Subscription “${record.name}” migrated: ${changes.join('; ')}. Tags now use lowercase namespace-safe names (up to ${SUBSCRIPTION_TAG_MAX_COUNT} tags, ${SUBSCRIPTION_TAG_MAX_LENGTH} characters each).`
+      )
+      return { ...record, tags: details.tags }
+    })
+
+  return { records: normalizedRecords, migrationWarnings, changed }
 }
 
 export class SubscriptionsStore {
@@ -27,16 +70,18 @@ export class SubscriptionsStore {
     this.legacySystemFilePath = getLegacySystemVaultSubscriptionsPath(vaultRoot)
   }
 
-  async read(): Promise<SubscriptionRecord[]> {
+  async read(): Promise<SubscriptionStoreReadResult> {
     const current = await this.readJsonFile(this.filePath)
     if (current) {
-      return normalizeState(current)
+      const normalized = normalizeState(current)
+      if (normalized.changed) await this.write(normalized.records)
+      return normalized
     }
 
     const legacyRoot = await this.readJsonFile(getLegacyRootVaultSubscriptionsPath(this.vaultRoot))
     if (legacyRoot) {
       const normalized = normalizeState(legacyRoot)
-      await this.write(normalized)
+      await this.write(normalized.records)
       await this.cleanupLegacyFiles()
       return normalized
     }
@@ -44,13 +89,13 @@ export class SubscriptionsStore {
     const legacy = await this.readJsonFile(this.legacySystemFilePath)
     if (legacy) {
       const normalized = normalizeState(legacy)
-      await this.write(normalized)
+      await this.write(normalized.records)
       await this.cleanupLegacyFiles()
       return normalized
     }
 
     await this.write([])
-    return []
+    return { records: [], migrationWarnings: [], changed: false }
   }
 
   async write(records: SubscriptionRecord[]): Promise<void> {
@@ -64,7 +109,7 @@ export class SubscriptionsStore {
     updater: (records: SubscriptionRecord[]) => SubscriptionRecord[]
   ): Promise<SubscriptionRecord[]> {
     const current = await this.read()
-    const next = updater(current)
+    const next = updater(current.records)
     await this.write(next)
     return next
   }

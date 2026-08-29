@@ -115,10 +115,12 @@ const api: RendererVaultApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.resourcesList),
     add: (input) => ipcRenderer.invoke(IPC_CHANNELS.resourcesAdd, input),
     update: (input) => ipcRenderer.invoke(IPC_CHANNELS.resourcesUpdate, input),
+    setProjectLinks: (input) => ipcRenderer.invoke(IPC_CHANNELS.resourcesSetProjectLinks, input),
     setProjectNotebook: (input) =>
       ipcRenderer.invoke(IPC_CHANNELS.resourcesSetProjectNotebook, input),
     detachFromProject: (input) =>
       ipcRenderer.invoke(IPC_CHANNELS.resourcesDetachFromProject, input),
+    remove: (resourceId) => ipcRenderer.invoke(IPC_CHANNELS.resourcesRemove, resourceId),
     refresh: (resourceId) => ipcRenderer.invoke(IPC_CHANNELS.resourcesRefresh, resourceId),
     locate: (resourceId, nextPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.resourcesLocate, resourceId, nextPath),

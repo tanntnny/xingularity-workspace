@@ -26,6 +26,7 @@ const taskCreateSchema = z.object({
   date: dateSchema.optional(),
   endDate: dateSchema.optional(),
   time: timeSchema.optional(),
+  endTime: timeSchema.optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   taskType: z.string().trim().min(1).max(80).optional(),
   status: statusSchema.optional(),
@@ -40,6 +41,7 @@ const taskUpdateSchema = z.object({
   projectId: z.string().trim().min(1).max(120).nullable().optional(),
   date: dateSchema.optional(),
   endDate: dateSchema.nullable().optional(),
+  endTime: timeSchema.nullable().optional(),
   completed: z.boolean().optional(),
   status: statusSchema.optional(),
   ...automationFields

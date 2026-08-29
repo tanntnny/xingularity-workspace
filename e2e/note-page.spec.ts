@@ -121,7 +121,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   )
 
   const electronApp = await electron.launch({
-    args: ['.', `--user-data-dir=${userDataPath}`],
+    args: [`--user-data-dir=${userDataPath}`, '.'],
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -146,29 +146,8 @@ async function launchWithFixture(vaultRoot: string): Promise<{
     () => typeof window.__XINGULARITY_E2E__?.getLastPageLeaveSaveDebug === 'function'
   )
   const notesPageButton = page.getByTestId('sidebar-page:notes')
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(async () => {
-          try {
-            await window.vaultApi.vault.restoreLast()
-          } catch {
-            // Retry until the temporary fixture vault is fully restorable.
-          }
-
-          const notesButton = document.querySelector<HTMLButtonElement>(
-            '[data-testid="sidebar-page:notes"]'
-          )
-
-          if (!notesButton) {
-            return 'missing'
-          }
-
-          return notesButton.disabled ? 'disabled' : 'enabled'
-        }),
-      { timeout: 60_000 }
-    )
-    .toBe('enabled')
+  await expect(notesPageButton).toBeVisible({ timeout: 60_000 })
+  await expect(notesPageButton).toBeEnabled({ timeout: 60_000 })
   await notesPageButton.click()
   await expectNotePanelReady(page)
 
@@ -259,6 +238,63 @@ async function openNote(page: Page, relPath: string): Promise<void> {
   await expect
     .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
     .toBe(relPath)
+}
+
+async function startNoteTreeDrag(
+  page: Page,
+  sourceRelPath: string,
+  targetRelPath: string
+): Promise<void> {
+  await page.evaluate(
+    ({ sourceRelPath, targetRelPath }) => {
+      const source = document.querySelector<HTMLElement>(
+        `[data-testid="note-tree-row:${sourceRelPath}"]`
+      )
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="note-tree-row:${targetRelPath}"]`
+      )
+      if (!source || !target) {
+        throw new Error('Note tree drag visual fixtures are missing')
+      }
+
+      const sourceRect = source.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const dataTransfer = new DataTransfer()
+      const sourceClientX = sourceRect.left + sourceRect.width / 2
+      const sourceClientY = sourceRect.top + sourceRect.height / 2
+      const targetClientX = targetRect.left + targetRect.width / 2
+      const targetClientY = targetRect.top + targetRect.height / 2
+
+      source.dispatchEvent(
+        new DragEvent('dragstart', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX: sourceClientX,
+          clientY: sourceClientY
+        })
+      )
+      target.dispatchEvent(
+        new DragEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX: targetClientX,
+          clientY: targetClientY
+        })
+      )
+    },
+    { sourceRelPath, targetRelPath }
+  )
+}
+
+async function endNoteTreeDrag(page: Page, sourceRelPath: string): Promise<void> {
+  await page.evaluate((sourceRelPath) => {
+    const source = document.querySelector<HTMLElement>(
+      `[data-testid="note-tree-row:${sourceRelPath}"]`
+    )
+    source?.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+  }, sourceRelPath)
 }
 
 async function replaceEditorContent(page: Page, lines: string[]): Promise<void> {
@@ -583,7 +619,7 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('shows a rotated floating preview while dragging a notebook card', async () => {
+  test('shows an upright floating preview while dragging a notebook card', async () => {
     const vaultRoot = await createFixtureVault('Alpha note\n')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
@@ -615,8 +651,12 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(() =>
           floatingPreview.evaluate((element) => {
-            const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
-            return Math.abs(matrix.b) > 0.01 || Math.abs(matrix.c) > 0.01
+            const transform = getComputedStyle(element).transform
+            if (transform === 'none') {
+              return true
+            }
+            const matrix = new DOMMatrixReadOnly(transform)
+            return Math.abs(matrix.b) <= 0.01 && Math.abs(matrix.c) <= 0.01
           })
         )
         .toBe(true)
@@ -709,6 +749,182 @@ test.describe('note page block editor switching', () => {
           }
         })
         .toBe(false)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves a notebook card with a native pointer drag', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('notebook-card:alpha.md')
+      const target = page.getByTestId('notebook-card:archive')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await source.dragTo(target, { steps: 20 })
+
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'archive', 'alpha.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves a notebook folder with a native pointer drag', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'source'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'source', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'target'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('notebook-card:source')
+      const target = page.getByTestId('notebook-card:target')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await source.dragTo(target, { steps: 20 })
+
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'target', 'source', 'nested.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves a file with a native pointer drag in the right-panel file tree', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('note-tree-row:alpha.md')
+      const target = page.getByTestId('note-tree-row:archive')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await source.dragTo(target, { steps: 20 })
+
+      await expect(page.getByTestId('note-tree-row:archive/alpha.md')).toBeVisible({
+        timeout: 20_000
+      })
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'archive', 'alpha.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves a folder with a native pointer drag in the right-panel file tree', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'source'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'source', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('note-tree-row:source')
+      const target = page.getByTestId('note-tree-row:archive')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await source.dragTo(target, { steps: 20 })
+
+      await expect(page.getByTestId('note-tree-row:archive/source')).toBeVisible({
+        timeout: 20_000
+      })
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(path.join(vaultRoot, 'notebooks', 'archive', 'source', 'nested.md'))
+            return true
+          } catch {
+            return false
+          }
+        })
+        .toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('shows surfaced previews and highlights valid right-panel folder drops', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'source'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'source', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const target = page.getByTestId('note-tree-row:archive')
+      const preview = page.getByTestId('note-tree-drag-preview')
+      await expect(target).toBeVisible()
+
+      await startNoteTreeDrag(page, 'alpha.md', 'archive')
+
+      await expect(preview).toBeVisible({ timeout: 10_000 })
+      await expect(preview).toHaveAttribute('data-drag-preview-variant', 'surface')
+      await expect
+        .poll(() => preview.evaluate((element) => getComputedStyle(element).backgroundColor))
+        .not.toMatch(/transparent|rgba\(0, 0, 0, 0\)/)
+      await expect(target).toHaveAttribute('data-drag-over', 'true')
+
+      await endNoteTreeDrag(page, 'alpha.md')
+      await expect(preview).toHaveCount(0)
+      await expect(target).toHaveAttribute('data-drag-over', 'false')
+
+      await startNoteTreeDrag(page, 'source', 'archive')
+
+      await expect(preview).toBeVisible({ timeout: 10_000 })
+      await expect(preview).toContainText('source')
+      await expect(target).toHaveAttribute('data-drag-over', 'true')
+      await endNoteTreeDrag(page, 'source')
+      await expect(preview).toHaveCount(0)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -3051,7 +3267,7 @@ test.describe('note page block editor switching', () => {
 
       await page.getByRole('button', { name: 'Note tags selection', exact: true }).click()
       const tagPopover = page.getByTestId('note-tags-editor-popover')
-      const tagInput = tagPopover.getByRole('textbox', {
+      const tagInput = tagPopover.getByRole('combobox', {
         name: 'Search or add tags',
         exact: true
       })

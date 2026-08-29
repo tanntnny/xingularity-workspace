@@ -411,8 +411,27 @@ export class ScheduleService {
             t.automationSourceKey === action.automationSourceKey
         )
         if (existing) {
-          // Idempotent create: an existing automation-owned task is already
-          // in the desired collection, so treat the no-op as successful.
+          // Keep creates idempotent, but reconcile the deadline time when an
+          // existing automation-owned task predates endTime support. The
+          // update permission is required so create cannot mutate user tasks
+          // beyond the schedule's declared capabilities.
+          if (
+            job.permissions.includes('updateTasks') &&
+            action.endTime !== undefined &&
+            existing.endTime !== action.endTime
+          ) {
+            return {
+              next: {
+                calendarTasks: settings.calendarTasks.map((task) =>
+                  task.id === existing.id ? { ...task, endTime: action.endTime } : task
+                )
+              },
+              result: true
+            }
+          }
+
+          // Otherwise, an existing automation-owned task is already in the
+          // desired collection, so treat the create as a successful no-op.
           return { next: {}, result: true }
         }
 
@@ -425,6 +444,7 @@ export class ScheduleService {
           date: action.date,
           endDate: normalizeCalendarEndDate(action.date, action.endDate),
           time: action.time,
+          endTime: action.endTime,
           completed: isTaskStatusDone(action.status),
           status: action.status ?? 'pending',
           createdAt: new Date().toISOString(),
@@ -465,6 +485,8 @@ export class ScheduleService {
         const nextDate = action.date !== undefined ? action.date : updated[idx].date
         const nextEndDate =
           action.endDate !== undefined ? (action.endDate ?? undefined) : updated[idx].endDate
+        const nextEndTime =
+          action.endTime !== undefined ? (action.endTime ?? undefined) : updated[idx].endTime
         updated[idx] = {
           ...updated[idx],
           ...(action.title !== undefined ? { title: action.title } : {}),
@@ -479,6 +501,7 @@ export class ScheduleService {
                 endDate: normalizeCalendarEndDate(nextDate, nextEndDate)
               }
             : {}),
+          ...(action.endTime !== undefined ? { endTime: nextEndTime } : {}),
           ...(action.completed !== undefined
             ? { completed: action.completed, status: action.completed ? 'completed' : 'pending' }
             : {}),

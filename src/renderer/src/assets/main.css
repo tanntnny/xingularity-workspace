@@ -68,13 +68,12 @@
     --ring: #666666;
     --drag-preview-bg: var(--card);
     --drag-preview-border: var(--ring);
-    --drag-preview-rotation: -2deg;
     --drop-zone-bg: transparent;
     --drop-zone-border: transparent;
     --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
     --drop-zone-active-border: var(--ring);
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
-    --scrollbar-size: 2px;
+    --scrollbar-size: 5px;
     --scrollbar-thumb: #b8b8b8;
     --scrollbar-thumb-hover: #8a8a8a;
     --radius: 0.75rem;
@@ -449,8 +448,6 @@
 
   * {
     @apply border-border;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -474,6 +471,13 @@
 
   *::-webkit-scrollbar-button {
     display: none;
+  }
+
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
   }
 
   .scrollbar-none {

@@ -7,8 +7,8 @@ export type CalendarTaskPanelProps = UnscheduledTaskListProps
 
 export function CalendarTaskPanel(props: CalendarTaskPanelProps): ReactElement {
   return (
-    <WorkspacePanelStack data-testid="calendar-task-panel" className="h-full min-h-0">
-      <WorkspacePanelSection className="min-h-0 flex-1 overflow-hidden p-0">
+    <WorkspacePanelStack data-testid="calendar-task-panel">
+      <WorkspacePanelSection className="overflow-hidden p-0">
         <UnscheduledTaskList {...props} />
       </WorkspacePanelSection>
     </WorkspacePanelStack>

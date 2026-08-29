@@ -107,10 +107,15 @@ describe('ActionButtonGroup', () => {
     expect(markup).toContain('aria-label="Calendar period navigation"')
     expect(markup).toContain('role="group"')
     expect(markup).toContain('rounded-[var(--radius-button)]')
+    expect(markup).toContain('rounded-[var(--radius-button)] border bg-card')
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')
     expect(markup).toContain('ui-compact-control')
     expect(markup).toContain('ui-control')
     expect(markup).toContain('Current month')
+    expect(markup.match(/data-slot="separator"/g)).toHaveLength(2)
+    expect(markup.match(/data-orientation="vertical"/g)).toHaveLength(2)
+    expect(markup).toContain('[&amp;&gt;button]:!rounded-none')
+    expect(markup).toContain('[&amp;&gt;button]:!border-0')
   })
 
   it('supports an opt-in glow when a grouped control receives focus', () => {

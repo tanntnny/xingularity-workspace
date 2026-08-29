@@ -15,7 +15,13 @@ export function SonnerBridge(): ReactElement {
     // Process any new toasts from the store and show them via Sonner
     toasts.forEach((t) => {
       const toastFn =
-        t.kind === 'error' ? toast.error : t.kind === 'success' ? toast.success : toast
+        t.kind === 'error'
+          ? toast.error
+          : t.kind === 'warning'
+            ? toast.warning
+            : t.kind === 'success'
+              ? toast.success
+              : toast
 
       toastFn(t.message, {
         id: t.id,

@@ -35,7 +35,7 @@ export const PROJECT_ICON_SYMBOLS: ProjectIconSymbol[] = [
   'camera',
   'calendar'
 ]
-export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled']
+export const PROJECT_ICON_VARIANTS: ProjectIconVariant[] = ['filled', 'outlined']
 
 export const PROJECT_ICON_COLORS: string[] = [
   '#38bdf8',
@@ -106,12 +106,14 @@ export function normalizeProjectIcon(
     : PROJECT_ICON_SYMBOLS[
         hashString(`${fallbackSeed}:${candidateGlyph ?? ''}`) % PROJECT_ICON_SYMBOLS.length
       ]
+  const variant: ProjectIconVariant =
+    icon.set === 'tabler' && icon.variant === 'outlined' ? 'outlined' : 'filled'
 
   return {
     set: 'tabler',
     glyph,
     shape: undefined,
-    variant: 'filled',
+    variant,
     color: normalizeProjectIconColor(icon.color, fallbackSeed)
   }
 }

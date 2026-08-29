@@ -11,7 +11,7 @@ const WorkspacePanelSection = React.forwardRef<HTMLElement, WorkspacePanelSectio
     <section
       ref={ref}
       className={cn(
-        'flex flex-col gap-3 rounded-shell border border-panel-border bg-panel p-4 text-card-foreground',
+        'flex shrink-0 flex-col gap-3 rounded-shell border border-panel-border bg-panel p-4 text-card-foreground',
         className
       )}
       {...props}
@@ -92,13 +92,11 @@ const CollapsibleWorkspacePanelSection = React.forwardRef<
           </CollapsibleTrigger>
           {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
-        <CollapsibleContent className={cn('min-h-0', contentClassName)}>
-          <div className="h-full min-h-0">
-            {description ? (
-              <p className="px-4 pb-1 pt-3 text-xs text-muted-foreground">{description}</p>
-            ) : null}
-            {children}
-          </div>
+        <CollapsibleContent className={contentClassName}>
+          {description ? (
+            <p className="px-4 pb-1 pt-3 text-xs text-muted-foreground">{description}</p>
+          ) : null}
+          {children}
         </CollapsibleContent>
       </WorkspacePanelSection>
     </Collapsible>

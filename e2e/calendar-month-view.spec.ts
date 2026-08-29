@@ -3,6 +3,7 @@ import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { expectSingleRightPanelScrollport } from './right-panel-scrollport'
 
 declare global {
   interface Window {
@@ -31,27 +32,33 @@ async function createFixtureVault(
   taskCount = 1,
   includeUnscheduled = false,
   tagsByIndex: Record<number, string[]> = {},
-  projectIndexes: readonly number[] = []
+  projectIndexes: readonly number[] = [],
+  unscheduledTaskCount = includeUnscheduled ? 1 : 0
 ): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-month-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
-  const calendarTasks = Array.from({ length: taskCount }, (_, index) => ({
-    id: `task-month-visible-${index}`,
-    title:
-      includeUnscheduled && index === taskCount - 1
-        ? 'Unscheduled view task'
+  const calendarTasks = Array.from({ length: taskCount }, (_, index) => {
+    const isUnscheduled = includeUnscheduled && index >= taskCount - unscheduledTaskCount
+
+    return {
+      id: `task-month-visible-${index}`,
+      title: isUnscheduled
+        ? unscheduledTaskCount === 1
+          ? 'Unscheduled view task'
+          : `Unscheduled task ${index + 1}`
         : taskCount === 1
           ? 'Month view task'
           : `Overflow task ${index + 1}`,
-    date: includeUnscheduled && index === taskCount - 1 ? undefined : todayIso,
-    completed: false,
-    createdAt: new Date().toISOString(),
-    priority: 'medium',
-    taskType: 'assignment',
-    tags: tagsByIndex[index] ?? [],
-    projectId: projectIndexes.includes(index) ? `project-${index}` : undefined,
-    reminders: []
-  }))
+      date: isUnscheduled ? undefined : todayIso,
+      completed: false,
+      createdAt: new Date().toISOString(),
+      priority: 'medium',
+      taskType: 'assignment',
+      tags: tagsByIndex[index] ?? [],
+      projectId: projectIndexes.includes(index) ? `project-${index}` : undefined,
+      reminders: []
+    }
+  })
 
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
@@ -156,7 +163,7 @@ async function getMonthlyResizeAffordanceStyles(locator: Locator): Promise<{
 }
 
 test.describe('calendar monthly view', () => {
-  test('keeps page actions in the context menu and view filters on the second row', async () => {
+  test('shows period navigation in the secondary row with view filters', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)
 
@@ -165,8 +172,75 @@ test.describe('calendar monthly view', () => {
 
       const viewToggle = page.getByTestId('calendar-view-toggle')
       const filterButton = page.getByTestId('calendar-task-filter-trigger')
+      const primaryRow = page.locator('[data-workspace-header-row="primary"]')
+      const secondaryRow = page.locator('[data-workspace-header-row="secondary"]')
+      const secondaryRightActions = secondaryRow.locator(
+        '.workspace-header-secondary-actions-right'
+      )
+      const periodNavigation = page.getByTestId('calendar-period-navigation')
       const workspaceTab = page.getByTestId('workspace-tab:workspace-tab-1')
       const contextMenuTrigger = page.getByTestId('workspace-page-context-menu-trigger')
+      const currentPeriodLabel = page.getByTestId('calendar-current-period')
+      await expect(currentPeriodLabel).toBeVisible()
+      await expect(currentPeriodLabel).toHaveText(
+        new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      )
+      const contextMenuBox = await contextMenuTrigger.boundingBox()
+      const currentPeriodLabelBox = await currentPeriodLabel.boundingBox()
+      if (!contextMenuBox || !currentPeriodLabelBox) {
+        throw new Error('Expected calendar topbar context controls to have layout boxes')
+      }
+      expect(currentPeriodLabelBox.x).toBeGreaterThan(contextMenuBox.x + contextMenuBox.width)
+      expect(
+        Math.abs(
+          currentPeriodLabelBox.y +
+            currentPeriodLabelBox.height / 2 -
+            (contextMenuBox.y + contextMenuBox.height / 2)
+        )
+      ).toBeLessThanOrEqual(4)
+      await expect(secondaryRow.getByTestId('calendar-period-navigation')).toBeVisible()
+      await expect(secondaryRightActions.getByTestId('calendar-period-navigation')).toBeVisible()
+      await expect(primaryRow.getByTestId('calendar-period-navigation')).toHaveCount(0)
+      await expect(periodNavigation.locator('button')).toHaveCount(3)
+      await expect(periodNavigation.getByTestId('calendar-period-previous')).toHaveAttribute(
+        'aria-label',
+        'Previous month'
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-current')).toHaveText(
+        'Current month'
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-next')).toHaveAttribute(
+        'aria-label',
+        'Next month'
+      )
+      const periodDividers = periodNavigation.locator('[data-slot="separator"]')
+      await expect(periodDividers).toHaveCount(2)
+      await expect(periodDividers.first()).toHaveAttribute('data-orientation', 'vertical')
+      await expect(periodDividers.last()).toHaveAttribute('data-orientation', 'vertical')
+      const groupStyles = await periodNavigation.evaluate((group) => {
+        const groupComputedStyles = getComputedStyle(group)
+        const buttonStyles = Array.from(group.querySelectorAll('button')).map((button) => {
+          const computedStyles = getComputedStyle(button)
+          return {
+            borderTopWidth: computedStyles.borderTopWidth,
+            borderRadius: computedStyles.borderRadius
+          }
+        })
+
+        return {
+          groupBorderTopWidth: groupComputedStyles.borderTopWidth,
+          groupBorderRadius: groupComputedStyles.borderRadius,
+          buttonStyles
+        }
+      })
+      expect(Number.parseFloat(groupStyles.groupBorderTopWidth)).toBeGreaterThan(0)
+      expect(groupStyles.groupBorderRadius).not.toBe('0px')
+      expect(groupStyles.buttonStyles).toEqual([
+        { borderTopWidth: '0px', borderRadius: '0px' },
+        { borderTopWidth: '0px', borderRadius: '0px' },
+        { borderTopWidth: '0px', borderRadius: '0px' }
+      ])
+
       await expect(contextMenuTrigger).toBeVisible()
       await contextMenuTrigger.click()
       await expect(page.getByTestId('workspace-page-context-menu')).toBeVisible()
@@ -187,6 +261,13 @@ test.describe('calendar monthly view', () => {
         throw new Error('Expected calendar header controls to have layout boxes')
       }
 
+      const periodNavigationBox = await periodNavigation.boundingBox()
+      if (!periodNavigationBox) {
+        throw new Error('Expected secondary calendar actions to have a layout box')
+      }
+
+      expect(periodNavigationBox.x).toBeGreaterThan(filterButtonBox.x + filterButtonBox.width)
+      expect(Math.abs(periodNavigationBox.y - toggleBox.y)).toBeLessThanOrEqual(4)
       expect(filterButtonBox.x).toBeGreaterThan(toggleBox.x + toggleBox.width)
       expect(Math.abs(filterButtonBox.y - toggleBox.y)).toBeLessThanOrEqual(4)
 
@@ -195,6 +276,30 @@ test.describe('calendar monthly view', () => {
       await expect(secondWorkspaceTab).toBeVisible()
       await page.getByTestId('sidebar-page:calendar').click()
       await expect(page.getByTestId('calendar-month-view')).toBeVisible()
+      await page.getByTestId('calendar-view-toggle').getByText('Weekly', { exact: true }).click()
+      await expect(page.getByTestId('calendar-week-view')).toBeVisible()
+      await expect(currentPeriodLabel).not.toHaveText(
+        new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-current')).toHaveText(
+        'Current week'
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-previous')).toHaveAttribute(
+        'aria-label',
+        'Previous week'
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-next')).toHaveAttribute(
+        'aria-label',
+        'Next week'
+      )
+
+      await page.getByTestId('calendar-view-toggle').getByText('Daily', { exact: true }).click()
+      await expect(currentPeriodLabel).toContainText(
+        new Date().toLocaleDateString(undefined, { weekday: 'long' })
+      )
+      await expect(periodNavigation.getByTestId('calendar-period-current')).toHaveText(
+        'Current day'
+      )
       await page.getByTestId('calendar-view-toggle').getByText('Weekly', { exact: true }).click()
       await expect(page.getByTestId('calendar-week-view')).toBeVisible()
 
@@ -609,6 +714,29 @@ test.describe('calendar monthly view', () => {
       await expect(page.getByText('Drop here to unschedule', { exact: true })).toHaveCount(0)
     } finally {
       await page.mouse.up()
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps a long unscheduled list in the shared panel scrollport', async () => {
+    const { rootPath } = await createFixtureVault(28, true, {}, [], 28)
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+      await expect(page.getByTestId('calendar-task-panel')).toBeVisible()
+      await expectSingleRightPanelScrollport(page)
+
+      const panelStack = page.getByTestId('calendar-task-panel')
+      await expect
+        .poll(() => panelStack.evaluate((element) => element.scrollHeight > element.clientHeight))
+        .toBe(true)
+
+      const lastTask = page.locator('[data-unscheduled-task-id="task-month-visible-27"]')
+      await lastTask.scrollIntoViewIfNeeded()
+      await expect(lastTask).toBeVisible()
+    } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
     }

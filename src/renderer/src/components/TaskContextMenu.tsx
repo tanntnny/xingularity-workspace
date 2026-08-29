@@ -16,17 +16,8 @@ import {
   getTaskPriorityChipItem,
   getTaskStatusChipItem
 } from '../lib/statusChipMeta'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger
-} from './ui/context-menu'
+import { ActionMenuItems, type ActionMenuGroup } from './ui/action-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import { Shortcut } from './ui/kbd'
 import { Button } from './ui/button'
 import {
@@ -118,130 +109,147 @@ export function TaskContextMenu({
     onUpdateReminders(task.id, nextReminders)
   }
 
+  const menuGroups: ActionMenuGroup[] = [
+    {
+      id: 'properties',
+      items: [
+        {
+          id: 'status',
+          label: 'Set status',
+          icon: <Check aria-hidden="true" />,
+          submenu: TASK_STATUS_OPTIONS.map((option) => ({
+            id: `status:${option.value}`,
+            label: (
+              <StatusChip
+                item={getTaskStatusChipItem(option.value)}
+                className="pointer-events-none"
+              />
+            ),
+            trailing:
+              currentStatus === option.value ? <Check className="ml-auto h-4 w-4" /> : undefined,
+            onSelect: () => onUpdateStatus(task.id, option.value)
+          }))
+        },
+        {
+          id: 'type',
+          label: 'Set type',
+          icon: <Target aria-hidden="true" />,
+          submenu: CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => ({
+            id: `type:${taskType.value}`,
+            label: (
+              <StatusChip
+                item={getCalendarTaskTypeChipItem(taskType.value)}
+                className="pointer-events-none"
+              />
+            ),
+            trailing:
+              (task.taskType || 'assignment') === taskType.value ? (
+                <Check className="ml-auto h-4 w-4" />
+              ) : undefined,
+            onSelect: () => onUpdateTaskType(task.id, taskType.value)
+          }))
+        },
+        {
+          id: 'priority',
+          label: 'Set priority',
+          icon: <Flag aria-hidden="true" />,
+          submenu: TASK_PRIORITY_OPTIONS.map((priority) => ({
+            id: `priority:${priority.value}`,
+            label: (
+              <StatusChip
+                item={getTaskPriorityChipItem(priority.value)}
+                className="pointer-events-none"
+              />
+            ),
+            trailing:
+              (task.priority || 'low') === priority.value ? (
+                <Check className="ml-auto h-4 w-4" />
+              ) : undefined,
+            onSelect: () => onUpdatePriority(task.id, priority.value)
+          }))
+        },
+        {
+          id: 'time',
+          label: 'Set time',
+          icon: <Clock3 aria-hidden="true" />,
+          submenu: [
+            ...QUICK_TIME_OPTIONS.map((option) => ({
+              id: `time:${option.value}`,
+              label: option.label,
+              trailing:
+                task.time === option.value ? <Check className="ml-auto h-4 w-4" /> : undefined,
+              onSelect: () => onUpdateTime(task.id, option.value)
+            })),
+            {
+              id: 'time:custom',
+              label: 'Custom time…',
+              onSelect: () => {
+                setTimeInputValue(task.time ?? '')
+                setIsTimeDialogOpen(true)
+              }
+            },
+            {
+              id: 'time:clear',
+              label: 'Clear time',
+              onSelect: () => onUpdateTime(task.id, undefined)
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'management',
+      items: [
+        {
+          id: 'reminders',
+          label: 'Manage reminders',
+          icon: <Bell aria-hidden="true" />,
+          onSelect: () => setIsReminderDialogOpen(true)
+        },
+        ...(task.date && onUnscheduleTask
+          ? [
+              {
+                id: 'unschedule',
+                label: 'Move to unscheduled',
+                icon: <Calendar aria-hidden="true" />,
+                onSelect: () => onUnscheduleTask(task.id)
+              }
+            ]
+          : !task.date && selectedDate && onScheduleTask
+            ? [
+                {
+                  id: 'schedule',
+                  label: task.endDate
+                    ? `Move deadline to ${selectedDate}`
+                    : `Schedule to ${selectedDate}`,
+                  icon: <Calendar aria-hidden="true" />,
+                  onSelect: () => onScheduleTask(task.id, selectedDate)
+                }
+              ]
+            : [])
+      ]
+    },
+    {
+      id: 'destructive',
+      items: [
+        {
+          id: 'delete',
+          label: 'Delete task',
+          icon: <Trash2 aria-hidden="true" />,
+          destructive: true,
+          shortcut: <Shortcut keys={['cmd', 'backspace']} />,
+          onSelect: () => onDelete(task.id)
+        }
+      ]
+    }
+  ]
+
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent data-testid={`task-context-menu:${task.id}`}>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Check className="mr-2 h-4 w-4" />
-              Set status
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {TASK_STATUS_OPTIONS.map((option) => (
-                <ContextMenuItem
-                  key={option.value}
-                  onSelect={() => onUpdateStatus(task.id, option.value)}
-                >
-                  <StatusChip
-                    item={getTaskStatusChipItem(option.value)}
-                    className="pointer-events-none"
-                  />
-                  {currentStatus === option.value && <Check className="ml-auto h-4 w-4" />}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Target className="mr-2 h-4 w-4" />
-              Set type
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {CALENDAR_TASK_TYPE_OPTIONS.map((taskType) => (
-                <ContextMenuItem
-                  key={taskType.value}
-                  onSelect={() => onUpdateTaskType(task.id, taskType.value)}
-                >
-                  <StatusChip
-                    item={getCalendarTaskTypeChipItem(taskType.value)}
-                    className="pointer-events-none"
-                  />
-                  {(task.taskType || 'assignment') === taskType.value && (
-                    <Check className="ml-auto h-4 w-4" />
-                  )}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Flag className="mr-2 h-4 w-4" />
-              Set priority
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {TASK_PRIORITY_OPTIONS.map((priority) => (
-                <ContextMenuItem
-                  key={priority.value}
-                  onSelect={() => onUpdatePriority(task.id, priority.value)}
-                >
-                  <StatusChip
-                    item={getTaskPriorityChipItem(priority.value)}
-                    className="pointer-events-none"
-                  />
-                  {(task.priority || 'low') === priority.value && (
-                    <Check className="ml-auto h-4 w-4" />
-                  )}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Clock3 className="mr-2 h-4 w-4" />
-              Set time
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {QUICK_TIME_OPTIONS.map((option) => (
-                <ContextMenuItem
-                  key={option.value}
-                  onSelect={() => onUpdateTime(task.id, option.value)}
-                >
-                  {option.label}
-                  {task.time === option.value && <Check className="ml-auto h-4 w-4" />}
-                </ContextMenuItem>
-              ))}
-              <ContextMenuItem
-                onSelect={() => {
-                  setTimeInputValue(task.time ?? '')
-                  setIsTimeDialogOpen(true)
-                }}
-              >
-                Custom time...
-              </ContextMenuItem>
-              <ContextMenuItem onSelect={() => onUpdateTime(task.id, undefined)}>
-                Clear time
-              </ContextMenuItem>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuItem
-            onSelect={() => {
-              setIsReminderDialogOpen(true)
-            }}
-          >
-            <Bell className="mr-2 h-4 w-4" />
-            Manage reminders
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          {task.date && onUnscheduleTask ? (
-            <ContextMenuItem onSelect={() => onUnscheduleTask(task.id)}>
-              <Calendar className="mr-2 h-4 w-4" />
-              Move to unscheduled
-            </ContextMenuItem>
-          ) : !task.date && selectedDate && onScheduleTask ? (
-            <ContextMenuItem onSelect={() => onScheduleTask(task.id, selectedDate)}>
-              <Calendar className="mr-2 h-4 w-4" />
-              {task.endDate ? `Move deadline to ${selectedDate}` : `Schedule to ${selectedDate}`}
-            </ContextMenuItem>
-          ) : null}
-          <ContextMenuItem onSelect={() => onDelete(task.id)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete task
-            <ContextMenuShortcut>
-              <Shortcut keys={['cmd', 'backspace']} />
-            </ContextMenuShortcut>
-          </ContextMenuItem>
+          <ActionMenuItems variant="context" groups={menuGroups} />
         </ContextMenuContent>
       </ContextMenu>
 

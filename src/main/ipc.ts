@@ -71,6 +71,16 @@ const projectContextMarkdownExportInputSchema = z.object({
   projectId: z.string().trim().min(1).max(120)
 })
 const querySchema = z.string().min(1).max(200)
+const resourceLabelSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9._-]*$/i),
+  value: z.string().trim().min(1).max(500)
+})
+const resourceLabelsSchema = z.array(resourceLabelSchema).max(50)
 const resourceInputSchema = z.object({
   type: z.enum(['notebook', 'external']).optional(),
   provider: z.enum(['xingularity', 'google-drive', 'filesystem', 'web']).optional(),
@@ -101,13 +111,20 @@ const resourceInputSchema = z.object({
   metadata: z
     .record(z.string(), z.union([z.string().max(500), z.number(), z.boolean(), z.null()]))
     .optional(),
-  projectId: z.string().min(1).max(120).optional()
+  labels: resourceLabelsSchema.optional(),
+  projectId: z.string().min(1).max(120).optional(),
+  projectIds: z.array(z.string().min(1).max(120)).max(50).optional()
 })
 const resourceIdSchema = z.string().min(1).max(200)
 const resourceUpdateSchema = z.object({
   resourceId: resourceIdSchema,
   canonicalUri: z.string().trim().min(1).max(4000).optional(),
-  title: z.string().trim().max(500).optional()
+  title: z.string().trim().max(500).optional(),
+  labels: resourceLabelsSchema.optional()
+})
+const resourceProjectLinksSchema = z.object({
+  resourceId: resourceIdSchema,
+  projectIds: z.array(z.string().min(1).max(120)).max(50)
 })
 const projectNotebookResourceSchema = z.object({
   projectId: z.string().min(1).max(120),
@@ -378,12 +395,14 @@ const projectDeleteInputSchema = z.object({
 })
 const projectMilestoneCreateInputSchema = z.object({
   projectId: z.string().min(1).max(120),
-  title: z.string().trim().min(1).max(200)
+  title: z.string().trim().min(1).max(200),
+  endDate: projectDateSchema.optional()
 })
 const projectMilestoneUpdateInputSchema = z.object({
   projectId: z.string().min(1).max(120),
   milestoneId: z.string().min(1).max(120),
-  title: z.string().trim().min(1).max(200)
+  title: z.string().trim().min(1).max(200),
+  endDate: projectDateSchema.nullable().optional()
 })
 const projectMilestoneReorderInputSchema = z.object({
   projectId: z.string().min(1).max(120),
@@ -779,12 +798,20 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.updateResource(resourceUpdateSchema.parse(input))
   })
 
+  handleIpc(IPC_CHANNELS.resourcesSetProjectLinks, async (_event, input: unknown) => {
+    return runtime.setResourceProjectLinks(resourceProjectLinksSchema.parse(input))
+  })
+
   handleIpc(IPC_CHANNELS.resourcesSetProjectNotebook, async (_event, input: unknown) => {
     return runtime.setProjectNotebook(projectNotebookResourceSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.resourcesDetachFromProject, async (_event, input: unknown) => {
     await runtime.detachResource(resourceDetachSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.resourcesRemove, async (_event, resourceId: unknown) => {
+    await runtime.removeResource(resourceIdSchema.parse(resourceId))
   })
 
   handleIpc(IPC_CHANNELS.resourcesRefresh, async (_event, resourceId: unknown) => {

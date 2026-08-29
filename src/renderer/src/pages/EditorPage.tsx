@@ -202,10 +202,10 @@ export function EditorPage({
   )
 
   const handleTagChange = (nextTags: string[]): void => {
-    const addedTag = nextTags.find((tag) => !tags.includes(tag))
-    const removedTag = tags.find((tag) => !nextTags.includes(tag))
-    if (addedTag) void onAddTag(addedTag)
-    if (removedTag) void onRemoveTag(removedTag)
+    const addedTags = nextTags.filter((tag) => !tags.includes(tag))
+    const removedTags = tags.filter((tag) => !nextTags.includes(tag))
+    addedTags.forEach((tag) => void onAddTag(tag))
+    removedTags.forEach((tag) => void onRemoveTag(tag))
   }
 
   return (

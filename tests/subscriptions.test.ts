@@ -7,7 +7,8 @@ import {
   buildSubscriptionRecord,
   deriveSubscriptionAnalytics,
   getBillingIntervalMonths,
-  normalizeMonthlyAmount
+  normalizeMonthlyAmount,
+  normalizeSubscriptionTags
 } from '../src/shared/subscriptions'
 import { SubscriptionsService } from '../src/main/subscriptionsService'
 
@@ -120,6 +121,12 @@ describe('subscription helpers', () => {
     expect(updated.normalizedMonthlyAmount).toBe(24)
     expect(updated.updatedAt).toBe('2026-04-07T00:00:00.000Z')
   })
+
+  it('normalizes subscription tags into the shared namespace-safe format', () => {
+    expect(
+      normalizeSubscriptionTags([' AI ', '#Team:Ops', 'team:ops', 'bad/tag', 'a'.repeat(61)])
+    ).toEqual(['ai', 'team:ops'])
+  })
 })
 
 describe('SubscriptionsService', () => {
@@ -164,5 +171,47 @@ describe('SubscriptionsService', () => {
       id: created.id,
       status: 'archived'
     })
+  })
+
+  it('normalizes legacy tags on first read and reports the migration once', async () => {
+    const vaultRoot = trackTempRoot(
+      await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-subscriptions-migration-'))
+    )
+    const rawRecord = {
+      ...buildSubscriptionRecord(
+        'sub-legacy',
+        {
+          name: 'Legacy Tool',
+          category: 'AI',
+          amount: 12,
+          currency: 'USD',
+          billingCycle: 'monthly',
+          status: 'active'
+        },
+        '2026-04-06T00:00:00.000Z'
+      ),
+      tags: [' AI ', '#Team:Ops', 'team:ops', 'bad/tag']
+    }
+    await fs.mkdir(path.join(vaultRoot, 'subscriptions'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'subscriptions', 'data.json'),
+      JSON.stringify([rawRecord], null, 2),
+      'utf-8'
+    )
+
+    const service = new SubscriptionsService()
+    service.handleVaultChange(vaultRoot)
+
+    const firstRead = await service.list()
+    expect(firstRead.records[0]?.tags).toEqual(['ai', 'team:ops'])
+    expect(firstRead.migrationWarnings[0]).toContain('Legacy Tool')
+
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(vaultRoot, 'subscriptions', 'data.json'), 'utf-8')
+    ) as Array<{ tags?: string[] }>
+    expect(persisted[0]?.tags).toEqual(['ai', 'team:ops'])
+
+    const secondRead = await service.list()
+    expect(secondRead.migrationWarnings).toEqual([])
   })
 })

@@ -293,6 +293,13 @@ export function CommandPalette({
         icon: APP_PAGE_ICONS.projects
       },
       {
+        value: '>go resources',
+        label: 'Go to Resources',
+        onSelect: () => onOpenPage('resources'),
+        keywords: ['links', 'files', 'labels', 'sources'],
+        icon: APP_PAGE_ICONS.resources
+      },
+      {
         value: '>go subscriptions',
         label: 'Go to Subscriptions',
         onSelect: () => onOpenPage('subscriptions'),

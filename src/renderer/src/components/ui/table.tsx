@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown } from './icons'
+import { ChevronDown, ChevronUp } from './icons'
 
 import { cn } from '../../lib/utils'
+import type { TableSortDirection } from '../../lib/tableSort'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
@@ -69,12 +70,37 @@ const TableHead = React.forwardRef<
 ))
 TableHead.displayName = 'TableHead'
 
-type SortDirection = 'asc' | 'desc'
-
 interface SortableTableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {
   isActive?: boolean
-  sortDirection?: SortDirection
+  sortDirection?: TableSortDirection
   onToggleSort: () => void
+}
+
+interface SortIndicatorProps {
+  isActive: boolean
+  direction: TableSortDirection
+}
+
+function SortIndicator({ isActive, direction }: SortIndicatorProps): React.ReactElement {
+  if (!isActive) {
+    return (
+      <span className="relative size-3 shrink-0" aria-hidden="true">
+        <ChevronUp
+          size={12}
+          aria-hidden="true"
+          className="absolute left-0 top-0 -translate-y-1"
+        />
+        <ChevronDown
+          size={12}
+          aria-hidden="true"
+          className="absolute left-0 top-0 translate-y-1"
+        />
+      </span>
+    )
+  }
+
+  const Icon = direction === 'asc' ? ChevronUp : ChevronDown
+  return <Icon size={12} aria-hidden="true" className="shrink-0" />
 }
 
 const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHeadProps>(
@@ -83,7 +109,6 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
     ref
   ) => {
     const ariaSort = isActive ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-    const SortIcon = !isActive ? ArrowUpDown : sortDirection === 'asc' ? ArrowUp : ArrowDown
 
     return (
       <TableHead ref={ref} className={className} aria-sort={ariaSort} {...props}>
@@ -93,7 +118,7 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
           onClick={onToggleSort}
         >
           <span className="min-w-0 flex-1">{children}</span>
-          <SortIcon size={12} aria-hidden="true" className="shrink-0" />
+          <SortIndicator isActive={isActive} direction={sortDirection} />
         </button>
       </TableHead>
     )
@@ -132,3 +157,5 @@ export {
   TableCell,
   TableCaption
 }
+
+export type { TableSortDirection } from '../../lib/tableSort'

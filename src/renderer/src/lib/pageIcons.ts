@@ -10,6 +10,7 @@ import {
   Mail,
   Paintbrush,
   Settings2,
+  Table,
   type FilledIcon
 } from '../components/ui/icons'
 
@@ -18,6 +19,7 @@ export const APP_PAGE_ICONS: Record<AppPage, FilledIcon> = {
   knowledge: ChartDots3,
   notes: Files,
   projects: Box,
+  resources: Table,
   subscriptions: BrandMastercard,
   calendar: CalendarEvent,
   schedules: Bolt,

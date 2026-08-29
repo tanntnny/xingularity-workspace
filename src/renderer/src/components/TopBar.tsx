@@ -24,6 +24,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
+  resources: 'Resources',
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
   schedules: 'Scheduling',

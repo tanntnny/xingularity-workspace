@@ -18,6 +18,7 @@ import type {
   Project,
   ProjectIconStyle,
   ProjectMilestone,
+  UpdateProjectMilestoneInput,
   ProjectPropertiesPatch,
   ProjectUpdateStatus,
   TaskStatus,
@@ -25,6 +26,7 @@ import type {
   ResourceRelation,
   ResourcePreview,
   ResourceInput,
+  ResourceUpdateInput,
   GoogleDriveFileCandidate
 } from '../../../shared/types'
 import { normalizeTag } from '../../../shared/noteTags'
@@ -32,8 +34,14 @@ import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { ProjectIconPicker } from '../components/ProjectIconPicker'
 import { ProjectLatestUpdate } from '../components/ProjectLatestUpdate'
 import { MilestoneCompletenessIcon } from '../components/MilestoneCompletenessIcon'
+import { TaskStatusIcon } from '../components/TaskStatusIcon'
 import { TaskContextMenu } from '../components/TaskContextMenu'
-import { ProjectMilestoneContextMenu } from '../components/ProjectContextMenus'
+import {
+  ProjectContextMenu,
+  ProjectMenuItems,
+  ProjectMilestoneContextMenu
+} from '../components/ProjectContextMenus'
+import type { ProjectMenuActionHandlers } from '../lib/projectMenu'
 import { InlineEditableText } from '../components/InlineEditableText'
 import {
   ProjectDescriptionEditor,
@@ -50,6 +58,7 @@ import {
 } from '../lib/statusChipMeta'
 import { formatCalendarDateValue, formatCalendarTimeValue } from '../lib/calendarDateTimeInput'
 import { getLatestProjectUpdate } from '../lib/projectUpdates'
+import { formatProjectDate, formatProjectUpdatedDate } from '../lib/projectDateLabels'
 import { cn } from '../lib/utils'
 import { Button, rowActionButtonClassName } from '../components/ui/button'
 import { CalendarDateEditPopover } from '../components/ui/calendar-date-edit-popover'
@@ -79,6 +88,11 @@ import {
 import { StatusChip } from '../components/ui/status-chip'
 import { StatusChipSelect } from '../components/ui/status-chip-select'
 import { ProgressRing } from '../components/ui/progress-ring'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from '../components/ui/dropdown-menu'
 import { TableRowList, type TableRowListColumn } from '../components/ui/table-row-list'
 import {
   filterProjectsForWorkspace,
@@ -100,6 +114,7 @@ import { APP_PAGE_ICONS } from '../lib/pageIcons'
 import {
   getProjectDirectTasks,
   getCurrentProjectMilestone,
+  getMostUrgentProjectTask,
   getProjectMilestoneProgress,
   getProjectMilestoneTasks,
   getProjectMilestoneStatus,
@@ -109,10 +124,12 @@ import type { ProjectMilestoneStatus } from '../lib/projectMilestones'
 import { calculateProjectHealth } from '../../../shared/projectPlanning'
 import { isTaskStatusDone } from '../../../shared/taskStatus'
 import { ProjectActivityPanel } from '../components/ProjectActivityPanel'
+import { ProjectMilestonesPanel } from '../components/ProjectMilestonesPanel'
 import { ProjectResourcesTable } from '../components/ProjectResourcesPanel'
 import { WorkspaceReadingWidth } from '../components/workspace'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 import { useReorderMotion } from '../hooks/useReorderMotion'
+import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 
 export type { ProjectsWorkspaceFilterMode } from '../lib/projectTaskRows'
 
@@ -143,6 +160,11 @@ interface ProjectsWorkspacePageProps {
   onFilterModeChange: (mode: ProjectsWorkspaceFilterMode) => void
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
   onOpenProject: (projectId: string) => void
+  onToggleProjectFavorite: (projectId: string) => void
+  onToggleProjectArchive: (projectId: string) => void
+  onExportProjectContext: (project: Project) => void
+  onDeleteProject: (projectId: string) => void
+  isProjectContextExporting?: boolean
   onOpenProjectUpdates: (projectId: string) => void
   onCreateProjectUpdate: (
     projectId: string,
@@ -161,11 +183,7 @@ interface ProjectsWorkspacePageProps {
   addResourceRequestProjectId?: string | null
   onAddResourceRequestHandled?: () => void
   onSetProjectNotebook: (projectId: string, notebookPath: string) => Promise<void>
-  onUpdateResource: (input: {
-    resourceId: string
-    canonicalUri?: string
-    title?: string
-  }) => Promise<void>
+  onUpdateResource: (input: ResourceUpdateInput) => Promise<void>
   onDetachResource: (projectId: string, resourceId: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
   onOpenNotebookResource: (resourceId: string) => void
@@ -187,9 +205,14 @@ interface ProjectsWorkspacePageProps {
     milestoneId?: string
   ) => Promise<CalendarTask>
   onCreateMilestone: (projectId: string, title: string) => Promise<ProjectMilestone>
-  onUpdateMilestone: (projectId: string, milestoneId: string, title: string) => void
+  onUpdateMilestone: (
+    projectId: string,
+    milestoneId: string,
+    patch: Pick<UpdateProjectMilestoneInput, 'title' | 'endDate'>
+  ) => void | Promise<void>
   onDeleteMilestone: (projectId: string, milestoneId: string) => Promise<void>
   onReorderMilestones: (projectId: string, milestoneIds: string[]) => Promise<boolean>
+  onOpenMilestoneDialog: (projectId: string, milestoneId: string) => void
   onUpdateProject: (
     projectId: string,
     draft: { name: string; description: string; icon: ProjectIconStyle }
@@ -209,6 +232,11 @@ export function ProjectsWorkspacePage({
   onFilterModeChange,
   onUpdateProjectProperties,
   onOpenProject,
+  onToggleProjectFavorite,
+  onToggleProjectArchive,
+  onExportProjectContext,
+  onDeleteProject,
+  isProjectContextExporting = false,
   onOpenProjectUpdates,
   onCreateProjectUpdate,
   onUpdateProjectUpdate,
@@ -241,12 +269,12 @@ export function ProjectsWorkspacePage({
   onUpdateMilestone,
   onDeleteMilestone,
   onReorderMilestones,
+  onOpenMilestoneDialog,
   onUpdateProject,
   onUpdateTask,
   onDeleteTask,
   onOpenTask
 }: ProjectsWorkspacePageProps): ReactElement {
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
   const [milestoneEditToken, setMilestoneEditToken] = useState(0)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
@@ -272,7 +300,6 @@ export function ProjectsWorkspacePage({
     setIsCreatingTask(true)
     try {
       const task = await onCreateTask(selectedProject.id, 'New Task')
-      setSelectedTaskId(task.id)
       onOpenTask(task.id, { isNewTask: true })
     } catch {
       // The parent reports persistence errors.
@@ -303,7 +330,7 @@ export function ProjectsWorkspacePage({
 
   const updateMilestone = (milestoneId: string, title: string): void => {
     if (selectedProject) {
-      onUpdateMilestone(selectedProject.id, milestoneId, title)
+      onUpdateMilestone(selectedProject.id, milestoneId, { title })
     }
     setEditingMilestoneId((current) => (current === milestoneId ? null : current))
   }
@@ -315,7 +342,6 @@ export function ProjectsWorkspacePage({
     try {
       const task = await onCreateTask(selectedProject.id, 'New Task', milestoneId)
       setExpandedMilestoneIds((current) => new Set(current).add(milestoneId))
-      setSelectedTaskId(task.id)
       onOpenTask(task.id, { isNewTask: true })
     } catch {
       // The parent reports persistence errors.
@@ -390,6 +416,11 @@ export function ProjectsWorkspacePage({
             favoriteProjectIds={favoriteProjectIds}
             onUpdateProjectProperties={onUpdateProjectProperties}
             onOpenProject={onOpenProject}
+            onToggleProjectFavorite={onToggleProjectFavorite}
+            onToggleProjectArchive={onToggleProjectArchive}
+            onExportProjectContext={onExportProjectContext}
+            onDeleteProject={onDeleteProject}
+            isProjectContextExporting={isProjectContextExporting}
           />
         ) : view === 'resources' && selectedProject ? (
           <div id="project-view-panel" role="tabpanel" aria-labelledby="project-view-tab-resources">
@@ -465,18 +496,16 @@ export function ProjectsWorkspacePage({
                   expandedMilestoneIds={expandedMilestoneIds}
                   isCreatingMilestone={isCreatingMilestone}
                   isCreatingTask={isCreatingTask}
-                  selectedTaskId={selectedTaskId}
                   editingMilestoneId={editingMilestoneId}
                   milestoneEditToken={milestoneEditToken}
                   onCreateMilestone={handleCreateMilestone}
                   onCreateTask={handleCreateMilestoneTask}
                   onToggleMilestone={toggleMilestone}
-                  onEditMilestone={requestMilestoneEdit}
                   onUpdateMilestone={updateMilestone}
-                  onOpenTask={(taskId) => {
-                    setSelectedTaskId(taskId)
-                    onOpenTask(taskId)
-                  }}
+                  onOpenMilestoneDialog={(milestoneId) =>
+                    onOpenMilestoneDialog(selectedProject.id, milestoneId)
+                  }
+                  onOpenTask={onOpenTask}
                   onUpdateTask={onUpdateTask}
                   onDeleteTask={onDeleteTask}
                   onDeleteMilestone={requestDeleteMilestone}
@@ -490,11 +519,7 @@ export function ProjectsWorkspacePage({
                   isCreatingTask={isCreatingTask}
                   onUpdateTask={onUpdateTask}
                   onDeleteTask={onDeleteTask}
-                  onOpenTask={(taskId) => {
-                    setSelectedTaskId(taskId)
-                    onOpenTask(taskId)
-                  }}
-                  selectedTaskId={selectedTaskId}
+                  onOpenTask={onOpenTask}
                 />
               </div>
             ) : (
@@ -513,18 +538,24 @@ export function ProjectsWorkspacePage({
 
 export function ProjectsWorkspaceRightPanel({
   projects,
+  tasks = [],
   favoriteProjectIds,
   selectedProjectId,
   onToggleProjectFavorite,
   onToggleProjectArchive,
-  onUpdateProjectProperties
+  onUpdateProjectProperties,
+  onCreateMilestone,
+  onOpenMilestone
 }: {
   projects: Project[]
+  tasks?: CalendarTask[]
   favoriteProjectIds: string[]
   selectedProjectId: string | null
   onToggleProjectFavorite: (projectId: string) => void
   onToggleProjectArchive: (projectId: string) => void
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
+  onCreateMilestone?: (projectId: string) => void | Promise<void>
+  onOpenMilestone?: (projectId: string, milestoneId: string) => void
 }): ReactElement {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
   const projectTagOptions = useMemo(() => {
@@ -554,6 +585,16 @@ export function ProjectsWorkspaceRightPanel({
         }}
         availableTags={projectTagOptions}
       />
+      {selectedProject ? (
+        <ProjectMilestonesPanel
+          project={selectedProject}
+          tasks={tasks}
+          onCreateMilestone={() =>
+            onCreateMilestone ? onCreateMilestone(selectedProject.id) : undefined
+          }
+          onOpenMilestone={(milestoneId) => onOpenMilestone?.(selectedProject.id, milestoneId)}
+        />
+      ) : null}
       {selectedProject ? <ProjectActivityPanel project={selectedProject} /> : null}
     </WorkspacePanelStack>
   )
@@ -695,18 +736,45 @@ function AllProjectsTable({
   tasks,
   favoriteProjectIds,
   onUpdateProjectProperties,
-  onOpenProject
+  onOpenProject,
+  onToggleProjectFavorite,
+  onToggleProjectArchive,
+  onExportProjectContext,
+  onDeleteProject,
+  isProjectContextExporting
 }: {
   projects: Project[]
   tasks: CalendarTask[]
   favoriteProjectIds: string[]
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
   onOpenProject: (projectId: string) => void
+  onToggleProjectFavorite: (projectId: string) => void
+  onToggleProjectArchive: (projectId: string) => void
+  onExportProjectContext: (project: Project) => void
+  onDeleteProject: (projectId: string) => void
+  isProjectContextExporting: boolean
 }): ReactElement {
+  const [sortState, setSortState] = usePersistentTableSort(
+    'xingularity:table-sort:projects',
+    null,
+    ['project', 'health', 'progress', 'end-date', 'updated'] as const
+  )
+
+  const getProjectMenuHandlers = (project: Project): ProjectMenuActionHandlers => ({
+    isFavorite: favoriteProjectIds.includes(project.id),
+    isExporting: isProjectContextExporting,
+    onOpen: ({ id }) => onOpenProject(id),
+    onToggleFavorite: ({ id }) => onToggleProjectFavorite(id),
+    onToggleArchive: ({ id }) => onToggleProjectArchive(id),
+    onExport: onExportProjectContext,
+    onDelete: ({ id }) => onDeleteProject(id)
+  })
+
   const projectRows = projects.map((project) => {
     const taskHealth = calculateProjectHealth(project, tasks)
     const projectMilestones = project.milestones ?? []
     const currentMilestone = getCurrentProjectMilestone(projectMilestones, tasks, project.id)
+    const mostUrgentTask = getMostUrgentProjectTask(tasks, project.id)
     const latestUpdate = getLatestProjectUpdate(project.updates)
 
     return {
@@ -714,6 +782,7 @@ function AllProjectsTable({
       taskHealth,
       projectMilestones,
       currentMilestone,
+      mostUrgentTask,
       latestUpdate
     }
   })
@@ -724,46 +793,89 @@ function AllProjectsTable({
     {
       id: 'project',
       header: 'Project',
-      cellClassName: 'min-w-56',
-      renderCell: ({ project, projectMilestones, currentMilestone }) => (
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpenProject(project.id)
-          }}
-          className="h-auto w-full min-w-0 max-w-full justify-start truncate rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
-          aria-label={`Open project ${project.name}`}
-        >
-          <span className="flex w-full min-w-0 items-center gap-2.5">
-            <NoteShapeIcon icon={project.icon} size={20} aria-hidden="true" />
-            <span className="min-w-0 truncate">{project.name}</span>
-            {projectMilestones.length > 0 ? (
+      cellClassName: 'w-[clamp(20rem,42vw,40rem)] min-w-[20rem] max-w-[40rem]',
+      sortValue: ({ project }) => project.name,
+      renderCell: ({ project, projectMilestones, currentMilestone, mostUrgentTask }) => {
+        const summaryTitle = [
+          project.name,
+          projectMilestones.length > 0 ? (currentMilestone?.title ?? 'Complete') : undefined,
+          mostUrgentTask?.title
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
+        return (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenProject(project.id)
+            }}
+            className="h-auto w-full min-w-0 max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+            aria-label={`Open project ${project.name}`}
+            title={summaryTitle}
+          >
+            <span className="flex w-full min-w-0 items-center gap-2.5">
+              <NoteShapeIcon icon={project.icon} size={20} aria-hidden="true" />
               <span
-                className="all-project-milestone-summary flex min-w-0 max-w-52 shrink-0 items-center gap-1.5 text-sm"
-                data-milestone-complete={!currentMilestone ? 'true' : 'false'}
+                className="workspace-text-fade min-w-0 flex-1"
+                data-testid={`all-project-summary:${project.id}`}
+                title={summaryTitle}
               >
-                <MilestoneCompletenessIcon
-                  status={currentMilestone ? 'current' : 'complete'}
-                  size={16}
-                  dataTestId={`all-project-milestone-icon:${project.id}`}
-                />
-                <span className="min-w-0 truncate">{currentMilestone?.title ?? 'Complete'}</span>
+                <span className="inline-flex min-w-max items-center gap-2.5">
+                  <span className="shrink-0" title={project.name}>
+                    {project.name}
+                  </span>
+                  {projectMilestones.length > 0 ? (
+                    <span
+                      className="all-project-milestone-summary flex shrink-0 items-center gap-1.5 text-sm"
+                      data-milestone-complete={!currentMilestone ? 'true' : 'false'}
+                    >
+                      <MilestoneCompletenessIcon
+                        status={currentMilestone ? 'current' : 'complete'}
+                        size={16}
+                        dataTestId={`all-project-milestone-icon:${project.id}`}
+                      />
+                      <span title={currentMilestone?.title ?? 'Complete'}>
+                        {currentMilestone?.title ?? 'Complete'}
+                      </span>
+                    </span>
+                  ) : null}
+                  {mostUrgentTask ? (
+                    <>
+                      <TaskStatusIcon
+                        status={mostUrgentTask.status}
+                        completed={mostUrgentTask.completed}
+                        size={16}
+                        className="all-project-urgent-task-status"
+                      />
+                      <span
+                        className="shrink-0 text-sm font-normal text-muted-foreground"
+                        data-testid={`all-project-urgent-task:${project.id}`}
+                        title={`Most urgent task: ${mostUrgentTask.title}`}
+                      >
+                        {mostUrgentTask.title}
+                      </span>
+                    </>
+                  ) : null}
+                </span>
               </span>
-            ) : null}
-          </span>
-        </Button>
-      )
+            </span>
+          </Button>
+        )
+      }
     },
     {
       id: 'health',
       header: 'Health',
       cellClassName: 'whitespace-nowrap',
+      sortValue: ({ latestUpdate }) => latestUpdate?.status,
       renderCell: ({ project, latestUpdate }) => (
         <StatusChip
           item={getProjectUpdateStatusChipItem(latestUpdate?.status)}
           surface="hover"
+          mutedLabel={latestUpdate ? undefined : true}
           data-testid={`all-project-health:${project.id}`}
         />
       )
@@ -772,6 +884,8 @@ function AllProjectsTable({
       id: 'progress',
       header: 'Progress',
       cellClassName: 'min-w-24',
+      sortValue: ({ taskHealth }) => taskHealth.completionRatio,
+      sortDefaultDirection: 'desc',
       renderCell: ({ project, taskHealth }) => {
         const completionPercent = Math.min(
           100,
@@ -796,6 +910,7 @@ function AllProjectsTable({
       id: 'end-date',
       header: 'End date',
       cellClassName: 'whitespace-nowrap',
+      sortValue: ({ project }) => project.endDate,
       renderCell: ({ project }) => {
         const endDateLabel = project.endDate ? formatProjectDate(project.endDate) : 'Set end date'
 
@@ -823,13 +938,15 @@ function AllProjectsTable({
       id: 'updated',
       header: 'Updated',
       cellClassName: 'whitespace-nowrap',
+      sortValue: ({ project }) => project.updatedAt,
+      sortDefaultDirection: 'desc',
       renderCell: ({ project }) => {
-        const updatedDateLabel = formatProjectDate(project.updatedAt)
+        const updatedDate = formatProjectUpdatedDate(project.updatedAt)
 
         return (
           <StatusChip
             item={{
-              label: <time dateTime={project.updatedAt}>{updatedDateLabel}</time>,
+              label: <time dateTime={project.updatedAt}>{updatedDate.label}</time>,
               icon: <CalendarCheck aria-hidden="true" />,
               iconColorToken: 'var(--muted-foreground)'
             }}
@@ -837,8 +954,8 @@ function AllProjectsTable({
             mutedLabel
             className="text-xs"
             data-testid={`all-project-date-chip:updated:${project.id}`}
-            aria-label={`Updated ${updatedDateLabel}`}
-            title={`Updated ${updatedDateLabel}`}
+            aria-label={`Updated ${updatedDate.label}; ${updatedDate.exactLabel}`}
+            title={`Updated ${updatedDate.exactLabel}`}
           />
         )
       }
@@ -856,6 +973,37 @@ function AllProjectsTable({
             size={16}
           />
         ) : null
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">Actions</span>,
+      headerClassName: 'w-10',
+      cellClassName: 'w-10 text-right',
+      renderCell: ({ project }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="rowAction"
+              size="icon"
+              className="ml-auto"
+              aria-label={`Open actions for project: ${project.name}`}
+              title="Open project actions"
+              data-testid={`all-project-menu:${project.id}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <MoreHorizontal size={16} aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <ProjectMenuItems
+              project={project}
+              handlers={getProjectMenuHandlers(project)}
+              variant="dropdown"
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
     }
   ]
 
@@ -881,21 +1029,26 @@ function AllProjectsTable({
           data-testid="all-projects-table"
           columns={columns}
           items={projectRows}
+          sortState={sortState}
+          onSortChange={setSortState}
           getRowKey={({ project }) => project.id}
           getRowProps={({ project }) => ({
             'data-testid': `all-project-row:${project.id}`,
             onClick: () => onOpenProject(project.id)
           })}
+          rowWrapper={({ project }, tableRow) => (
+            <ProjectContextMenu
+              project={project}
+              handlers={getProjectMenuHandlers(project)}
+              key={project.id}
+            >
+              {tableRow}
+            </ProjectContextMenu>
+          )}
         />
       )}
     </section>
   )
-}
-
-function formatProjectDate(value: string): string {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function ProjectsWorkspaceHeaderActions({
@@ -1169,14 +1322,13 @@ function ProjectMilestones({
   expandedMilestoneIds,
   isCreatingMilestone,
   isCreatingTask,
-  selectedTaskId,
   editingMilestoneId,
   milestoneEditToken,
   onCreateMilestone,
   onCreateTask,
   onToggleMilestone,
-  onEditMilestone,
   onUpdateMilestone,
+  onOpenMilestoneDialog,
   onOpenTask,
   onUpdateTask,
   onDeleteTask,
@@ -1189,14 +1341,13 @@ function ProjectMilestones({
   expandedMilestoneIds: Set<string>
   isCreatingMilestone: boolean
   isCreatingTask: boolean
-  selectedTaskId: string | null
   editingMilestoneId: string | null
   milestoneEditToken: number
   onCreateMilestone: () => void
   onCreateTask: (milestoneId: string) => void
   onToggleMilestone: (milestoneId: string) => void
-  onEditMilestone: (milestoneId: string) => void
   onUpdateMilestone: (milestoneId: string, title: string) => void
+  onOpenMilestoneDialog: (milestoneId: string) => void
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
@@ -1482,11 +1633,10 @@ function ProjectMilestones({
               tasks={tasks}
               expanded={expandedMilestoneIds.has(milestone.id)}
               editToken={editingMilestoneId === milestone.id ? milestoneEditToken : 0}
-              selectedTaskId={selectedTaskId}
               isCreatingTask={isCreatingTask}
               onCreateTask={onCreateTask}
               onToggle={() => onToggleMilestone(milestone.id)}
-              onEdit={() => onEditMilestone(milestone.id)}
+              onEdit={() => onOpenMilestoneDialog(milestone.id)}
               onUpdateMilestone={onUpdateMilestone}
               onOpenTask={onOpenTask}
               onUpdateTask={onUpdateTask}
@@ -1532,7 +1682,6 @@ function ProjectMilestoneRow({
   tasks,
   expanded,
   editToken,
-  selectedTaskId,
   isCreatingTask,
   onCreateTask,
   onToggle,
@@ -1558,7 +1707,6 @@ function ProjectMilestoneRow({
   tasks: CalendarTask[]
   expanded: boolean
   editToken: number
-  selectedTaskId: string | null
   isCreatingTask: boolean
   onCreateTask: (milestoneId: string) => void
   onToggle: () => void
@@ -1645,7 +1793,6 @@ function ProjectMilestoneRow({
               previewMotion="smooth"
               previewElevation="strong"
               hideFromPreview
-              rotation={0}
               className={cn(
                 rowActionButtonClassName,
                 'pointer-events-auto absolute -left-6 top-1/2 z-20 flex size-7 -translate-y-1/2 items-center justify-center rounded-full border-0 p-0 opacity-0 transition-opacity group-hover/milestone-header:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[dragging=true]:opacity-100 motion-reduce:transition-none'
@@ -1716,7 +1863,7 @@ function ProjectMilestoneRow({
                   variant="rowAction"
                   size="icon"
                   shape="pill"
-                  className="pointer-events-auto size-7 shrink-0 opacity-0 transition-opacity group-hover/milestone-header:opacity-100 group-focus-within/milestone-header:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+                  className="pointer-events-auto size-7 shrink-0 opacity-0 transition-opacity group-hover/milestone-header:opacity-100 motion-reduce:transition-none"
                   onPointerDown={stopRowInteraction}
                   onClick={(event) => {
                     stopRowInteraction(event)
@@ -1748,7 +1895,6 @@ function ProjectMilestoneRow({
                   <TaskDetailRow
                     key={task.id}
                     task={task}
-                    selected={selectedTaskId === task.id}
                     isParentDropActive={isDragOver}
                     onUpdateTask={onUpdateTask}
                     onDeleteTask={onDeleteTask}
@@ -1772,8 +1918,7 @@ function ProjectTasks({
   isCreatingTask,
   onUpdateTask,
   onDeleteTask,
-  onOpenTask,
-  selectedTaskId
+  onOpenTask
 }: {
   tasks: CalendarTask[]
   onCreateTask: () => void
@@ -1781,7 +1926,6 @@ function ProjectTasks({
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
-  selectedTaskId: string | null
 }): ReactElement {
   return (
     <section aria-labelledby="project-tasks-heading" className="space-y-3">
@@ -1795,7 +1939,6 @@ function ProjectTasks({
           <TaskDetailRow
             key={task.id}
             task={task}
-            selected={selectedTaskId === task.id}
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
             onOpenTask={onOpenTask}
@@ -1818,19 +1961,17 @@ function ProjectTasks({
   )
 }
 
-function TaskDetailRow({
+export function TaskDetailRow({
   task,
   onUpdateTask,
   onDeleteTask,
   onOpenTask,
-  selected,
   isParentDropActive = false
 }: {
   task: CalendarTask
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onOpenTask: (taskId: string) => void
-  selected: boolean
   isParentDropActive?: boolean
 }): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
@@ -1872,7 +2013,6 @@ function TaskDetailRow({
     >
       <li
         className="group relative rounded-[var(--radius-button)] px-2 py-1 data-[parent-drop-active=true]:bg-[var(--drop-zone-active-bg)]"
-        data-selected={selected}
         data-parent-drop-active={isParentDropActive ? 'true' : 'false'}
         data-testid={`project-task-row:${task.id}`}
       >
@@ -1881,7 +2021,7 @@ function TaskDetailRow({
           className={cn(
             'absolute inset-0 z-0 rounded-[var(--radius-button)] border border-transparent bg-transparent text-left outline-none transition-colors',
             isParentDropActive ? 'bg-[var(--drop-zone-active-bg)]' : 'group-hover:bg-muted',
-            'focus-visible:border-border focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring group-data-[selected=true]:border-border group-data-[selected=true]:bg-muted'
+            'focus-visible:border-border focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring'
           )}
           onClick={() => onOpenTask(task.id)}
           aria-label={`Open task: ${task.title}`}

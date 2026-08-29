@@ -23,11 +23,7 @@ const WorkspaceListRail = React.forwardRef<HTMLElement, WorkspaceListRailProps>(
     const hasItems = React.Children.count(children) > 0
 
     return (
-      <nav
-        ref={ref}
-        className={cn('flex h-full min-h-0 flex-col overflow-auto p-3', className)}
-        {...props}
-      >
+      <nav ref={ref} className={cn('flex flex-col p-3', className)} {...props}>
         {hasItems ? (
           <ul className="flex min-w-0 flex-col gap-2">{children}</ul>
         ) : emptyState ? (

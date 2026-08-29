@@ -13,11 +13,15 @@ import {
   WorkspaceIconButton,
   WorkspacePageContextMenu,
   WorkspacePanelStack,
+  WorkspaceRightPanel,
   WorkspaceResizableLayout
 } from '../src/renderer/src/components/ui/document-workspace'
 import { BreadcrumbButton } from '../src/renderer/src/components/ui/breadcrumb'
 import { Card } from '../src/renderer/src/components/ui/card'
-import { WorkspacePanelSection } from '../src/renderer/src/components/ui/workspace-panel-section'
+import {
+  CollapsibleWorkspacePanelSection,
+  WorkspacePanelSection
+} from '../src/renderer/src/components/ui/workspace-panel-section'
 import { SidebarProvider, SidebarRail } from '../src/renderer/src/components/ui/sidebar'
 import { WorkspacePage } from '../src/renderer/src/components/workspace/page'
 
@@ -57,7 +61,7 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('aria-label="Close right sidebar"')
   })
 
-  it('keeps the page breadcrumb and context menu in the primary header row', () => {
+  it('keeps page actions in the primary row and secondary actions in the secondary row', () => {
     const markup = renderToStaticMarkup(
       createElement(
         WorkspaceContextProvider,
@@ -68,17 +72,57 @@ describe('document workspace right panel', () => {
             WorkspacePageContextMenu,
             null,
             createElement('div', null, 'Actions')
+          ),
+          secondaryActions: createElement(
+            'span',
+            { 'data-testid': 'secondary-header-action' },
+            'Calendar controls'
           )
         })
       )
     )
 
-    const primaryRow = markup.match(/<div data-workspace-header-row="primary"[^>]*>/)?.[0]
+    const primaryRowStart = markup.indexOf('<div data-workspace-header-row="primary"')
+    const secondaryRowStart = markup.indexOf('<div data-workspace-header-row="secondary"')
+    const primaryRow = markup.slice(primaryRowStart, secondaryRowStart)
+    const secondaryRow = markup.slice(secondaryRowStart)
 
-    expect(primaryRow).toBeDefined()
+    expect(primaryRowStart).toBeGreaterThanOrEqual(0)
+    expect(secondaryRowStart).toBeGreaterThan(primaryRowStart)
     expect(markup).toContain('data-testid="page-breadcrumb"')
     expect(markup).toContain('data-testid="workspace-page-context-menu-trigger"')
     expect(markup).toContain('aria-label="Open page context menu"')
+    expect(primaryRow).not.toContain('data-testid="secondary-header-action"')
+    expect(secondaryRow).toContain('data-testid="secondary-header-action"')
+  })
+
+  it('places trailing page context content after the page action menu', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceContextProvider,
+        null,
+        createElement(DocumentWorkspaceMainHeader, {
+          breadcrumb: createElement('span', null, 'Calendar'),
+          pageContextMenu: createElement(
+            WorkspacePageContextMenu,
+            null,
+            createElement('div', null, 'Actions')
+          ),
+          pageContextMenuTrailing: createElement(
+            'span',
+            { 'data-testid': 'calendar-current-period' },
+            'August 2026'
+          )
+        })
+      )
+    )
+
+    const contextMenuIndex = markup.indexOf('workspace-page-context-menu-trigger')
+    const periodLabelIndex = markup.indexOf('data-testid="calendar-current-period"')
+
+    expect(contextMenuIndex).toBeGreaterThanOrEqual(0)
+    expect(periodLabelIndex).toBeGreaterThan(contextMenuIndex)
+    expect(markup).toContain('August 2026')
   })
 
   it('omits the page context menu trigger when no page actions are available', () => {
@@ -225,19 +269,66 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('data-testid="panel-two"')
     expect(markup).toContain('gap-3')
     expect(markup).toContain('overflow-y-auto')
+    expect(markup).toContain('data-workspace-scrollport="true"')
     expect(markup).not.toContain('bg-card p-3')
+  })
+
+  it('keeps panel sections intrinsic while the stack owns vertical scrolling', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        createElement(WorkspacePanelSection, { id: 'intrinsic-panel' }, 'Panel'),
+        createElement(
+          CollapsibleWorkspacePanelSection,
+          { heading: 'Details', id: 'intrinsic-collapsible-panel' },
+          createElement('div', null, 'Details')
+        )
+      )
+    )
+
+    const intrinsicPanel = markup.match(/<section[^>]*id="intrinsic-panel"[^>]*>/)?.[0]
+    const intrinsicCollapsiblePanel = markup.match(
+      /<section[^>]*id="intrinsic-collapsible-panel"[^>]*>/
+    )?.[0]
+
+    expect(intrinsicPanel).toBeTruthy()
+    expect(intrinsicPanel ?? '').toContain('shrink-0')
+    expect(intrinsicPanel ?? '').not.toContain('flex-1')
+    expect(intrinsicPanel ?? '').not.toContain('h-full')
+    expect(intrinsicPanel ?? '').not.toContain('min-h-0')
+    expect(intrinsicCollapsiblePanel).toBeTruthy()
+    expect(intrinsicCollapsiblePanel ?? '').toContain('shrink-0')
+    expect(intrinsicCollapsiblePanel ?? '').not.toContain('flex-1')
+    expect(intrinsicCollapsiblePanel ?? '').not.toContain('h-full')
+    expect(intrinsicCollapsiblePanel ?? '').not.toContain('min-h-0')
   })
 
   it('keeps the panel frame clipped while the stack owns vertical scrolling', () => {
     const markup = renderToStaticMarkup(
       createElement(
         DocumentWorkspacePanelContent,
-        { className: 'overflow-hidden' },
+        null,
         createElement(WorkspacePanelStack, null, createElement('section', null, 'Panel'))
       )
     )
 
     expect(markup).toContain('overflow-hidden')
+    expect(markup).toContain('overflow-y-auto')
+    expect(markup).toContain('data-workspace-scrollport="true"')
+  })
+
+  it('marks a multi-section right panel as the shared scrollport', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceRightPanel,
+        null,
+        createElement('section', null, 'Panel one'),
+        createElement('section', null, 'Panel two')
+      )
+    )
+
+    expect(markup).toContain('data-workspace-scrollport="true"')
     expect(markup).toContain('overflow-y-auto')
   })
 
@@ -266,6 +357,7 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('data-testid="workspace-main"')
     expect(markup).toContain('data-testid="workspace-right-panel-content-one"')
     expect(markup).toContain('data-testid="workspace-right-panel-content-two"')
+    expect(markup).toContain('data-workspace-scrollport="true"')
   })
 
   it('marks the sidebar rail as a horizontal resize affordance', () => {

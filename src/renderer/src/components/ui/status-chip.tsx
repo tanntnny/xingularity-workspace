@@ -11,7 +11,7 @@ export interface StatusChipItem {
 }
 
 export type StatusChipVariant = 'default' | 'bare'
-export type StatusChipSurface = 'none' | 'pill' | 'hover' | 'hover-pill'
+export type StatusChipSurface = 'none' | 'pill' | 'attention' | 'hover' | 'hover-pill'
 export type StatusChipLabelOverflow = 'truncate' | 'wrap' | 'fade'
 
 type StatusChipSpanProps = {
@@ -98,6 +98,7 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
     ref
   ) => {
     const resolvedLabelOverflow = labelOverflow ?? (wrapLabel ? 'wrap' : 'truncate')
+    const mutedLabelUsesHoverForeground = mutedLabel === true
     const chipStyle = {
       ...style,
       '--status-chip-icon-color': item.iconColorToken,
@@ -111,7 +112,7 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
           ? 'whitespace-normal break-words'
           : 'truncate',
       mutedLabel === true
-        ? 'text-muted-foreground'
+        ? 'text-muted-foreground transition-colors group-hover/status-chip:text-foreground group-focus-visible/status-chip:text-foreground'
         : mutedLabel === false
           ? 'text-foreground'
           : item.labelColorToken
@@ -122,6 +123,7 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
     )
     const rootClassName = cn(
       statusChipVariants({ variant, surface: variant === 'default' ? surface : 'none' }),
+      mutedLabelUsesHoverForeground && 'group/status-chip',
       resolvedLabelOverflow === 'wrap' && '!whitespace-normal',
       className,
       'items-center justify-start'

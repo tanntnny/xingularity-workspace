@@ -3,6 +3,7 @@ import { _electron as electron, type ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { expectSingleRightPanelScrollport } from './right-panel-scrollport'
 
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-scheduling-e2e-vault-'))
@@ -65,7 +66,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   )
 
   const electronApp = await electron.launch({
-    args: ['.', `--user-data-dir=${userDataPath}`],
+    args: [`--user-data-dir=${userDataPath}`, '.'],
     cwd: process.cwd(),
     env: { ...process.env, CI: '1' }
   })
@@ -76,14 +77,11 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   await expect
     .poll(
       async () =>
-        page.evaluate(async () => {
-          try {
-            await window.vaultApi.vault.restoreLast()
-          } catch {
-            // Retry until the temporary fixture vault is restorable.
-          }
-
-          return Boolean(document.querySelector('[data-testid="sidebar-command-palette"]'))
+        page.evaluate(() => {
+          const commandPalette = document.querySelector<HTMLButtonElement>(
+            '[data-testid="sidebar-command-palette"]'
+          )
+          return commandPalette ? !commandPalette.disabled : false
         }),
       { timeout: 60_000 }
     )
@@ -134,6 +132,28 @@ test('automation rows change background on hover', async () => {
     expect(after.cellHovered).toBe(true)
     expect(after.rowBackground).not.toBe(before.rowBackground)
     expect(after.cellBackground).not.toBe(before.cellBackground)
+  } finally {
+    await electronApp.close()
+    await fs.rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test('keeps a long automation properties panel in the shared scrollport', async () => {
+  const rootPath = await createFixtureVault()
+  const { electronApp, page } = await launchWithFixture(rootPath)
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 420 })
+    await page.getByTestId('sidebar-page:schedules').click()
+    await page.getByTestId('scheduling-job:job-selected').click()
+
+    const panelStack = page.getByTestId('scheduling-panel-stack')
+    await expect(page.getByTestId('scheduling-properties-panel')).toBeVisible()
+    await expect(panelStack).toBeVisible()
+    await expectSingleRightPanelScrollport(page)
+    await expect
+      .poll(() => panelStack.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true)
   } finally {
     await electronApp.close()
     await fs.rm(rootPath, { recursive: true, force: true })

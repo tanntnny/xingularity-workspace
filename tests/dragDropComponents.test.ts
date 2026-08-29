@@ -23,16 +23,21 @@ describe('DragSource', () => {
     expect(markup).toContain('data-drag-preview-motion="none"')
     expect(markup).toContain('data-drag-preview-elevation="default"')
     expect(markup).toContain('data-[dragging=true]:opacity-0')
-    expect(markup).not.toContain('data-[dragging=true]:rotate-[var(--drag-preview-rotation)]')
-    expect(markup).toContain('--drag-preview-rotation:-2deg')
+    expect(markup).not.toContain('rotate-')
+    expect(markup).not.toContain('rotation')
     expect(markup).toContain('task-card')
   })
 
-  it('renders a rotated preview visual without changing source layout semantics', () => {
+  it('renders an upright preview visual without changing source layout semantics', () => {
     const markup = renderToStaticMarkup(
       React.createElement(
         DragSource,
-        { as: 'li', visual: 'preview', preview: 'none', rotation: -2 },
+        {
+          as: 'li',
+          visual: 'preview',
+          preview: 'none',
+          previewVariant: 'surface'
+        },
         'Notebook row'
       )
     )
@@ -40,8 +45,11 @@ describe('DragSource', () => {
     expect(markup).toContain('<li')
     expect(markup).not.toContain('draggable="true"')
     expect(markup).toContain('data-drag-visual="preview"')
-    expect(markup).toContain('--drag-preview-rotation:-2deg')
-    expect(markup).toContain('data-[drag-visual=preview]:rotate-[var(--drag-preview-rotation)]')
+    expect(markup).toContain('data-drag-preview-variant="surface"')
+    expect(markup).toContain('data-[drag-visual=preview]:bg-[var(--drag-preview-bg)]')
+    expect(markup).toContain('data-[drag-visual=preview]:border-[var(--drag-preview-border)]')
+    expect(markup).not.toContain('rotate-')
+    expect(markup).not.toContain('rotation')
   })
 
   it('supports previews that preserve the child content styling', () => {
@@ -139,12 +147,11 @@ describe('DropZone', () => {
     expect(markup).toContain('background:var(--calendar-drop-zone-active-bg)')
     expect(markup).toContain('border-0')
     expect(markup).not.toContain('data-[drag-over=true]:border-[var(--drop-zone-active-border)]')
-    expect(markup).not.toContain('transform:rotate(var(--drag-preview-rotation))')
 
     const defaultMarkup = renderToStaticMarkup(
       React.createElement(DropZone, { active: true, variant: 'indicator' })
     )
-    expect(defaultMarkup).not.toContain('transform:rotate(var(--drag-preview-rotation))')
+    expect(defaultMarkup).not.toContain('rotate(')
   })
 
   it('uses the borderless calendar drop background for unscheduled drops', () => {

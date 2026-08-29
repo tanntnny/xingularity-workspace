@@ -2,6 +2,7 @@ import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/utils'
+import { Separator } from './separator'
 
 const buttonGroupVariants = cva('ui-control inline-flex items-center [&>button]:px-2', {
   variants: {
@@ -23,7 +24,7 @@ const buttonGroupVariants = cva('ui-control inline-flex items-center [&>button]:
 })
 
 const actionButtonGroupVariants = cva(
-  'ui-control inline-flex items-center gap-0 overflow-hidden rounded-[var(--radius-button)] border bg-card [&>*]:h-full [&>*:not(:first-child)]:border-l',
+  'ui-control inline-flex items-center gap-0 overflow-hidden rounded-[var(--radius-button)] border bg-card [&>*:not([data-slot=separator])]:h-full [&>button]:!rounded-none [&>button]:!border-0',
   {
     variants: {
       focusWithin: {
@@ -61,17 +62,38 @@ const ButtonGroup = React.forwardRef<HTMLDivElement, ButtonGroupProps>(
 ButtonGroup.displayName = 'ButtonGroup'
 
 export interface ActionButtonGroupProps
-  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof actionButtonGroupVariants> {}
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof actionButtonGroupVariants> {
+  dividers?: boolean
+}
 
 const ActionButtonGroup = React.forwardRef<HTMLDivElement, ActionButtonGroupProps>(
-  ({ className, focusWithin, size, ...props }, ref) => (
-    <div
-      ref={ref}
-      role="group"
-      className={cn(actionButtonGroupVariants({ focusWithin, size }), className)}
-      {...props}
-    />
-  )
+  ({ className, focusWithin, size, dividers = true, children, ...props }, ref) => {
+    const groupChildren = React.Children.toArray(children)
+
+    return (
+      <div
+        ref={ref}
+        role="group"
+        className={cn(actionButtonGroupVariants({ focusWithin, size }), className)}
+        {...props}
+      >
+        {dividers
+          ? groupChildren.flatMap((child, index) => [
+              ...(index > 0
+                ? [
+                    <Separator
+                      key={`action-button-group-separator-${index}`}
+                      orientation="vertical"
+                      className="h-[var(--compact-control-height)]"
+                    />
+                  ]
+                : []),
+              child
+            ])
+          : children}
+      </div>
+    )
+  }
 )
 ActionButtonGroup.displayName = 'ActionButtonGroup'
 

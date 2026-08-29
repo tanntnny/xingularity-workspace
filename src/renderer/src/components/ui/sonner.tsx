@@ -14,8 +14,12 @@ const Toaster = ({ ...props }: ToasterProps): React.ReactElement => {
           description: 'group-[.toast]:text-muted-foreground',
           actionButton: 'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
           cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
-          success: 'group-[.toaster]:border-primary group-[.toaster]:bg-primary/10',
-          error: 'group-[.toaster]:border-destructive group-[.toaster]:bg-destructive/10'
+          success:
+            'group-[.toaster]:border-success-border group-[.toaster]:bg-success-muted group-[.toaster]:text-success-muted-foreground',
+          warning:
+            'group-[.toaster]:border-warning-border group-[.toaster]:bg-warning-muted group-[.toaster]:text-warning-muted-foreground',
+          error:
+            'group-[.toaster]:border-destructive group-[.toaster]:bg-destructive-muted group-[.toaster]:text-destructive-muted-foreground'
         }
       }}
       {...props}

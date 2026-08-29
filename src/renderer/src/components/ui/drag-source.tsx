@@ -16,7 +16,6 @@ type DragSourceOwnProps = {
   previewMotion?: DragPreviewMotion
   previewElevation?: DragPreviewElevation
   hideFromPreview?: boolean
-  rotation?: number
   onDragStart?: React.DragEventHandler<HTMLElement>
   onDragEnd?: React.DragEventHandler<HTMLElement>
 }
@@ -35,7 +34,6 @@ let activeFloatingPreviewCleanup: (() => void) | null = null
 
 function setCloneDragImage(
   event: React.DragEvent<HTMLElement>,
-  rotation: number,
   previewSizing: 'source' | 'fit-content'
 ): void {
   if (typeof document === 'undefined') {
@@ -62,9 +60,7 @@ function setCloneDragImage(
   dragPreview.style.pointerEvents = 'none'
   dragPreview.style.animation = 'none'
   dragPreview.style.transition = 'none'
-  dragPreview.style.transform = `rotate(${rotation}deg)`
   dragPreview.style.opacity = '1'
-  dragPreview.style.setProperty('--drag-preview-rotation', `${rotation}deg`)
   document.body.appendChild(dragPreview)
 
   event.dataTransfer.setDragImage(dragPreview, event.clientX - rect.left, event.clientY - rect.top)
@@ -80,7 +76,6 @@ function createFloatingDragImage(
     previewMotion,
     previewElevation,
     previewVariant,
-    rotation,
     hidePreviewDescendants
   }: {
     previewTarget: HTMLElement
@@ -89,7 +84,6 @@ function createFloatingDragImage(
     previewMotion: DragPreviewMotion
     previewElevation: DragPreviewElevation
     previewVariant: 'surface' | 'content'
-    rotation: number
     hidePreviewDescendants: boolean
   }
 ): () => void {
@@ -164,10 +158,7 @@ function createFloatingDragImage(
           : `left ${motionDuration} ${motionEasing}, top ${motionDuration} ${motionEasing}`
       : 'none'
   floatingPreview.style.willChange = previewAxis === 'y' ? 'top' : 'left, top'
-  floatingPreview.style.transform = `rotate(${rotation}deg)`
-  floatingPreview.style.transformOrigin = `${pointerOffsetX}px ${pointerOffsetY}px`
   floatingPreview.style.opacity = '1'
-  floatingPreview.style.setProperty('--drag-preview-rotation', `${rotation}deg`)
 
   const applyPosition = (clientX: number, clientY: number): void => {
     if (clientX === 0 && clientY === 0) {
@@ -246,7 +237,6 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
     previewMotion = 'none',
     previewElevation = 'default',
     hideFromPreview = false,
-    rotation = -2,
     draggable = true,
     onDragStart,
     onDragEnd,
@@ -260,9 +250,6 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
   const Component = (as ?? 'div') as React.ElementType
   const isPreview = visual === 'preview'
   const isDragging = dragging ?? internalDragging
-  const previewStyle = isPreview
-    ? ({ '--drag-preview-rotation': `${rotation}deg` } as React.CSSProperties)
-    : undefined
   const previewVariantClassName =
     previewVariant === 'content'
       ? 'data-[drag-visual=preview]:border-transparent data-[drag-visual=preview]:bg-transparent data-[drag-visual=preview]:opacity-100'
@@ -286,12 +273,12 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
       data-drag-preview-elevation={previewElevation}
       data-drag-preview-ignore={hideFromPreview ? 'true' : undefined}
       className={cn(
-        'relative cursor-grab transition-[opacity,box-shadow,transform] duration-150 ease-out active:cursor-grabbing data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-0 data-[drag-visual=preview]:rotate-[var(--drag-preview-rotation)]',
+        'relative cursor-grab transition-[opacity,box-shadow] duration-150 ease-out active:cursor-grabbing data-[dragging=true]:cursor-grabbing data-[dragging=true]:opacity-0',
         previewVariantClassName,
         previewElevationClassName,
         className
       )}
-      style={{ '--drag-preview-rotation': `${rotation}deg`, ...style, ...previewStyle }}
+      style={style}
       onDragStart={(event: React.DragEvent<HTMLElement>) => {
         previewCleanupRef.current?.()
         previewCleanupRef.current = null
@@ -302,7 +289,7 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
         }
         setInternalDragging(true)
         if (!isPreview && preview === 'clone') {
-          setCloneDragImage(event, rotation, previewSizing)
+          setCloneDragImage(event, previewSizing)
         } else if (!isPreview && preview === 'floating') {
           previewCleanupRef.current = createFloatingDragImage(event, {
             previewTarget: previewTargetRef?.current ?? event.currentTarget,
@@ -311,7 +298,6 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
             previewMotion,
             previewElevation,
             previewVariant,
-            rotation,
             hidePreviewDescendants: Boolean(previewTargetRef?.current && hideFromPreview)
           })
         }

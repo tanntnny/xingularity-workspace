@@ -18,16 +18,18 @@ import {
   Sparkles,
   Target
 } from '../components/ui/icons'
-import type { ProjectIconSymbol } from '../../../shared/types'
+import type { ProjectIconSymbol, ProjectIconVariant } from '../../../shared/types'
 import { PROJECT_ICON_SYMBOLS } from '../../../shared/projectIcons'
 
 export interface ProjectIconCatalogEntry {
   glyph: ProjectIconSymbol
   label: string
+  variant: ProjectIconVariant
   Icon: TablerIcon
 }
 
 const FILLED_ICON_NAME_PATTERN = /^Icon(.+)Filled$/
+const OUTLINED_ICON_NAME_PATTERN = /^Icon(.+)$/
 
 function toGlyph(value: string): ProjectIconSymbol {
   return value
@@ -69,7 +71,9 @@ function buildProjectIconCatalog(): ProjectIconCatalogEntry[] {
   const entries: ProjectIconCatalogEntry[] = []
 
   for (const [exportName, value] of Object.entries(TablerIcons)) {
-    const match = exportName.match(FILLED_ICON_NAME_PATTERN)
+    const filledMatch = exportName.match(FILLED_ICON_NAME_PATTERN)
+    const outlinedMatch = filledMatch ? null : exportName.match(OUTLINED_ICON_NAME_PATTERN)
+    const match = filledMatch ?? outlinedMatch
     if (!match || typeof value !== 'object' || value === null) {
       continue
     }
@@ -81,33 +85,59 @@ function buildProjectIconCatalog(): ProjectIconCatalogEntry[] {
 
     seenIcons.add(Icon)
     const glyph = toGlyph(match[1])
-    entries.push({ glyph, label: toLabel(glyph), Icon })
+    entries.push({
+      glyph,
+      label: toLabel(glyph),
+      variant: filledMatch ? 'filled' : 'outlined',
+      Icon
+    })
   }
 
-  const existingGlyphs = new Set(entries.map((entry) => entry.glyph))
+  const existingFilledGlyphs = new Set(
+    entries.filter((entry) => entry.variant === 'filled').map((entry) => entry.glyph)
+  )
   for (const glyph of PROJECT_ICON_SYMBOLS) {
-    if (!existingGlyphs.has(glyph)) {
+    if (!existingFilledGlyphs.has(glyph)) {
       entries.push({
         glyph,
         label: toLabel(glyph),
+        variant: 'filled',
         Icon: LEGACY_PROJECT_ICON_COMPONENTS[glyph]
       })
     }
   }
 
-  return entries.sort((left, right) => left.label.localeCompare(right.label))
+  return entries.sort((left, right) => {
+    const labelOrder = left.label.localeCompare(right.label)
+    if (labelOrder !== 0) return labelOrder
+    return left.variant === right.variant ? 0 : left.variant === 'filled' ? -1 : 1
+  })
 }
 
 export const PROJECT_ICON_CATALOG = buildProjectIconCatalog()
 
-const PROJECT_ICON_CATALOG_BY_GLYPH = new Map(
-  PROJECT_ICON_CATALOG.map((entry) => [entry.glyph, entry])
-)
-
-export function getProjectIconCatalogEntry(glyph: ProjectIconSymbol): ProjectIconCatalogEntry {
-  return PROJECT_ICON_CATALOG_BY_GLYPH.get(glyph) ?? PROJECT_ICON_CATALOG[0]
+function getCatalogKey(glyph: ProjectIconSymbol, variant: ProjectIconVariant): string {
+  return `${glyph}:${variant}`
 }
 
-export function getProjectIconComponent(glyph: ProjectIconSymbol): TablerIcon {
-  return getProjectIconCatalogEntry(glyph).Icon
+const PROJECT_ICON_CATALOG_BY_GLYPH = new Map(
+  PROJECT_ICON_CATALOG.map((entry) => [getCatalogKey(entry.glyph, entry.variant), entry])
+)
+
+export function getProjectIconCatalogEntry(
+  glyph: ProjectIconSymbol,
+  variant: ProjectIconVariant = 'filled'
+): ProjectIconCatalogEntry {
+  return (
+    PROJECT_ICON_CATALOG_BY_GLYPH.get(getCatalogKey(glyph, variant)) ??
+    PROJECT_ICON_CATALOG_BY_GLYPH.get(getCatalogKey(glyph, 'filled')) ??
+    PROJECT_ICON_CATALOG[0]
+  )
+}
+
+export function getProjectIconComponent(
+  glyph: ProjectIconSymbol,
+  variant: ProjectIconVariant = 'filled'
+): TablerIcon {
+  return getProjectIconCatalogEntry(glyph, variant).Icon
 }

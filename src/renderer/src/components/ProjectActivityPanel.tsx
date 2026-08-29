@@ -35,15 +35,15 @@ export function ProjectActivityPanel({ project }: { project: Project }): ReactEl
     {
       id: 'activity',
       header: 'Activity',
-      headerClassName: 'sr-only',
+      headerClassName: 'h-8 px-2 text-[10px] uppercase tracking-wide',
       cellClassName: 'min-w-0 p-0',
       renderCell: (update) => {
         return (
-          <div className="flex min-w-0 items-center gap-2 p-3">
+          <div className="flex min-w-0 items-center gap-2 p-2">
             <StatusChip
               item={PROJECT_UPDATE_CHIP_ITEMS[update.status]}
-              surface="pill"
-              className="shrink-0 text-xs"
+              variant="bare"
+              className="shrink-0 text-sm"
               data-testid={`project-activity-status:${update.id}`}
             />
             <time
@@ -68,13 +68,14 @@ export function ProjectActivityPanel({ project }: { project: Project }): ReactEl
   return (
     <CollapsibleWorkspacePanelSection heading="Activity" data-testid="project-activity-panel">
       {updates.length > 0 ? (
-        <div className="p-3">
+        <div className="px-2 pb-1">
           <TableRowList
             aria-label="Project update history"
             data-testid="project-activity-table"
             className="text-xs"
             columns={columns}
             items={updates}
+            hideHeader
             getRowKey={(update) => update.id}
             getRowProps={(update) => ({
               'data-testid': `project-activity-row:${update.id}`

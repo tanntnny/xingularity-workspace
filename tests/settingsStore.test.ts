@@ -450,6 +450,7 @@ describe('SettingsStore', () => {
         {
           id: 'milestone-1',
           title: 'Launch',
+          endDate: '2026-08-31',
           createdAt: '2026-08-13T00:00:00.000Z',
           updatedAt: '2026-08-13T00:00:00.000Z'
         }
@@ -478,6 +479,7 @@ describe('SettingsStore', () => {
     })
 
     expect(settings.projects[0].milestones).toEqual(project.milestones)
+    expect(settings.projects[0].milestones?.[0]?.endDate).toBe('2026-08-31')
     expect(settings.calendarTasks).toEqual([
       expect.objectContaining({ id: 'task-valid', milestoneId: 'milestone-1' }),
       expect.objectContaining({ id: 'task-invalid', milestoneId: undefined })

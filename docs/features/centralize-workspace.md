@@ -14,20 +14,25 @@ not a commitment to implement every integration described here.
 The first implementation slice now establishes the context layer without
 changing source ownership:
 
-- typed resource references, device-specific locators, relations, lifecycle
+* typed resource references, device-specific locators, relations, lifecycle
   states, and vault-scoped feature flags;
-- migration of legacy `project.resources` values into typed references while
+
+* migration of legacy `project.resources` values into typed references while
   preserving the original values for compatibility;
-- selected local file/folder and URL resources with metadata, previews for
+
+* selected local file/folder and URL resources with metadata, previews for
   explicitly enabled text files, open/reveal actions, refresh health, and
   recoverable missing links;
-- source-preserving capture of paths and URLs, project context resource cards,
+
+* source-preserving capture of paths and URLs, project context resource cards,
   resource-aware search results, and bounded agent context bundles;
-- a read-only Google Drive adapter using PKCE, narrow `drive.file` scope,
+
+* a read-only Google Drive adapter using PKCE, narrow `drive.file` scope,
   metadata listing, selected-file project linking, bounded Docs/Sheets text
   previews, and `changes.list` pagination; credentials are revocable from the
   workspace settings surface;
-- previewed, authorized-root local writes with expected-hash checks and an
+
+* previewed, authorized-root local writes with expected-hash checks and an
   audit log. External writes remain disabled by default.
 
 Google write actions remain behind their feature boundary until the read-only
@@ -40,20 +45,29 @@ all-in-one replacement for Google Docs, Google Sheets, or Finder.
 
 Centralize the things that are currently fragmented:
 
-- capture and triage;
-- identity and discovery of resources;
-- relationships between projects, tasks, notes, decisions, and resources;
-- cross-source search;
-- project context and review surfaces;
-- safe actions such as open, reveal, attach, summarize, and create a task;
-- provenance, freshness, permission, and connection status.
+* capture and triage;
+
+* identity and discovery of resources;
+
+* relationships between projects, tasks, notes, decisions, and resources;
+
+* cross-source search;
+
+* project context and review surfaces;
+
+* safe actions such as open, reveal, attach, summarize, and create a task;
+
+* provenance, freshness, permission, and connection status.
 
 Keep the things that are already good at their job in their source system:
 
-- Google Docs remains the collaborative rich-text editor;
-- Google Sheets remains the spreadsheet and calculation environment;
-- Finder remains the authoritative local file system and file-management UI;
-- Xingularity remains the canonical home for local Markdown notes and its own
+* Google Docs remains the collaborative rich-text editor;
+
+* Google Sheets remains the spreadsheet and calculation environment;
+
+* Finder remains the authoritative local file system and file-management UI;
+
+* Xingularity remains the canonical home for local Markdown notes and its own
   structured project/task records.
 
 The product promise becomes:
@@ -72,13 +86,19 @@ tree.
 The problem is not simply that there are too many applications. The deeper
 problem is that the **context of a piece of work is distributed**:
 
-- a project plan is in a Xingularity project;
-- the meeting note is a Markdown note or Google Doc;
-- the numbers are in a Google Sheet;
-- the design, export, or source material is in a Finder folder;
-- the follow-up is a Xingularity task;
-- the decision is buried in a paragraph;
-- the user later has to reconstruct the connection manually.
+* a project plan is in a Xingularity project;
+
+* the meeting note is a Markdown note or Google Doc;
+
+* the numbers are in a Google Sheet;
+
+* the design, export, or source material is in a Finder folder;
+
+* the follow-up is a Xingularity task;
+
+* the decision is buried in a paragraph;
+
+* the user later has to reconstruct the connection manually.
 
 The information exists, but the relationship is lost. Users end up searching
 the same topic in several applications, copying excerpts into a central note,
@@ -373,12 +393,17 @@ interface ResourceRef {
 
 The exact type can change. The important properties are:
 
-- stable identity separate from display title;
-- provider and kind visible to the search and UI layers;
-- a source URI or source-specific ID;
-- source-of-truth ownership;
-- access and freshness state;
-- timestamps that distinguish the source’s modification from Xingularity’s
+* stable identity separate from display title;
+
+* provider and kind visible to the search and UI layers;
+
+* a source URI or source-specific ID;
+
+* source-of-truth ownership;
+
+* access and freshness state;
+
+* timestamps that distinguish the source’s modification from Xingularity’s
   observation or index time.
 
 Do not put OAuth tokens, refresh tokens, raw security-scoped bookmark data, or
@@ -419,15 +444,23 @@ auditable instead of being inferred only from folder names or repeated tags.
 
 Useful initial relation types:
 
-- `project_contains_resource`
-- `task_derived_from_resource`
-- `note_references_resource`
-- `decision_supported_by_resource`
-- `milestone_delivered_by_resource`
-- `resource_related_to_resource`
-- `resource_snapshot_of_external`
-- `resource_supersedes_resource`
-- `capture_came_from_resource`
+* `project_contains_resource`
+
+* `task_derived_from_resource`
+
+* `note_references_resource`
+
+* `decision_supported_by_resource`
+
+* `milestone_delivered_by_resource`
+
+* `resource_related_to_resource`
+
+* `resource_snapshot_of_external`
+
+* `resource_supersedes_resource`
+
+* `capture_came_from_resource`
 
 Each relation should retain its creator, creation time, optional source
 location, and whether it was manually confirmed or suggested by automation.
@@ -441,12 +474,17 @@ Discovered → Linked → Indexed → Confirmed → Reviewed
                   ↘ stale / moved / offline / denied / missing
 ```
 
-- **Discovered:** found by a connector or selected by the user.
-- **Linked:** attached to a project, note, task, or capture.
-- **Indexed:** enough metadata or content is available for search.
-- **Confirmed:** a person accepted a suggested relation or classification.
-- **Reviewed:** the user has recently verified that the link remains useful.
-- **Stale/moved/offline/denied/missing:** a recoverable state that needs an
+* **Discovered:** found by a connector or selected by the user.
+
+* **Linked:** attached to a project, note, task, or capture.
+
+* **Indexed:** enough metadata or content is available for search.
+
+* **Confirmed:** a person accepted a suggested relation or classification.
+
+* **Reviewed:** the user has recently verified that the link remains useful.
+
+* **Stale/moved/offline/denied/missing:** a recoverable state that needs an
   honest explanation and an appropriate next action.
 
 ## Product surfaces
@@ -455,12 +493,17 @@ Discovered → Linked → Indexed → Confirmed → Reviewed
 
 The home surface should not be a dump of every source. It should show:
 
-- active projects and their next commitments;
-- recent captures awaiting triage;
-- resources that changed or became unavailable;
-- decisions or tasks linked to newly updated resources;
-- recently opened contexts;
-- a compact universal search entry point.
+* active projects and their next commitments;
+
+* recent captures awaiting triage;
+
+* resources that changed or became unavailable;
+
+* decisions or tasks linked to newly updated resources;
+
+* recently opened contexts;
+
+* a compact universal search entry point.
 
 The default home view should be small and useful without setup. Users can add
 project views later, but should not have to build a database before the product
@@ -480,11 +523,15 @@ Decision log — Xingularity note · linked from Project Atlas
 
 Every result needs:
 
-- source badge and source account/device;
-- freshness and last-observed time;
-- access state;
-- why it matched;
-- an action appropriate to the source: open, reveal, attach, import, or
+* source badge and source account/device;
+
+* freshness and last-observed time;
+
+* access state;
+
+* why it matched;
+
+* an action appropriate to the source: open, reveal, attach, import, or
   reauthorize.
 
 Search should support filters for provider, kind, project, state, date, and
@@ -498,21 +545,31 @@ Xingularity can answer questions about content it has not been allowed to read.
 
 Capture should accept:
 
-- text and quick notes;
-- URLs;
-- dragged local files and folders;
-- Google Drive links or selected Drive results;
-- screenshots and supported attachments;
-- a selected project or “unassigned” state.
+* text and quick notes;
+
+* URLs;
+
+* dragged local files and folders;
+
+* Google Drive links or selected Drive results;
+
+* screenshots and supported attachments;
+
+* a selected project or “unassigned” state.
 
 Each capture preserves provenance. The user can later:
 
-- keep it as a note;
-- attach it to a project;
-- create a task with a backlink;
-- create a resource reference;
-- import a copy into the vault;
-- dismiss or archive it.
+* keep it as a note;
+
+* attach it to a project;
+
+* create a task with a backlink;
+
+* create a resource reference;
+
+* import a copy into the vault;
+
+* dismiss or archive it.
 
 Automatic classification should be proposed, not silently applied. The current
 capture trust boundary from `project-management-operating-system.md` is a good
@@ -526,13 +583,19 @@ Captured → Proposed → Confirmed → Published → Resolved or Archived
 
 Every project should have a contextual view with sections such as:
 
-- outcome and current status;
-- Work: tasks, milestones, and dependencies;
-- Notes: linked Xingularity notes;
-- Documents: Google Docs, Sheets, Slides, and external files;
-- Decisions and risks;
-- Recent changes and resource health;
-- Open questions and captures.
+* outcome and current status;
+
+* Work: tasks, milestones, and dependencies;
+
+* Notes: linked Xingularity notes;
+
+* Documents: Google Docs, Sheets, Slides, and external files;
+
+* Decisions and risks;
+
+* Recent changes and resource health;
+
+* Open questions and captures.
 
 This is a projection over related objects, not a hidden project folder. The
 notebook tree remains user-managed, and external files remain where they are.
@@ -553,17 +616,27 @@ history of observations. The primary action is to reach the source.
 
 Useful actions:
 
-- Open in Google Docs/Sheets or the system default application;
-- Reveal in Finder;
-- Copy source link;
-- Attach to project or note;
-- Create task from resource;
-- Add a note or decision about the resource;
-- Index or refresh;
-- Import a snapshot;
-- Locate moved file;
-- Reauthorize connector;
-- Unlink from the current context.
+* Open in Google Docs/Sheets or the system default application;
+
+* Reveal in Finder;
+
+* Copy source link;
+
+* Attach to project or note;
+
+* Create task from resource;
+
+* Add a note or decision about the resource;
+
+* Index or refresh;
+
+* Import a snapshot;
+
+* Locate moved file;
+
+* Reauthorize connector;
+
+* Unlink from the current context.
 
 “Move,” “rename,” “trash,” “share,” and “change permissions” should not appear
 as default resource actions. They are high-impact source mutations and should
@@ -581,15 +654,22 @@ all of a user’s Drive into the local vault.
 
 Good first capabilities:
 
-- connect a Google account through PKCE;
-- select a Drive, folder, or individual files to make available;
-- retrieve file ID, name, MIME type, URL, parent, modified time, and permission
+* connect a Google account through PKCE;
+
+* select a Drive, folder, or individual files to make available;
+
+* retrieve file ID, name, MIME type, URL, parent, modified time, and permission
   hints;
-- list and search authorized files;
-- refresh incrementally;
-- attach a Drive item to a project, note, task, or capture;
-- open it in its native Google Workspace surface;
-- optionally retrieve a bounded excerpt for an explicitly enabled resource.
+
+* list and search authorized files;
+
+* refresh incrementally;
+
+* attach a Drive item to a project, note, task, or capture;
+
+* open it in its native Google Workspace surface;
+
+* optionally retrieve a bounded excerpt for an explicitly enabled resource.
 
 The Drive API supports filtered file search through `files.list`, including
 name, MIME type, modified time, and full-text query terms. It also exposes
@@ -603,11 +683,13 @@ Sources: [Drive file search](https://developers.google.com/workspace/drive/api/g
 
 Google Docs and Sheets have different semantics from Markdown notes:
 
-- Docs have collaborative revisions, comments, tables, suggestions, and rich
+* Docs have collaborative revisions, comments, tables, suggestions, and rich
   formatting;
-- Sheets have formulas, ranges, charts, formatting, protected areas, and
+
+* Sheets have formulas, ranges, charts, formatting, protected areas, and
   multiple sheets;
-- their source permissions and collaboration state live in Google Workspace.
+
+* their source permissions and collaboration state live in Google Workspace.
 
 The Docs API provides structured reads and atomic `documents.batchUpdate`
 operations. The Sheets API provides range/value operations and spreadsheet
@@ -662,11 +744,15 @@ Source: [Notion’s Google Drive AI connector documentation](https://www.notion.
 
 The Finder integration should begin with user-selected files and folders:
 
-- the user selects a folder to add as a resource scope;
-- Xingularity records a device-specific locator;
-- the app indexes only allowed metadata and configured file types;
-- the user can open a file or reveal it in Finder;
-- changes are observed and shown as resource health, not silently moved.
+* the user selects a folder to add as a resource scope;
+
+* Xingularity records a device-specific locator;
+
+* the app indexes only allowed metadata and configured file types;
+
+* the user can open a file or reveal it in Finder;
+
+* changes are observed and shown as resource health, not silently moved.
 
 Apple’s App Sandbox model is built around user-selected files/folders and
 security-scoped bookmarks for persistent access. Apple’s `NSWorkspace` APIs
@@ -683,12 +769,17 @@ Sources: [Apple file access in the macOS App Sandbox](https://developer.apple.co
 
 Never default to scanning the entire home directory. Let users choose:
 
-- selected folder roots;
-- read-only or read/write intent;
-- file extensions or MIME families;
-- maximum file size;
-- whether content indexing is enabled;
-- whether hidden/system folders are excluded.
+* selected folder roots;
+
+* read-only or read/write intent;
+
+* file extensions or MIME families;
+
+* maximum file size;
+
+* whether content indexing is enabled;
+
+* whether hidden/system folders are excluded.
 
 Default to metadata and supported text/PDF extraction. Make OCR, binary
 inspection, and broad content indexing explicit because they affect privacy,
@@ -699,21 +790,29 @@ performance, disk usage, and AI exposure.
 Finder is allowed to change outside Xingularity. A file may be renamed, moved,
 deleted, placed online-only, or become inaccessible. The app should:
 
-- detect that the old locator no longer resolves;
-- attempt a safe identity match using file identity and observed metadata;
-- ask the user to locate again when confidence is low;
-- preserve the resource ID and relations;
-- never silently substitute a different file with a similar name.
+* detect that the old locator no longer resolves;
+
+* attempt a safe identity match using file identity and observed metadata;
+
+* ask the user to locate again when confidence is low;
+
+* preserve the resource ID and relations;
+
+* never silently substitute a different file with a similar name.
 
 ### Xingularity notes and structured work
 
 Xingularity should remain the canonical source for:
 
-- Markdown notes;
-- projects and their structured metadata;
-- tasks, milestones, dependencies, decisions, and project pulse;
-- captures and reviews;
-- relationship records.
+* Markdown notes;
+
+* projects and their structured metadata;
+
+* tasks, milestones, dependencies, decisions, and project pulse;
+
+* captures and reviews;
+
+* relationship records.
 
 External resources should be able to appear in the same search and graph, but
 they should retain their provider identity. This extends the existing typed
@@ -725,11 +824,15 @@ search and knowledge-graph work without turning the vault into a dumping ground.
 
 Use one normalized search result contract with provider-aware documents:
 
-- local note index: full text and note metadata;
-- structured index: projects, tasks, calendar events, captures, decisions;
-- filesystem index: selected roots and supported metadata/content;
-- Drive index: authorized metadata and selected excerpts;
-- web/resource index: titles, URLs, annotations, and optional snapshots.
+* local note index: full text and note metadata;
+
+* structured index: projects, tasks, calendar events, captures, decisions;
+
+* filesystem index: selected roots and supported metadata/content;
+
+* Drive index: authorized metadata and selected excerpts;
+
+* web/resource index: titles, URLs, annotations, and optional snapshots.
 
 Each index reports its freshness and failure state. The query layer can merge
 results, but it must not hide a connector error behind a successful local
@@ -757,11 +860,15 @@ was offline or its content was not indexed.
 
 The refresh model should be different by provider:
 
-- Xingularity vault: local watcher and existing index updates;
-- local files: selected-root watcher plus periodic reconciliation;
-- Google Drive: initial `files.list`, then `changes.list` cursor;
-- web URLs: manual refresh or explicit scheduled fetch;
-- imported snapshots: stable until the user creates a new snapshot.
+* Xingularity vault: local watcher and existing index updates;
+
+* local files: selected-root watcher plus periodic reconciliation;
+
+* Google Drive: initial `files.list`, then `changes.list` cursor;
+
+* web URLs: manual refresh or explicit scheduled fetch;
+
+* imported snapshots: stable until the user creates a new snapshot.
 
 Every resource should expose “last observed” and “source modified” separately.
 That distinction makes cloud lag and local indexing delay visible.
@@ -772,19 +879,27 @@ That distinction makes cloud lag and local indexing delay visible.
 
 An automation can observe and propose:
 
-- “This file looks related to Project Atlas”;
-- “This Google Doc mentions a possible task”;
-- “This Finder folder changed significantly”;
-- “This capture may be a decision or reference.”
+* “This file looks related to Project Atlas”;
+
+* “This Google Doc mentions a possible task”;
+
+* “This Finder folder changed significantly”;
+
+* “This capture may be a decision or reference.”
 
 It must not silently:
 
-- create authoritative tasks from unreviewed text;
-- move files or rename folders;
-- upload local files to Google Drive;
-- change Google permissions;
-- copy an entire Drive folder into the vault;
-- send private content to an AI provider without an explicit policy.
+* create authoritative tasks from unreviewed text;
+
+* move files or rename folders;
+
+* upload local files to Google Drive;
+
+* change Google permissions;
+
+* copy an entire Drive folder into the vault;
+
+* send private content to an AI provider without an explicit policy.
 
 The proposal should show source, evidence, confidence, target mutation, and
 accept/edit/reject controls before committing.
@@ -813,12 +928,17 @@ the project lead or resource owner confirms publication or mutation.
 
 Deliver:
 
-- `ResourceRef`, `ResourceLocator`, and relation contracts;
-- resource states, source-of-truth labels, and freshness semantics;
-- a migration from existing `project.resources` strings;
-- provider-neutral search targets;
-- connector and credential boundaries;
-- resource actions and confirmation rules.
+* `ResourceRef`, `ResourceLocator`, and relation contracts;
+
+* resource states, source-of-truth labels, and freshness semantics;
+
+* a migration from existing `project.resources` strings;
+
+* provider-neutral search targets;
+
+* connector and credential boundaries;
+
+* resource actions and confirmation rules.
 
 Exit condition: a project can link an internal note, a URL, an existing
 attachment, and a placeholder external resource without any provider-specific
@@ -828,13 +948,19 @@ UI leaking into the domain model.
 
 Deliver:
 
-- add a selected Finder folder or file;
-- show metadata and supported previews;
-- open in the default application;
-- reveal in Finder;
-- attach to a project/note/task;
-- show moved, missing, offline, and permission states;
-- index selected text/PDF content behind an explicit setting.
+* add a selected Finder folder or file;
+
+* show metadata and supported previews;
+
+* open in the default application;
+
+* reveal in Finder;
+
+* attach to a project/note/task;
+
+* show moved, missing, offline, and permission states;
+
+* index selected text/PDF content behind an explicit setting.
 
 Do not implement file move, delete, or broad home-directory scanning in this
 phase.
@@ -847,13 +973,19 @@ foundations needed for Google Drive.
 
 Deliver:
 
-- OAuth/PKCE connection and credential revocation;
-- user-selected Drive/folder/file scope;
-- Drive metadata search;
-- incremental change refresh;
-- project/resource picker;
-- open in Docs, Sheets, Slides, or Drive;
-- selected-resource content extraction with freshness and permission display.
+* OAuth/PKCE connection and credential revocation;
+
+* user-selected Drive/folder/file scope;
+
+* Drive metadata search;
+
+* incremental change refresh;
+
+* project/resource picker;
+
+* open in Docs, Sheets, Slides, or Drive;
+
+* selected-resource content extraction with freshness and permission display.
 
 Do not promise complete, real-time indexing of all of Drive. Support personal
 accounts and organization accounts only where the chosen scopes and Google
@@ -863,12 +995,17 @@ verification path allow it; document unsupported account/setup cases clearly.
 
 Deliver:
 
-- merged search across local, structured, Finder, and Drive resources;
-- project-scoped search;
-- resource health and refresh controls;
-- project Context view;
-- source backlinks from tasks, decisions, and notes;
-- recent-context and “needs attention” views.
+* merged search across local, structured, Finder, and Drive resources;
+
+* project-scoped search;
+
+* resource health and refresh controls;
+
+* project Context view;
+
+* source backlinks from tasks, decisions, and notes;
+
+* recent-context and “needs attention” views.
 
 Success condition: a user can begin from a task or project and reach the source
 material in one or two intentional actions without copying content manually.
@@ -877,11 +1014,15 @@ material in one or two intentional actions without copying content manually.
 
 Deliver:
 
-- global capture for files, URLs, text, and Drive links;
-- source-preserving inbox;
-- proposals for project linking and task/decision extraction;
-- review, accept, edit, reject, archive flows;
-- source links on every confirmed task and decision.
+* global capture for files, URLs, text, and Drive links;
+
+* source-preserving inbox;
+
+* proposals for project linking and task/decision extraction;
+
+* review, accept, edit, reject, archive flows;
+
+* source links on every confirmed task and decision.
 
 This is where “collect resources” becomes a daily habit rather than a one-time
 integration setup.
@@ -890,12 +1031,17 @@ integration setup.
 
 Consider only after read-only flows are reliable:
 
-- create a Google Doc from a Xingularity note;
-- append an approved status block to a selected Google Doc;
-- write selected values to a user-approved Google Sheet range;
-- create or update local files in an explicitly authorized root;
-- scheduled refresh and resource health reports;
-- agent-generated drafts with citations and approval.
+* create a Google Doc from a Xingularity note;
+
+* append an approved status block to a selected Google Doc;
+
+* write selected values to a user-approved Google Sheet range;
+
+* create or update local files in an explicitly authorized root;
+
+* scheduled refresh and resource health reports;
+
+* agent-generated drafts with citations and approval.
 
 Every write needs a preview, target/source label, permission check, revision or
 ETag handling where available, and an undo or recovery story. Rich two-way
@@ -906,27 +1052,35 @@ is substantially riskier than linking and explicit publishing.
 
 The proposal extends current directions instead of replacing them:
 
-- `SEARCH-001` already defines a typed search contract, filters, ranking, and
+* `SEARCH-001` already defines a typed search contract, filters, ranking, and
   sensitive-text redaction. Add provider-aware external resources to that
   contract.
-- `KNOW-001` already expands the graph beyond note mentions. Add resource
+
+* `KNOW-001` already expands the graph beyond note mentions. Add resource
   nodes and typed edges with provenance.
-- `PROJ-001` already treats projects as planning spaces rather than folders.
+
+* `PROJ-001` already treats projects as planning spaces rather than folders.
   Project Context becomes a projection over related resources.
-- `CAP-001` already points toward an actionable capture inbox. Resource capture
+
+* `CAP-001` already points toward an actionable capture inbox. Resource capture
   should preserve source context before classification.
-- `SYNC-001` and `CORE-001` already recognize checksums, change detection, and
+
+* `SYNC-001` and `CORE-001` already recognize checksums, change detection, and
   conflicts. External connectors need the same explicit states without
   enabling destructive sync by default.
-- `SEC-002` already moves credentials toward device credential storage. Drive
+
+* `SEC-002` already moves credentials toward device credential storage. Drive
   tokens and file-access handles must follow that boundary.
-- `VAULT-001` already emphasizes export, diagnostics, backup, and recovery.
+
+* `VAULT-001` already emphasizes export, diagnostics, backup, and recovery.
   Resource relations and connector state should be included in portable
   manifests without exporting secrets.
-- The existing provider-neutral Google Calendar adapter is a useful pattern:
+
+* The existing provider-neutral Google Calendar adapter is a useful pattern:
   explicit scopes, PKCE, refresh/revocation handling, normalized external IDs,
   and clear read-only access.
-- The existing main/preload/renderer boundary remains important. File-system
+
+* The existing main/preload/renderer boundary remains important. File-system
   access, connector tokens, content fetching, and source mutations belong in
   the main process or a narrowly scoped bridge, not in renderer components.
 
@@ -954,19 +1108,25 @@ project’s resources useful, source-aware, and searchable.
 Use measures that test whether centralization reduces reconstruction work rather
 than whether users connect the most services.
 
-- **Context recovery:** time from opening a task/project to opening the source
+* **Context recovery:** time from opening a task/project to opening the source
   material that explains it.
-- **Capture continuity:** percentage of captures that retain a valid source
+
+* **Capture continuity:** percentage of captures that retain a valid source
   link and reach a confirmed destination.
-- **Search usefulness:** successful source opens after a cross-source query,
+
+* **Search usefulness:** successful source opens after a cross-source query,
   separated by provider and freshness state.
-- **Resource health:** percentage of linked external resources that are
+
+* **Resource health:** percentage of linked external resources that are
   resolvable, with time-to-repair for moved or reauthorized items.
-- **Duplicate avoidance:** number of imported copies created intentionally
+
+* **Duplicate avoidance:** number of imported copies created intentionally
   versus accidental duplicate content.
-- **Trust safety:** count of unintended external writes, permission errors, and
+
+* **Trust safety:** count of unintended external writes, permission errors, and
   AI proposals rejected because provenance or freshness was unclear.
-- **Maintenance burden:** how often users need to reorganize or repair the
+
+* **Maintenance burden:** how often users need to reorganize or repair the
   central system to keep it useful.
 
 Qualitative usability checks should include:
@@ -1005,40 +1165,73 @@ performance, and maintenance concerns the community repeatedly raises.
 
 ### Community discussions
 
-- [r/Notion — Using OneDrive and Google Drive with Notion](https://www.reddit.com/r/Notion/comments/1rmtjdk/using_onedrive_and_google_drive_wnotion/)
-- [r/Notion — Do you stick to Notion for notes, or mix other tools?](https://www.reddit.com/r/Notion/comments/1o4pzxh/do_you_all_stick_to_notion_for_notes_or_mix_other/)
-- [r/Notion — Google Drive vs Notion](https://www.reddit.com/r/Notion/comments/1fv0b7o)
-- [r/Notion — Startup Notion and Google Drive](https://www.reddit.com/r/Notion/comments/1sxgf5u/startup_notion_and_google_drive/)
-- [r/Notion — What part of your setup became harder to maintain?](https://www.reddit.com/r/Notion/comments/1ufamxs/what_part_of_your_notion_setup_became_harder_to/)
-- [r/Notion — All-in-one systems versus specific tools](https://www.reddit.com/r/Notion/comments/1r42zvu/quick_question_do_you_guys_get_more_productive/)
-- [r/Notion — Is Notion becoming unnecessarily complicated?](https://www.reddit.com/r/Notion/comments/1ug9tgm/is_notion_becoming_unnecessarily_complicated/)
-- [r/ObsidianMD — Linking external Google Doc notes](https://www.reddit.com/r/ObsidianMD/comments/1aekeha)
-- [r/ObsidianMD — Folder Bridge external folders](https://www.reddit.com/r/ObsidianMD/comments/1rboynw/i_built_folder_bridgean_obsidian_plugin_that_lets/)
-- [r/ObsidianMD — Google Drive sync plugin](https://www.reddit.com/r/ObsidianMD/comments/1dzbunx/obsidian_google_drive_sync_beta_a_free/)
-- [Obsidian Forum — Linking to external files and folders](https://forum.obsidian.md/t/linking-to-external-files-folders/70121)
-- [r/ProductivityApps — All-in-one productivity apps and global inbox](https://www.reddit.com/r/ProductivityApps/comments/1dj0ve4/all-in-one-productivity-apps-specially-free/)
-- [r/ProductivityApps — Keeping notes and tasks connected](https://www.reddit.com/r/ProductivityApps/comments/1tz6xzm/i_built_a_workspace_because_i_kept_losing_the/)
-- [r/macapps — Integrating Finder in notes](https://www.reddit.com/r/macapps/comments/1ium12m/integrating_finder_in_notes/)
-- [r/macapps — Relational file management](https://www.reddit.com/r/macapps/comments/1opxj05/relational_file_management/)
-- [r/macapps — Hookmark and cross-application links](https://www.reddit.com/r/macapps/comments/1irmqos/is_hookmark_actually_needed/)
-- [Hacker News — Notion all-in-one workspace](https://news.ycombinator.com/item?id=18904648)
-- [Hacker News — Do you like Notion?](https://news.ycombinator.com/item?id=36846623)
-- [Hacker News — App switching and context](https://news.ycombinator.com/item?id=44352214)
-- [Hacker News — Hoarding notes and turning them into actions](https://news.ycombinator.com/item?id=46826277)
-- [DEVONthink community — Index links and external files](https://discourse.devontechnologies.com/t/index-links-in-devonthink/7954)
-- [DEVONthink community — External file links](https://discourse.devontechnologies.com/t/dt-does-external-file-links/81)
+* [r/Notion — Using OneDrive and Google Drive with Notion](https://www.reddit.com/r/Notion/comments/1rmtjdk/using_onedrive_and_google_drive_wnotion/)
+
+* [r/Notion — Do you stick to Notion for notes, or mix other tools?](https://www.reddit.com/r/Notion/comments/1o4pzxh/do_you_all_stick_to_notion_for_notes_or_mix_other/)
+
+* [r/Notion — Google Drive vs Notion](https://www.reddit.com/r/Notion/comments/1fv0b7o)
+
+* [r/Notion — Startup Notion and Google Drive](https://www.reddit.com/r/Notion/comments/1sxgf5u/startup_notion_and_google_drive/)
+
+* [r/Notion — What part of your setup became harder to maintain?](https://www.reddit.com/r/Notion/comments/1ufamxs/what_part_of_your_notion_setup_became_harder_to/)
+
+* [r/Notion — All-in-one systems versus specific tools](https://www.reddit.com/r/Notion/comments/1r42zvu/quick_question_do_you_guys_get_more_productive/)
+
+* [r/Notion — Is Notion becoming unnecessarily complicated?](https://www.reddit.com/r/Notion/comments/1ug9tgm/is_notion_becoming_unnecessarily_complicated/)
+
+* [r/ObsidianMD — Linking external Google Doc notes](https://www.reddit.com/r/ObsidianMD/comments/1aekeha)
+
+* [r/ObsidianMD — Folder Bridge external folders](https://www.reddit.com/r/ObsidianMD/comments/1rboynw/i_built_folder_bridgean_obsidian_plugin_that_lets/)
+
+* [r/ObsidianMD — Google Drive sync plugin](https://www.reddit.com/r/ObsidianMD/comments/1dzbunx/obsidian_google_drive_sync_beta_a_free/)
+
+* [Obsidian Forum — Linking to external files and folders](https://forum.obsidian.md/t/linking-to-external-files-folders/70121)
+
+* [r/ProductivityApps — All-in-one productivity apps and global inbox](https://www.reddit.com/r/ProductivityApps/comments/1dj0ve4/all-in-one-productivity-apps-specially-free/)
+
+* [r/ProductivityApps — Keeping notes and tasks connected](https://www.reddit.com/r/ProductivityApps/comments/1tz6xzm/i_built_a_workspace_because_i_kept_losing_the/)
+
+* [r/macapps — Integrating Finder in notes](https://www.reddit.com/r/macapps/comments/1ium12m/integrating_finder_in_notes/)
+
+* [r/macapps — Relational file management](https://www.reddit.com/r/macapps/comments/1opxj05/relational_file_management/)
+
+* [r/macapps — Hookmark and cross-application links](https://www.reddit.com/r/macapps/comments/1irmqos/is_hookmark_actually_needed/)
+
+* [Hacker News — Notion all-in-one workspace](https://news.ycombinator.com/item?id=18904648)
+
+* [Hacker News — Do you like Notion?](https://news.ycombinator.com/item?id=36846623)
+
+* [Hacker News — App switching and context](https://news.ycombinator.com/item?id=44352214)
+
+* [Hacker News — Hoarding notes and turning them into actions](https://news.ycombinator.com/item?id=46826277)
+
+* [DEVONthink community — Index links and external files](https://discourse.devontechnologies.com/t/index-links-in-devonthink/7954)
+
+* [DEVONthink community — External file links](https://discourse.devontechnologies.com/t/dt-does-external-file-links/81)
 
 ### Product and platform documentation
 
-- [Google Drive API — Search for files and folders](https://developers.google.com/workspace/drive/api/guides/search-files)
-- [Google Drive API — `changes.list`](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/list)
-- [Google Drive API — Choose authorization scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
-- [Google OAuth — Policies](https://developers.google.com/identity/protocols/oauth2/policies)
-- [Google Docs API — Document concepts](https://developers.google.com/workspace/docs/api/concepts/document)
-- [Google Sheets API — Read and write cell values](https://developers.google.com/workspace/sheets/api/guides/values)
-- [Notion — Google Drive AI Connector](https://www.notion.com/help/notion-ai-connectors-for-google-drive)
-- [Apple — Accessing files from the macOS App Sandbox](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
-- [Apple — `NSOpenPanel`](https://developer.apple.com/documentation/appkit/nsopenpanel)
-- [Apple — `NSWorkspace`](https://developer.apple.com/documentation/appkit/nsworkspace)
-- [Apple — Reveal files in Finder](https://developer.apple.com/documentation/appkit/nsworkspace/activatefileviewerselecting%28_%3A%29)
-- [Hookmark — Cross-application linking features](https://hookproductivity.com/help/general/features/)
+* [Google Drive API — Search for files and folders](https://developers.google.com/workspace/drive/api/guides/search-files)
+
+* [Google Drive API —](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/list) [`changes.list`](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/list)
+
+* [Google Drive API — Choose authorization scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+
+* [Google OAuth — Policies](https://developers.google.com/identity/protocols/oauth2/policies)
+
+* [Google Docs API — Document concepts](https://developers.google.com/workspace/docs/api/concepts/document)
+
+* [Google Sheets API — Read and write cell values](https://developers.google.com/workspace/sheets/api/guides/values)
+
+* [Notion — Google Drive AI Connector](https://www.notion.com/help/notion-ai-connectors-for-google-drive)
+
+* [Apple — Accessing files from the macOS App Sandbox](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
+
+* [Apple —](https://developer.apple.com/documentation/appkit/nsopenpanel) [`NSOpenPanel`](https://developer.apple.com/documentation/appkit/nsopenpanel)
+
+* [Apple —](https://developer.apple.com/documentation/appkit/nsworkspace) [`NSWorkspace`](https://developer.apple.com/documentation/appkit/nsworkspace)
+
+* [Apple — Reveal files in Finder](https://developer.apple.com/documentation/appkit/nsworkspace/activatefileviewerselecting%28_%3A%29)
+
+* [Hookmark — Cross-application linking features](https://hookproductivity.com/help/general/features/)
+

@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -13,14 +12,31 @@ import type {
   GoogleDriveFileCandidate,
   NoteTreeNode,
   Project,
+  ResourceLabel,
   ResourceInput,
+  ResourceUpdateInput,
   ResourcePreview,
   ResourceRef,
   ResourceRelation,
   ExternalProduct
 } from '../../../shared/types'
-import { notebookPathFromResource } from '../../../shared/resourceDomain'
+import {
+  normalizeResourceLabelKey,
+  normalizeResourceLabels,
+  notebookPathFromResource,
+  RESOURCE_LABEL_VALUE_MAX_LENGTH
+} from '../../../shared/resourceDomain'
 import { flattenNotebookFolders } from '../lib/projectNotebook'
+import {
+  filterResourceRows,
+  getResourcePageRows,
+  getResourceProjectIds,
+  type ResourceFilterState
+} from '../lib/resourceRows'
+import { createResourceLabelDrafts, type ResourceLabelDraft } from '../lib/resourceLabels'
+import { ResourceLabelsEditor } from './ResourceLabelsEditor'
+import { ResourceLabelChip } from './ResourceLabelChip'
+import { ResourceProjectsEditor } from './ResourceProjectsEditor'
 import {
   getProjectResourceRows,
   isExternalHttpUrl,
@@ -33,6 +49,16 @@ import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from './ui/alert-dialog'
+import {
   Dialog,
   DialogActionButton,
   DialogBody,
@@ -42,20 +68,13 @@ import {
   DialogShellFooter,
   DialogShellHeader
 } from './ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from './ui/dropdown-menu'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger
-} from './ui/context-menu'
+  ActionMenuItems,
+  type ActionMenuGroup,
+  type ActionMenuItemDefinition
+} from './ui/action-menu'
 import { EmptyState } from './ui/empty-state'
 import { Input } from './ui/input'
 import { WorkspaceIconButton } from './ui/document-workspace'
@@ -63,6 +82,7 @@ import { ColumnFolderPicker, type ColumnFolderPickerNode } from './ui/column-fol
 import { StatusChip } from './ui/status-chip'
 import { StatusChipToggleGroup, StatusChipToggleItem } from './ui/status-chip-toggle'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
+import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 import {
   CalendarCheck,
   Check,
@@ -77,6 +97,7 @@ import {
   Link,
   Loader2,
   MoreHorizontal,
+  Trash2,
   RefreshCw,
   Unlink,
   X
@@ -91,21 +112,43 @@ const externalProductIcons: Partial<Record<ExternalProduct, SimpleIcon>> = {
 
 const GOOGLE_DOC_MIME_TYPE = 'application/vnd.google-apps.document'
 
+const GLOBAL_RESOURCE_SORTABLE_COLUMNS = [
+  'resource',
+  'source',
+  'labels',
+  'projects',
+  'health',
+  'location',
+  'last-checked'
+] as const
+
+const PROJECT_RESOURCE_SORTABLE_COLUMNS = [
+  'resource',
+  'source',
+  'labels',
+  'health',
+  'location',
+  'last-checked'
+] as const
+
 export interface ProjectResourcesTableProps {
-  project: Project
+  project?: Project
+  scope?: 'project' | 'global'
+  projects?: Project[]
   noteTree: NoteTreeNode[]
   resources: ResourceRef[]
   relations: ResourceRelation[]
+  resourceFilters?: ResourceFilterState
   onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
+  onCreateResource?: (input: ResourceInput) => Promise<void>
   addResourceRequestProjectId?: string | null
+  addResourceRequest?: boolean
   onAddResourceRequestHandled?: () => void
-  onSetProjectNotebook: (projectId: string, notebookPath: string) => Promise<void>
-  onUpdateResource: (input: {
-    resourceId: string
-    canonicalUri?: string
-    title?: string
-  }) => Promise<void>
+  onSetProjectNotebook?: (projectId: string, notebookPath: string) => Promise<void>
+  onUpdateResource: (input: ResourceUpdateInput) => Promise<void>
+  onSetResourceProjectLinks?: (input: { resourceId: string; projectIds: string[] }) => Promise<void>
   onDetachResource: (projectId: string, resourceId: string) => Promise<void>
+  onRemoveResource?: (resourceId: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
   onOpenNotebookResource: (resourceId: string) => void
   onLocateResource?: (resourceId: string) => Promise<void>
@@ -127,22 +170,14 @@ interface ProjectResourceActionHandlers {
   onReveal?: () => void
   onRefresh?: () => void
   onPreview?: () => void
-}
-
-interface ProjectResourceMenuItem {
-  id: string
-  label: string
-  icon: ReactElement
-  onSelect: () => void
-  separatorBefore?: boolean
-  testId?: string
+  onRemove?: () => void
 }
 
 function getProjectResourceMenuItems(
   resource: ProjectResourceRow['resource'],
   handlers: ProjectResourceActionHandlers
-): ProjectResourceMenuItem[] {
-  const items: ProjectResourceMenuItem[] = [
+): ActionMenuGroup[] {
+  const primaryItems: ActionMenuItemDefinition[] = [
     {
       id: 'open',
       label: 'Open',
@@ -161,9 +196,13 @@ function getProjectResourceMenuItems(
       onSelect: handlers.onEdit
     }
   ]
+  const integrationItems: ActionMenuItemDefinition[] = []
+  const inspectionItems: ActionMenuItemDefinition[] = []
+  const organizationItems: ActionMenuItemDefinition[] = []
+  const destructiveItems: ActionMenuItemDefinition[] = []
 
   if (handlers.onAttachGoogleDocs) {
-    items.push({
+    integrationItems.push({
       id: 'attach-google-docs',
       label: 'Attach Google Docs',
       icon: <FileText aria-hidden="true" />,
@@ -173,7 +212,7 @@ function getProjectResourceMenuItems(
   }
 
   if (handlers.onPreview) {
-    items.push({
+    inspectionItems.push({
       id: 'preview',
       label: 'Preview',
       icon: <Eye aria-hidden="true" />,
@@ -182,7 +221,7 @@ function getProjectResourceMenuItems(
   }
 
   if (handlers.onRefresh) {
-    items.push({
+    inspectionItems.push({
       id: 'refresh',
       label: 'Refresh status',
       icon: <RefreshCw aria-hidden="true" />,
@@ -191,7 +230,7 @@ function getProjectResourceMenuItems(
   }
 
   if (handlers.onLocate) {
-    items.push({
+    inspectionItems.push({
       id: 'locate',
       label: 'Locate',
       icon: <FolderInput aria-hidden="true" />,
@@ -200,7 +239,7 @@ function getProjectResourceMenuItems(
   }
 
   if (handlers.onReveal) {
-    items.push({
+    inspectionItems.push({
       id: 'reveal',
       label: 'Reveal in Finder',
       icon: <HardDrive aria-hidden="true" />,
@@ -209,29 +248,50 @@ function getProjectResourceMenuItems(
   }
 
   if (handlers.onDetach) {
-    items.push({
+    organizationItems.push({
       id: 'detach',
       label: 'Remove from project',
       icon: <Unlink aria-hidden="true" />,
-      onSelect: handlers.onDetach,
-      separatorBefore: true
+      onSelect: handlers.onDetach
     })
   }
 
-  return items
+  if (handlers.onRemove) {
+    destructiveItems.push({
+      id: 'remove',
+      label: 'Delete resource',
+      icon: <Trash2 aria-hidden="true" />,
+      onSelect: handlers.onRemove,
+      destructive: true
+    })
+  }
+
+  return [
+    { id: 'primary', items: primaryItems },
+    { id: 'integration', items: integrationItems },
+    { id: 'inspection', items: inspectionItems },
+    { id: 'organization', items: organizationItems },
+    { id: 'destructive', items: destructiveItems }
+  ]
 }
 
 export function ProjectResourcesTable({
   project,
+  scope = 'project',
+  projects = [],
   noteTree,
   resources,
   relations,
+  resourceFilters = {},
   onAddResource,
+  onCreateResource,
   addResourceRequestProjectId,
+  addResourceRequest = false,
   onAddResourceRequestHandled,
-  onSetProjectNotebook,
   onUpdateResource,
+  onSetResourceProjectLinks,
   onDetachResource,
+  onRemoveResource,
   onOpenResource,
   onOpenNotebookResource,
   onLocateResource,
@@ -258,18 +318,47 @@ export function ProjectResourcesTable({
   const [googleDriveLoading, setGoogleDriveLoading] = useState(false)
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false)
   const [googleDriveError, setGoogleDriveError] = useState<string | null>(null)
-  const rows = useMemo(
-    () => getProjectResourceRows(project, resources, relations),
-    [project, relations, resources]
+  const [resourceToDelete, setResourceToDelete] = useState<ResourceRef | null>(null)
+  const [sortState, setSortState] = usePersistentTableSort(
+    `xingularity:table-sort:resources:${scope}`,
+    null,
+    scope === 'global' ? GLOBAL_RESOURCE_SORTABLE_COLUMNS : PROJECT_RESOURCE_SORTABLE_COLUMNS
   )
-
+  const allResourceRows = useMemo(
+    () =>
+      scope === 'global'
+        ? getResourcePageRows(resources, projects, relations).map(({ resource }) => ({ resource }))
+        : project
+          ? getProjectResourceRows(project, resources, relations)
+          : [],
+    [project, projects, relations, resources, scope]
+  )
+  const globalResourceRows = useMemo(
+    () => getResourcePageRows(resources, projects, relations),
+    [projects, relations, resources]
+  )
+  const filteredGlobalResourceRows = useMemo(
+    () =>
+      filterResourceRows(globalResourceRows, {
+        ...resourceFilters
+      }),
+    [globalResourceRows, resourceFilters]
+  )
+  const rows = useMemo(() => {
+    if (scope !== 'global') return allResourceRows
+    return filteredGlobalResourceRows.map(({ resource }) => ({ resource }))
+  }, [allResourceRows, filteredGlobalResourceRows, scope])
   useEffect(() => {
-    if (addResourceRequestProjectId !== project.id) return
+    const shouldOpenProjectDialog =
+      scope === 'project' && project && addResourceRequestProjectId === project.id
+    const shouldOpenGlobalDialog = scope === 'global' && addResourceRequest
+    if (!shouldOpenProjectDialog && !shouldOpenGlobalDialog) return
+
     setDialogType('external')
     setEditingResource(null)
     setDialogOpen(true)
     onAddResourceRequestHandled?.()
-  }, [addResourceRequestProjectId, onAddResourceRequestHandled, project.id])
+  }, [addResourceRequest, addResourceRequestProjectId, onAddResourceRequestHandled, project, scope])
 
   const run = async (resourceId: string, action: () => Promise<void>): Promise<void> => {
     setBusyId(resourceId)
@@ -284,7 +373,11 @@ export function ProjectResourcesTable({
 
   const openEditDialog = (resource: ResourceRef): void => {
     setDialogType(resource.type)
-    setEditingResource(resource)
+    setEditingResource(
+      scope === 'global'
+        ? { ...resource, projectIds: getResourceProjectIds(resource, projects, relations) }
+        : resource
+    )
     setDialogOpen(true)
   }
 
@@ -348,7 +441,7 @@ export function ProjectResourcesTable({
   }
 
   const attachSelectedGoogleDriveFiles = async (): Promise<void> => {
-    if (!onAttachGoogleDriveResources || selectedGoogleDriveFileIds.size === 0) return
+    if (!project || !onAttachGoogleDriveResources || selectedGoogleDriveFileIds.size === 0) return
 
     setGoogleDriveSaving(true)
     setGoogleDriveError(null)
@@ -375,10 +468,18 @@ export function ProjectResourcesTable({
     onOpen: () => openResource(row),
     onEdit: () => openEditDialog(row.resource),
     onAttachGoogleDocs:
-      googleDriveEnabled && row.resource.provider === 'google-drive'
+      scope === 'project' &&
+      project &&
+      googleDriveEnabled &&
+      row.resource.provider === 'google-drive'
         ? () => void openGoogleDriveDialog()
         : undefined,
-    onDetach: () => void run(row.resource.id, () => onDetachResource(project.id, row.resource.id)),
+    onDetach:
+      scope === 'project' && project
+        ? () => void run(row.resource.id, () => onDetachResource(project.id, row.resource.id))
+        : undefined,
+    onRemove:
+      scope === 'global' && onRemoveResource ? () => setResourceToDelete(row.resource) : undefined,
     onLocate:
       onLocateResource && row.resource.provider === 'filesystem'
         ? () => void run(row.resource.id, () => onLocateResource(row.resource.id))
@@ -405,6 +506,7 @@ export function ProjectResourcesTable({
       id: 'resource',
       header: 'Name',
       cellClassName: 'min-w-64',
+      sortValue: ({ resource }) => resource.title,
       renderCell: (row) => (
         <Button
           type="button"
@@ -428,13 +530,58 @@ export function ProjectResourcesTable({
       id: 'source',
       header: 'Source',
       cellClassName: 'whitespace-nowrap',
+      sortValue: ({ resource }) => resourceProductLabel(resource),
       renderCell: ({ resource }) => (
         <span className="text-sm text-muted-foreground">{resourceProductLabel(resource)}</span>
       )
     },
     {
+      id: 'labels',
+      header: 'Labels',
+      cellClassName: 'min-w-48 max-w-[24rem]',
+      sortValue: ({ resource }) => {
+        const labels = (resource.labels ?? [])
+          .map(formatResourceLabel)
+          .sort((left, right) => left.localeCompare(right))
+        return labels.length > 0 ? labels.join(' · ') : null
+      },
+      renderCell: ({ resource }) => <ResourceLabelsCell resource={resource} />
+    },
+    ...(scope === 'global'
+      ? [
+          {
+            id: 'projects',
+            header: 'Projects',
+            cellClassName: 'min-w-40 max-w-[20rem]',
+            sortValue: ({ resource }: ProjectResourceRow) => {
+              const projectIds = getResourceProjectIds(resource, projects, relations)
+              const projectNames = projects
+                .filter((candidate) => projectIds.includes(candidate.id))
+                .map((candidate) => candidate.name)
+                .sort((left, right) => left.localeCompare(right))
+              return projectNames.length > 0 ? projectNames.join(', ') : null
+            },
+            renderCell: ({ resource }: ProjectResourceRow) => {
+              const projectIds = getResourceProjectIds(resource, projects, relations)
+              const projectNames = projects
+                .filter((candidate) => projectIds.includes(candidate.id))
+                .map((candidate) => candidate.name)
+              return (
+                <span
+                  className="block truncate text-sm text-muted-foreground"
+                  title={projectNames.join(', ') || 'Unassigned'}
+                >
+                  {projectNames.length > 0 ? projectNames.join(', ') : 'Unassigned'}
+                </span>
+              )
+            }
+          } satisfies TableRowListColumn<ProjectResourceRow>
+        ]
+      : []),
+    {
       id: 'health',
       header: 'Health',
+      sortValue: ({ resource }) => resource.state,
       renderCell: ({ resource }) => {
         const healthChip = RESOURCE_STATE_CHIP_ITEMS[resource.state]
 
@@ -455,6 +602,7 @@ export function ProjectResourcesTable({
       id: 'location',
       header: 'Location',
       cellClassName: 'min-w-56 max-w-[28rem]',
+      sortValue: ({ resource }) => resourceLocationLabel(resource),
       renderCell: ({ resource }) => (
         <span
           className="block truncate text-sm text-muted-foreground"
@@ -468,6 +616,8 @@ export function ProjectResourcesTable({
       id: 'last-checked',
       header: 'Last checked',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
+      sortValue: ({ resource }) => resource.lastSeenAt ?? resource.updatedAt,
+      sortDefaultDirection: 'desc',
       renderCell: (row) => {
         const { resource } = row
         const checkedAt = resource.lastSeenAt ?? resource.updatedAt
@@ -503,27 +653,40 @@ export function ProjectResourcesTable({
     <>
       <section
         className="flex min-h-full min-w-0 flex-col gap-6"
-        data-testid="project-resources-page"
-        aria-labelledby="project-resources-heading"
+        data-testid={scope === 'global' ? 'resources-page' : 'project-resources-page'}
+        aria-labelledby={scope === 'global' ? 'resources-heading' : 'project-resources-heading'}
       >
-        <h1 id="project-resources-heading" className="sr-only">
+        <h1
+          id={scope === 'global' ? 'resources-heading' : 'project-resources-heading'}
+          className="sr-only"
+        >
           Resources
         </h1>
         {rows.length === 0 ? (
           <EmptyState
             icon={Link}
-            title="No resources found"
-            description="Use Add resource in the top bar to link one or more notebook folders or external links."
+            title={
+              scope === 'global' && globalResourceRows.length > 0
+                ? 'No matching resources'
+                : 'No resources found'
+            }
+            description={
+              scope === 'global' && globalResourceRows.length > 0
+                ? 'Try a different search term.'
+                : 'Use Add resource in the top bar to link one or more notebook folders or external links.'
+            }
           />
         ) : (
           <TableRowList
             aria-label="Resources"
-            data-testid="project-resources-table"
+            data-testid={scope === 'global' ? 'resources-table' : 'project-resources-table'}
             columns={columns}
             items={rows}
+            sortState={sortState}
+            onSortChange={setSortState}
             getRowKey={({ resource }) => resource.id}
             getRowProps={(row) => ({
-              'data-testid': `project-resource-row:${row.resource.id}`,
+              'data-testid': `${scope === 'global' ? 'resource' : 'project-resource'}-row:${row.resource.id}`,
               className: cn('group', busyId === row.resource.id && 'opacity-60'),
               onClick: () => openResource(row)
             })}
@@ -569,13 +732,19 @@ export function ProjectResourcesTable({
         key={`${editingResource?.id ?? 'new'}:${dialogType}`}
         open={dialogOpen}
         type={dialogType}
-        project={project}
+        project={project ?? null}
+        projects={projects}
+        existingResources={
+          scope === 'global' ? resources : allResourceRows.map(({ resource }) => resource)
+        }
+        context={scope === 'global' ? 'Resources' : 'Project Resources'}
         noteTree={noteTree}
         resource={editingResource}
         onOpenChange={setDialogOpen}
         onAddResource={onAddResource}
-        onSetProjectNotebook={onSetProjectNotebook}
+        onCreateResource={onCreateResource}
         onUpdateResource={onUpdateResource}
+        onSetResourceProjectLinks={onSetResourceProjectLinks}
       />
       <Dialog open={googleDriveDialogOpen} onOpenChange={handleGoogleDriveDialogOpenChange}>
         <DialogContent className="max-w-lg" showCloseButton={false}>
@@ -657,48 +826,55 @@ export function ProjectResourcesTable({
           </DialogShell>
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={Boolean(resourceToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setResourceToDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete resource?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes {resourceToDelete?.title ?? 'this resource'} and its links
+              from every project. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!resourceToDelete || !onRemoveResource) return
+                void run(resourceToDelete.id, async () => {
+                  await onRemoveResource(resourceToDelete.id)
+                  setResourceToDelete(null)
+                })
+              }}
+            >
+              Delete resource
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
 
 function ProjectResourceDropdownItems({
-  items
+  groups
 }: {
-  items: readonly ProjectResourceMenuItem[]
+  groups: readonly ActionMenuGroup[]
 }): ReactElement {
-  return (
-    <>
-      {items.map((item) => (
-        <Fragment key={item.id}>
-          {item.separatorBefore ? <DropdownMenuSeparator /> : null}
-          <DropdownMenuItem data-testid={item.testId} onSelect={item.onSelect}>
-            {item.icon}
-            {item.label}
-          </DropdownMenuItem>
-        </Fragment>
-      ))}
-    </>
-  )
+  return <ActionMenuItems variant="dropdown" groups={groups} />
 }
 
 function ProjectResourceContextMenuItems({
-  items
+  groups
 }: {
-  items: readonly ProjectResourceMenuItem[]
+  groups: readonly ActionMenuGroup[]
 }): ReactElement {
-  return (
-    <>
-      {items.map((item) => (
-        <Fragment key={item.id}>
-          {item.separatorBefore ? <ContextMenuSeparator /> : null}
-          <ContextMenuItem data-testid={item.testId} onSelect={item.onSelect}>
-            {item.icon}
-            {item.label}
-          </ContextMenuItem>
-        </Fragment>
-      ))}
-    </>
-  )
+  return <ActionMenuItems variant="context" groups={groups} />
 }
 
 function ProjectResourceActions({
@@ -712,7 +888,7 @@ function ProjectResourceActions({
   className?: string
 } & ProjectResourceActionHandlers): ReactElement {
   const { resource } = row
-  const items = getProjectResourceMenuItems(resource, handlers)
+  const groups = getProjectResourceMenuItems(resource, handlers)
 
   return (
     <div
@@ -738,7 +914,7 @@ function ProjectResourceActions({
           />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <ProjectResourceDropdownItems items={items} />
+          <ProjectResourceDropdownItems groups={groups} />
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -753,13 +929,13 @@ function ProjectResourceContextMenu({
   row: ProjectResourceRow
   children: ReactElement
 } & ProjectResourceActionHandlers): ReactElement {
-  const items = getProjectResourceMenuItems(row.resource, handlers)
+  const groups = getProjectResourceMenuItems(row.resource, handlers)
 
   return (
     <ContextMenu modal>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent data-testid={`project-resource-context-menu:${row.resource.id}`}>
-        <ProjectResourceContextMenuItems items={items} />
+        <ProjectResourceContextMenuItems groups={groups} />
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -845,30 +1021,60 @@ function ResourceIconFrame({
   )
 }
 
+function ResourceLabelsCell({ resource }: { resource: ResourceRef }): ReactElement {
+  const labels = resource.labels ?? []
+  if (labels.length === 0) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
+
+  return (
+    <div
+      className="flex max-w-full flex-wrap gap-1"
+      title={labels.map(formatResourceLabel).join(', ')}
+    >
+      {labels.map((label) => (
+        <ResourceLabelChip
+          key={`${label.key}:${label.value}`}
+          label={label}
+          className="max-w-full text-xs"
+        />
+      ))}
+    </div>
+  )
+}
+
+function formatResourceLabel(label: ResourceLabel): string {
+  return `${label.key}=${label.value}`
+}
+
 function ResourceEditorDialog({
   open,
   type,
+  context,
   project,
+  projects,
+  existingResources,
   noteTree,
   resource,
   onOpenChange,
   onAddResource,
-  onSetProjectNotebook,
-  onUpdateResource
+  onCreateResource,
+  onUpdateResource,
+  onSetResourceProjectLinks
 }: {
   open: boolean
   type: 'notebook' | 'external'
-  project: Project
+  context: string
+  project: Project | null
+  projects: readonly Project[]
+  existingResources: readonly ResourceRef[]
   noteTree: NoteTreeNode[]
   resource: ResourceRef | null
   onOpenChange: (open: boolean) => void
   onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
-  onSetProjectNotebook: (projectId: string, notebookPath: string) => Promise<void>
-  onUpdateResource: (input: {
-    resourceId: string
-    canonicalUri?: string
-    title?: string
-  }) => Promise<void>
+  onCreateResource?: (input: ResourceInput) => Promise<void>
+  onUpdateResource: (input: ResourceUpdateInput) => Promise<void>
+  onSetResourceProjectLinks?: (input: { resourceId: string; projectIds: string[] }) => Promise<void>
 }): ReactElement {
   const folders = useMemo(() => flattenNotebookFolders(noteTree), [noteTree])
   const initialNotebookPath = resource ? notebookPathFromResource(resource) : null
@@ -889,13 +1095,14 @@ function ResourceEditorDialog({
   const linkedNotebookPaths = useMemo(() => {
     const paths = new Set<string>()
 
-    for (const linkedResource of project.resourceRefs ?? []) {
+    for (const linkedResource of existingResources) {
+      if (linkedResource.id === resource?.id) continue
       const path = notebookPathFromResource(linkedResource)
       if (path) paths.add(path)
     }
 
     return paths
-  }, [project.resourceRefs])
+  }, [existingResources, resource?.id])
   const duplicateFolderNames = useMemo(() => {
     const counts = new Map<string, number>()
 
@@ -948,8 +1155,16 @@ function ResourceEditorDialog({
   const [notebookPath, setNotebookPath] = useState(initialNotebookPath ?? '')
   const [externalUrl, setExternalUrl] = useState(resource?.canonicalUri ?? '')
   const [title, setTitle] = useState(resource?.title ?? '')
+  const [labelDrafts, setLabelDrafts] = useState<ResourceLabelDraft[]>(() =>
+    createResourceLabelDrafts(resource?.labels ?? [])
+  )
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
+    () => resource?.projectIds ?? (project ? [project.id] : [])
+  )
   const [error, setError] = useState<string | null>(null)
+  const [labelError, setLabelError] = useState<string | null>(null)
   const isEditing = Boolean(resource)
+  const canChooseProjects = !project && projects.length > 0
   const selectedFolder = folderOptions.find((folder) => folder.path === notebookPath)
   const selectedFolderHasDuplicateName = selectedFolder
     ? duplicateFolderNames.has(selectedFolder.name)
@@ -961,19 +1176,65 @@ function ResourceEditorDialog({
     setNotebookPath(initialNotebookPath ?? '')
     setExternalUrl(resource?.canonicalUri ?? '')
     setTitle(resource?.title ?? '')
+    setLabelDrafts(createResourceLabelDrafts(resource?.labels ?? []))
+    setSelectedProjectIds(resource?.projectIds ?? (project ? [project.id] : []))
     setError(null)
-  }, [initialNotebookPath, open, resource, type])
+    setLabelError(null)
+  }, [initialNotebookPath, open, project, resource, type])
+
+  const getLabels = (): ResourceLabel[] => {
+    const hasIncompleteLabel = labelDrafts.some(
+      (draft) => Boolean(draft.key.trim()) !== Boolean(draft.value.trim())
+    )
+    if (hasIncompleteLabel) {
+      throw new Error('Complete both the key and value for each label, or remove the empty row.')
+    }
+
+    for (const draft of labelDrafts) {
+      if (!normalizeResourceLabelKey(draft.key)) {
+        throw new Error('Label keys may use letters, numbers, dots, dashes, or underscores.')
+      }
+      if (draft.value.trim().length > RESOURCE_LABEL_VALUE_MAX_LENGTH) {
+        throw new Error(
+          `Label values must be ${RESOURCE_LABEL_VALUE_MAX_LENGTH} characters or fewer.`
+        )
+      }
+    }
+
+    const labels = normalizeResourceLabels(labelDrafts)
+    const completeDrafts = labelDrafts.filter(
+      (draft) => draft.key.trim().length > 0 && draft.value.trim().length > 0
+    )
+    if (labels.length !== completeDrafts.length) {
+      throw new Error('Label keys may use letters, numbers, dots, dashes, or underscores.')
+    }
+    return labels
+  }
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     setError(null)
+    setLabelError(null)
     try {
+      const labels = getLabels()
+      const projectIds = project ? [project.id] : selectedProjectIds
       if (selectedType === 'notebook') {
         if (!notebookPath) throw new Error('Choose a notebook folder')
         if (resource) {
-          await onUpdateResource({ resourceId: resource.id, canonicalUri: notebookPath })
+          await onUpdateResource({ resourceId: resource.id, canonicalUri: notebookPath, labels })
+          if (onSetResourceProjectLinks) {
+            await onSetResourceProjectLinks({ resourceId: resource.id, projectIds })
+          }
         } else {
-          await onSetProjectNotebook(project.id, notebookPath)
+          const input: ResourceInput = {
+            type: 'notebook',
+            canonicalUri: notebookPath,
+            labels,
+            ...(projectIds.length ? { projectIds } : {})
+          }
+          if (project) await onAddResource(project.id, input)
+          else if (onCreateResource) await onCreateResource(input)
+          else throw new Error('Resource creation is unavailable in this workspace.')
         }
       } else {
         const normalizedUrl = externalUrl.trim()
@@ -984,38 +1245,49 @@ function ResourceEditorDialog({
           await onUpdateResource({
             resourceId: resource.id,
             canonicalUri: normalizedUrl,
-            title: title.trim() || undefined
+            title: title.trim() || undefined,
+            labels
           })
+          if (onSetResourceProjectLinks) {
+            await onSetResourceProjectLinks({ resourceId: resource.id, projectIds })
+          }
         } else {
-          await onAddResource(project.id, {
+          const input: ResourceInput = {
             type: 'external',
             canonicalUri: normalizedUrl,
-            title: title.trim() || undefined
-          })
+            title: title.trim() || undefined,
+            labels,
+            ...(projectIds.length ? { projectIds } : {})
+          }
+          if (project) await onAddResource(project.id, input)
+          else if (onCreateResource) await onCreateResource(input)
+          else throw new Error('Resource creation is unavailable in this workspace.')
         }
       }
       onOpenChange(false)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : String(submitError))
+      const message = submitError instanceof Error ? submitError.message : String(submitError)
+      if (message.startsWith('Label') || message.startsWith('Complete both')) setLabelError(message)
+      else setError(message)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg"
-        data-testid="project-resource-dialog"
+        className="max-w-2xl"
+        data-testid={context === 'Resources' ? 'resource-dialog' : 'project-resource-dialog'}
         showCloseButton={false}
       >
         <DialogShell>
           <DialogShellHeader
-            context="Project Resources"
+            context={context}
             title={isEditing ? 'Edit resource' : 'Add resource'}
             closeLabel="Close resource editor"
             onClose={() => onOpenChange(false)}
           />
-          <form onSubmit={(event) => void submit(event)}>
-            <DialogBody className="space-y-4">
+          <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+            <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
               {!isEditing ? (
                 <StatusChipToggleGroup
                   value={selectedType}
@@ -1117,6 +1389,31 @@ function ResourceEditorDialog({
                   </div>
                 </div>
               )}
+
+              <div
+                role="group"
+                aria-label="Resource labels and projects"
+                data-testid="resource-dialog-properties"
+                className="flex min-w-0 flex-wrap items-center gap-2"
+              >
+                <ResourceLabelsEditor
+                  drafts={labelDrafts}
+                  onChange={setLabelDrafts}
+                  error={labelError}
+                  className="min-w-0 max-w-full"
+                  surface="pill"
+                />
+                {canChooseProjects ? (
+                  <ResourceProjectsEditor
+                    value={selectedProjectIds}
+                    projects={projects}
+                    onChange={setSelectedProjectIds}
+                    className="min-w-0 max-w-full"
+                    surface="pill"
+                  />
+                ) : null}
+              </div>
+
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
             </DialogBody>
             <DialogShellFooter>

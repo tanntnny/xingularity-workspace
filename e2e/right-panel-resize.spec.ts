@@ -108,6 +108,21 @@ async function getResizeAffordanceStyles(locator: Locator): Promise<{
   })
 }
 
+async function resizeRightPanelBy(page: Page, delta: number): Promise<void> {
+  const resizeHandle = page.getByTestId('workspace-right-panel-resize')
+  const handleBox = await resizeHandle.boundingBox()
+  if (!handleBox) {
+    throw new Error('Right workspace panel resize handle bounding box is not available')
+  }
+
+  const startX = handleBox.x + handleBox.width / 2
+  const startY = handleBox.y + handleBox.height / 2
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  await page.mouse.move(startX - delta, startY, { steps: 8 })
+  await page.mouse.up()
+}
+
 test.describe('right workspace panel resizing', () => {
   test('supports pointer and keyboard resizing, collapse, clamping, and persistence', async () => {
     const vaultRoot = await createFixtureVault()
@@ -218,6 +233,48 @@ test.describe('right workspace panel resizing', () => {
       expect(resizeObserverErrors).toEqual([])
     } finally {
       await electronApp.close()
+    }
+  })
+
+  test('remembers independent widths per page and migrates the legacy width', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.evaluate(() => {
+        window.localStorage.setItem('workspace_right_panel_width', JSON.stringify(340))
+      })
+      await page.reload()
+      await expect(page.getByTestId('sidebar-command-palette')).toBeVisible({ timeout: 20_000 })
+
+      const panel = page.getByTestId('workspace-right-panel')
+      await expect.poll(() => getWidth(panel)).toBe(340)
+
+      await resizeRightPanelBy(page, 60)
+      await expect.poll(() => getWidth(panel)).toBe(400)
+
+      await page.getByTestId('sidebar-page:knowledge').click()
+      await expect(page.getByTestId('workspace-right-panel-resize')).toBeVisible()
+      await expect.poll(() => getWidth(panel)).toBe(340)
+
+      await resizeRightPanelBy(page, 40)
+      await expect.poll(() => getWidth(panel)).toBe(380)
+
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect.poll(() => getWidth(panel)).toBe(400)
+
+      await page.getByTestId('sidebar-page:knowledge').click()
+      await expect.poll(() => getWidth(panel)).toBe(380)
+
+      await page.reload()
+      await expect(page.getByTestId('sidebar-command-palette')).toBeVisible({ timeout: 20_000 })
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect.poll(() => getWidth(panel)).toBe(400)
+      await page.getByTestId('sidebar-page:knowledge').click()
+      await expect.poll(() => getWidth(panel)).toBe(380)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
     }
   })
 

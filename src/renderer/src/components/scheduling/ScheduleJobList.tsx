@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { Plus } from '../ui/icons'
+import { FolderOpen, MoreHorizontal, Play, Plus, Trash2 } from '../ui/icons'
 import { APP_PAGE_ICONS } from '../../lib/pageIcons'
 import { Button, EmptyState, TableRowList, type TableRowListColumn } from '../ui'
 import type { RunStatus, ScheduleJob, TriggerConfig } from '../../../../shared/scheduleTypes'
@@ -10,6 +10,11 @@ import {
 } from '../../lib/statusChipMeta'
 import { StatusChip } from '../ui/status-chip'
 import type { ScheduleJobListProps } from './types'
+import { ActionMenuItems, type ActionMenuGroup } from '../ui/action-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/context-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../ui/dropdown-menu'
+import { WorkspaceIconButton } from '../ui/document-workspace'
+import { usePersistentTableSort } from '../../hooks/usePersistentTableSort'
 
 function formatLastRunDate(value: string | undefined): string {
   if (!value) {
@@ -61,19 +66,79 @@ function formatTrigger(trigger: TriggerConfig): string {
   return 'Manually'
 }
 
+function getScheduleJobMenuGroups(
+  job: ScheduleJob,
+  onSelect: (jobId: string) => void,
+  onRunJob?: (jobId: string) => void,
+  onRequestDeleteJob?: (jobId: string) => void,
+  isRunning = false
+): ActionMenuGroup[] {
+  return [
+    {
+      id: 'primary',
+      items: [
+        {
+          id: 'open',
+          label: 'Open automation',
+          icon: <FolderOpen aria-hidden="true" />,
+          onSelect: () => onSelect(job.id)
+        }
+      ]
+    },
+    {
+      id: 'execution',
+      items: onRunJob
+        ? [
+            {
+              id: 'run',
+              label: isRunning ? 'Running…' : 'Run now',
+              icon: <Play aria-hidden="true" />,
+              disabled: isRunning,
+              onSelect: () => onRunJob(job.id)
+            }
+          ]
+        : []
+    },
+    {
+      id: 'destructive',
+      items: onRequestDeleteJob
+        ? [
+            {
+              id: 'delete',
+              label: 'Delete automation',
+              icon: <Trash2 aria-hidden="true" />,
+              destructive: true,
+              onSelect: () => onRequestDeleteJob(job.id)
+            }
+          ]
+        : []
+    }
+  ]
+}
+
 export function ScheduleJobList({
   jobs,
   selectedJobId,
   loading,
   className,
   onSelect,
-  onCreate
+  onCreate,
+  onRunJob,
+  onRequestDeleteJob,
+  isRunning = false
 }: ScheduleJobListProps): ReactElement {
+  const [sortState, setSortState] = usePersistentTableSort(
+    'xingularity:table-sort:schedules',
+    null,
+    ['name', 'status', 'schedule', 'runtime', 'last-run'] as const
+  )
+
   const columns: readonly TableRowListColumn<ScheduleJob>[] = [
     {
       id: 'name',
       header: 'Automation',
       cellClassName: 'min-w-56',
+      sortValue: (job) => job.name,
       renderCell: (job) => (
         <Button
           type="button"
@@ -92,6 +157,7 @@ export function ScheduleJobList({
     {
       id: 'status',
       header: 'Status',
+      sortValue: (job) => getStatus(job.lastStatus, job.enabled),
       renderCell: (job) => (
         <StatusChip item={SCHEDULE_JOB_STATUS_CHIP_ITEMS[getStatus(job.lastStatus, job.enabled)]} />
       )
@@ -100,19 +166,59 @@ export function ScheduleJobList({
       id: 'schedule',
       header: 'Schedule',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
+      sortValue: (job) => formatTrigger(job.trigger),
       renderCell: (job) => formatTrigger(job.trigger)
     },
     {
       id: 'runtime',
       header: 'Runtime',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
+      sortValue: (job) => (job.runtime === 'javascript' ? 'JavaScript' : 'Python'),
       renderCell: (job) => (job.runtime === 'javascript' ? 'JavaScript' : 'Python')
     },
     {
       id: 'last-run',
       header: 'Last run',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
+      sortValue: (job) => job.lastRunAt,
+      sortDefaultDirection: 'desc',
       renderCell: (job) => formatLastRunDate(job.lastRunAt)
+    },
+    {
+      id: 'actions',
+      header: '',
+      cellClassName: 'w-12 text-right',
+      renderCell: (job) => {
+        const groups = getScheduleJobMenuGroups(
+          job,
+          onSelect,
+          onRunJob,
+          onRequestDeleteJob,
+          isRunning
+        )
+
+        return (
+          <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <WorkspaceIconButton
+                  variant="rowAction"
+                  borderless
+                  data-testid={`scheduling-job-menu:${job.id}`}
+                  aria-label={`Open automation menu for ${job.name}`}
+                  title={`Open automation menu for ${job.name}`}
+                  icon={<MoreHorizontal size={15} aria-hidden="true" />}
+                  className="h-7 w-7 bg-transparent hover:bg-card-hover focus-visible:bg-card-hover"
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <ActionMenuItems variant="dropdown" groups={groups} />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )
+      }
     }
   ]
 
@@ -147,12 +253,32 @@ export function ScheduleJobList({
           data-testid="scheduling-job-list-items"
           columns={columns}
           items={jobs}
+          sortState={sortState}
+          onSortChange={setSortState}
           getRowKey={(job) => job.id}
           getRowProps={(job) => ({
             'data-testid': `scheduling-job:${job.id}`,
             'data-state': selectedJobId === job.id ? 'selected' : undefined,
             onClick: () => onSelect(job.id)
           })}
+          rowWrapper={(job, tableRow) => {
+            const groups = getScheduleJobMenuGroups(
+              job,
+              onSelect,
+              onRunJob,
+              onRequestDeleteJob,
+              isRunning
+            )
+
+            return (
+              <ContextMenu key={job.id}>
+                <ContextMenuTrigger asChild>{tableRow}</ContextMenuTrigger>
+                <ContextMenuContent data-testid={`scheduling-job-context-menu:${job.id}`}>
+                  <ActionMenuItems variant="context" groups={groups} />
+                </ContextMenuContent>
+              </ContextMenu>
+            )
+          }}
         />
       )}
     </section>

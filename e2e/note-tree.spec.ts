@@ -375,7 +375,7 @@ test.describe('notes tree view', () => {
         tagPopover.getByRole('button', { name: 'Search tag alpha', exact: true })
       ).toBeVisible()
       await tagPopover
-        .getByRole('textbox', { name: 'Search or add tags', exact: true })
+        .getByRole('combobox', { name: 'Search or add tags', exact: true })
         .press('Escape')
 
       await page.getByTestId('note-tree-row:alpha.md').dragTo(archiveRow)

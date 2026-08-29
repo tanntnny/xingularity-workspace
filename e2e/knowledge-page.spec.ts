@@ -3,6 +3,7 @@ import { _electron as electron, ElectronApplication } from 'playwright'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { expectSingleRightPanelScrollport } from './right-panel-scrollport'
 
 async function createFixtureVault(): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-knowledge-e2e-vault-'))
@@ -26,22 +27,21 @@ async function launchWithFixture(vaultRoot: string): Promise<{
   electronApp: ElectronApplication
   page: Page
 }> {
+  const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-knowledge-user-'))
+  await fs.writeFile(
+    path.join(userDataPath, 'settings.json'),
+    JSON.stringify({ lastVaultPath: vaultRoot }, null, 2),
+    'utf-8'
+  )
+
   const electronApp = await electron.launch({
-    args: ['.'],
+    args: [`--user-data-dir=${userDataPath}`, '.'],
     cwd: process.cwd(),
     env: {
       ...process.env,
       CI: '1'
     }
   })
-
-  const userDataPath = await electronApp.evaluate(({ app }) => app.getPath('userData'))
-  await fs.mkdir(userDataPath, { recursive: true })
-  await fs.writeFile(
-    path.join(userDataPath, 'settings.json'),
-    JSON.stringify({ lastVaultPath: vaultRoot }, null, 2),
-    'utf-8'
-  )
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
@@ -136,6 +136,30 @@ test.describe('knowledge page', () => {
       await expect(orphanToggle).toBeChecked()
       await expect(graphNodes).toHaveCount(1)
       await expect(page.getByTestId('knowledge-empty-state')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps knowledge settings sections in one shared scrollport', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.setViewportSize({ width: 1440, height: 360 })
+      await page.getByTestId('sidebar-page:knowledge').click()
+      await expect(page.getByTestId('knowledge-graph-editor')).toBeVisible()
+      await expect(page.getByTestId('knowledge-orphan-visibility-panel')).toBeVisible()
+      await expectSingleRightPanelScrollport(page)
+
+      const rightPanel = page.getByTestId('workspace-right-panel')
+      const sharedScrollport = rightPanel.locator('[data-workspace-scrollport="true"]')
+      await expect
+        .poll(() =>
+          sharedScrollport.evaluate((element) => element.scrollHeight > element.clientHeight)
+        )
+        .toBe(true)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

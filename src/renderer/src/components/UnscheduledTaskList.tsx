@@ -111,7 +111,7 @@ export function UnscheduledTaskList({
     <div
       data-unscheduled-task-list="true"
       data-unscheduled-drag-over={isDragOver ? 'true' : 'false'}
-      className="flex h-full flex-col overflow-hidden bg-transparent"
+      className="flex flex-col bg-transparent"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -152,7 +152,7 @@ export function UnscheduledTaskList({
 
       <div className="mx-4 border-t border-border" />
 
-      <div ref={containerRef} className="flex-1 overflow-auto px-2 pt-4">
+      <div ref={containerRef} className="px-2 pt-4">
         <DropZone
           as="div"
           data-unscheduled-drop-zone="true"
@@ -161,9 +161,9 @@ export function UnscheduledTaskList({
           tone="calendar-unscheduled"
           variant="surface"
           aria-label="Unscheduled task drop zone"
-          className="flex min-h-full flex-col p-3"
+          className="flex flex-col p-3"
         >
-          <div className="flex flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-3">
             {tasks.map((task) => {
               const revealProps = getRevealItemProps(task.id)
               return (
@@ -191,7 +191,6 @@ export function UnscheduledTaskList({
                 >
                   <DragSource
                     as="article"
-                    rotation={0}
                     previewVariant="content"
                     previewSizing="fit-content"
                     ref={revealProps.ref}
@@ -259,7 +258,7 @@ export function UnscheduledTaskList({
             })}
 
             {tasks.length === 0 && (
-              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+              <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="border bg-card text-card-foreground mb-3 flex h-12 w-12 items-center justify-center rounded-lg">
                   <CalendarPlus size={24} className="text-muted-foreground" />
                 </div>

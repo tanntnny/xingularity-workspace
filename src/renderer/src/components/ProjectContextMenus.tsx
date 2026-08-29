@@ -1,13 +1,47 @@
 import type { ReactElement } from 'react'
-import type { ProjectMilestone } from '../../../shared/types'
+import type { Project, ProjectMilestone } from '../../../shared/types'
+import { ActionMenuItems, type ActionMenuGroup, type ActionMenuVariant } from './ui/action-menu'
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from './ui/icons'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger
-} from './ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
+import { getProjectMenuGroups, type ProjectMenuActionHandlers } from '../lib/projectMenu'
+
+export function ProjectMenuItems({
+  project,
+  handlers,
+  variant,
+  includeOpen = true
+}: {
+  project: Project
+  handlers: ProjectMenuActionHandlers
+  variant: ActionMenuVariant
+  includeOpen?: boolean
+}): ReactElement {
+  return (
+    <ActionMenuItems
+      variant={variant}
+      groups={getProjectMenuGroups(project, handlers, { includeOpen })}
+    />
+  )
+}
+
+export function ProjectContextMenu({
+  project,
+  handlers,
+  children
+}: {
+  project: Project
+  handlers: ProjectMenuActionHandlers
+  children: ReactElement
+}): ReactElement {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent data-testid={`project-context-menu:${project.id}`}>
+        <ProjectMenuItems project={project} handlers={handlers} variant="context" />
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
 
 interface ProjectMilestoneContextMenuProps {
   milestone: ProjectMilestone
@@ -30,27 +64,50 @@ export function ProjectMilestoneContextMenu({
   onDelete,
   children
 }: ProjectMilestoneContextMenuProps): ReactElement {
+  const groups: ActionMenuGroup[] = [
+    {
+      id: 'primary',
+      items: [
+        {
+          id: 'add-task',
+          label: 'Add task to milestone',
+          icon: <Plus aria-hidden="true" />,
+          disabled: isCreatingTask,
+          onSelect: onCreateTask
+        },
+        {
+          id: 'open',
+          label: 'Open milestone',
+          icon: <Pencil aria-hidden="true" />,
+          onSelect: onEdit
+        },
+        {
+          id: 'toggle',
+          label: expanded ? 'Collapse milestone' : 'Expand milestone',
+          icon: expanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />,
+          onSelect: onToggle
+        }
+      ]
+    },
+    {
+      id: 'destructive',
+      items: [
+        {
+          id: 'delete',
+          label: 'Delete milestone',
+          icon: <Trash2 aria-hidden="true" />,
+          destructive: true,
+          onSelect: onDelete
+        }
+      ]
+    }
+  ]
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent data-testid={`project-milestone-context-menu:${milestone.id}`}>
-        <ContextMenuItem disabled={isCreatingTask} onSelect={onCreateTask}>
-          <Plus />
-          Add task to milestone
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onEdit}>
-          <Pencil />
-          Edit milestone
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onToggle}>
-          {expanded ? <ChevronDown /> : <ChevronRight />}
-          {expanded ? 'Collapse milestone' : 'Expand milestone'}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={onDelete}>
-          <Trash2 />
-          Delete milestone
-        </ContextMenuItem>
+        <ActionMenuItems variant="context" groups={groups} />
       </ContextMenuContent>
     </ContextMenu>
   )
