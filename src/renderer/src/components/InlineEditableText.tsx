@@ -9,6 +9,7 @@ import {
   useState
 } from 'react'
 import { Input, type InputVariant } from './ui/input'
+import { TooltipButton } from './ui/tooltip'
 import { cn } from '../lib/utils'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
@@ -193,7 +194,7 @@ export function InlineEditableText({
     setIsEditing(true)
   }
 
-  const displayButton = (
+  const displayButtonControl = (
     <button
       type="button"
       className={cn(
@@ -209,11 +210,13 @@ export function InlineEditableText({
         event.preventDefault()
         beginEditing()
       }}
-      title={title}
       aria-label={value || placeholder || title}
     >
       {renderDisplay ? renderDisplay(value) : value || placeholder}
     </button>
+  )
+  const displayButton = (
+    <TooltipButton label={value || placeholder || title}>{displayButtonControl}</TooltipButton>
   )
 
   if (displayAs === 'span') {

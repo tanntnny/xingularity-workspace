@@ -4,6 +4,14 @@ import { ChevronRight, MoreHorizontal } from './icons'
 
 import { cn } from '../../lib/utils'
 
+const breadcrumbEntryClassName =
+  'inline-flex min-h-7 max-w-full items-center rounded-[var(--radius-button)] px-2 py-1'
+
+const breadcrumbInteractiveClassName = cn(
+  breadcrumbEntryClassName,
+  'transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+)
+
 const Breadcrumb = React.forwardRef<
   HTMLElement,
   React.ComponentPropsWithoutRef<'nav'> & {
@@ -41,13 +49,7 @@ const BreadcrumbLink = React.forwardRef<
 >(({ asChild, className, ...props }, ref) => {
   const Comp = asChild ? Slot : 'a'
 
-  return (
-    <Comp
-      ref={ref}
-      className={cn('transition-colors hover:text-foreground', className)}
-      {...props}
-    />
-  )
+  return <Comp ref={ref} className={cn(breadcrumbInteractiveClassName, className)} {...props} />
 })
 BreadcrumbLink.displayName = 'BreadcrumbLink'
 
@@ -58,7 +60,7 @@ const BreadcrumbButton = React.forwardRef<
   <button
     ref={ref}
     type={type}
-    className={cn('app-no-drag transition-colors hover:text-foreground', className)}
+    className={cn('app-no-drag', breadcrumbInteractiveClassName, className)}
     {...props}
   />
 ))
@@ -85,7 +87,11 @@ BreadcrumbIconLabel.displayName = 'BreadcrumbIconLabel'
 
 const BreadcrumbLabel = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
   ({ className, ...props }, ref) => (
-    <span ref={ref} className={cn('font-normal text-muted-foreground', className)} {...props} />
+    <span
+      ref={ref}
+      className={cn(breadcrumbEntryClassName, 'font-normal text-muted-foreground', className)}
+      {...props}
+    />
   )
 )
 BreadcrumbLabel.displayName = 'BreadcrumbLabel'
@@ -95,7 +101,7 @@ const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWit
     <span
       ref={ref}
       aria-current="page"
-      className={cn('font-normal text-foreground', className)}
+      className={cn(breadcrumbEntryClassName, 'font-normal text-foreground', className)}
       {...props}
     />
   )
@@ -125,7 +131,10 @@ const BreadcrumbEllipsis = ({
   <span
     role="presentation"
     aria-hidden="true"
-    className={cn('flex h-9 w-9 items-center justify-center', className)}
+    className={cn(
+      'flex h-9 w-9 items-center justify-center rounded-[var(--radius-button)]',
+      className
+    )}
     {...props}
   >
     <MoreHorizontal className="h-4 w-4" />

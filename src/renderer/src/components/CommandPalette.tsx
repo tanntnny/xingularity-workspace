@@ -7,7 +7,16 @@ import {
   useRef,
   useState
 } from 'react'
-import { Clock, FileText, Plus, Terminal } from './ui/icons'
+import {
+  CircleAlert,
+  Clock,
+  Download,
+  FileText,
+  FolderOpen,
+  Plus,
+  RefreshCw,
+  Terminal
+} from './ui/icons'
 import { APP_PAGE_ICONS, VaultIcon } from '../lib/pageIcons'
 import type { AppPage } from '../navigation'
 import { stripNoteExtension } from '../../../shared/noteDocument'
@@ -57,6 +66,11 @@ interface CommandPaletteProps {
   onOpenPage: (page: CommandPalettePage) => void
   onOpenWarpAtNoteFolder: () => Promise<void>
   onManageVaults?: () => void
+  onOpenVaultFinder?: () => Promise<void>
+  onOpenVaultTerminal?: () => Promise<void>
+  onOpenSyncHealth?: () => void
+  onReconcileVault?: () => Promise<void>
+  onCreateVaultBackup?: () => Promise<void>
 }
 
 type CommandPaletteShortcutKey = 'cmd' | 'Enter' | string
@@ -78,7 +92,12 @@ export function CommandPalette({
   onOpenProject,
   onOpenPage,
   onOpenWarpAtNoteFolder,
-  onManageVaults
+  onManageVaults,
+  onOpenVaultFinder,
+  onOpenVaultTerminal,
+  onOpenSyncHealth,
+  onReconcileVault,
+  onCreateVaultBackup
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
     'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-primary transition-colors group-data-[selected=true]:text-primary'
@@ -293,6 +312,13 @@ export function CommandPalette({
         icon: APP_PAGE_ICONS.projects
       },
       {
+        value: '>go tasks',
+        label: 'Go to Tasks',
+        onSelect: () => onOpenPage('tasks'),
+        keywords: ['task', 'todo', 'work items'],
+        icon: APP_PAGE_ICONS.tasks
+      },
+      {
         value: '>go resources',
         label: 'Go to Resources',
         onSelect: () => onOpenPage('resources'),
@@ -355,9 +381,108 @@ export function CommandPalette({
               icon: VaultIcon
             }
           ]
+        : []),
+      ...(onOpenVaultFinder
+        ? [
+            {
+              value: '>vault open finder',
+              label: 'Open Vault in Finder',
+              onSelect: () => {
+                void onOpenVaultFinder()
+              },
+              keywords: ['vault', 'finder', 'explorer', 'folder', 'files'],
+              icon: FolderOpen
+            }
+          ]
+        : []),
+      ...(onOpenVaultTerminal
+        ? [
+            {
+              value: '>vault open terminal',
+              label: 'Open Vault in Terminal',
+              onSelect: () => {
+                void onOpenVaultTerminal()
+              },
+              keywords: ['vault', 'terminal', 'shell', 'command line', 'cwd'],
+              icon: Terminal
+            }
+          ]
+        : []),
+      ...(onOpenSyncHealth
+        ? [
+            {
+              value: '>vault status',
+              label: 'Show Vault Status',
+              onSelect: () => onOpenSyncHealth(),
+              keywords: ['vault', 'status', 'sync', 'health'],
+              icon: VaultIcon
+            },
+            {
+              value: '>vault validate',
+              label: 'Validate Vault',
+              onSelect: () => onOpenSyncHealth(),
+              keywords: ['vault', 'validate', 'diagnostics', 'health'],
+              icon: CircleAlert
+            }
+          ]
+        : []),
+      ...(onReconcileVault
+        ? [
+            {
+              value: '>vault reconcile',
+              label: 'Reconcile Vault',
+              onSelect: () => {
+                void onReconcileVault()
+              },
+              keywords: ['vault', 'reconcile', 'rescan', 'refresh', 'sync'],
+              icon: RefreshCw
+            }
+          ]
+        : []),
+      ...(onOpenSyncHealth
+        ? [
+            {
+              value: '>vault conflicts',
+              label: 'Review Vault Conflicts',
+              onSelect: () => onOpenSyncHealth(),
+              keywords: ['vault', 'conflicts', 'merge', 'recovery'],
+              icon: CircleAlert
+            },
+            {
+              value: '>vault diagnostics',
+              label: 'Open Vault Diagnostics',
+              onSelect: () => onOpenSyncHealth(),
+              keywords: ['vault', 'diagnostics', 'repair', 'quarantine'],
+              icon: CircleAlert
+            }
+          ]
+        : []),
+      ...(onCreateVaultBackup
+        ? [
+            {
+              value: '>vault backup',
+              label: 'Create Vault Backup',
+              onSelect: () => {
+                void onCreateVaultBackup()
+              },
+              keywords: ['vault', 'backup', 'export', 'portable', 'manifest'],
+              icon: Download
+            }
+          ]
         : [])
     ],
-    [activeNotePath, onCreate, onManageVaults, onOpenPage, onOpenWarpAtNoteFolder]
+    [
+      activeNotePath,
+      onCreate,
+      onCreateVaultBackup,
+      onManageVaults,
+      onOpenPage,
+      onOpenSyncHealth,
+      onOpenVaultFinder,
+      onOpenVaultTerminal,
+      onOpenWarpAtNoteFolder,
+      onReconcileVault
+    ]
   )
 
   const filteredCommandItems = useMemo(

@@ -23,6 +23,7 @@ import {
   Label,
   Trash2
 } from '../ui'
+import { COMMAND_ENTER_ARIA_KEYSHORTCUT, handleCommandEnterSubmit } from '../../lib/formShortcuts'
 
 const SECRET_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/
 
@@ -227,6 +228,7 @@ export function ScheduleSecretsDialog({
                 <form
                   className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]"
                   onSubmit={handleSaveSecret}
+                  onKeyDownCapture={handleCommandEnterSubmit}
                 >
                   <div className="space-y-1.5">
                     <Label htmlFor="scheduling-secret-name">Name</Label>
@@ -255,6 +257,7 @@ export function ScheduleSecretsDialog({
                     type="submit"
                     className="self-end rounded-[var(--radius-button-pill)]"
                     disabled={isSaving}
+                    aria-keyshortcuts={COMMAND_ENTER_ARIA_KEYSHORTCUT}
                     data-testid="scheduling-save-secret"
                   >
                     {isSaving ? 'Saving…' : 'Save secret'}

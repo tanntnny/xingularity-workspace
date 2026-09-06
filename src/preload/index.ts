@@ -13,6 +13,15 @@ import {
   ReminderClickTarget,
   RendererVaultApi
 } from '../shared/types'
+import type { VaultBackupResult } from '../shared/types'
+import type {
+  NoteDocumentReadResult,
+  VaultChangeEvent,
+  VaultReconcileResult,
+  VaultSyncSnapshot,
+  WriteNoteDocumentRequest,
+  WriteNoteResult
+} from '../shared/vaultProtocol'
 
 const api: RendererVaultApi = {
   ui: {
@@ -40,13 +49,19 @@ const api: RendererVaultApi = {
     switchSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultSwitchSaved, rootPath),
     toggleFavoriteSaved: (rootPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.vaultToggleFavoriteSaved, rootPath),
-    removeSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultRemoveSaved, rootPath)
+    removeSaved: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.vaultRemoveSaved, rootPath),
+    getSyncSnapshot: (): Promise<VaultSyncSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultSyncSnapshot),
+    reconcile: (): Promise<VaultReconcileResult> => ipcRenderer.invoke(IPC_CHANNELS.vaultReconcile),
+    createBackup: (): Promise<VaultBackupResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultCreateBackup)
   },
   desktop: {
     chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),
     choosePath: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChoosePath, title),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenExternal, url),
     openPath: (targetPath) => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenPath, targetPath),
+    openTerminal: () => ipcRenderer.invoke(IPC_CHANNELS.desktopOpenTerminal),
     openWarpAtNotePath: (relPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.desktopOpenWarpAtNotePath, relPath)
   },
@@ -58,13 +73,24 @@ const api: RendererVaultApi = {
       ipcRenderer.on(IPC_CHANNELS.filesTreeChanged, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.filesTreeChanged, wrapped)
     },
+    onVaultChanged: (listener): (() => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, payload: VaultChangeEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.vaultChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.vaultChanged, wrapped)
+    },
     readNote: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNote, relPath),
     readNoteDocument: (relPath) => ipcRenderer.invoke(IPC_CHANNELS.readNoteDocument, relPath),
+    readNoteDocumentWithRevision: (relPath): Promise<NoteDocumentReadResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.readNoteDocumentWithRevision, relPath),
     readExcalidrawFileDocument: (relPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.readExcalidrawFileDocument, relPath),
     writeNote: (relPath, content) => ipcRenderer.invoke(IPC_CHANNELS.writeNote, relPath, content),
     writeNoteDocument: (relPath, document): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.writeNoteDocument, relPath, document),
+    writeNoteDocumentWithRevision: (request: WriteNoteDocumentRequest): Promise<WriteNoteResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.writeNoteDocumentWithRevision, request),
     writeExcalidrawFileDocument: (relPath, document): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.writeExcalidrawFileDocument, relPath, document),
     createNote: (name) => ipcRenderer.invoke(IPC_CHANNELS.createNote, name),
@@ -232,7 +258,9 @@ const api: RendererVaultApi = {
     deleteUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectUpdate, input)
   },
   tasks: {
-    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createTask, input)
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createTask, input),
+    duplicate: (input) => ipcRenderer.invoke(IPC_CHANNELS.duplicateTask, input),
+    configureRecurrence: (input) => ipcRenderer.invoke(IPC_CHANNELS.configureTaskRecurrence, input)
   },
   history: {
     undo: () => ipcRenderer.invoke(IPC_CHANNELS.historyUndo),

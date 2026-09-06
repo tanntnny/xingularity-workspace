@@ -15,6 +15,8 @@ import {
   getResourcePageRows,
   type ResourceFilterState
 } from '../lib/resourceRows'
+import type { ResourceWorkspaceViewState } from '../lib/workspaceViewState'
+import type { TableSortState } from '../lib/tableSort'
 import { Search } from '../components/ui/icons'
 import { WorkspaceHeaderSecondaryActions } from '../components/ui/document-workspace'
 import { Input } from '../components/ui/input'
@@ -26,21 +28,21 @@ export interface ResourceSearchInputProps {
 
 export function ResourceSearchInput({ value, onChange }: ResourceSearchInputProps): ReactElement {
   return (
-    <div className="relative w-64 max-w-[calc(100vw-1.5rem)] shrink-0 transition-[width] duration-[var(--motion-duration-content)] ease-[var(--motion-ease-standard)] focus-within:w-80">
+    <div className="relative w-64 max-w-[calc(100vw-1.5rem)] shrink-0 rounded-[var(--radius-button-pill)] border border-input bg-panel transition-[width] duration-[var(--motion-duration-content)] ease-[var(--motion-ease-standard)] focus-within:w-80">
       <Search
         size={14}
         aria-hidden="true"
         className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
       />
       <Input
+        variant="plain"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search resources"
         aria-label="Search resources"
         data-testid="resource-search-input"
-        radius="control"
-        focusRadius="pill"
-        className="h-[var(--compact-control-height)] border-input bg-panel pl-8 pr-3 text-xs shadow-none focus-visible:bg-panel-hover focus-visible:ring-2 focus-visible:ring-ring"
+        radius="pill"
+        className="h-[var(--compact-control-height)] pl-8 pr-3 text-xs focus-visible:bg-transparent focus-visible:outline-none focus-visible:ring-0"
       />
     </div>
   )
@@ -63,6 +65,8 @@ export interface ResourcesPageProps {
   onRevealResource?: (resourceId: string) => Promise<void>
   onRefreshResource?: (resourceId: string) => Promise<void>
   onPreviewResource?: (resourceId: string) => Promise<ResourcePreview>
+  viewState?: ResourceWorkspaceViewState
+  onViewStateChange?: (state: ResourceWorkspaceViewState) => void
 }
 
 export function ResourcesPage({
@@ -81,9 +85,12 @@ export function ResourcesPage({
   onLocateResource,
   onRevealResource,
   onRefreshResource,
-  onPreviewResource
+  onPreviewResource,
+  viewState,
+  onViewStateChange
 }: ResourcesPageProps): ReactElement {
-  const [resourceFilters, setResourceFilters] = useState<ResourceFilterState>({})
+  const [localResourceFilters, setLocalResourceFilters] = useState<ResourceFilterState>({})
+  const resourceFilters = viewState?.filters ?? localResourceFilters
   const resourceRows = useMemo(
     () => getResourcePageRows(resources, projects, relations),
     [projects, relations, resources]
@@ -92,18 +99,30 @@ export function ResourcesPage({
     () => getResourceFilterOptions(resourceRows, projects),
     [projects, resourceRows]
   )
+  const updateResourceFilters = (nextFilters: ResourceFilterState): void => {
+    if (viewState && onViewStateChange) {
+      onViewStateChange({ ...viewState, filters: nextFilters })
+      return
+    }
+    setLocalResourceFilters(nextFilters)
+  }
+  const updateResourceSort = (sortState: TableSortState): void => {
+    if (viewState && onViewStateChange) {
+      onViewStateChange({ ...viewState, sortState })
+    }
+  }
 
   return (
     <>
       <WorkspaceHeaderSecondaryActions>
         <ResourceSearchInput
           value={resourceFilters.searchQuery ?? ''}
-          onChange={(searchQuery) => setResourceFilters((current) => ({ ...current, searchQuery }))}
+          onChange={(searchQuery) => updateResourceFilters({ ...resourceFilters, searchQuery })}
         />
         <ResourceFiltersPopover
           options={resourceFilterOptions}
           value={resourceFilters}
-          onChange={setResourceFilters}
+          onChange={updateResourceFilters}
         />
       </WorkspaceHeaderSecondaryActions>
       <ProjectResourcesTable
@@ -113,6 +132,8 @@ export function ResourcesPage({
         resources={resources}
         relations={relations}
         resourceFilters={resourceFilters}
+        sortState={viewState ? viewState.sortState : undefined}
+        onSortChange={viewState && onViewStateChange ? updateResourceSort : undefined}
         onAddResource={async () => undefined}
         onCreateResource={onCreateResource}
         addResourceRequest={addResourceRequest}

@@ -1,11 +1,11 @@
 import { useState, type ReactElement } from 'react'
 import type { AppPlatformKind } from '../platform'
-import { Button, Card, CardContent, CardHeader, FolderOpen } from '../components/ui'
+import { Button } from '../components/ui'
+import appLogo from '../../../../assets/logo.png'
 
 type VaultAction = 'open' | 'create'
 
 interface NoVaultPageProps {
-  lastVaultPath: string | null
   platformKind: AppPlatformKind
   supportsVaultPicker: boolean
   onOpenExistingVault: () => Promise<void>
@@ -14,7 +14,6 @@ interface NoVaultPageProps {
 }
 
 export function NoVaultPage({
-  lastVaultPath,
   platformKind,
   supportsVaultPicker,
   onOpenExistingVault,
@@ -43,41 +42,53 @@ export function NoVaultPage({
       className="flex min-h-full flex-1 flex-col overflow-y-auto bg-background p-2 text-foreground antialiased"
     >
       <div className="flex flex-1 items-center justify-center px-3 py-12 sm:px-8">
-        <Card className="w-full max-w-2xl">
-          <CardHeader className="items-center text-center">
-            <div className="flex size-16 items-center justify-center rounded-lg border border-ring bg-muted text-foreground">
-              <FolderOpen size={26} aria-hidden="true" />
-            </div>
-            <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight">
-              {supportsVaultPicker ? 'Select a vault first' : 'Workspace connection required'}
-            </h1>
-          </CardHeader>
+        <div className="flex w-full max-w-2xl flex-col items-center text-center">
+          <div className="flex size-16 items-center justify-center text-foreground">
+            <img src={appLogo} alt="Xingularity logo" className="size-16 object-contain" />
+          </div>
+          <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight">
+            {supportsVaultPicker ? 'Select a vault first' : 'Workspace connection required'}
+          </h1>
 
-          <CardContent className="space-y-5">
+          <div className="mt-5 w-full">
             {supportsVaultPicker ? (
-              <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+              <div className="flex flex-col items-center gap-2">
                 <Button
                   type="button"
-                  data-testid="vault-required-open"
-                  onClick={() => {
-                    void runVaultAction('open')
-                  }}
-                  disabled={activeAction !== null}
-                  className="sm:min-w-44"
-                >
-                  {activeAction === 'open' ? 'Opening vault...' : 'Open Existing Vault'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
+                  variant="accent"
+                  shape="pill"
                   data-testid="vault-required-create"
                   onClick={() => {
                     void runVaultAction('create')
                   }}
                   disabled={activeAction !== null}
-                  className="sm:min-w-44"
+                  className="w-full max-w-52 shrink-0"
                 >
                   {activeAction === 'create' ? 'Creating vault...' : 'Create New Vault'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  shape="pill"
+                  data-testid="vault-required-open"
+                  onClick={() => {
+                    void runVaultAction('open')
+                  }}
+                  disabled={activeAction !== null}
+                  className="w-full max-w-52 shrink-0"
+                >
+                  {activeAction === 'open' ? 'Opening vault...' : 'Open Existing Vault'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  shape="pill"
+                  data-testid="vault-required-manage"
+                  onClick={onManageSavedVaults}
+                  disabled={activeAction !== null}
+                  className="w-full max-w-52 shrink-0"
+                >
+                  Manage Saved Vaults
                 </Button>
               </div>
             ) : (
@@ -87,34 +98,8 @@ export function NoVaultPage({
                   : 'A platform workspace adapter must be connected before this build can open local data.'}
               </div>
             )}
-
-            {supportsVaultPicker ? (
-              <div className="text-center">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  data-testid="vault-required-manage"
-                  onClick={onManageSavedVaults}
-                  disabled={activeAction !== null}
-                >
-                  Manage Saved Vaults
-                </Button>
-              </div>
-            ) : null}
-
-            <div className="rounded-lg border border-border bg-muted px-4 py-3 text-left text-sm text-muted-foreground">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {supportsVaultPicker ? 'Last Known Vault' : 'Desktop Vault State'}
-              </div>
-              <div className="mt-2 break-words text-foreground">
-                {lastVaultPath ??
-                  (supportsVaultPicker
-                    ? 'No previous vault remembered on this device.'
-                    : 'No desktop vault is available in this runtime.')}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </main>
   )

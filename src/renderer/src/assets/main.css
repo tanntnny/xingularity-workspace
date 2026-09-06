@@ -37,6 +37,8 @@
     --surface-subtle: #e9e9e9;
     --surface-subtle-foreground: #202020;
     --surface-subtle-hover: #f5f5f5;
+    --selection-counter-background: #ffffff;
+    --selection-counter-foreground: #1a1a1a;
     --destructive: #dc2626;
     --destructive-foreground: #fafafa;
     --destructive-muted: #fee2e2;
@@ -275,6 +277,8 @@
     --surface-subtle: #2b2b2d;
     --surface-subtle-foreground: #f2f2f2;
     --surface-subtle-hover: #353537;
+    --selection-counter-background: #ffffff;
+    --selection-counter-foreground: #1a1a1a;
     --destructive: #7f1d1d;
     --destructive-foreground: #fafafa;
     --destructive-muted: #450a0a;
@@ -947,10 +951,44 @@
   .motion-workspace-panel {
     transition:
       transform var(--motion-duration-panel) var(--motion-ease-standard),
-      opacity var(--motion-duration-panel) var(--motion-ease-standard),
+      opacity var(--motion-duration-panel) var(--motion-ease-standard);
+    will-change: transform, opacity;
+  }
+
+  .motion-sidebar-gap {
+    transition: width var(--motion-duration-panel) var(--motion-ease-standard);
+  }
+
+  .motion-sidebar-overlay {
+    transition: opacity var(--motion-duration-panel) var(--motion-ease-standard);
+  }
+
+  .motion-sidebar {
+    transition:
+      left var(--motion-duration-panel) var(--motion-ease-standard),
+      right var(--motion-duration-panel) var(--motion-ease-standard),
       width var(--motion-duration-panel) var(--motion-ease-standard),
-      flex-basis var(--motion-duration-panel) var(--motion-ease-standard);
-    will-change: transform, opacity, width, flex-basis;
+      transform var(--motion-duration-panel) var(--motion-ease-standard),
+      opacity var(--motion-duration-panel) var(--motion-ease-standard);
+    will-change: left, right, width, transform, opacity;
+  }
+
+  .motion-workspace-panel[data-panel-state='entering'],
+  .motion-workspace-panel[data-panel-state='exiting'] {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .motion-workspace-panel[data-panel-state='open'] {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .motion-workspace-panel[data-panel-state='collapsed'] {
+    display: none;
+    pointer-events: none;
   }
 
   .motion-editor-surface {
@@ -1013,7 +1051,9 @@
   }
 
   @media (max-width: 900px) {
-    .motion-workspace-panel[data-panel-state='open'] {
+    .motion-workspace-panel[data-panel-state='entering'],
+    .motion-workspace-panel[data-panel-state='open'],
+    .motion-workspace-panel[data-panel-state='exiting'] {
       position: absolute;
       inset: 0.5rem 0.5rem 0.5rem auto;
       z-index: 20;
@@ -1045,6 +1085,9 @@
     .motion-staggered-reveal,
     .motion-workspace-content,
     .motion-workspace-panel,
+    .motion-sidebar-gap,
+    .motion-sidebar-overlay,
+    .motion-sidebar,
     .motion-editor-surface,
     .motion-editor-popover,
     .motion-calendar-event {
@@ -1169,6 +1212,32 @@
     border: 0;
     background-color: transparent;
     margin-top: var(--calendar-task-stack-gap-y);
+  }
+
+  [data-drag-visual='source'][data-dragging='true'] {
+    animation: none;
+    opacity: 0;
+  }
+
+  [data-drag-visual='source'][data-dragging='true'][data-drag-operation='copy'] {
+    animation: none;
+    opacity: 1;
+  }
+
+  .calendar-full
+    .fc-event.calendar-task-event[data-dragging='true']:not(.fc-event-dragging):not(
+      .fc-event-mirror
+    ) {
+    animation: none;
+    opacity: 0;
+  }
+
+  .calendar-full
+    .fc-event.calendar-task-event[data-dragging='true'][data-drag-operation='copy']:not(
+      .fc-event-dragging
+    ):not(.fc-event-mirror) {
+    animation: none;
+    opacity: 1;
   }
 
   .calendar-full .fc-event .fc-event-resizer {
@@ -1910,39 +1979,175 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
-  mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%);
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%);
 }
 
+.workspace-text-clip {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+@property --sidebar-workspace-fade-width {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 2rem;
+}
+
+@property --workspace-tab-fade-width {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 2rem;
+}
+
+.sidebar-workspace-text-fade {
+  --sidebar-workspace-fade-width: 2rem;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--sidebar-workspace-fade-width))),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--sidebar-workspace-fade-width))),
+    transparent 100%
+  );
+  transition: --sidebar-workspace-fade-width 300ms ease-out;
+}
+
+[data-sidebar='menu-item']:has(> [data-sidebar='menu-action']) > [data-sidebar='menu-button'] {
+  transition: padding-right 300ms ease-out;
+}
+
+[data-sidebar='menu-item']:has(> [data-sidebar='menu-action']):is(
+    :hover,
+    :focus-within,
+    :has(> [data-sidebar='menu-action'][data-state='open'])
+  )
+  > [data-sidebar='menu-button'] {
+  padding-right: 2rem;
+}
+
+[data-sidebar='menu-item']:has(> [data-sidebar='menu-action']):is(
+    :hover,
+    :focus-within,
+    :has(> [data-sidebar='menu-action'][data-state='open'])
+  )
+  > [data-sidebar='menu-button'],
+[data-sidebar='menu-item']:has(> [data-sidebar='menu-action']):is(
+    :hover,
+    :focus-within,
+    :has(> [data-sidebar='menu-action'][data-state='open'])
+  )
+  .sidebar-workspace-text-fade {
+  transition-duration: 150ms;
+}
+
+[data-sidebar='menu-item']:has(> [data-sidebar='menu-action']):is(
+    :hover,
+    :focus-within,
+    :has(> [data-sidebar='menu-action'][data-state='open'])
+  )
+  .sidebar-workspace-text-fade {
+  --sidebar-workspace-fade-width: 4rem;
+}
+
+[data-collapsible='icon']
+  [data-sidebar='menu-item']:has(> [data-sidebar='menu-action'])
+  > [data-sidebar='menu-button'] {
+  padding-right: 0;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-workspace-text-fade,
+  [data-sidebar='menu-item']:has(> [data-sidebar='menu-action']) > [data-sidebar='menu-button'] {
+    transition: none;
+  }
+}
+
+.status-chip-label-clip,
 .status-chip-label-fade {
   display: block;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: clip;
 }
 
 .status-chip-label-fade[data-overflowing='true'] {
   -webkit-mask-image: linear-gradient(
     to right,
     black 0,
-    black max(0px, calc(100% - 2rem)),
+    black max(0px, calc(100% - 1rem)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to right,
     black 0,
-    black max(0px, calc(100% - 2rem)),
+    black max(0px, calc(100% - 1rem)),
     transparent 100%
   );
 }
 
-.workspace-tab-label-fade {
-  -webkit-mask-image: none;
-  mask-image: none;
+.workspace-tab-card {
+  --workspace-tab-action-space: var(--workspace-tab-control-height);
 }
 
-.workspace-tab-card:hover .workspace-tab-label-fade,
-.workspace-tab-card:focus-within .workspace-tab-label-fade {
-  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
-  mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
+.workspace-tab-card[data-has-shortcut='true'] {
+  --workspace-tab-action-space: 3.3125rem;
+}
+
+.workspace-tab-card:is(:hover, :focus-within) {
+  background-color: var(--surface-subtle-hover);
+}
+
+.workspace-tab-card[data-active='true']:is(:hover, :focus-within) {
+  background-color: var(--surface-subtle-hover);
+}
+
+.workspace-tab-trigger {
+  transition: padding-right 300ms ease-out;
+}
+
+.workspace-tab-card:is(:hover, :focus-within) .workspace-tab-trigger {
+  padding-right: var(--workspace-tab-action-space);
+}
+
+.workspace-tab-label-fade {
+  --workspace-tab-fade-width: 2rem;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-tab-fade-width))),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-tab-fade-width))),
+    transparent 100%
+  );
+  transition: --workspace-tab-fade-width 300ms ease-out;
+}
+
+.workspace-tab-card:is(:hover, :focus-within) .workspace-tab-trigger,
+.workspace-tab-card:is(:hover, :focus-within) .workspace-tab-label-fade {
+  transition-duration: 150ms;
+}
+
+.workspace-tab-card:is(:hover, :focus-within) .workspace-tab-label-fade {
+  --workspace-tab-fade-width: 2.8125rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tab-trigger,
+  .workspace-tab-label-fade {
+    transition: none;
+  }
 }

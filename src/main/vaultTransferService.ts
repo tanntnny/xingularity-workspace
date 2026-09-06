@@ -14,6 +14,8 @@ import {
 } from './vaultDiagnostics'
 import { assertSafeRelativePath, joinSafe, normalizeRelativePath } from '../shared/pathSafety'
 import type { VaultBackupResult, VaultTransferManifest } from '../shared/types'
+import { isPortableScopePath } from './vaultPortablePolicy'
+import { ensureVaultManifest, normalizeVaultId, readVaultManifest } from './vaultManifest'
 
 export const PORTABLE_MANIFEST_FILE_NAME = 'manifest.json'
 export const PORTABLE_MANIFEST_VERSION = 1
@@ -61,7 +63,7 @@ export async function buildPortableManifest(
   options: VaultTransferOptions = {}
 ): Promise<VaultTransferManifest> {
   const root = path.resolve(rootPath)
-  const files = await scanVaultFiles(root, {
+  const scannedFiles = await scanVaultFiles(root, {
     ...options,
     exclude: [...DEFAULT_PORTABLE_EXCLUDES, ...(options.exclude ?? [])],
     // Portable transfer is a hard privacy boundary.  The flags are accepted
@@ -70,6 +72,8 @@ export async function buildPortableManifest(
     includeIndexes: false,
     rejectSymlinks: true
   })
+  const files = scannedFiles.filter((file) => isPortableScopePath(file.path))
+  const vaultManifest = await readVaultManifest(root)
   const excludes = normalizeExclusionRules([
     ...DEFAULT_PORTABLE_EXCLUDES,
     ...(options.exclude ?? [])
@@ -79,6 +83,7 @@ export async function buildPortableManifest(
     version: PORTABLE_MANIFEST_VERSION,
     createdAt: new Date().toISOString(),
     schemaVersion: options.schemaVersion ?? (await readVaultSchemaVersion(root)),
+    ...(vaultManifest ? { vaultId: vaultManifest.vaultId } : {}),
     files: files.map(({ path: relPath, size, checksum }) => ({ path: relPath, size, checksum })),
     excludes
   }
@@ -101,7 +106,14 @@ export function normalizePortableManifest(input: unknown): VaultTransferManifest
   if (!isRecord(input)) {
     throw new Error('Portable manifest must be an object')
   }
-  const allowedKeys = new Set(['version', 'createdAt', 'schemaVersion', 'files', 'excludes'])
+  const allowedKeys = new Set([
+    'version',
+    'createdAt',
+    'schemaVersion',
+    'vaultId',
+    'files',
+    'excludes'
+  ])
   const unknownKey = Object.keys(input).find((key) => !allowedKeys.has(key))
   if (unknownKey) {
     throw new Error(`Portable manifest contains an unknown field: ${unknownKey}`)
@@ -119,6 +131,7 @@ export function normalizePortableManifest(input: unknown): VaultTransferManifest
   ) {
     throw new Error('Portable manifest schemaVersion must be a positive integer')
   }
+  const vaultId = input.vaultId === undefined ? undefined : normalizeVaultId(input.vaultId)
   if (!Array.isArray(input.files)) {
     throw new Error('Portable manifest files must be an array')
   }
@@ -162,6 +175,7 @@ export function normalizePortableManifest(input: unknown): VaultTransferManifest
     version: PORTABLE_MANIFEST_VERSION,
     createdAt: input.createdAt,
     schemaVersion: input.schemaVersion,
+    ...(vaultId ? { vaultId } : {}),
     files: files.sort((left, right) => left.path.localeCompare(right.path)),
     excludes: normalizeExclusionRules(input.excludes)
   }
@@ -172,6 +186,7 @@ export function checksumPortableManifest(manifest: VaultTransferManifest): strin
   const canonical = {
     version: normalized.version,
     schemaVersion: normalized.schemaVersion,
+    ...(normalized.vaultId ? { vaultId: normalized.vaultId } : {}),
     excludes: normalized.excludes,
     files: normalized.files
   }
@@ -349,6 +364,10 @@ export async function restoreVault(
       await ensureDestinationDirectory(stagingPath)
       await copyManifestFiles(preview.sourcePath, stagingPath, preview.manifest, false)
       await verifyManifestFiles(stagingPath, preview.manifest)
+      await ensureVaultManifest(stagingPath, {
+        ...(preview.manifest.vaultId ? { vaultId: preview.manifest.vaultId } : {}),
+        schemaVersion: preview.manifest.schemaVersion
+      })
       await fs.rename(stagingPath, preview.destinationPath)
     } catch (error) {
       await fs.rm(stagingPath, { recursive: true, force: true }).catch(() => undefined)
@@ -363,6 +382,10 @@ export async function restoreVault(
       Boolean(options.overwrite)
     )
     await verifyManifestFiles(preview.destinationPath, preview.manifest)
+    await ensureVaultManifest(preview.destinationPath, {
+      ...(preview.manifest.vaultId ? { vaultId: preview.manifest.vaultId } : {}),
+      schemaVersion: preview.manifest.schemaVersion
+    })
   }
 
   return {

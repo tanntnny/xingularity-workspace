@@ -2,8 +2,13 @@ import chokidar, { FSWatcher } from 'chokidar'
 import path from 'node:path'
 import { isExcalidrawPath } from '../shared/excalidrawFile'
 import { isNotePath } from '../shared/noteDocument'
+import { ExpectedWriteRegistry, readVaultFileRevision } from './vaultRevision'
 
 export type VaultEvent = 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+
+export interface VaultWatcherOptions {
+  pathFilter?: (relPath: string, type: VaultEvent) => boolean
+}
 
 export function isWatchedVaultPath(relPath: string, type: VaultEvent): boolean {
   if (type === 'addDir' || type === 'unlinkDir') {
@@ -15,13 +20,18 @@ export function isWatchedVaultPath(relPath: string, type: VaultEvent): boolean {
 
 export class VaultWatcher {
   private watcher: FSWatcher | null = null
-  private readonly recentInternalWrites = new Map<string, number>()
+  private readonly expectedWrites = new ExpectedWriteRegistry()
   private readonly pendingTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(
     private readonly notesRoot: string,
-    private readonly onFileEvent: (relPath: string, type: VaultEvent) => Promise<void>
-  ) {}
+    private readonly onFileEvent: (relPath: string, type: VaultEvent) => Promise<void>,
+    options: VaultWatcherOptions = {}
+  ) {
+    this.pathFilter = options.pathFilter ?? isWatchedVaultPath
+  }
+
+  private readonly pathFilter: (relPath: string, type: VaultEvent) => boolean
 
   start(): void {
     this.watcher = chokidar.watch(this.notesRoot, {
@@ -49,13 +59,21 @@ export class VaultWatcher {
     this.watcher = null
   }
 
-  markInternalWrite(relPath: string): void {
-    this.recentInternalWrites.set(relPath, Date.now())
+  markInternalWrite(relPath: string, contentHash?: string, transactionId?: string): void {
+    this.expectedWrites.register(
+      path.resolve(this.notesRoot, relPath),
+      contentHash ?? null,
+      transactionId
+    )
+  }
+
+  markInternalDelete(relPath: string, transactionId?: string): void {
+    this.expectedWrites.register(path.resolve(this.notesRoot, relPath), null, transactionId)
   }
 
   private enqueue(absPath: string, type: VaultEvent): void {
     const relPath = path.relative(this.notesRoot, absPath).replace(/\\/g, '/')
-    if (!isWatchedVaultPath(relPath, type)) {
+    if (!this.pathFilter(relPath, type)) {
       return
     }
 
@@ -66,29 +84,44 @@ export class VaultWatcher {
 
     const timer = setTimeout(() => {
       this.pendingTimers.delete(relPath)
-      if (this.shouldSkip(relPath)) {
-        return
-      }
-      void this.onFileEvent(relPath, type).catch((error) => {
-        console.error('[VaultWatcher] failed to process event', { relPath, type, error })
+      void this.shouldSkip(path.resolve(this.notesRoot, relPath), type).then((skip) => {
+        if (skip) {
+          return
+        }
+
+        return this.onFileEvent(relPath, type).catch((error) => {
+          console.error('[VaultWatcher] failed to process event', { relPath, type, error })
+        })
       })
     }, 180)
 
     this.pendingTimers.set(relPath, timer)
   }
 
-  private shouldSkip(relPath: string): boolean {
-    const ts = this.recentInternalWrites.get(relPath)
-    if (!ts) {
+  private async shouldSkip(absPath: string, type: VaultEvent): Promise<boolean> {
+    if (type === 'unlink' || type === 'unlinkDir' || type === 'addDir') {
+      return this.expectedWrites.acknowledge(absPath, null) !== null
+    }
+
+    return this.observeExpectedWrite(absPath)
+  }
+
+  private async observeExpectedWrite(absPath: string): Promise<boolean> {
+    try {
+      const revision = await readVaultFileRevision(absPath)
+      return this.expectedWrites.acknowledge(absPath, revision.contentHash) !== null
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return false
+      }
+      console.warn('[VaultWatcher] failed to inspect expected write', { absPath, error })
       return false
     }
-
-    if (Date.now() - ts <= 1200) {
-      this.recentInternalWrites.delete(relPath)
-      return true
-    }
-
-    this.recentInternalWrites.delete(relPath)
-    return false
   }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return Boolean(
+    error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === 'ENOENT'
+  )
 }

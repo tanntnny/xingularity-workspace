@@ -3,6 +3,7 @@ import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown, ChevronUp } from './icons'
 
 import { cn } from '../../lib/utils'
+import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 const Select = SelectPrimitive.Root
 const SelectGroup = SelectPrimitive.Group
@@ -10,22 +11,56 @@ const SelectValue = SelectPrimitive.Value
 
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      'group ui-control flex w-full items-center justify-between whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card px-2 text-foreground shadow-sm ring-offset-background placeholder:text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate',
-      className
-    )}
-    {...props}
-  >
-    {children}
-    <SelectPrimitive.Icon asChild>
-      <ChevronDown className="motion-state-chevron size-[var(--control-icon-size)] opacity-60 group-data-[state=open]:rotate-180" />
-    </SelectPrimitive.Icon>
-  </SelectPrimitive.Trigger>
-))
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    tooltip?: string
+    tooltipWrapperClassName?: string
+  }
+>(
+  (
+    {
+      className,
+      children,
+      tooltip,
+      tooltipWrapperClassName,
+      title,
+      'aria-label': ariaLabel,
+      ...props
+    },
+    ref
+  ) => {
+    const resolvedTooltip = getButtonTooltipLabel(tooltip, ariaLabel, title, children)
+    const trigger = (
+      <SelectPrimitive.Trigger
+        ref={ref}
+        className={cn(
+          'group ui-control flex w-full items-center justify-between whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card px-2 text-foreground shadow-sm ring-offset-background placeholder:text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate',
+          className
+        )}
+        aria-label={ariaLabel}
+        title={title}
+        {...props}
+      >
+        {children}
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className="motion-state-chevron size-[var(--control-icon-size)] opacity-60 group-data-[state=open]:rotate-180" />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+    )
+
+    return resolvedTooltip ? (
+      <TooltipButton
+        label={resolvedTooltip}
+        disabled={props.disabled}
+        wrapperClassName={tooltipWrapperClassName}
+        preserveChildAttributes
+      >
+        {trigger}
+      </TooltipButton>
+    ) : (
+      trigger
+    )
+  }
+)
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 
 const SelectScrollUpButton = React.forwardRef<

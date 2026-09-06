@@ -4,6 +4,12 @@ import { cn } from '../../lib/utils'
 export type DragPreviewAxis = 'both' | 'x' | 'y'
 export type DragPreviewMotion = 'none' | 'smooth'
 export type DragPreviewElevation = 'default' | 'strong'
+export type DragOperation = 'move' | 'copy'
+
+type FloatingDragPreviewHandle = {
+  cleanup: () => void
+  setOperation: (operation: DragOperation) => void
+}
 
 type DragSourceOwnProps = {
   dragging?: boolean
@@ -18,6 +24,7 @@ type DragSourceOwnProps = {
   hideFromPreview?: boolean
   onDragStart?: React.DragEventHandler<HTMLElement>
   onDragEnd?: React.DragEventHandler<HTMLElement>
+  onDragOperationChange?: (operation: DragOperation) => void
 }
 
 export type DragSourceProps<T extends React.ElementType = 'div'> = DragSourceOwnProps &
@@ -48,6 +55,9 @@ function setCloneDragImage(
 
   const rect = source.getBoundingClientRect()
   dragPreview.dataset.dragVisual = 'preview'
+  if (source.dataset.dragOperation) {
+    dragPreview.dataset.dragOperation = source.dataset.dragOperation
+  }
   dragPreview.style.position = 'fixed'
   dragPreview.style.top = '-9999px'
   dragPreview.style.left = '-9999px'
@@ -86,9 +96,12 @@ function createFloatingDragImage(
     previewVariant: 'surface' | 'content'
     hidePreviewDescendants: boolean
   }
-): () => void {
+): FloatingDragPreviewHandle {
   if (typeof document === 'undefined') {
-    return () => undefined
+    return {
+      cleanup: () => undefined,
+      setOperation: () => undefined
+    }
   }
 
   activeFloatingPreviewCleanup?.()
@@ -97,7 +110,10 @@ function createFloatingDragImage(
   const source = event.currentTarget
   const floatingPreview = previewTarget.cloneNode(true)
   if (!(floatingPreview instanceof HTMLElement)) {
-    return () => undefined
+    return {
+      cleanup: () => undefined,
+      setOperation: () => undefined
+    }
   }
 
   const rect = previewTarget.getBoundingClientRect()
@@ -111,6 +127,9 @@ function createFloatingDragImage(
   transparentDragImage.style.left = '-9999px'
 
   floatingPreview.dataset.dragVisual = 'preview'
+  if (source.dataset.dragOperation) {
+    floatingPreview.dataset.dragOperation = source.dataset.dragOperation
+  }
   floatingPreview.dataset.floatingDragPreview = 'true'
   floatingPreview.dataset.dragPreviewTarget = 'custom'
   floatingPreview.dataset.dragPreviewAxis = previewAxis
@@ -214,13 +233,17 @@ function createFloatingDragImage(
     }
   }
 
+  const setOperation = (operation: DragOperation): void => {
+    floatingPreview.dataset.dragOperation = operation
+  }
+
   source.addEventListener('drag', handlePointerMove)
   window.addEventListener('dragover', handlePointerMove, true)
   window.addEventListener('drop', cleanup, true)
   window.addEventListener('dragend', cleanup, true)
   activeFloatingPreviewCleanup = cleanup
 
-  return cleanup
+  return { cleanup, setOperation }
 }
 
 const DragSourceImpl = <T extends React.ElementType = 'div'>(
@@ -240,13 +263,28 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
     draggable = true,
     onDragStart,
     onDragEnd,
+    onDragOperationChange,
+    children,
     style,
     ...props
   }: DragSourceProps<T>,
   ref: React.ForwardedRef<HTMLElement>
 ): React.ReactElement => {
   const [internalDragging, setInternalDragging] = React.useState(false)
-  const previewCleanupRef = React.useRef<(() => void) | null>(null)
+  const [internalDragOperation, setInternalDragOperation] = React.useState<DragOperation | null>(
+    null
+  )
+  const dragOperationRef = React.useRef<DragOperation | null>(null)
+  const dragOperationCleanupRef = React.useRef<(() => void) | null>(null)
+  const previewCleanupRef = React.useRef<FloatingDragPreviewHandle | null>(null)
+  React.useEffect(() => {
+    return () => {
+      dragOperationCleanupRef.current?.()
+      dragOperationCleanupRef.current = null
+      previewCleanupRef.current?.cleanup()
+      previewCleanupRef.current = null
+    }
+  }, [])
   const Component = (as ?? 'div') as React.ElementType
   const isPreview = visual === 'preview'
   const isDragging = dragging ?? internalDragging
@@ -265,6 +303,7 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
       draggable={isPreview ? false : draggable}
       data-dragging={isDragging ? 'true' : 'false'}
       data-drag-visual={visual}
+      data-drag-operation={internalDragOperation ?? undefined}
       data-drag-preview-variant={previewVariant}
       data-drag-preview-sizing={previewSizing}
       data-drag-preview-target={previewTargetRef ? 'custom' : 'source'}
@@ -280,18 +319,30 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
       )}
       style={style}
       onDragStart={(event: React.DragEvent<HTMLElement>) => {
-        previewCleanupRef.current?.()
+        dragOperationCleanupRef.current?.()
+        dragOperationCleanupRef.current = null
+        previewCleanupRef.current?.cleanup()
         previewCleanupRef.current = null
         onDragStart?.(event)
         if (event.defaultPrevented) {
           setInternalDragging(false)
+          setInternalDragOperation(null)
+          dragOperationRef.current = null
+          delete event.currentTarget.dataset.dragOperation
           return
         }
+        const operation: DragOperation = onDragOperationChange && event.altKey ? 'copy' : 'move'
+        const source = event.currentTarget
+        dragOperationRef.current = operation
+        source.dataset.dragOperation = operation
+        setInternalDragOperation(operation)
         setInternalDragging(true)
+
+        let floatingPreviewHandle: FloatingDragPreviewHandle | null = null
         if (!isPreview && preview === 'clone') {
           setCloneDragImage(event, previewSizing)
         } else if (!isPreview && preview === 'floating') {
-          previewCleanupRef.current = createFloatingDragImage(event, {
+          floatingPreviewHandle = createFloatingDragImage(event, {
             previewTarget: previewTargetRef?.current ?? event.currentTarget,
             previewSizing,
             previewAxis,
@@ -300,16 +351,78 @@ const DragSourceImpl = <T extends React.ElementType = 'div'>(
             previewVariant,
             hidePreviewDescendants: Boolean(previewTargetRef?.current && hideFromPreview)
           })
+          previewCleanupRef.current = floatingPreviewHandle
         }
+
+        if (!onDragOperationChange) {
+          return
+        }
+
+        const updateOperation = (nextOperation: DragOperation): void => {
+          if (dragOperationRef.current === nextOperation) {
+            return
+          }
+
+          dragOperationRef.current = nextOperation
+          source.dataset.dragOperation = nextOperation
+          setInternalDragOperation(nextOperation)
+          floatingPreviewHandle?.setOperation(nextOperation)
+          onDragOperationChange?.(nextOperation)
+        }
+        const syncOperationFromModifier = (altKey: boolean): void => {
+          updateOperation(altKey ? 'copy' : 'move')
+        }
+        const handleDrag = (dragEvent: DragEvent): void => {
+          syncOperationFromModifier(dragEvent.altKey)
+        }
+        const handleDragOver = (dragEvent: DragEvent): void => {
+          syncOperationFromModifier(dragEvent.altKey)
+        }
+        const handleModifierKey = (keyboardEvent: KeyboardEvent): void => {
+          if (
+            keyboardEvent.key !== 'Alt' &&
+            keyboardEvent.key !== 'Option' &&
+            keyboardEvent.code !== 'AltLeft' &&
+            keyboardEvent.code !== 'AltRight'
+          ) {
+            return
+          }
+
+          syncOperationFromModifier(keyboardEvent.type === 'keydown')
+        }
+        const cleanupDragOperation = (): void => {
+          source.removeEventListener('drag', handleDrag)
+          window.removeEventListener('dragover', handleDragOver, true)
+          window.removeEventListener('keydown', handleModifierKey, true)
+          window.removeEventListener('keyup', handleModifierKey, true)
+          window.removeEventListener('dragend', cleanupDragOperation, true)
+          if (dragOperationCleanupRef.current === cleanupDragOperation) {
+            dragOperationCleanupRef.current = null
+          }
+        }
+
+        source.addEventListener('drag', handleDrag)
+        window.addEventListener('dragover', handleDragOver, true)
+        window.addEventListener('keydown', handleModifierKey, true)
+        window.addEventListener('keyup', handleModifierKey, true)
+        window.addEventListener('dragend', cleanupDragOperation, true)
+        dragOperationCleanupRef.current = cleanupDragOperation
       }}
       onDragEnd={(event: React.DragEvent<HTMLElement>) => {
         setInternalDragging(false)
-        previewCleanupRef.current?.()
+        setInternalDragOperation(null)
+        dragOperationRef.current = null
+        dragOperationCleanupRef.current?.()
+        dragOperationCleanupRef.current = null
+        delete event.currentTarget.dataset.dragOperation
+        previewCleanupRef.current?.cleanup()
         previewCleanupRef.current = null
         onDragEnd?.(event)
       }}
       {...props}
-    />
+    >
+      {children}
+    </Component>
   )
 }
 

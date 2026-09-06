@@ -22,7 +22,8 @@ const badgeVariants = cva(
         tag3: 'border-[var(--tag-3-border)] bg-[var(--tag-3-bg)] text-[var(--tag-3-foreground)] hover:bg-[var(--tag-3-hover)]',
         tag4: 'border-[var(--tag-4-border)] bg-[var(--tag-4-bg)] text-[var(--tag-4-foreground)] hover:bg-[var(--tag-4-hover)]',
         tag5: 'border-[var(--tag-5-border)] bg-[var(--tag-5-bg)] text-[var(--tag-5-foreground)] hover:bg-[var(--tag-5-hover)]',
-        neutral: 'border-border bg-muted text-muted-foreground'
+        neutral: 'border-border bg-muted text-muted-foreground',
+        counter: 'border-border bg-selection-counter text-selection-counter-foreground'
       }
     },
     defaultVariants: {
@@ -33,6 +34,10 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
+
+export interface SelectionCounterProps extends Omit<BadgeProps, 'children' | 'variant'> {
+  count: number
+}
 
 function Badge({
   className,
@@ -61,4 +66,30 @@ function Badge({
   )
 }
 
-export { Badge, badgeVariants }
+function SelectionCounter({
+  count,
+  className,
+  'aria-label': ariaLabel,
+  ...props
+}: SelectionCounterProps): React.ReactElement | null {
+  if (count <= 0) {
+    return null
+  }
+
+  return (
+    <Badge
+      {...props}
+      variant="counter"
+      aria-label={ariaLabel ?? `${count} selected`}
+      className={cn(
+        'h-5 min-w-5 shrink-0 justify-center rounded-full px-1 text-[11px] leading-none',
+        className
+      )}
+    >
+      {count}
+    </Badge>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export { Badge, badgeVariants, SelectionCounter }

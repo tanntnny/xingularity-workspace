@@ -68,6 +68,7 @@ import {
   DialogShellFooter,
   DialogShellHeader
 } from './ui/dialog'
+import { COMMAND_ENTER_ARIA_KEYSHORTCUT, handleCommandEnterSubmit } from '../lib/formShortcuts'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import {
@@ -83,6 +84,7 @@ import { StatusChip } from './ui/status-chip'
 import { StatusChipToggleGroup, StatusChipToggleItem } from './ui/status-chip-toggle'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
 import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
+import type { TableSortState } from '../lib/tableSort'
 import {
   CalendarCheck,
   Check,
@@ -139,6 +141,8 @@ export interface ProjectResourcesTableProps {
   resources: ResourceRef[]
   relations: ResourceRelation[]
   resourceFilters?: ResourceFilterState
+  sortState?: TableSortState | null
+  onSortChange?: (sortState: TableSortState) => void
   onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
   onCreateResource?: (input: ResourceInput) => Promise<void>
   addResourceRequestProjectId?: string | null
@@ -283,6 +287,8 @@ export function ProjectResourcesTable({
   resources,
   relations,
   resourceFilters = {},
+  sortState: controlledSortState,
+  onSortChange,
   onAddResource,
   onCreateResource,
   addResourceRequestProjectId,
@@ -319,11 +325,19 @@ export function ProjectResourcesTable({
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false)
   const [googleDriveError, setGoogleDriveError] = useState<string | null>(null)
   const [resourceToDelete, setResourceToDelete] = useState<ResourceRef | null>(null)
-  const [sortState, setSortState] = usePersistentTableSort(
+  const [localSortState, setLocalSortState] = usePersistentTableSort(
     `xingularity:table-sort:resources:${scope}`,
     null,
     scope === 'global' ? GLOBAL_RESOURCE_SORTABLE_COLUMNS : PROJECT_RESOURCE_SORTABLE_COLUMNS
   )
+  const sortState = controlledSortState !== undefined ? controlledSortState : localSortState
+  const setSortState = (nextSortState: TableSortState): void => {
+    if (onSortChange) {
+      onSortChange(nextSortState)
+      return
+    }
+    setLocalSortState(nextSortState)
+  }
   const allResourceRows = useMemo(
     () =>
       scope === 'global'
@@ -1286,7 +1300,11 @@ function ResourceEditorDialog({
             closeLabel="Close resource editor"
             onClose={() => onOpenChange(false)}
           />
-          <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => void submit(event)}
+            onKeyDownCapture={handleCommandEnterSubmit}
+          >
             <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
               {!isEditing ? (
                 <StatusChipToggleGroup
@@ -1421,6 +1439,8 @@ function ResourceEditorDialog({
                 type="submit"
                 icon={<Check />}
                 label={isEditing ? 'Save resource' : 'Add resource'}
+                shortcutKeys={['cmd', 'return']}
+                aria-keyshortcuts={COMMAND_ENTER_ARIA_KEYSHORTCUT}
                 tone="accent"
                 disabled={
                   selectedType === 'notebook' && (folderOptions.length === 0 || !notebookPath)

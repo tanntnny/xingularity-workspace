@@ -3,6 +3,10 @@
   "include": ["electron.vite.config.*", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "tests/**/*", "vitest.config.ts"],
   "compilerOptions": {
     "composite": true,
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": {
+      "@tabler-icon-data/*": ["node_modules/@tabler/icons/*"]
+    }
   }
 }

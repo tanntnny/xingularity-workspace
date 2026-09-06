@@ -8,7 +8,8 @@ export default defineConfig({
   renderer: {
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@renderer': resolve('src/renderer/src'),
+        '@tabler-icon-data': resolve('node_modules/@tabler/icons')
       }
     },
     plugins: [react()]

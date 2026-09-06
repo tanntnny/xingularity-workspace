@@ -474,6 +474,7 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain(
       'hover:bg-card-hover hover:text-foreground focus-visible:bg-card-hover focus-visible:text-foreground'
     )
+    expect(markup).toContain('group-hover/milestone-header:bg-muted')
     expect(markup).toContain('data-testid="project-task-menu:task-1"')
     expect(markup).toContain(
       'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100'

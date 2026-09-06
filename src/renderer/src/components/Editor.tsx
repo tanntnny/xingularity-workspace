@@ -894,7 +894,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         ? { from: mentionPicker.from, to: mentionPicker.to }
         : null
       const fallbackLabel = getNoteDisplayName(targetRelPath)
-      const href = noteMentionHref(fallbackLabel)
+      const href = noteMentionHref(targetRelPath)
 
       if (
         !runEditorActionSafely((ctx) => {

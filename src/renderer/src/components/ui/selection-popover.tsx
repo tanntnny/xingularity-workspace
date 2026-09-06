@@ -2,9 +2,10 @@ import * as React from 'react'
 
 import { cn } from '../../lib/utils'
 import { Button } from './button'
-import { Check, ChevronDown, Plus } from './icons'
+import { ChevronDown, Plus } from './icons'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from './command'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from './popover'
+import { SelectionCheckbox } from './selection-checkbox'
 
 export interface SelectionPopoverOption {
   value: string
@@ -41,23 +42,31 @@ interface SelectionPopoverBaseProps {
   }
 }
 
-export interface MultipleSelectionPopoverProps extends SelectionPopoverBaseProps {
-  selectionMode?: 'multiple'
-  value: readonly string[]
-  onValueChange: (value: string[]) => void
+interface SelectionPopoverCreateProps {
   onCreate?: (value: string) => void | Promise<void>
   getCreateValue?: (query: string) => string | null
   createLabel?: (value: string) => React.ReactNode
   createError?: React.ReactNode
 }
 
-export interface SingleSelectionPopoverProps extends SelectionPopoverBaseProps {
+export interface MultipleSelectionPopoverProps
+  extends SelectionPopoverBaseProps, SelectionPopoverCreateProps {
+  selectionMode?: 'multiple'
+  value: readonly string[]
+  onValueChange: (value: string[]) => void
+}
+
+export interface SingleSelectionPopoverProps
+  extends SelectionPopoverBaseProps, SelectionPopoverCreateProps {
   selectionMode: 'single'
   value: string
   onValueChange: (value: string) => void
 }
 
 export type SelectionPopoverProps = MultipleSelectionPopoverProps | SingleSelectionPopoverProps
+
+const selectionOptionClassName =
+  'group min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-popover-hover hover:text-foreground focus:bg-popover-hover focus:text-foreground data-[selected=true]:bg-popover-hover data-[selected=true]:text-foreground data-[checked=true]:bg-popover-hover data-[checked=true]:text-foreground'
 
 function isMultipleSelection(props: SelectionPopoverProps): props is MultipleSelectionPopoverProps {
   return props.selectionMode !== 'single'
@@ -129,12 +138,12 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
     })
   }, [normalizedQuery, options])
 
-  const onCreate = multiple ? props.onCreate : undefined
-  const getCreateValue = multiple ? props.getCreateValue : undefined
-  const createLabel = multiple
-    ? (props.createLabel ?? ((nextValue) => `Create tag "${nextValue}"`))
-    : undefined
-  const createError = multiple ? props.createError : undefined
+  const onCreate = props.onCreate
+  const getCreateValue = props.getCreateValue
+  const createLabel =
+    props.createLabel ??
+    ((nextValue: string) => `Create ${multiple ? 'tag' : label.toLowerCase()} "${nextValue}"`)
+  const createError = props.createError
   const createValue = React.useMemo(() => {
     if (!onCreate || !normalizedQuery) {
       return null
@@ -153,11 +162,15 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
         ? [existingCreateOption]
         : []
   const canCreate = Boolean(createValue && !existingCreateOption && visibleOptions.length === 0)
-  const navigableOptions = visibleOptions.filter((option) => !option.disabled)
+  const createOptionValue = createValue ? `__create__:${createValue}` : ''
+  const navigableOptionValues = [
+    ...visibleOptions.filter((option) => !option.disabled).map((option) => option.value),
+    ...(canCreate ? [createOptionValue] : [])
+  ]
   const [highlightedValue, setHighlightedValue] = React.useState('')
   const highlightedOptionValue =
-    navigableOptions.find((option) => option.value === highlightedValue)?.value ??
-    navigableOptions[0]?.value ??
+    navigableOptionValues.find((optionValue) => optionValue === highlightedValue) ??
+    navigableOptionValues[0] ??
     ''
 
   React.useEffect(() => {
@@ -212,6 +225,9 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
     if (!createValue) return
 
     void onCreate?.(createValue)
+    if (!multiple) {
+      handleOpenChange(false)
+    }
     handleSearchValueChange('')
   }
 
@@ -261,21 +277,21 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
           className="rounded-md"
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-              if (navigableOptions.length === 0) {
+              if (navigableOptionValues.length === 0) {
                 return
               }
 
               event.preventDefault()
               const direction = event.key === 'ArrowDown' ? 1 : -1
-              const currentIndex = navigableOptions.findIndex(
-                (option) => option.value === highlightedOptionValue
+              const currentIndex = navigableOptionValues.findIndex(
+                (optionValue) => optionValue === highlightedOptionValue
               )
               const baseIndex = currentIndex < 0 ? (direction > 0 ? 0 : -1) : currentIndex
               const nextIndex = baseIndex + direction
               const resolvedIndex = loop
-                ? (nextIndex + navigableOptions.length) % navigableOptions.length
-                : Math.max(0, Math.min(nextIndex, navigableOptions.length - 1))
-              const nextValue = navigableOptions[resolvedIndex]?.value
+                ? (nextIndex + navigableOptionValues.length) % navigableOptionValues.length
+                : Math.max(0, Math.min(nextIndex, navigableOptionValues.length - 1))
+              const nextValue = navigableOptionValues[resolvedIndex]
               if (nextValue) {
                 setHighlightedValue(nextValue)
               }
@@ -285,7 +301,11 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
             if (selectOnTab && !multiple && event.key === 'Tab') {
               if (highlightedOptionValue) {
                 event.preventDefault()
-                handleToggle(highlightedOptionValue)
+                if (canCreate && highlightedOptionValue === createOptionValue) {
+                  handleCreate()
+                } else {
+                  handleToggle(highlightedOptionValue)
+                }
                 return
               }
             }
@@ -331,19 +351,9 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
                       aria-selected={!multiple ? selected : undefined}
                       aria-checked={multiple ? selected : undefined}
                       data-checked={selected ? 'true' : 'false'}
-                      className="min-h-7 cursor-pointer gap-2 rounded-md px-2 py-1 text-foreground transition-colors hover:bg-popover-hover hover:text-foreground focus:bg-popover-hover focus:text-foreground data-[selected=true]:bg-popover-hover data-[selected=true]:text-foreground data-[checked=true]:bg-popover-hover data-[checked=true]:text-foreground"
+                      className={selectionOptionClassName}
                     >
-                      {multiple ? (
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            'flex size-4 shrink-0 items-center justify-center rounded-sm border border-border text-primary',
-                            selected && 'border-primary bg-primary text-primary-foreground'
-                          )}
-                        >
-                          {selected ? <Check size={12} /> : null}
-                        </span>
-                      ) : null}
+                      {multiple ? <SelectionCheckbox checked={selected} /> : null}
                       <span
                         className={cn(
                           'min-w-0 flex-1 text-left',
@@ -371,46 +381,36 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
                           {option.action.icon}
                         </Button>
                       ) : null}
-                      {!multiple ? (
-                        <Check
-                          aria-hidden="true"
-                          className={cn(
-                            'ml-auto size-[var(--control-icon-size)] shrink-0 text-primary',
-                            selected ? 'opacity-100' : 'opacity-0'
-                          )}
-                        />
-                      ) : null}
                     </CommandItem>
                   )
                 })}
               </CommandGroup>
+            ) : canCreate ? (
+              <CommandGroup className="[&_[cmdk-group-items]]:space-y-0.5">
+                <CommandItem
+                  value={createOptionValue}
+                  onSelect={handleCreate}
+                  aria-selected={!multiple ? true : undefined}
+                  data-testid={testId ? `${testId}-create` : undefined}
+                  className={selectionOptionClassName}
+                >
+                  <Plus size={16} aria-hidden="true" className="text-muted-foreground" />
+                  <span className="min-w-0 flex-1 text-left truncate">
+                    {createLabel(createValue ?? '')}
+                  </span>
+                </CommandItem>
+              </CommandGroup>
             ) : (
               <div className="p-2">
-                {canCreate ? (
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={handleCreate}
-                    data-testid={testId ? `${testId}-create` : undefined}
-                  >
-                    <Plus size={16} aria-hidden="true" />
-                    <span className="min-w-0 truncate">
-                      {createValue ? createLabel?.(createValue) : null}
-                    </span>
-                  </button>
-                ) : createError && normalizedQuery ? (
+                {createError && normalizedQuery ? (
                   <p role="alert" className="px-2 py-2 text-xs text-destructive">
                     {createError}
                   </p>
                 ) : (
                   <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                     {normalizedQuery
-                      ? multiple
-                        ? 'No matching tags'
-                        : `No matching ${label.toLowerCase()}`
-                      : multiple
-                        ? 'No tags yet'
-                        : `No ${label.toLowerCase()} available`}
+                      ? `No matching ${label.toLowerCase()}`
+                      : `No ${label.toLowerCase()} yet`}
                   </p>
                 )}
               </div>

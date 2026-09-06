@@ -8,6 +8,7 @@ import {
   parseStoredNoteDocument,
   serializeStoredNoteDocument
 } from '../src/shared/noteDocument'
+import { noteMentionHref } from '../src/shared/noteMentions'
 import { StoredNoteDocument } from '../src/shared/types'
 
 interface NoteSnapshot {
@@ -103,6 +104,44 @@ async function createFixtureVault(alphaContent: string, alphaTags: string[] = []
   await fs.writeFile(
     path.join(rootPath, 'notes', 'beta.md'),
     serializeStoredNoteDocument(createStoredNoteDocumentFromText('Side note\n')),
+    'utf-8'
+  )
+  return rootPath
+}
+
+async function createNestedNoteLinkFixtureVault(): Promise<string> {
+  const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-nested-note-link-vault-'))
+  await fs.mkdir(path.join(rootPath, 'notes', 'f1'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'map.md'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Map note\n')),
+    'utf-8'
+  )
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'master.md'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Root master\n')),
+    'utf-8'
+  )
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'f1', 'master.md'),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested master\n')),
+    'utf-8'
+  )
+  return rootPath
+}
+
+async function createUnresolvedNoteLinkFixtureVault(): Promise<string> {
+  const rootPath = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'xingularity-unresolved-note-link-vault-')
+  )
+  await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
+  await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
+  await fs.writeFile(
+    path.join(rootPath, 'notes', 'map.md'),
+    serializeStoredNoteDocument(
+      createStoredNoteDocumentFromText(`See [Missing](${noteMentionHref('missing')})\n`)
+    ),
     'utf-8'
   )
   return rootPath
@@ -1049,17 +1088,69 @@ test.describe('note page block editor switching', () => {
           }
         })
 
+      const readTabShortcutCloseGap = async (): Promise<number> =>
+        page.evaluate(() => {
+          const close = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-close:workspace-tab-1"]'
+          )
+          const shortcut = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-shortcut:workspace-tab-1"]'
+          )
+          if (!close || !shortcut) {
+            throw new Error('Expected workspace tab shortcut and close controls')
+          }
+
+          return Math.abs(
+            close.getBoundingClientRect().left - shortcut.getBoundingClientRect().right
+          )
+        })
+
+      const readTabLabelShortcutGap = async (): Promise<number> =>
+        page.evaluate(() => {
+          const shortcut = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-shortcut:workspace-tab-1"]'
+          )
+          const label = document.querySelector<HTMLElement>(
+            '[data-testid="workspace-tab-label:workspace-tab-1"]'
+          )
+          if (!shortcut || !label) {
+            throw new Error('Expected workspace tab label and shortcut')
+          }
+
+          return Math.abs(
+            label.getBoundingClientRect().right - shortcut.getBoundingClientRect().left
+          )
+        })
+
+      const readTabSurfaceColors = async (): Promise<string> =>
+        page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>('.workspace-tab-card')
+          if (!card) {
+            throw new Error('Expected workspace tab card')
+          }
+
+          return window.getComputedStyle(card).backgroundColor
+        })
+
+      const idleSurfaceColors = await readTabSurfaceColors()
+
       await expect.poll(readTabAffordanceState).toEqual({
         closeOpacity: '0',
         shortcutOpacity: '0',
-        hasMaskImage: false
+        hasMaskImage: true
       })
+      const idleLabelShortcutGap = await readTabLabelShortcutGap()
       await tabCard.hover()
       await expect.poll(readTabAffordanceState).toEqual({
         closeOpacity: '1',
         shortcutOpacity: '1',
         hasMaskImage: true
       })
+      await expect.poll(readTabShortcutCloseGap).toBeLessThanOrEqual(1)
+      await expect.poll(readTabLabelShortcutGap).toBeLessThanOrEqual(1)
+      expect(idleLabelShortcutGap).toBeGreaterThan(1)
+      const hoveredSurfaceColors = await readTabSurfaceColors()
+      expect(hoveredSurfaceColors).not.toBe(idleSurfaceColors)
       await tabCloseButton.hover()
       await expect
         .poll(() =>
@@ -1114,6 +1205,34 @@ test.describe('note page block editor switching', () => {
           path: 'alpha.md',
           content: expect.stringContaining('Duplicate note draft')
         })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('closes workspace tabs with middle click', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const firstTab = page.getByTestId('workspace-tab:workspace-tab-1')
+      await expect(firstTab).toBeVisible()
+
+      await page.getByTestId('workspace-tab-add').click()
+      const secondTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondTab).toBeVisible()
+      await expect(secondTab).toHaveAttribute('aria-selected', 'true')
+
+      await firstTab.click({ button: 'middle' })
+      await expect(firstTab).toHaveCount(0)
+      await expect(secondTab).toHaveAttribute('aria-selected', 'true')
+
+      await secondTab.click({ button: 'middle' })
+      await expect(secondTab).toHaveCount(0)
+      const replacementTab = page.getByTestId('workspace-tab:workspace-tab-3')
+      await expect(replacementTab).toBeVisible()
+      await expect(replacementTab).toHaveAttribute('aria-selected', 'true')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -2060,6 +2179,75 @@ test.describe('note page block editor switching', () => {
       await expect(notePopover).toBeVisible({ timeout: 10_000 })
       await editor.click()
       await expect(notePopover).toBeHidden()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('preserves the selected nested note path when following a note link', async () => {
+    const vaultRoot = await createNestedNoteLinkFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'map.md')
+      await replaceEditorContent(page, ['[['])
+
+      const notePopover = page.getByTestId('note-link-completion')
+      await expect(notePopover).toBeVisible({ timeout: 10_000 })
+      const nestedOption = notePopover.locator('[cmdk-item]').filter({ hasText: 'f1/master' })
+      await expect(nestedOption).toBeVisible()
+      await nestedOption.click()
+
+      const canonicalHref = noteMentionHref('f1/master')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain(canonicalHref)
+
+      const selectedLink = page
+        .getByTestId('note-block-editor')
+        .locator('a[href]')
+        .filter({ hasText: 'master' })
+        .first()
+      await expect(selectedLink).toHaveAttribute('href', canonicalHref)
+      await selectedLink.click()
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe('f1/master.md')
+      await expect(readNoteFromDisk(page, 'master.md')).resolves.toContain('Root master')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('does not create a note when a note link target cannot be resolved', async () => {
+    const vaultRoot = await createUnresolvedNoteLinkFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'map.md')
+      const missingLink = page
+        .getByTestId('note-block-editor')
+        .locator('a[href]')
+        .filter({ hasText: 'Missing' })
+        .first()
+      await expect(missingLink).toBeVisible()
+      await missingLink.click()
+
+      await expect(
+        page.getByText('Could not resolve note link: missing', { exact: true })
+      ).toBeVisible({ timeout: 10_000 })
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 10_000 })
+        .toBe('map.md')
+      await expect(
+        fs.access(path.join(vaultRoot, 'notes', 'missing.md')).then(
+          () => true,
+          () => false
+        )
+      ).resolves.toBe(false)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

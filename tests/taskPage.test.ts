@@ -41,6 +41,52 @@ describe('task page composition', () => {
     expect(markup).not.toContain('A private task description')
   })
 
+  it('splits calendar card metadata evenly and hard cuts long values', () => {
+    const longTitle = 'A very long task title that hard cuts inside the calendar card'
+    const longProjectName = 'A very long project name that hard cuts inside the calendar card'
+    const markup = renderToStaticMarkup(
+      createElement(CalendarTaskCard, {
+        task: { ...task, title: longTitle, time: '09:00', endTime: '17:00' },
+        project: { ...project, name: longProjectName }
+      })
+    )
+
+    expect(markup).toContain('grid-cols-2')
+    expect(markup).toContain('data-calendar-task-field="status"')
+    expect(markup).toContain('data-calendar-task-field="time"')
+    expect(markup).toContain('data-calendar-task-field="title"')
+    expect(markup).toContain('data-calendar-task-field="project"')
+    expect(markup).toContain('status-chip-label-clip')
+    expect(markup).toContain('workspace-text-clip')
+    expect(markup).not.toContain('status-chip-label-fade')
+    expect(markup).not.toContain('workspace-text-fade')
+    expect(markup).toContain(`title="${longTitle}"`)
+    expect(markup).toContain(`title="${longProjectName}"`)
+    expect(markup).toContain('title="09:00 - 17:00"')
+    expect(markup).not.toContain('truncate')
+  })
+
+  it('uses a single metadata column when a card hides its time', () => {
+    const markup = renderToStaticMarkup(createElement(CalendarTaskCard, { task, showTime: false }))
+
+    expect(markup).toContain('grid-cols-1')
+    expect(markup).not.toContain('grid-cols-2')
+    expect(markup).not.toContain('data-calendar-task-field="time"')
+  })
+
+  it('can keep completed weekly task and project labels readable', () => {
+    const markup = renderToStaticMarkup(
+      createElement(CalendarTaskCard, {
+        task: { ...task, completed: true },
+        project,
+        strikeCompleted: false
+      })
+    )
+
+    expect(markup).toContain('Launch project')
+    expect(markup).not.toContain('line-through')
+  })
+
   it('renders calendar task property chips with muted bare styling', () => {
     const markup = renderToStaticMarkup(
       createElement(CalendarTaskCard, { task: { ...task, tags: [] } })

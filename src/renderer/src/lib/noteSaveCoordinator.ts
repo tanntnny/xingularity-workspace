@@ -1,18 +1,32 @@
 import type { StoredNoteDocument } from '../../../shared/types'
+import type { WriteNoteResult } from '../../../shared/vaultProtocol'
 
 export interface NoteSaveRequest {
   relPath: string
   content: string
   document: StoredNoteDocument
+  baseHash?: string | null
+  clientMutationId?: string
+}
+
+export class NoteSaveConflictError extends Error {
+  readonly result: Extract<WriteNoteResult, { ok: false }>
+
+  constructor(result: Extract<WriteNoteResult, { ok: false }>) {
+    super(result.error.message)
+    this.name = 'NoteSaveConflictError'
+    this.result = result
+  }
 }
 
 interface CreateNoteSaveCoordinatorOptions {
   onPersisted?: (request: NoteSaveRequest) => Promise<void> | void
-  writeNote: (request: NoteSaveRequest) => Promise<void>
+  writeNote: (request: NoteSaveRequest) => Promise<void | WriteNoteResult>
 }
 
 export interface NoteSaveCoordinator {
   enqueue: (request: NoteSaveRequest) => Promise<void>
+  setBaseRevision: (relPath: string, revision: string | null) => void
 }
 
 export function createNoteSaveCoordinator(
@@ -20,12 +34,26 @@ export function createNoteSaveCoordinator(
 ): NoteSaveCoordinator {
   let queue = Promise.resolve()
   let latestVersion = 0
+  const latestRevisions = new Map<string, string | null>()
 
   return {
     enqueue(request) {
       const requestVersion = ++latestVersion
       const run = async (): Promise<void> => {
-        await options.writeNote(request)
+        const executionRequest =
+          latestRevisions.has(request.relPath) && request.baseHash !== undefined
+            ? {
+                ...request,
+                baseHash: latestRevisions.get(request.relPath) ?? null
+              }
+            : request
+        const result = await options.writeNote(executionRequest)
+        if (result && !result.ok) {
+          throw new NoteSaveConflictError(result)
+        }
+        if (result?.ok) {
+          latestRevisions.set(request.relPath, result.revision.contentHash)
+        }
 
         if (requestVersion === latestVersion) {
           await options.onPersisted?.(request)
@@ -35,6 +63,9 @@ export function createNoteSaveCoordinator(
       const next = queue.catch(() => undefined).then(run)
       queue = next
       return next
+    },
+    setBaseRevision(relPath, revision) {
+      latestRevisions.set(relPath, revision)
     }
   }
 }

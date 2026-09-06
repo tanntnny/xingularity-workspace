@@ -5,6 +5,7 @@ import { ChevronRight, X } from './icons'
 import { cn } from '../../lib/utils'
 import { Button } from './button'
 import { WorkspaceIconButton } from './document-workspace'
+import { Shortcut, type ShortcutKey } from './kbd'
 
 const Dialog = DialogPrimitive.Root
 
@@ -189,13 +190,16 @@ interface DialogActionButtonProps extends Omit<
 > {
   icon: React.ReactNode
   label?: string
+  shortcutKeys?: readonly ShortcutKey[]
   tone?: 'default' | 'primary' | 'accent'
+  tooltip?: string
+  tooltipWrapperClassName?: string
 }
 
 const DialogActionButton = React.forwardRef<
   React.ElementRef<typeof Button>,
   DialogActionButtonProps
->(({ className, icon, label, tone = 'default', type = 'button', ...props }, ref) => (
+>(({ className, icon, label, shortcutKeys, tone = 'default', type = 'button', ...props }, ref) => (
   <Button
     ref={ref}
     type={type}
@@ -210,6 +214,13 @@ const DialogActionButton = React.forwardRef<
   >
     {icon}
     {label ? <span>{label}</span> : null}
+    {shortcutKeys?.length ? (
+      <Shortcut
+        keys={shortcutKeys}
+        aria-hidden="true"
+        className="border-muted-foreground bg-transparent px-1 text-[11px] text-muted-foreground"
+      />
+    ) : null}
   </Button>
 ))
 DialogActionButton.displayName = 'DialogActionButton'

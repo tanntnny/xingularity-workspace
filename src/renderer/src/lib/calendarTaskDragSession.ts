@@ -1,6 +1,9 @@
-type CalendarTaskDragSession = {
+export type CalendarTaskDragMode = 'move' | 'copy'
+
+export type CalendarTaskDragSession = {
   taskId: string
   pointerOffsetMinutes: number
+  mode: CalendarTaskDragMode
 }
 
 let activeSession: CalendarTaskDragSession | null = null
@@ -17,6 +20,23 @@ export function getCalendarTaskDragSession(): CalendarTaskDragSession | null {
 
 export function clearCalendarTaskDragSession(): void {
   activeSession = null
+}
+
+export function parseCalendarTaskDragPayload(payload: string): {
+  taskId: string
+  mode: CalendarTaskDragMode
+} | null {
+  if (payload.startsWith('copy:')) {
+    const taskId = payload.slice('copy:'.length)
+    return taskId ? { taskId, mode: 'copy' } : null
+  }
+
+  if (payload.startsWith('move:')) {
+    const taskId = payload.slice('move:'.length)
+    return taskId ? { taskId, mode: 'move' } : null
+  }
+
+  return payload ? { taskId: payload, mode: 'move' } : null
 }
 
 export function setCalendarTaskUnscheduledDragOver(isDragOver: boolean): void {

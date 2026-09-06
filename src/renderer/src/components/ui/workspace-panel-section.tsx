@@ -3,6 +3,7 @@ import * as React from 'react'
 import { cn } from '../../lib/utils'
 import { ChevronDown } from './icons'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible'
+import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 interface WorkspacePanelSectionProps extends React.HTMLAttributes<HTMLElement> {}
 
@@ -78,18 +79,24 @@ const CollapsibleWorkspacePanelSection = React.forwardRef<
         {...props}
       >
         <div className="flex min-h-[var(--control-height)] items-center gap-2 px-4 py-3">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="group flex min-w-0 flex-1 items-center justify-between gap-3 bg-transparent p-0 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-            >
-              <span className="min-w-0 truncate">{heading}</span>
-              <ChevronDown
-                aria-hidden="true"
-                className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"
-              />
-            </button>
-          </CollapsibleTrigger>
+          <TooltipButton
+            label={
+              getButtonTooltipLabel(undefined, undefined, undefined, heading) ?? 'Toggle section'
+            }
+          >
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="group flex min-w-0 flex-1 items-center justify-between gap-3 bg-transparent p-0 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <span className="min-w-0 truncate">{heading}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"
+                />
+              </button>
+            </CollapsibleTrigger>
+          </TooltipButton>
           {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
         <CollapsibleContent className={contentClassName}>

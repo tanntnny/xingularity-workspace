@@ -11,6 +11,11 @@ declare global {
       vault: {
         restoreLast: () => Promise<unknown>
       }
+      settings: {
+        get: () => Promise<{
+          calendarTasks: Array<{ id: string; date?: string; endDate?: string }>
+        }>
+      }
     }
   }
 }
@@ -20,6 +25,12 @@ function toIsoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function shiftIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T12:00:00`)
+  date.setDate(date.getDate() + days)
+  return toIsoDate(date)
 }
 
 function getMonthDayCellCount(date: Date): number {
@@ -33,7 +44,11 @@ async function createFixtureVault(
   includeUnscheduled = false,
   tagsByIndex: Record<number, string[]> = {},
   projectIndexes: readonly number[] = [],
-  unscheduledTaskCount = includeUnscheduled ? 1 : 0
+  unscheduledTaskCount = includeUnscheduled ? 1 : 0,
+  taskSchedule: 'scheduled' | 'deadline-only' = 'scheduled',
+  taskTitle?: string,
+  taskTime?: string,
+  taskEndTime?: string
 ): Promise<{ rootPath: string; todayIso: string }> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-month-e2e-vault-'))
   const todayIso = toIsoDate(new Date())
@@ -47,9 +62,12 @@ async function createFixtureVault(
           ? 'Unscheduled view task'
           : `Unscheduled task ${index + 1}`
         : taskCount === 1
-          ? 'Month view task'
+          ? (taskTitle ?? 'Month view task')
           : `Overflow task ${index + 1}`,
-      date: isUnscheduled ? undefined : todayIso,
+      date: isUnscheduled || taskSchedule === 'deadline-only' ? undefined : todayIso,
+      endDate: !isUnscheduled && taskSchedule === 'deadline-only' ? todayIso : undefined,
+      time: !isUnscheduled && taskSchedule === 'scheduled' ? taskTime : undefined,
+      endTime: !isUnscheduled && taskSchedule === 'scheduled' ? taskEndTime : undefined,
       completed: false,
       createdAt: new Date().toISOString(),
       priority: 'medium',
@@ -141,6 +159,37 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 async function openMonthlyCalendar(page: Page): Promise<void> {
   await page.getByTestId('sidebar-page:calendar').click()
   await expect(page.getByTestId('calendar-month-view')).toBeVisible()
+}
+
+async function readCalendarTask(
+  page: Page,
+  taskId: string
+): Promise<{ date?: string; endDate?: string } | null> {
+  return page.evaluate(async (id) => {
+    const settings = await window.vaultApi.settings.get()
+    const task = settings.calendarTasks.find((candidate) => candidate.id === id)
+    return task ? { date: task.date, endDate: task.endDate } : null
+  }, taskId)
+}
+
+async function resizeMonthlyTaskHandle(
+  page: Page,
+  handle: Locator,
+  targetDate: string
+): Promise<void> {
+  const handleBox = await handle.boundingBox()
+  const targetCell = page.locator(`.calendar-full .fc-daygrid-day[data-date="${targetDate}"]`)
+  const targetBox = await targetCell.boundingBox()
+  if (!handleBox || !targetBox) {
+    throw new Error(`Expected monthly resize geometry for target date ${targetDate}`)
+  }
+
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 8
+  })
+  await page.mouse.up()
 }
 
 async function getMonthlyResizeAffordanceStyles(locator: Locator): Promise<{
@@ -332,13 +381,22 @@ test.describe('calendar monthly view', () => {
       await filterButton.click()
       const popover = page.getByTestId('calendar-task-filter-popover')
       await expect(popover).toBeVisible()
+      await expect(popover.locator('[aria-label="0 selected"]')).toHaveCount(0)
+      await expect(popover).not.toContainText('None selected')
       await popover.locator('input[aria-label="Search calendar task tags"]').fill('planning')
 
       const planningOption = page.getByTestId('calendar-task-tag-option:planning')
       await expect(planningOption).toBeVisible()
       await planningOption.click()
       await expect(planningOption).toHaveAttribute('data-checked', 'true')
-      await expect(filterButton).toContainText('Filter (1)')
+      const selectionCount = popover.locator('[aria-label="1 selected"]')
+      await expect(selectionCount).toBeVisible()
+      await expect(selectionCount).toHaveText('1')
+      await expect(selectionCount).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+      await expect(selectionCount).toHaveCSS('color', 'rgb(26, 26, 26)')
+      const triggerSelectionCount = filterButton.locator('[aria-label="1 selected"]')
+      await expect(triggerSelectionCount).toBeVisible()
+      await expect(triggerSelectionCount).toHaveText('1')
 
       await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
       await expect(eventByTitle('Overflow task 2')).toHaveCount(0)
@@ -350,13 +408,41 @@ test.describe('calendar monthly view', () => {
       await page.waitForLoadState('domcontentloaded')
       await page.waitForFunction(() => typeof window.vaultApi?.vault?.restoreLast === 'function')
       await openMonthlyCalendar(page)
-      await expect(page.getByTestId('calendar-task-filter-trigger')).toContainText('Filter (1)')
+      await expect(filterButton.locator('[aria-label="1 selected"]')).toHaveText('1')
       await expect(eventByTitle('Overflow task 1')).toHaveCount(1)
 
       await page.getByTestId('calendar-task-filter-trigger').click()
       await page.getByTestId('calendar-task-filter-clear').click()
       await expect(page.getByTestId('calendar-task-filter-trigger')).toHaveText('Filter')
+      await expect(filterButton.locator('[aria-label="1 selected"]')).toHaveCount(0)
+      await expect(page.getByTestId('calendar-task-filter-popover')).not.toContainText(
+        'None selected'
+      )
+      await expect(
+        page.getByTestId('calendar-task-filter-popover').locator('[aria-label="0 selected"]')
+      ).toHaveCount(0)
       await expect(eventByTitle('Overflow task 2')).toHaveCount(1)
+
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('calendar-task-filter-popover')).toBeHidden()
+      await page.setViewportSize({ width: 520, height: 800 })
+      await expect
+        .poll(() => page.evaluate(() => window.matchMedia('(max-width: 639px)').matches))
+        .toBe(true)
+      await expect(filterButton).toBeVisible()
+      await filterButton.click()
+
+      const mobilePopover = page.getByTestId('calendar-task-filter-popover')
+      await expect(mobilePopover).toBeVisible()
+      await expect(mobilePopover).toHaveAttribute('data-side', 'bottom')
+      await expect(
+        mobilePopover.getByRole('heading', { name: 'Filter calendar tasks' })
+      ).toBeVisible()
+      await expect(mobilePopover.locator('[aria-label="0 selected"]')).toHaveCount(0)
+      await mobilePopover.locator('input[aria-label="Search calendar task tags"]').fill('planning')
+      await expect(planningOption).toBeVisible()
+      await planningOption.click()
+      await expect(mobilePopover.locator('[aria-label="1 selected"]')).toHaveText('1')
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -481,10 +567,112 @@ test.describe('calendar monthly view', () => {
         })
         .toBe('1')
       const affordanceStyles = await getMonthlyResizeAffordanceStyles(resizer)
-      expect(affordanceStyles.lineWidth).toBe('1px')
+      expect(affordanceStyles.lineWidth).toBe('0.5px')
       expect(affordanceStyles.lineBackgroundImage).toContain('linear-gradient')
       expect(affordanceStyles.lineOpacity).toBe('1')
       expect(affordanceStyles.hoverBackgroundColor).toBe('rgba(0, 0, 0, 0)')
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('divides monthly task metadata evenly and hard cuts long values', async () => {
+    const longTitle = 'A very long task title that hard cuts without fade or ellipsis'
+    const timeLabel = '09:00 - 17:00'
+    const { rootPath } = await createFixtureVault(
+      1,
+      false,
+      {},
+      [],
+      0,
+      'scheduled',
+      longTitle,
+      '09:00',
+      '17:00'
+    )
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const event = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
+        hasText: longTitle
+      })
+      const statusField = event.locator('[data-calendar-task-field="status"]')
+      const timeField = event.locator('[data-calendar-task-field="time"]')
+      const titleField = event.locator('[data-calendar-task-field="title"]')
+      await expect(statusField).toBeVisible()
+      await expect(timeField).toBeVisible()
+      await expect(titleField).toBeVisible()
+
+      const statusBox = await statusField.boundingBox()
+      const timeBox = await timeField.boundingBox()
+      if (!statusBox || !timeBox) {
+        throw new Error('Expected monthly task metadata columns to have layout boxes')
+      }
+      expect(Math.abs(statusBox.width - timeBox.width)).toBeLessThanOrEqual(1)
+
+      await expect(statusField.locator('.status-chip-label-clip')).toHaveCount(1)
+      await expect(statusField.locator('.status-chip-label-fade')).toHaveCount(0)
+      await expect(titleField).toHaveClass(/workspace-text-clip/)
+      await expect(timeField).toHaveClass(/workspace-text-clip/)
+      await expect(titleField).not.toHaveClass(/workspace-text-fade/)
+      await expect(timeField).not.toHaveClass(/workspace-text-fade/)
+      await expect(titleField).toHaveAttribute('title', longTitle)
+      await expect(timeField).toHaveAttribute('title', timeLabel)
+
+      const overflowStyles = await titleField.evaluate((element) => {
+        const styles = getComputedStyle(element)
+        return {
+          textOverflow: styles.textOverflow,
+          webkitMaskImage: styles.webkitMaskImage
+        }
+      })
+      expect(overflowStyles.textOverflow).toBe('clip')
+      expect(overflowStyles.webkitMaskImage).toBe('none')
+    } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('resizes deadline-only task start and end dates from monthly handles', async () => {
+    const { rootPath, todayIso } = await createFixtureVault(1, false, {}, [], 0, 'deadline-only')
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const taskId = 'task-month-visible-0'
+      const event = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      const startResizer = event.locator('.fc-event-resizer-start').first()
+      const endResizer = event.locator('.fc-event-resizer-end').first()
+      await event.hover()
+      await expect(startResizer).toBeVisible()
+      await expect(endResizer).toBeVisible()
+
+      const previousDate = shiftIsoDate(todayIso, -1)
+      await resizeMonthlyTaskHandle(page, startResizer, previousDate)
+      await expect
+        .poll(() => readCalendarTask(page, taskId))
+        .toEqual({ date: previousDate, endDate: todayIso })
+
+      const nextDate = shiftIsoDate(todayIso, 1)
+      await resizeMonthlyTaskHandle(
+        page,
+        page
+          .locator('.calendar-full .fc-event.calendar-task-event')
+          .filter({ hasText: 'Month view task' })
+          .locator('.fc-event-resizer-end')
+          .first(),
+        nextDate
+      )
+      await expect
+        .poll(() => readCalendarTask(page, taskId))
+        .toEqual({ date: previousDate, endDate: nextDate })
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -566,9 +754,10 @@ test.describe('calendar monthly view', () => {
     try {
       await openMonthlyCalendar(page)
 
-      const source = page.locator('.calendar-full .fc-event.calendar-task-event').filter({
-        hasText: 'Month view task'
-      })
+      const source = page
+        .locator('.calendar-full .fc-event.calendar-task-event')
+        .filter({ hasText: 'Month view task' })
+        .first()
       await expect(source).toBeVisible()
 
       const sourceBox = await source.boundingBox()
@@ -576,6 +765,7 @@ test.describe('calendar monthly view', () => {
         throw new Error('Monthly calendar task bounds are unavailable')
       }
 
+      await page.keyboard.down('Alt')
       await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
       await page.mouse.down()
       await page.mouse.move(
@@ -628,6 +818,16 @@ test.describe('calendar monthly view', () => {
         )
         .toBe(true)
 
+      await expect(source).toHaveAttribute('data-dragging', 'true')
+      await expect(source).toHaveCSS('opacity', '1')
+      await expect(source).toHaveAttribute('data-drag-operation', 'copy')
+      const mirror = page.locator('.fc-event-dragging.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      await expect(mirror).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(mirror).toContainText('Month view task')
+      await expect(page.locator('[data-drag-copy-cue="true"]')).toHaveCount(0)
+
       await expect
         .poll(() =>
           source.evaluate((element) => {
@@ -638,6 +838,58 @@ test.describe('calendar monthly view', () => {
         .toBe(true)
     } finally {
       await page.mouse.up()
+      await page.keyboard.up('Alt')
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('reveals the original when Option is pressed during a monthly drag', async () => {
+    const { rootPath } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openMonthlyCalendar(page)
+
+      const source = page
+        .locator('.calendar-full .fc-event.calendar-task-event')
+        .filter({ hasText: 'Month view task' })
+        .first()
+      await expect(source).toBeVisible()
+
+      const sourceBox = await source.boundingBox()
+      if (!sourceBox) {
+        throw new Error('Monthly modifier drag bounds are unavailable')
+      }
+
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(
+        sourceBox.x + sourceBox.width / 2 + 24,
+        sourceBox.y + sourceBox.height / 2 + 24,
+        { steps: 3 }
+      )
+      await expect(source).toHaveAttribute('data-dragging', 'true')
+      await expect(source).toHaveAttribute('data-drag-operation', 'move')
+      await expect(source).toHaveCSS('opacity', '0')
+
+      await page.keyboard.down('Alt')
+      await page.mouse.move(
+        sourceBox.x + sourceBox.width / 2 + 48,
+        sourceBox.y + sourceBox.height / 2 + 48,
+        { steps: 3 }
+      )
+
+      await expect(source).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(source).toHaveCSS('opacity', '1')
+      const mirror = page.locator('.fc-event-dragging.calendar-task-event').filter({
+        hasText: 'Month view task'
+      })
+      await expect(mirror).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(mirror).toContainText('Month view task')
+    } finally {
+      await page.mouse.up()
+      await page.keyboard.up('Alt')
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
     }
@@ -653,7 +905,8 @@ test.describe('calendar monthly view', () => {
       const source = page.locator(
         '[data-unscheduled-task-list="true"] [data-unscheduled-task-id="task-month-visible-1"]'
       )
-      const target = page.locator(`.calendar-full .fc-daygrid-day[data-date="${todayIso}"]`)
+      const targetDate = shiftIsoDate(todayIso, -1)
+      const target = page.locator(`.calendar-full .fc-daygrid-day[data-date="${targetDate}"]`)
       await expect(source).toBeVisible()
       await expect(target).toBeVisible()
 
@@ -671,6 +924,8 @@ test.describe('calendar monthly view', () => {
 
       await expect(source).toHaveAttribute('data-dragging', 'true')
       await expect(source).toHaveCSS('opacity', '0')
+      await expect(source).toHaveAttribute('data-drag-operation', 'move')
+      await expect(page.locator('[data-drag-copy-cue="true"]')).toHaveCount(0)
       await expect(target).toHaveAttribute('data-calendar-drop-over', 'true')
       await expect(target).toHaveCSS('background-color', 'rgba(188, 232, 241, 0.3)')
       await expect(

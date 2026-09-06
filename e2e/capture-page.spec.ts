@@ -114,4 +114,22 @@ test.describe('capture page', () => {
       await fs.rm(vaultRoot, { recursive: true, force: true })
     }
   })
+
+  test('supports the platform primary-action shortcut for quick capture', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:capture').click()
+      await expect(page.getByTestId('capture-page')).toBeVisible()
+
+      const input = page.getByTestId('capture-input')
+      await input.fill('Command enter capture')
+      await input.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter')
+      await expect(page.locator('[data-testid^="fleeting-note:"]')).toHaveCount(1)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
 })

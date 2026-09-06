@@ -1,8 +1,9 @@
-import { createElement, type CSSProperties, type ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { ProjectIconStyle } from '../../../shared/types'
 import { resolveProjectIconGlyph } from '../../../shared/projectIcons'
 import { cn } from '../lib/utils'
-import { getProjectIconComponent } from '../lib/projectIconCatalog'
+import { getProjectIconCatalogEntry } from '../lib/projectIconCatalog'
+import { ProjectIconSvg } from './ui/project-icon'
 
 export type ProjectIconSurface = 'none' | 'subtle'
 
@@ -21,7 +22,7 @@ export function NoteShapeIcon({
   className,
   surface = 'none'
 }: NoteShapeIconProps): ReactElement {
-  const ProjectIcon = getProjectIconComponent(resolveProjectIconGlyph(icon), icon.variant)
+  const catalogEntry = getProjectIconCatalogEntry(resolveProjectIconGlyph(icon), icon.variant)
   const glyphSize =
     surface === 'subtle'
       ? typeof size === 'number'
@@ -46,16 +47,17 @@ export function NoteShapeIcon({
       )}
       style={iconStyle}
     >
-      {createElement(ProjectIcon, {
-        size: glyphSize,
-        style: {
-          width: glyphSize,
-          height: glyphSize,
+      <ProjectIconSvg
+        iconNode={catalogEntry.iconNode}
+        glyph={catalogEntry.glyph}
+        variant={catalogEntry.variant}
+        size={glyphSize}
+        style={{
           color: 'var(--project-icon-color)'
-        },
-        color: 'var(--project-icon-color)',
-        'aria-hidden': true
-      })}
+        }}
+        color="var(--project-icon-color)"
+        aria-hidden="true"
+      />
     </span>
   )
 }

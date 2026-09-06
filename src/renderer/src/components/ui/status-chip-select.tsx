@@ -5,6 +5,7 @@ import { SelectionPopover } from './selection-popover'
 import {
   StatusChip,
   type StatusChipItem,
+  type StatusChipLabelOverflow,
   type StatusChipSurface,
   type StatusChipVariant
 } from './status-chip'
@@ -27,6 +28,7 @@ export interface StatusChipSelectProps extends Omit<
   variant?: StatusChipVariant
   surface?: StatusChipSurface
   wrapLabel?: boolean
+  labelOverflow?: StatusChipLabelOverflow
   mutedLabel?: boolean
 }
 
@@ -44,6 +46,7 @@ export const StatusChipSelect = React.forwardRef<HTMLButtonElement, StatusChipSe
       variant = 'default',
       surface = 'none',
       wrapLabel = false,
+      labelOverflow,
       mutedLabel,
       type = 'button',
       'aria-label': ariaLabel,
@@ -76,6 +79,7 @@ export const StatusChipSelect = React.forwardRef<HTMLButtonElement, StatusChipSe
                 'pointer-events-none min-w-0 flex-1 gap-2',
                 !option.mutedTrigger && 'text-foreground [&>span:last-child]:text-foreground'
               )}
+              labelOverflow={labelOverflow}
             />
           ),
           wrapLabel,
@@ -85,7 +89,7 @@ export const StatusChipSelect = React.forwardRef<HTMLButtonElement, StatusChipSe
               ? String(option.label)
               : undefined)
         })),
-      [options, wrapLabel]
+      [labelOverflow, options, wrapLabel]
     )
 
     const handleValueChange = (nextValue: string): void => {
@@ -110,6 +114,7 @@ export const StatusChipSelect = React.forwardRef<HTMLButtonElement, StatusChipSe
           variant={variant}
           surface={surface}
           wrapLabel={wrapLabel}
+          labelOverflow={labelOverflow}
           mutedLabel={triggerMutedLabel ? true : undefined}
           item={triggerItem}
           className={className}

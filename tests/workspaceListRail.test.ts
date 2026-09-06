@@ -48,4 +48,17 @@ describe('workspace list rail', () => {
     expect(markup).toContain('No projects yet')
     expect(markup).not.toContain('<ul')
   })
+
+  it('supports single-row fading labels', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceListRailItem,
+        { labelOverflow: 'fade' },
+        'A long design audit destination label'
+      )
+    )
+
+    expect(markup).toContain('workspace-text-fade block max-w-full min-w-0 flex-1')
+    expect(markup).not.toContain('block min-w-0 truncate')
+  })
 })

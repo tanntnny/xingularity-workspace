@@ -1,4 +1,5 @@
 import { CalendarTask, CalendarTaskType, TaskPriority, TaskStatus } from '../../../shared/types'
+import { normalizeCalendarEndDate } from '../../../shared/calendarTaskDates'
 import { normalizeTaskTags } from '../../../shared/taskTags'
 
 export type CalendarContentFilter = 'all' | 'projectTasks' | 'nonProjectTasks'
@@ -119,6 +120,19 @@ export function getCalendarTaskTagOptions(tasks: CalendarTask[]): CalendarTaskTa
   )
 }
 
+export function isCalendarTaskOnDate(
+  task: Pick<CalendarTask, 'date' | 'endDate'>,
+  date: string
+): boolean {
+  const startDate = task.date ?? task.endDate
+  if (!startDate) {
+    return false
+  }
+
+  const endDate = normalizeCalendarEndDate(task.date, task.endDate) ?? startDate
+  return startDate <= date && endDate >= date
+}
+
 export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[] {
   return normalizeCalendarTasks(tasks)
     .filter((task) => Boolean(task.date || task.endDate))
@@ -133,7 +147,7 @@ export function buildCalendarEvents(tasks: CalendarTask[]): CalendarEventInput[]
         start: startIso,
         end: endIso ? toIsoDate(addIsoDays(parseIsoDate(endIso), 1)) : undefined,
         allDay: true as const,
-        ...(deadlineOnly ? { durationEditable: false } : {}),
+        durationEditable: true,
         extendedProps: {
           source: 'task',
           taskId: task.id,

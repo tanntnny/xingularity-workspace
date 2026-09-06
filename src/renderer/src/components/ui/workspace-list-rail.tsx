@@ -14,6 +14,7 @@ export interface WorkspaceListRailItemProps extends Omit<
   active?: boolean
   className?: string
   description?: React.ReactNode
+  labelOverflow?: 'truncate' | 'fade'
   leading?: React.ReactNode
   trailing?: React.ReactNode
 }
@@ -36,33 +37,52 @@ const WorkspaceListRail = React.forwardRef<HTMLElement, WorkspaceListRailProps>(
 WorkspaceListRail.displayName = 'WorkspaceListRail'
 
 const WorkspaceListRailItem = React.forwardRef<HTMLButtonElement, WorkspaceListRailItemProps>(
-  ({ active = false, children, className, description, leading, trailing, ...props }, ref) => (
-    <li className="min-w-0">
-      <Button
-        ref={ref}
-        type="button"
-        variant={active ? 'secondary' : 'ghost'}
-        aria-current={active ? 'page' : undefined}
-        data-active={active}
-        className={cn(
-          'h-auto min-h-[var(--control-height)] w-full justify-start gap-2 rounded-[var(--radius-button)] px-3 py-2 text-left',
-          className
-        )}
-        {...props}
-      >
-        {leading ? <span className="shrink-0">{leading}</span> : null}
-        <span className="min-w-0 flex-1">
-          <span className="block min-w-0 truncate">{children}</span>
-          {description ? (
-            <span className="block min-w-0 truncate text-xs text-muted-foreground">
-              {description}
-            </span>
-          ) : null}
-        </span>
-        {trailing ? <span className="shrink-0">{trailing}</span> : null}
-      </Button>
-    </li>
-  )
+  (
+    {
+      active = false,
+      children,
+      className,
+      description,
+      labelOverflow = 'truncate',
+      leading,
+      trailing,
+      ...props
+    },
+    ref
+  ) => {
+    const labelClassName =
+      labelOverflow === 'fade'
+        ? 'workspace-text-fade block max-w-full min-w-0 flex-1'
+        : 'block min-w-0 truncate'
+
+    return (
+      <li className="min-w-0">
+        <Button
+          ref={ref}
+          type="button"
+          variant={active ? 'secondary' : 'ghost'}
+          aria-current={active ? 'page' : undefined}
+          data-active={active}
+          className={cn(
+            'h-auto min-h-[var(--control-height)] w-full justify-start gap-2 rounded-[var(--radius-button)] px-3 py-2 text-left',
+            className
+          )}
+          {...props}
+        >
+          {leading ? <span className="shrink-0">{leading}</span> : null}
+          <span className="min-w-0 flex-1">
+            <span className={labelClassName}>{children}</span>
+            {description ? (
+              <span className="block min-w-0 truncate text-xs text-muted-foreground">
+                {description}
+              </span>
+            ) : null}
+          </span>
+          {trailing ? <span className="shrink-0">{trailing}</span> : null}
+        </Button>
+      </li>
+    )
+  }
 )
 WorkspaceListRailItem.displayName = 'WorkspaceListRailItem'
 

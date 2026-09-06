@@ -25,6 +25,7 @@ import {
 } from '../components/ui'
 import { ActionButtonGroup } from '../components/ui/button-group'
 import { Shortcut } from '../components/ui/kbd'
+import { handleCommandEnterSubmit } from '../lib/formShortcuts'
 import { WorkspacePage, WorkspacePageHeader, WorkspaceSectionCard } from '../components/workspace'
 import type {
   FleetingConversionResult,
@@ -167,7 +168,12 @@ export function CapturePage({
           focusWithin="glow"
           className="w-full"
         >
-          <form onSubmit={handleSubmit} className="min-w-0 flex-1" data-testid="quick-capture-form">
+          <form
+            onSubmit={handleSubmit}
+            onKeyDownCapture={handleCommandEnterSubmit}
+            className="min-w-0 flex-1"
+            data-testid="quick-capture-form"
+          >
             <label htmlFor="capture-input" className="sr-only">
               Quick Capture
             </label>
@@ -189,7 +195,7 @@ export function CapturePage({
           </form>
           <Shortcut
             keys={['cmd', 'return']}
-            aria-label="Press Command Enter to save"
+            aria-label="Press Return or Command Enter to save"
             className="shrink-0 rounded-none border-0 bg-transparent px-3 shadow-none"
           />
         </ActionButtonGroup>
@@ -210,6 +216,7 @@ export function CapturePage({
         </div>
         <form
           className="flex items-center gap-2"
+          onKeyDownCapture={handleCommandEnterSubmit}
           onSubmit={(event) => {
             event.preventDefault()
             void submitResourceCapture()

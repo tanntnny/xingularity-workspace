@@ -273,11 +273,17 @@ describe('ActionButtonGroup', () => {
         icon: 'Done',
         label: 'Save changes',
         tone: 'accent',
+        shortcutKeys: ['cmd', 'return'],
+        'aria-keyshortcuts': 'Meta+Enter Control+Enter',
         'aria-label': 'Save changes'
       })
     )
 
     expect(markup).toContain('>Save changes</span>')
+    expect(markup).toContain('aria-keyshortcuts="Meta+Enter Control+Enter"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).toContain('⌘')
+    expect(markup).toContain('↵')
     expect(markup).toContain('bg-accent')
     expect(markup).toContain('text-accent-foreground')
     expect(markup).toContain('rounded-[var(--radius-button-pill)]')

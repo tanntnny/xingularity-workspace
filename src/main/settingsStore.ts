@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { normalizeWorkspaceViews } from '../shared/workspaceViews'
 import { normalizeTaskTags } from '../shared/taskTags'
 import { isTaskDone } from '../shared/taskStatus'
 import {
@@ -163,6 +164,7 @@ export function createDefaultAppSettings(): AppSettings {
     editorVimKeyMappings: [],
     calendarTasks: [],
     tasks: [],
+    workspaceViews: [],
     projectIcons: {},
     projects: [],
     gridBoard: {
@@ -249,6 +251,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     editorVimKeyMappings: normalizeEditorVimKeyMappings(parsed.editorVimKeyMappings),
     calendarTasks: normalizedTaskLinks,
     tasks: normalizedTaskLinks,
+    workspaceViews: normalizeWorkspaceViews(parsed.workspaceViews),
     projectIcons: normalizeProjectIcons(parsed.projectIcons),
     projects: normalizedProjects.map((project) => ({
       ...project,
@@ -993,6 +996,7 @@ export class SettingsStore {
       pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
+      workspaceViews: settings.workspaceViews,
       featureFlags: settings.featureFlags,
       gridBoard: settings.gridBoard
     }

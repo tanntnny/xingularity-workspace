@@ -8,6 +8,11 @@ import {
   previewVaultRestore,
   restoreVault
 } from '../src/main/vaultTransferService'
+import {
+  createVaultManifest,
+  readVaultManifest,
+  writeVaultManifest
+} from '../src/main/vaultManifest'
 import { compareVaultSync } from '../src/main/vaultSyncService'
 
 const tempRoots: string[] = []
@@ -35,6 +40,11 @@ describe('vault transfer service', () => {
       'utf-8'
     )
     await fs.writeFile(path.join(source, 'index.sqlite'), 'rebuild-me', 'utf-8')
+    const sourceManifest = createVaultManifest({
+      vaultId: 'portable-vault',
+      createdAt: '2026-08-28T00:00:00.000Z'
+    })
+    await writeVaultManifest(source, sourceManifest)
 
     const result = await createVaultBackup(source, backup)
     expect(result.fileCount).toBe(2)
@@ -56,6 +66,15 @@ describe('vault transfer service', () => {
     await expect(fs.stat(path.join(restore, 'credentials.json'))).rejects.toThrow()
     await expect(fs.stat(path.join(restore, 'settings.json'))).rejects.toThrow()
     await expect(fs.stat(path.join(restore, 'index.sqlite'))).rejects.toThrow()
+    await expect(readVaultManifest(restore)).resolves.toMatchObject({
+      vaultId: sourceManifest.vaultId,
+      schemaVersion: sourceManifest.schemaVersion
+    })
+
+    const portableManifest = JSON.parse(
+      await fs.readFile(path.join(backup, 'manifest.json'), 'utf-8')
+    ) as { vaultId?: string }
+    expect(portableManifest.vaultId).toBe(sourceManifest.vaultId)
   })
 
   it('requires explicit overwrite for a restore conflict and rejects unsafe manifests', async () => {

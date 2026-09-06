@@ -99,6 +99,7 @@ describe('task tag UI', () => {
     )
 
     expect(markup).toContain('border border-border')
+    expect(markup).toContain('rounded-[var(--radius-button-pill)]')
     expect(markup).toContain('bg-surface-subtle')
     expect(markup).toContain('hover:bg-surface-subtle-hover')
     expect(markup).toContain('focus-visible:bg-surface-subtle-hover')
@@ -177,7 +178,9 @@ describe('task tag UI', () => {
     )
 
     expect(markup).toContain('calendar-task-filter-trigger')
-    expect(markup).toContain('Filter (2)')
+    expect(markup).toContain('aria-label="2 selected"')
+    expect(markup).toContain('bg-selection-counter')
+    expect(markup).not.toContain('Filter (2)')
     expect(markup).toContain('Filter calendar tasks, 2 active')
   })
 })

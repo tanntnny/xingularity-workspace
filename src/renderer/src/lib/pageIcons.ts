@@ -7,8 +7,9 @@ import {
   CalendarEvent,
   ChartDots3,
   Files,
+  ListTodo,
   Mail,
-  Paintbrush,
+  Shield,
   Settings2,
   Table,
   type FilledIcon
@@ -19,12 +20,13 @@ export const APP_PAGE_ICONS: Record<AppPage, FilledIcon> = {
   knowledge: ChartDots3,
   notes: Files,
   projects: Box,
+  tasks: ListTodo,
   resources: Table,
   subscriptions: BrandMastercard,
   calendar: CalendarEvent,
   schedules: Bolt,
   schedulingGuide: BookOpen,
-  designAudit: Paintbrush,
+  designAudit: Shield,
   settings: Settings2
 }
 

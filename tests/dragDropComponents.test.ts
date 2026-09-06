@@ -28,6 +28,22 @@ describe('DragSource', () => {
     expect(markup).toContain('task-card')
   })
 
+  it('hides a task source while dragging', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(
+        DragSource,
+        {
+          as: 'article',
+          dragging: true
+        },
+        'Task card'
+      )
+    )
+
+    expect(markup).toContain('data-dragging="true"')
+    expect(markup).toContain('data-[dragging=true]:opacity-0')
+  })
+
   it('renders an upright preview visual without changing source layout semantics', () => {
     const markup = renderToStaticMarkup(
       React.createElement(
@@ -136,6 +152,15 @@ describe('DropZone', () => {
       React.createElement(DropZone, { active: true, variant: 'timed' }, 'timed')
     )
     expect(timedMarkup).not.toContain('pointer-events-none')
+  })
+
+  it('matches content drop zones to card corner rounding', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(DropZone, { active: true, variant: 'content' }, 'Notebook card')
+    )
+
+    expect(markup).toContain('rounded-xl')
+    expect(markup).not.toContain('rounded-none')
   })
 
   it('applies the calendar drop background tone only when requested', () => {

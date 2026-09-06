@@ -11,6 +11,9 @@ declare global {
       vault: {
         restoreLast: () => Promise<unknown>
       }
+      settings: {
+        get: () => Promise<{ calendarTasks: CalendarTask[] }>
+      }
     }
   }
 }
@@ -483,12 +486,24 @@ test.describe('calendar weekly drag preview', () => {
       await taskDialog.getByRole('button', { name: 'Open full page', exact: true }).click()
       await expect(page.getByTestId('task-page')).toBeVisible()
       await expect(page.getByRole('button', { name: 'Task start time', exact: true })).toHaveText(
-        /\d{1,2}:\d{2} (AM|PM)/
+        '3:10 AM'
       )
       await expect(page.getByRole('button', { name: 'Task end time', exact: true })).toHaveText(
-        /\d{1,2}:\d{2} (AM|PM)/
+        '4:10 AM'
       )
       await expect(page.getByRole('button', { name: 'Task start date', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Task end date', exact: true })).toBeVisible()
+
+      const savedTask = await page.evaluate(async (title) => {
+        const settings = await window.vaultApi.settings.get()
+        return settings.calendarTasks.find((task) => task.title === title)
+      }, 'Weekly focus task')
+      expect(savedTask).toMatchObject({
+        date: todayIso,
+        endDate: todayIso,
+        time: '03:10',
+        endTime: '04:10'
+      })
     } finally {
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
@@ -501,7 +516,9 @@ test.describe('calendar weekly drag preview', () => {
 
     try {
       await openWeeklyCalendar(page)
-      const task = page.getByTestId('calendar-week-task:task-weekly-preview')
+      const task = page.locator(
+        '[data-testid="calendar-week-task:task-weekly-preview"][data-drag-visual="source"]'
+      )
       await expect(task).toBeVisible()
       await expect(task.getByText('Pending', { exact: true })).toBeVisible()
 
@@ -525,6 +542,7 @@ test.describe('calendar weekly drag preview', () => {
             bubbles: true,
             cancelable: true,
             dataTransfer,
+            altKey: true,
             clientX: sourceRect.left + sourceRect.width / 2,
             clientY: sourceRect.top + 12
           })
@@ -535,6 +553,7 @@ test.describe('calendar weekly drag preview', () => {
             bubbles: true,
             cancelable: true,
             dataTransfer,
+            altKey: true,
             clientX: targetRect.left + targetRect.width / 2,
             clientY: targetRect.top + 200
           })
@@ -543,6 +562,12 @@ test.describe('calendar weekly drag preview', () => {
 
       const floatingPreview = page.locator('[data-floating-drag-preview="true"]')
       await expect(floatingPreview).toBeVisible()
+      await expect(task).toHaveAttribute('data-dragging', 'true')
+      await expect(task).toHaveCSS('opacity', '1')
+      await expect(task).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(floatingPreview).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(floatingPreview).toContainText('Timed drag preview task')
+      await expect(page.locator('[data-drag-copy-cue="true"]')).toHaveCount(0)
       await expect
         .poll(() =>
           floatingPreview.evaluate((element) => {
@@ -572,7 +597,56 @@ test.describe('calendar weekly drag preview', () => {
         source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
       })
       await expect(floatingPreview).toHaveCount(0)
+      await expect(task).toHaveAttribute('data-dragging', 'false')
     } finally {
+      await electronApp.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps the original visible when Option is pressed during a weekly drag', async () => {
+    const { rootPath, todayIso } = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(rootPath)
+
+    try {
+      await openWeeklyCalendar(page)
+      const task = page.locator(
+        '[data-testid="calendar-week-task:task-weekly-preview"][data-drag-visual="source"]'
+      )
+      const target = page.getByTestId(`calendar-week-timed-column:${todayIso}`)
+      await expect(task).toBeVisible()
+      await expect(target).toBeVisible()
+      await task.scrollIntoViewIfNeeded()
+
+      const sourceBox = await task.boundingBox()
+      const targetBox = await target.boundingBox()
+      if (!sourceBox || !targetBox) {
+        throw new Error('Weekly modifier drag bounds are unavailable')
+      }
+
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(
+        sourceBox.x + sourceBox.width / 2 + 24,
+        sourceBox.y + sourceBox.height / 2 + 24,
+        { steps: 3 }
+      )
+      await page.keyboard.down('Alt')
+      await page.mouse.move(
+        targetBox.x + targetBox.width / 2,
+        targetBox.y + targetBox.height / 2 + 120,
+        { steps: 5 }
+      )
+
+      await expect(task).toHaveAttribute('data-dragging', 'true')
+      await expect(task).toHaveAttribute('data-drag-operation', 'copy')
+      await expect(task).toHaveCSS('opacity', '1')
+      const floatingPreview = page.locator('[data-floating-drag-preview="true"]')
+      await expect(floatingPreview).toBeVisible()
+      await expect(floatingPreview).toHaveAttribute('data-drag-operation', 'copy')
+    } finally {
+      await page.mouse.up()
+      await page.keyboard.up('Alt')
       await electronApp.close()
       await fs.rm(rootPath, { recursive: true, force: true })
     }
@@ -816,10 +890,12 @@ test.describe('calendar weekly drag preview', () => {
 
     try {
       await openWeeklyCalendar(page)
-      const source = page.locator('[data-unscheduled-task-id="task-weekly-unscheduled"]')
+      const source = page.locator(
+        '[data-unscheduled-task-id="task-weekly-unscheduled"][data-drag-visual="source"]'
+      )
       await expect(source).toBeVisible()
 
-      const dragImage = await page.evaluate((dateIso) => {
+      const previewStyles = await page.evaluate((dateIso) => {
         const source = document.querySelector<HTMLElement>(
           '[data-unscheduled-task-id="task-weekly-unscheduled"]'
         )
@@ -833,18 +909,6 @@ test.describe('calendar weekly drag preview', () => {
         const sourceRect = source.getBoundingClientRect()
         const targetRect = target.getBoundingClientRect()
         const dataTransfer = new DataTransfer()
-        let previewStyles: { height: string; maxHeight: string } | null = null
-
-        Object.defineProperty(dataTransfer, 'setDragImage', {
-          value: (image: Element) => {
-            if (image instanceof HTMLElement) {
-              previewStyles = {
-                height: image.style.height,
-                maxHeight: image.style.maxHeight
-              }
-            }
-          }
-        })
 
         source.dispatchEvent(
           new DragEvent('dragstart', {
@@ -866,12 +930,19 @@ test.describe('calendar weekly drag preview', () => {
           })
         )
 
-        return previewStyles
+        const preview = document.querySelector<HTMLElement>('[data-floating-drag-preview="true"]')
+        return preview
+          ? {
+              height: preview.style.height,
+              maxHeight: preview.style.maxHeight
+            }
+          : null
       }, todayIso)
 
-      expect(dragImage).toEqual({ height: 'fit-content', maxHeight: 'none' })
+      expect(previewStyles).toEqual({ height: 'fit-content', maxHeight: 'none' })
+      await expect(source).toHaveCSS('opacity', '0')
 
-      const indicator = page.getByTestId('calendar-week-drop-indicator')
+      const indicator = page.getByTestId('calendar-week-all-day-drop-indicator')
       await expect(indicator).toBeVisible()
       const indicatorBox = await indicator.boundingBox()
       expect(indicatorBox).not.toBeNull()
@@ -879,7 +950,6 @@ test.describe('calendar weekly drag preview', () => {
         throw new Error('Unscheduled weekly drop indicator bounds are unavailable')
       }
       expect(indicatorBox.height).toBeGreaterThan(0)
-      expect(indicatorBox.height).toBeLessThan(80)
 
       await page.evaluate((dateIso) => {
         const target = document.querySelector<HTMLElement>(
@@ -901,7 +971,7 @@ test.describe('calendar weekly drag preview', () => {
         )
       }, todayIso)
 
-      const task = page.getByTestId('calendar-week-task:task-weekly-unscheduled')
+      const task = page.getByTestId('calendar-week-all-day-task:task-weekly-unscheduled')
       await expect(task).toBeVisible()
       const taskBox = await task.boundingBox()
       expect(taskBox).not.toBeNull()
@@ -910,18 +980,9 @@ test.describe('calendar weekly drag preview', () => {
       }
       expect(taskBox.height).toBeLessThan(80)
 
-      await expect
-        .poll(async () => {
-          const settings = JSON.parse(
-            await fs.readFile(path.join(rootPath, 'tasks', 'task-weekly-unscheduled.json'), 'utf8')
-          ) as { weeklyHeightMode?: string }
-          return settings.weeklyHeightMode
-        })
-        .toBe('content')
-
       await page.evaluate(() => {
         const source = document.querySelector<HTMLElement>(
-          '[data-unscheduled-task-id="task-weekly-unscheduled"]'
+          '[data-unscheduled-task-id="task-weekly-unscheduled"][data-drag-visual="source"]'
         )
         source?.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
       })

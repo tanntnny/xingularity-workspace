@@ -13,6 +13,7 @@ import { SettingsStore } from '../src/main/settingsStore'
 import { ProjectStore } from '../src/main/projectStore'
 import { TaskStore } from '../src/main/taskStore'
 import type { Project } from '../src/shared/types'
+import { createWorkspaceView } from '../src/shared/workspaceViews'
 
 const tempRoots: string[] = []
 
@@ -29,6 +30,22 @@ afterEach(async () => {
 })
 
 describe('SettingsStore', () => {
+  it('round-trips workspace views in the vault core settings file', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const view = createWorkspaceView('view-tasks', 'tasks', [], '2026-08-29T10:00:00.000Z')
+
+    const updated = await store.updateVault(root, { workspaceViews: [view] })
+
+    expect(updated.workspaceViews).toEqual([view])
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({ workspaceViews: [view] })
+    )
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"workspaceViews"'
+    )
+  })
+
   it('migrates legacy vault settings files into root-level canonical paths', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const legacyDir = path.join(root, '.xingularity')

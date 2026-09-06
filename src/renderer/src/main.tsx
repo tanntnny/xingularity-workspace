@@ -8,6 +8,7 @@ import App from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AppErrorPage } from './components/AppErrorPage'
 import { AppPlatformProvider, useAppPlatform } from './platform'
+import { TooltipProvider } from './components/ui/tooltip'
 
 function AppRoot() {
   const platform = useAppPlatform()
@@ -66,8 +67,10 @@ function AppRoot() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppPlatformProvider>
-      <AppRoot />
-    </AppPlatformProvider>
+    <TooltipProvider delayDuration={300}>
+      <AppPlatformProvider>
+        <AppRoot />
+      </AppPlatformProvider>
+    </TooltipProvider>
   </StrictMode>
 )

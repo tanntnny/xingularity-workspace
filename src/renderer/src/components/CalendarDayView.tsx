@@ -12,6 +12,7 @@ interface CalendarDayViewProps {
   onSelectDate: (date: string) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onOpenTask?: (taskId: string) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
 }
@@ -32,6 +33,7 @@ export function CalendarDayView({
   onSelectDate,
   onRescheduleTask,
   onOpenTask,
+  onDuplicateTask,
   onDeleteTask,
   onUpdateTask
 }: CalendarDayViewProps): ReactElement {
@@ -76,6 +78,7 @@ export function CalendarDayView({
       key={task.id}
       task={task}
       selectedDate={selectedDate}
+      onDuplicateTask={onDuplicateTask}
       onDelete={safeDeleteTask}
       onUpdateStatus={(taskId, status) =>
         safeUpdateTask(taskId, { status, completed: isTaskStatusDone(status) })

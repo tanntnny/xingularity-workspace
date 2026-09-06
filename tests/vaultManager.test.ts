@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { validateVault } from '../src/main/vaultManager'
+import { readVaultManifest } from '../src/main/vaultManifest'
 
 const tempRoots: string[] = []
 
@@ -60,5 +61,22 @@ describe('vaultManager', () => {
     await expect(validateVault(root)).rejects.toThrow(
       /both legacy notes\/ and canonical notebooks\//i
     )
+  })
+
+  it('persists a path-independent manifest identity across reopen and relocation', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-vault-')))
+    const first = await validateVault(root)
+    const reopened = await validateVault(root)
+
+    expect(first.manifest.vaultId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(reopened.manifest.vaultId).toBe(first.manifest.vaultId)
+    await expect(readVaultManifest(root)).resolves.toMatchObject({
+      vaultId: first.manifest.vaultId
+    })
+
+    const relocated = trackTempRoot(path.join(path.dirname(root), `${path.basename(root)}-copy`))
+    await fs.cp(root, relocated, { recursive: true })
+    const copied = await validateVault(relocated)
+    expect(copied.manifest.vaultId).toBe(first.manifest.vaultId)
   })
 })

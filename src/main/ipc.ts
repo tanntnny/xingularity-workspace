@@ -10,8 +10,11 @@ import { IPC_CHANNELS } from '../shared/ipc'
 import {
   CALENDAR_TASK_TYPE_VALUES,
   NOTE_VIM_MAPPING_ACTION_VALUES,
-  NOTE_VIM_MAPPING_MODE_VALUES
+  NOTE_VIM_MAPPING_MODE_VALUES,
+  WORKSPACE_VIEW_TASK_GROUP_BY_VALUES,
+  WORKSPACE_VIEW_TASK_SCHEDULE_FILTER_VALUES
 } from '../shared/types'
+import { RESOURCE_PROVIDERS, RESOURCE_STATES, RESOURCE_TYPES } from '../shared/resourceDomain'
 import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
 import { isVaultRelativePath } from '../shared/projectFolders'
 import { handleIpc } from './errorReporting'
@@ -187,6 +190,12 @@ const noteDocumentSchema = z.object({
   tags: z.array(z.string()).max(200),
   markdown: z.string().max(2_000_000)
 })
+const noteDocumentWriteRequestSchema = z.object({
+  path: notePathSchema,
+  document: noteDocumentSchema,
+  baseHash: z.string().min(1).max(256).nullable(),
+  clientMutationId: z.string().min(1).max(200)
+})
 const aiCompletionInputSchema = z.object({
   notePath: z.string().min(1).max(512),
   noteContent: z.string().max(2_000_000),
@@ -280,6 +289,22 @@ const taskReminderSchema = z.object({
   value: z.number().int().min(1).max(365),
   enabled: z.boolean()
 })
+const taskRecurrenceSchema = z.object({
+  seriesId: z.string().min(1).max(200),
+  anchorTaskId: z.string().min(1).max(120),
+  occurrenceKey: z.string().min(1).max(80),
+  rrule: z.string().trim().min(1).max(500),
+  horizon: z.number().int().min(1).max(52),
+  timezone: z.string().trim().min(1).max(100),
+  generated: z.boolean(),
+  overridden: z.boolean().optional(),
+  excludedOccurrenceKeys: z.array(z.string().min(1).max(80)).max(500).optional()
+})
+const taskRecurrenceDraftSchema = z.object({
+  rrule: z.string().trim().min(1).max(500),
+  horizon: z.number().int().min(1).max(52).optional(),
+  timezone: z.string().trim().min(1).max(100).optional()
+})
 const calendarTaskSchema = z.object({
   id: z.string().min(1).max(120),
   title: z.string().min(1).max(200),
@@ -313,7 +338,12 @@ const calendarTaskSchema = z.object({
     .optional(),
   weeklyHeightMode: z.enum(['duration', 'content']).optional(),
   automationSource: z.string().max(200).optional(),
-  automationSourceKey: z.string().max(200).optional()
+  automationSourceKey: z.string().max(200).optional(),
+  updatedAt: z.string().min(1).max(64).optional(),
+  dependencyIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+  parentTaskId: z.string().min(1).max(120).optional(),
+  estimateMinutes: z.number().int().min(0).max(10_000_000).optional(),
+  recurrence: taskRecurrenceSchema.optional()
 })
 const taskCreateInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -342,7 +372,39 @@ const taskCreateInputSchema = z.object({
   reminders: z.array(taskReminderSchema).max(10).optional(),
   dependencyIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   parentTaskId: z.string().min(1).max(120).optional(),
-  estimateMinutes: z.number().int().min(0).max(10_000_000).optional()
+  estimateMinutes: z.number().int().min(0).max(10_000_000).optional(),
+  recurrence: taskRecurrenceDraftSchema.optional()
+})
+const taskScheduleOverrideSchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .nullable()
+    .optional(),
+  endTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .nullable()
+    .optional(),
+  weeklyHeightMode: z.enum(['duration', 'content']).nullable().optional()
+})
+const taskDuplicateInputSchema = z.object({
+  taskId: z.string().min(1).max(120),
+  schedule: taskScheduleOverrideSchema.optional()
+})
+const taskRecurrenceConfigureInputSchema = z.object({
+  taskId: z.string().min(1).max(120),
+  recurrence: taskRecurrenceDraftSchema.nullable()
 })
 
 const projectIconSchema = z.object({
@@ -358,6 +420,58 @@ const projectIconSchema = z.object({
   variant: z.enum(['filled', 'outlined']).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
 })
+const workspaceViewIconSchema = projectIconSchema.extend({
+  set: z.literal('tabler').optional(),
+  variant: z.enum(['filled', 'outlined'])
+})
+
+const workspaceViewSortSchema = z.object({
+  columnId: z.string().min(1).max(100),
+  direction: z.enum(['asc', 'desc'])
+})
+const workspaceViewBaseSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(160),
+  icon: workspaceViewIconSchema,
+  createdAt: z.string().min(1).max(100),
+  updatedAt: z.string().min(1).max(100)
+})
+const workspaceViewTaskSchema = workspaceViewBaseSchema.extend({
+  source: z.literal('tasks'),
+  config: z.object({
+    searchQuery: z.string().max(500),
+    statuses: z
+      .array(z.enum(['pending', 'backlog', 'in-progress', 'blocked', 'canceled', 'completed']))
+      .max(20),
+    taskTypes: z.array(z.enum(CALENDAR_TASK_TYPE_VALUES)).max(20),
+    priorities: z.array(z.enum(['low', 'medium', 'high'])).max(20),
+    projectIds: z.array(z.string().min(1).max(120)).max(500),
+    milestoneIds: z.array(z.string().min(1).max(120)).max(500),
+    scheduleStates: z.array(z.enum(WORKSPACE_VIEW_TASK_SCHEDULE_FILTER_VALUES)).max(10),
+    tags: z.array(z.string().max(100)).max(500),
+    groupBy: z.enum(WORKSPACE_VIEW_TASK_GROUP_BY_VALUES),
+    sortState: workspaceViewSortSchema.nullable()
+  })
+})
+const workspaceViewResourceSchema = workspaceViewBaseSchema.extend({
+  source: z.literal('resources'),
+  config: z.object({
+    searchQuery: z.string().max(500),
+    types: z.array(z.enum(RESOURCE_TYPES)).max(10),
+    providers: z.array(z.enum(RESOURCE_PROVIDERS)).max(10),
+    states: z.array(z.enum(RESOURCE_STATES)).max(20),
+    labelFilters: z.record(
+      z.string().min(1).max(64),
+      z.array(z.string().max(500)).max(100)
+    ),
+    projectIds: z.array(z.string().min(1).max(120)).max(500),
+    sortState: workspaceViewSortSchema.nullable()
+  })
+})
+const workspaceViewSchema = z.discriminatedUnion('source', [
+  workspaceViewTaskSchema,
+  workspaceViewResourceSchema
+])
 
 const projectCreateInputSchema = z.object({
   name: z.string().trim().max(200).optional(),
@@ -524,6 +638,7 @@ const settingsUpdateSchema = z.object({
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(5000).optional(),
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
+  workspaceViews: z.array(workspaceViewSchema).max(100).optional(),
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
@@ -622,6 +737,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.removeSavedVault(genericPathSchema.parse(rootPath))
   })
 
+  handleIpc(IPC_CHANNELS.vaultSyncSnapshot, async () => {
+    return runtime.getVaultSyncSnapshot()
+  })
+
+  handleIpc(IPC_CHANNELS.vaultReconcile, async () => {
+    return runtime.reconcileVault()
+  })
+
+  handleIpc(IPC_CHANNELS.vaultCreateBackup, async () => {
+    return runtime.createVaultBackup()
+  })
+
   handleIpc(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {
     return runtime.chooseDirectory(directoryTitleSchema.parse(title))
   })
@@ -636,6 +763,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.desktopOpenPath, async (_event, targetPath: unknown) => {
     await runtime.openPath(sourcePathSchema.parse(targetPath))
+  })
+
+  handleIpc(IPC_CHANNELS.desktopOpenTerminal, async () => {
+    await runtime.openTerminal()
   })
 
   handleIpc(IPC_CHANNELS.desktopOpenWarpAtNotePath, async (_event, relPath: unknown) => {
@@ -680,6 +811,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
     return runtime.readNoteDocument(notePathSchema.parse(relPath))
   })
 
+  handleIpc(IPC_CHANNELS.readNoteDocumentWithRevision, async (_event, relPath: unknown) => {
+    return runtime.readNoteDocumentWithRevision(notePathSchema.parse(relPath))
+  })
+
   handleIpc(IPC_CHANNELS.readExcalidrawFileDocument, async (_event, relPath: unknown) => {
     return runtime.readExcalidrawFileDocument(notePathSchema.parse(relPath))
   })
@@ -693,6 +828,10 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
       notePathSchema.parse(relPath),
       noteDocumentSchema.parse(document)
     )
+  })
+
+  handleIpc(IPC_CHANNELS.writeNoteDocumentWithRevision, async (_event, request: unknown) => {
+    return runtime.writeNoteDocumentWithRevision(noteDocumentWriteRequestSchema.parse(request))
   })
 
   handleIpc(
@@ -1057,6 +1196,14 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.createTask, async (_event, input: unknown) => {
     return runtime.createTask(taskCreateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.duplicateTask, async (_event, input: unknown) => {
+    return runtime.duplicateTask(taskDuplicateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.configureTaskRecurrence, async (_event, input: unknown) => {
+    return runtime.configureTaskRecurrence(taskRecurrenceConfigureInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.historyUndo, async () => {

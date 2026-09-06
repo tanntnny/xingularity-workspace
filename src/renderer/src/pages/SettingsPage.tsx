@@ -10,6 +10,7 @@ import {
 } from '../components/ui'
 import { WorkspacePageLayout, WorkspaceReadingWidth } from '../components/workspace'
 import { WorkspaceHeaderSecondaryActions } from '../components/ui/document-workspace'
+import { VaultSyncSection, type VaultSyncSectionProps } from './VaultSyncPage'
 import type {
   CondaEnvironment,
   GoogleDriveAuthorizationStart,
@@ -47,6 +48,15 @@ const VISUAL_MODE_ACTIONS: Array<{ value: NoteVimMappingAction; label: string }>
   { value: 'deleteSelection', label: 'Delete selection' },
   { value: 'yankSelection', label: 'Yank selection' }
 ]
+
+export type SettingsTabId =
+  | 'profile'
+  | 'workspace'
+  | 'sync'
+  | 'appearance'
+  | 'editor'
+  | 'agent'
+  | 'developer'
 
 function getEditorVimActionOptions(
   mode: NoteVimMappingMode
@@ -129,6 +139,8 @@ function getEditorVimMappingErrors(mappings: NoteVimKeyMapping[]): Record<string
 }
 
 interface SettingsPageProps {
+  initialTab?: SettingsTabId
+  syncHealth?: VaultSyncSectionProps
   profileName: string
   mistralApiKeyConfigured: boolean
   editorVimModeEnabled: boolean
@@ -169,6 +181,8 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({
+  initialTab,
+  syncHealth,
   profileName,
   mistralApiKeyConfigured,
   editorVimModeEnabled,
@@ -203,6 +217,7 @@ export function SettingsPage({
   onDisconnectGoogleDrive,
   onOpenExternal
 }: SettingsPageProps): ReactElement {
+  const syncHealthAvailable = Boolean(syncHealth)
   const [profileDraft, setProfileDraft] = useState(profileName)
   const [mistralApiKeyDraft, setMistralApiKeyDraft] = useState('')
   const [vimMappingDrafts, setVimMappingDrafts] =
@@ -213,9 +228,9 @@ export function SettingsPage({
   const [driveState, setDriveState] = useState('')
   const [driveBusy, setDriveBusy] = useState(false)
   const [driveError, setDriveError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<
-    'profile' | 'workspace' | 'appearance' | 'editor' | 'agent' | 'developer'
-  >('profile')
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(
+    initialTab === 'sync' && !syncHealthAvailable ? 'profile' : (initialTab ?? 'profile')
+  )
 
   useEffect(() => {
     setProfileDraft(profileName)
@@ -224,6 +239,17 @@ export function SettingsPage({
   useEffect(() => {
     setVimMappingDrafts(editorVimKeyMappings)
   }, [editorVimKeyMappings])
+
+  useEffect(() => {
+    if (initialTab === 'sync' && !syncHealthAvailable) {
+      setActiveTab('profile')
+      return
+    }
+
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab, syncHealthAvailable])
 
   const commitProfileName = (): void => {
     const trimmedName = profileDraft.trim()
@@ -386,6 +412,15 @@ export function SettingsPage({
           >
             Workspace
           </TabToggleGroupItem>
+          {syncHealthAvailable ? (
+            <TabToggleGroupItem
+              id="settings-tab-sync"
+              aria-controls="settings-tab-panel"
+              value="sync"
+            >
+              Sync
+            </TabToggleGroupItem>
+          ) : null}
           <TabToggleGroupItem
             id="settings-tab-appearance"
             aria-controls="settings-tab-panel"
@@ -658,6 +693,18 @@ export function SettingsPage({
                 Import legacy Excalidraw drawings
               </Button>
             </section>
+          </div>
+        ) : null}
+
+        {activeTab === 'sync' && syncHealth ? (
+          <div
+            id="settings-tab-panel"
+            role="tabpanel"
+            aria-labelledby="settings-tab-sync"
+            data-testid="settings-sync-panel"
+            className="grid gap-4"
+          >
+            <VaultSyncSection {...syncHealth} />
           </div>
         ) : null}
 

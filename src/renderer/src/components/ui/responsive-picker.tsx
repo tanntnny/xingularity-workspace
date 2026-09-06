@@ -1,7 +1,7 @@
 import * as React from 'react'
 
 import { cn } from '../../lib/utils'
-import { Badge } from './badge'
+import { SelectionCounter } from './badge'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from './drawer'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { Button } from './button'
@@ -45,22 +45,20 @@ function PickerHeader({
   heading: React.ReactNode
   descriptionId?: string
 }): React.ReactElement {
-  const hasSelectionCount = selectedCount !== undefined
+  const hasSelectionCount = selectedCount !== undefined && selectedCount > 0
   const clearDisabled = selectedCount !== undefined && selectedCount === 0
 
   return (
-    <div className="flex min-w-0 items-start justify-between gap-3">
+    <div className="flex min-w-0 items-center justify-between gap-3">
       <div className="min-w-0 space-y-1">
-        {heading}
+        <div className="flex min-w-0 items-center gap-2">
+          {heading}
+          {hasSelectionCount ? <SelectionCounter count={selectedCount ?? 0} /> : null}
+        </div>
         {description ? (
           <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">
             {description}
           </p>
-        ) : null}
-        {hasSelectionCount ? (
-          <Badge variant="neutral" className="h-5 px-1.5 text-[11px]">
-            {selectedCount === 0 ? 'None selected' : `${selectedCount} selected`}
-          </Badge>
         ) : null}
       </div>
       {onClear ? (
@@ -72,7 +70,7 @@ function PickerHeader({
           onClick={onClear}
           aria-label={clearLabel}
           data-testid={clearTestId}
-          className="shrink-0 px-2 text-xs"
+          className="shrink-0 px-2 text-xs hover:bg-surface-subtle-hover focus-visible:bg-surface-subtle-hover"
         >
           {clearLabel}
         </Button>
@@ -172,7 +170,11 @@ export function ResponsivePicker({
               clearLabel={clearLabel}
               clearTestId={clearTestId}
               descriptionId={descriptionId}
-              heading={<DrawerTitle id={titleId}>{title}</DrawerTitle>}
+              heading={
+                <DrawerTitle id={titleId} className="min-w-0">
+                  {title}
+                </DrawerTitle>
+              }
             />
           </DrawerHeader>
           {body}
@@ -207,7 +209,7 @@ export function ResponsivePicker({
             clearTestId={clearTestId}
             descriptionId={descriptionId}
             heading={
-              <h2 id={titleId} className="text-sm font-semibold text-foreground">
+              <h2 id={titleId} className="min-w-0 text-sm font-semibold text-foreground">
                 {title}
               </h2>
             }

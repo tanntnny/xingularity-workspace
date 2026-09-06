@@ -4,8 +4,10 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FileService } from '../src/main/fileService'
 import { computeNextRunAt, ScheduleService } from '../src/main/scheduleService'
+import { ScheduleStore } from '../src/main/scheduleStore'
 import { buildCalendarEvents } from '../src/renderer/src/lib/calendarTasks'
 import type { AppSettings, AppSettingsUpdate } from '../src/shared/types'
+import type { ScheduleJob } from '../src/shared/scheduleTypes'
 
 vi.mock('electron', () => ({
   app: {
@@ -30,6 +32,7 @@ function createDefaultSettings(): AppSettings {
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
+    workspaceViews: [],
     projectIcons: {},
     projects: [],
     gridBoard: {
@@ -43,6 +46,7 @@ class MockRuntime {
   private readonly fileService: FileService
   private settings: AppSettings = createDefaultSettings()
   private readonly ready: Promise<void>
+  private vaultReady: Promise<boolean> = Promise.resolve(true)
 
   constructor(rootPath: string) {
     const notesRoot = path.join(rootPath, 'notebooks')
@@ -56,6 +60,15 @@ class MockRuntime {
 
   async getSettings(): Promise<AppSettings> {
     return this.settings
+  }
+
+  async waitForVaultReady(): Promise<boolean> {
+    await this.ready
+    return this.vaultReady
+  }
+
+  setVaultReady(vaultReady: Promise<boolean>): void {
+    this.vaultReady = vaultReady
   }
 
   async updateSettings(next: AppSettingsUpdate): Promise<AppSettings> {
@@ -472,6 +485,76 @@ print(json.dumps({"actions": [{
     expect(appliedRun.status).toBe('review')
     await service.applyActions(appliedRun.id)
     expect((await service.listJobs())[0]?.lastStatus).toBe('success')
+  })
+})
+
+describe('ScheduleService vault transitions', () => {
+  let tempRoot: string
+
+  beforeEach(async () => {
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-schedule-transition-test-'))
+  })
+
+  afterEach(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true })
+  })
+
+  it('waits for the destination vault before listing jobs during a switch', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+    const destinationRoot = path.join(tempRoot, 'destination-vault')
+    const destinationJob: ScheduleJob = {
+      id: 'destination-job',
+      name: 'Destination job',
+      enabled: false,
+      trigger: { type: 'manual' },
+      runtime: 'javascript',
+      code: '',
+      permissions: [],
+      outputMode: 'review_before_apply',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    }
+
+    await new ScheduleStore(destinationRoot).writeJobs([destinationJob])
+
+    let releaseReady!: (ready: boolean) => void
+    runtime.setVaultReady(
+      new Promise<boolean>((resolve) => {
+        releaseReady = resolve
+      })
+    )
+
+    try {
+      await service.handleVaultChange(tempRoot)
+      await service.handleVaultChange(null)
+
+      const jobsPromise = service.listJobs()
+      await service.handleVaultChange(destinationRoot)
+      releaseReady(true)
+
+      await expect(jobsPromise).resolves.toEqual([destinationJob])
+    } finally {
+      service.destroy()
+    }
+  })
+
+  it('returns empty reads after the final vault is closed', async () => {
+    const runtime = new MockRuntime(tempRoot)
+    const service = new ScheduleService(runtime as never)
+
+    try {
+      await service.handleVaultChange(tempRoot)
+      await service.handleVaultChange(null)
+
+      await expect(service.listJobs()).resolves.toEqual([])
+      await expect(service.listRuns('missing-job')).resolves.toEqual([])
+      await expect(service.deleteJob('missing-job')).rejects.toThrow(
+        'No vault selected for schedule operations'
+      )
+    } finally {
+      service.destroy()
+    }
   })
 })
 

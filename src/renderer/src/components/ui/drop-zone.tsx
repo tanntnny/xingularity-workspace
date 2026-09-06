@@ -11,7 +11,7 @@ const dropZoneVariants = cva(
         indicator: 'pointer-events-none',
         timed: 'rounded-none',
         row: 'rounded-md data-[drag-over=true]:shadow-sm',
-        content: 'rounded-none'
+        content: 'rounded-xl'
       }
     },
     defaultVariants: {

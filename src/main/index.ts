@@ -43,6 +43,13 @@ runtime.onTreeChange(() => {
     }
   }
 })
+runtime.onVaultEvent((event) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.vaultChanged, event)
+    }
+  }
+})
 runtime.onReminderClick((target) => {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {

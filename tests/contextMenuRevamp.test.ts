@@ -29,13 +29,24 @@ describe('context menu definitions', () => {
     expect(groups.map((group) => group.id)).toEqual(['primary', 'state', 'destructive'])
     expect(groups[0]?.items[0]?.label).toBe('Open project')
     expect(groups[1]?.items.map((item) => item.label)).toEqual([
-      'Add to favorites',
+      'Add favorite',
       'Archive project',
       'Exporting project context…'
     ])
     expect(groups[1]?.items[2]?.disabled).toBe(true)
     expect(groups[2]?.items[0]?.label).toBe('Delete project')
     expect(groups[2]?.items[0]?.destructive).toBe(true)
+
+    const favoriteGroups = getProjectMenuGroups(project, {
+      isFavorite: true,
+      onOpen: () => undefined,
+      onToggleFavorite: () => undefined,
+      onToggleArchive: () => undefined,
+      onExport: () => undefined,
+      onDelete: () => undefined
+    })
+
+    expect(favoriteGroups[1]?.items[0]?.label).toBe('Remove favorite')
   })
 
   it('uses the same note action groups for custom and native menus', () => {

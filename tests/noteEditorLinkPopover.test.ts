@@ -11,6 +11,8 @@ describe('note editor link popover', () => {
     expect(editorSource).toContain('options={mentionOptions}')
     expect(editorSource).toContain('onValueChange={handleMentionSelect}')
     expect(editorSource).toContain('onSearchValueChange={handleMentionSearchValueChange}')
+    expect(editorSource).toContain('const href = noteMentionHref(targetRelPath)')
+    expect(editorSource).not.toContain('const href = noteMentionHref(fallbackLabel)')
     expect(editorSource).toContain('testId="note-link-completion"')
     expect(editorSource).toContain('selectOnTab')
     expect(editorSource).toContain('hideTrigger')

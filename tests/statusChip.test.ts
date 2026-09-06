@@ -63,6 +63,7 @@ describe('StatusChip', () => {
   it('supports an opt-in pill surface', () => {
     const markup = renderToStaticMarkup(createElement(StatusChip, { item, surface: 'pill' }))
 
+    expect(markup).toContain('rounded-[var(--radius-button-pill)]')
     expect(markup).toContain('border border-border')
     expect(markup).toContain('px-2')
     expect(markup).not.toContain('px-[var(--control-padding-x)]')
@@ -155,9 +156,9 @@ describe('StatusChip', () => {
     const markup = renderToStaticMarkup(createElement(StatusChip, { item, mutedLabel: true }))
 
     expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*">Completed<\/span>/)
-    expect(markup).toContain('group/status-chip')
-    expect(markup).toContain('group-hover/status-chip:text-foreground')
-    expect(markup).toContain('group-focus-visible/status-chip:text-foreground')
+    expect(markup).not.toContain('group/status-chip')
+    expect(markup).not.toContain('group-hover/status-chip:text-foreground')
+    expect(markup).not.toContain('group-focus-visible/status-chip:text-foreground')
     expect(markup).not.toContain(' text-foreground">Completed')
     expect(markup).toContain('ui-control')
   })

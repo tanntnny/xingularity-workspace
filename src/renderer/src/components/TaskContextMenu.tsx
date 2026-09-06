@@ -1,5 +1,5 @@
 import { ReactElement, useState } from 'react'
-import { Bell, BellRing, Calendar, Check, Clock3, Flag, Target, Trash2, X } from './ui/icons'
+import { Bell, BellRing, Calendar, Check, Clock3, Copy, Flag, Target, Trash2, X } from './ui/icons'
 import {
   CALENDAR_TASK_TYPE_OPTIONS,
   TASK_STATUS_OPTIONS,
@@ -36,6 +36,8 @@ import { SelectionPopover } from './ui/selection-popover'
 interface TaskContextMenuProps {
   task: CalendarTask
   selectedDate?: string
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
+  showCopyGestureHint?: boolean
   onDelete: (taskId: string) => void
   onUpdateStatus: (taskId: string, status: TaskStatus) => void
   onUpdatePriority: (taskId: string, priority: TaskPriority) => void
@@ -63,6 +65,8 @@ const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
 export function TaskContextMenu({
   task,
   selectedDate,
+  onDuplicateTask,
+  showCopyGestureHint = false,
   onDelete,
   onUpdateStatus,
   onUpdatePriority,
@@ -200,6 +204,18 @@ export function TaskContextMenu({
     {
       id: 'management',
       items: [
+        ...(onDuplicateTask
+          ? [
+              {
+                id: 'duplicate',
+                label: 'Duplicate task',
+                icon: <Copy aria-hidden="true" />,
+                shortcut: showCopyGestureHint ? <Shortcut keys={['option', 'drag']} /> : undefined,
+                testId: `duplicate-task-menu-item:${task.id}`,
+                onSelect: () => void onDuplicateTask(task.id)
+              }
+            ]
+          : []),
         {
           id: 'reminders',
           label: 'Manage reminders',

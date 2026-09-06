@@ -27,6 +27,39 @@ function createFixtureProject(
   }
 }
 
+async function expectStandardDestructiveMenuItem(menu: Locator): Promise<void> {
+  const regularItem = menu.getByRole('menuitem', { name: 'Open project', exact: true })
+  const destructiveItem = menu.getByRole('menuitem', { name: 'Delete project', exact: true })
+  await expect(destructiveItem).toBeVisible()
+
+  await expect
+    .poll(async () => destructiveItem.evaluate((element) => getComputedStyle(element).color))
+    .toBe(await regularItem.evaluate((element) => getComputedStyle(element).color))
+  await expect
+    .poll(async () =>
+      destructiveItem
+        .locator('svg')
+        .first()
+        .evaluate((element) => getComputedStyle(element).color)
+    )
+    .toBe(
+      await regularItem
+        .locator('svg')
+        .first()
+        .evaluate((element) => getComputedStyle(element).color)
+    )
+
+  const restBackground = await destructiveItem.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  )
+  await destructiveItem.hover()
+  await expect
+    .poll(async () =>
+      destructiveItem.evaluate((element) => getComputedStyle(element).backgroundColor)
+    )
+    .not.toBe(restBackground)
+}
+
 function createFixtureTask(
   id: string,
   title: string,
@@ -280,6 +313,28 @@ test.describe('projects workspace', () => {
     }
   })
 
+  test('returns to All Projects when clicking the sidebar Projects item', async () => {
+    const vaultRoot = await createFixtureVault([
+      createFixtureProject('project-1', 'Alpha Project'),
+      createFixtureProject('project-2', 'Beta Project')
+    ])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:projects').click()
+      await page.getByTestId('all-project-row:project-1').click()
+      await expect(page.getByLabel('Project name')).toHaveValue('Alpha Project')
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('all-projects-page')).toBeVisible()
+      await expect(page.getByTestId('all-project-row:project-1')).toBeVisible()
+      await expect(page.getByTestId('all-project-row:project-2')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('opens the organized project menu from an All Projects row', async () => {
     const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -293,19 +348,19 @@ test.describe('projects workspace', () => {
       const contextMenu = page.getByTestId('project-context-menu:project-1')
       await expect(contextMenu).toBeVisible()
       await expect(contextMenu.getByRole('menuitem', { name: 'Open project' })).toBeVisible()
-      await expect(contextMenu.getByRole('menuitem', { name: 'Add to favorites' })).toBeVisible()
+      await expect(contextMenu.getByRole('menuitem', { name: 'Add favorite' })).toBeVisible()
       await expect(contextMenu.getByRole('menuitem', { name: 'Archive project' })).toBeVisible()
       await expect(
         contextMenu.getByRole('menuitem', { name: 'Export project context' })
       ).toBeVisible()
-      await expect(contextMenu.getByRole('menuitem', { name: 'Delete project' })).toBeVisible()
+      await expectStandardDestructiveMenuItem(contextMenu)
       await expect(contextMenu.getByRole('separator')).toHaveCount(2)
       await page.keyboard.press('Escape')
 
       await page.getByTestId('all-project-menu:project-1').click()
       const dropdownMenu = page.locator('[role="menu"][data-state="open"]')
       await expect(dropdownMenu.getByRole('menuitem', { name: 'Open project' })).toBeVisible()
-      await expect(dropdownMenu.getByRole('menuitem', { name: 'Delete project' })).toBeVisible()
+      await expectStandardDestructiveMenuItem(dropdownMenu)
       await expect(dropdownMenu.getByRole('separator')).toHaveCount(2)
     } finally {
       await electronApp.close()
@@ -612,11 +667,19 @@ test.describe('projects workspace', () => {
 
       const popover = page.getByRole('dialog', { name: 'Choose project icon' })
       await expect(popover).toBeVisible()
-      await expect(popover.getByPlaceholder('Search icon names...')).toBeVisible()
+      const iconSearch = popover.getByPlaceholder('Search icon names...')
+      await expect(iconSearch).toBeVisible()
+      await expect(iconSearch).toBeFocused()
       await expect(popover.locator('[role="separator"]')).toHaveCount(2)
       await expect(popover.getByText('Color', { exact: true })).toBeVisible()
+      const iconOptions = popover.locator('[data-testid^="project-icon-option:"]')
+      expect(await iconOptions.count()).toBeLessThanOrEqual(48)
 
-      await popover.getByPlaceholder('Search icon names...').fill('rocket')
+      await iconSearch.fill('a')
+      await expect(iconOptions).toHaveCount(48)
+      await expect(popover.getByRole('status')).toContainText('Showing the first 48')
+
+      await iconSearch.fill('rocket')
       const filledRocket = popover.getByTestId('project-icon-option:rocket:filled')
       const outlinedRocket = popover.getByTestId('project-icon-option:rocket:outlined')
       await expect(filledRocket).toBeVisible()
@@ -636,6 +699,7 @@ test.describe('projects workspace', () => {
         'on'
       )
       await page.keyboard.press('Escape')
+      await expect(iconTrigger).toBeFocused()
 
       await page.reload()
       await expect(page.getByTestId('sidebar-page:projects')).toBeVisible({ timeout: 20_000 })
@@ -2448,6 +2512,43 @@ test.describe('projects workspace', () => {
           return { date: savedTask?.date, time: savedTask?.time }
         })
         .toEqual({ date: '2026-02-14', time: '11:00' })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('finishes task dialog editing with the platform primary-action shortcut', async () => {
+    const project = createFixtureProject('project-1', 'Alpha Project')
+    const task = {
+      ...createFixtureTask('task-shortcut-1', 'Prepare release', 'project-1'),
+      description: '# Initial description'
+    }
+    const vaultRoot = await createFixtureVault([project], [task])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openProjectHome(page)
+      await page.getByRole('button', { name: 'Open task: Prepare release', exact: true }).click()
+
+      const taskDialog = page.getByTestId('task-center-dialog')
+      const descriptionEditor = taskDialog.locator('.ProseMirror')
+      await taskDialog.getByLabel('Task name').fill('Prepare launch')
+      await descriptionEditor.fill('Updated description')
+      await descriptionEditor.press('Enter')
+      await expect(taskDialog).toBeVisible()
+
+      await descriptionEditor.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter')
+      await expect(taskDialog).toHaveCount(0)
+      await expect
+        .poll(async () => {
+          const settings = await page.evaluate(() => window.vaultApi.settings.get())
+          return settings.calendarTasks.find((item) => item.id === task.id)
+        })
+        .toMatchObject({
+          title: 'Prepare launch',
+          description: '# Updated description\n\n'
+        })
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

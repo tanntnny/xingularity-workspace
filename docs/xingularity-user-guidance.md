@@ -213,6 +213,10 @@ Available actions:
 
 - assign reminders
 
+- configure repeating tasks with a custom RRULE and rolling future horizon
+
+- edit an individual generated occurrence without changing the rest of the series
+
 - mark tasks complete
 
 - delete tasks

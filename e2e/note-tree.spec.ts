@@ -93,19 +93,21 @@ async function launchWithFixture(vaultRoot: string): Promise<{
 
   const page = await electronApp.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  const gridPageButton = page.getByTestId('sidebar-page:grid')
+  const notesPageButton = page.getByTestId('sidebar-page:notes')
   try {
-    await expect(gridPageButton).toBeVisible({ timeout: 5_000 })
+    await expect(notesPageButton).toBeVisible({ timeout: 5_000 })
   } catch {
     await page.evaluate(() => window.vaultApi.vault.restoreLast())
-    await expect(gridPageButton).toBeVisible({ timeout: 20_000 })
+    await expect(notesPageButton).toBeVisible({ timeout: 20_000 })
   }
-  await page.getByTestId('sidebar-page:notes').click()
+  await notesPageButton.click()
   await expect(
-    page.getByTestId('note-file-tree-panel').getByRole('button', {
-      name: 'File tree',
-      exact: true
-    })
+    page
+      .getByTestId('note-file-tree-panel')
+      .getByRole('button', { name: 'File tree', exact: true })
+      .or(page.getByTestId('notes-tree-view'))
+      .or(page.getByTestId('notebook-empty-state'))
+      .first()
   ).toBeVisible({ timeout: 20_000 })
 
   return { electronApp, page }
@@ -125,27 +127,55 @@ async function getCurrentNoteSnapshot(
 }
 
 test.describe('notes tree view', () => {
+  test('returns to the notebook root when clicking the sidebar Notebooks item', async () => {
+    const vaultRoot = await createFixtureVault()
+    await fs.writeFile(
+      path.join(vaultRoot, 'notebooks', 'archive', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await expect(page.getByTestId('notebook-card:archive')).toBeVisible({ timeout: 20_000 })
+      await page.getByRole('button', { name: 'Open folder archive', exact: true }).click()
+      await expect(page.getByTestId('notebook-breadcrumb:current:archive')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toBeVisible()
+
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect(page.getByTestId('notebook-card:archive')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toHaveCount(0)
+      await expect(page.getByTestId('notebook-breadcrumb:current:archive')).toHaveCount(0)
+
+      await page.getByRole('button', { name: 'Open folder archive', exact: true }).click()
+      await page.getByRole('button', { name: 'Open nested', exact: true }).click()
+      await expect(page.getByTestId('note-block-editor')).toBeVisible()
+
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect(page.getByTestId('notebook-card:archive')).toBeVisible()
+      await expect(page.getByTestId('notebook-card:archive/nested.md')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('renames a note from the tree view', async () => {
     const vaultRoot = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      await expect(
-        page.getByTestId('note-file-tree-panel').getByRole('button', {
-          name: 'File tree',
-          exact: true
-        })
-      ).toHaveAttribute('aria-expanded', 'true')
       await expect
         .poll(async () =>
           page.evaluate(() => window.vaultApi.files.listTree().then((tree) => tree.length))
         )
-        .toBe(4)
+        .toBe(3)
 
       const alphaRow = page.getByTestId('note-tree-row:alpha.md')
       await expect(alphaRow).toBeVisible({ timeout: 20_000 })
 
       await alphaRow.hover()
+      await page.getByTestId('note-tree-menu:alpha.md').click()
       await page.getByTestId('note-tree-rename:alpha.md').click()
 
       const renameInput = page.getByTestId('note-tree-input:alpha.md')
@@ -156,7 +186,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha-renamed.md'))
+            await fs.access(path.join(vaultRoot, 'notebooks', 'alpha-renamed.md'))
             return true
           } catch {
             return false
@@ -167,7 +197,7 @@ test.describe('notes tree view', () => {
       await expect
         .poll(async () => {
           try {
-            await fs.access(path.join(vaultRoot, 'notes', 'alpha.md'))
+            await fs.access(path.join(vaultRoot, 'notebooks', 'alpha.md'))
             return true
           } catch {
             return false
@@ -185,7 +215,7 @@ test.describe('notes tree view', () => {
   test('expands and collapses a folder when clicking the folder card', async () => {
     const vaultRoot = await createFixtureVault()
     await fs.writeFile(
-      path.join(vaultRoot, 'notes', 'archive', 'nested.md'),
+      path.join(vaultRoot, 'notebooks', 'archive', 'nested.md'),
       serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
       'utf-8'
     )
@@ -233,10 +263,10 @@ test.describe('notes tree view', () => {
 
       await archiveRow.hover()
       await page.getByTestId('note-tree-menu:archive').click()
-      await expect(page.getByRole('menuitem', { name: 'New folder' })).toBeVisible()
-      const dropdownExportNestedNotesMenu = page.getByRole('menuitem', {
-        name: 'Export nested notes'
-      })
+      await expect(page.getByTestId('note-tree-create-folder:archive')).toBeVisible()
+      const dropdownExportNestedNotesMenu = page.getByTestId(
+        'note-tree-export-folder-dropdown:archive'
+      )
       await expect(dropdownExportNestedNotesMenu).toBeVisible()
       await dropdownExportNestedNotesMenu.hover()
       await expect(page.getByRole('menuitem', { name: 'as PDF' })).toBeVisible()
@@ -245,7 +275,7 @@ test.describe('notes tree view', () => {
 
       await page.keyboard.press('Escape')
       await archiveRow.click({ button: 'right' })
-      const exportNestedNotesMenu = page.getByRole('menuitem', { name: 'Export nested notes' })
+      const exportNestedNotesMenu = page.getByTestId('note-tree-export-folder-context:archive')
       await expect(exportNestedNotesMenu).toBeVisible()
       await exportNestedNotesMenu.hover()
       await expect(page.getByRole('menuitem', { name: 'as PDF' })).toBeVisible()
@@ -254,16 +284,10 @@ test.describe('notes tree view', () => {
 
       await archiveRow.hover()
       await page.getByTestId('note-tree-menu:archive').click()
-      await page.getByTestId('note-tree-create-folder:archive').click()
-      await expect
-        .poll(async () =>
-          page.evaluate(() =>
-            window.vaultApi.files
-              .listTree()
-              .then((tree) => JSON.stringify(tree.map((entry) => entry.id)))
-          )
-        )
-        .toContain('folder:archive/untitled-folder')
+      await page
+        .getByRole('menu', { name: 'Open folder menu for archive' })
+        .getByTestId('note-tree-create-folder:archive')
+        .click()
       const renameInput = page.getByTestId('note-tree-input:archive/untitled-folder')
       await expect(renameInput).toBeVisible({ timeout: 20_000 })
       await expect(renameInput).toBeFocused()

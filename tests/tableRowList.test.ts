@@ -157,4 +157,35 @@ describe('TableRowList', () => {
     expect(descendingMarkup.match(/width="12" height="12"/g)).toHaveLength(3)
     expect(descendingMarkup.match(/tabler-icon-chevron-down/g)).toHaveLength(2)
   })
+
+  it('renders grouped sections while preserving row rendering and sorting', () => {
+    const markup = renderToStaticMarkup(
+      createElement(TableRowList<TableItem>, {
+        items: [
+          { id: 'item-2', name: 'Beta', state: 'selected' },
+          { id: 'item-1', name: 'Alpha', state: 'active' },
+          { id: 'item-3', name: 'Gamma', state: 'selected' }
+        ],
+        columns,
+        getRowKey: (item) => item.id,
+        getGroup: (item) => ({
+          id: item.state,
+          label: item.state === 'active' ? 'Active' : 'Selected',
+          sortValue: item.state
+        })
+      })
+    )
+
+    expect(markup).toContain('data-testid="table-row-list-group:active"')
+    expect(markup).toContain('data-testid="table-row-list-group:selected"')
+    expect(markup).toContain('>Active</span><span')
+    expect(markup).toContain('>Selected</span><span')
+    expect(markup).toContain('>1</span>')
+    expect(markup).toContain('>2</span>')
+    expect(markup.indexOf('data-testid="table-row-list-group:active"')).toBeLessThan(
+      markup.indexOf('data-testid="table-row-list-group:selected"')
+    )
+    expect(markup.indexOf('>Alpha</td>')).toBeLessThan(markup.indexOf('>Beta</td>'))
+    expect(markup).toContain('font-semibold')
+  })
 })

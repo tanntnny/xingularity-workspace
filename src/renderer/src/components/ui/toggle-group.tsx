@@ -3,6 +3,7 @@ import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/utils'
+import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 const toggleGroupVariants = cva('ui-control flex items-center justify-center gap-1', {
   variants: {
@@ -239,34 +240,68 @@ ToggleGroup.displayName = ToggleGroupPrimitive.Root.displayName
 const ToggleGroupItem = React.forwardRef<
   React.ComponentRef<typeof ToggleGroupPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Item> &
-    VariantProps<typeof toggleGroupItemVariants>
->(({ className, children, variant, size, ...props }, ref) => {
-  const context = React.useContext(ToggleGroupContext)
-  const itemVariant = variant ?? context.variant
-  const activeStateClass =
-    context.type === 'multiple'
-      ? itemVariant === 'outline'
-        ? 'data-[state=on]:border-input data-[state=on]:bg-muted'
-        : 'data-[state=on]:bg-card data-[state=on]:shadow-sm'
-      : 'data-[state=on]:border-transparent data-[state=on]:bg-transparent data-[state=on]:hover:bg-transparent data-[state=on]:shadow-none'
+    VariantProps<typeof toggleGroupItemVariants> & {
+      tooltip?: string
+      tooltipWrapperClassName?: string
+    }
+>(
+  (
+    {
+      className,
+      children,
+      variant,
+      size,
+      tooltip,
+      tooltipWrapperClassName,
+      title,
+      'aria-label': ariaLabel,
+      ...props
+    },
+    ref
+  ) => {
+    const context = React.useContext(ToggleGroupContext)
+    const itemVariant = variant ?? context.variant
+    const activeStateClass =
+      context.type === 'multiple'
+        ? itemVariant === 'outline'
+          ? 'data-[state=on]:border-input data-[state=on]:bg-muted'
+          : 'data-[state=on]:bg-card data-[state=on]:shadow-sm'
+        : 'data-[state=on]:border-transparent data-[state=on]:bg-transparent data-[state=on]:hover:bg-transparent data-[state=on]:shadow-none'
 
-  return (
-    <ToggleGroupPrimitive.Item
-      ref={ref}
-      className={cn(
-        toggleGroupItemVariants({
-          variant: itemVariant,
-          size: size ?? context.size
-        }),
-        activeStateClass,
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </ToggleGroupPrimitive.Item>
-  )
-})
+    const resolvedTooltip = getButtonTooltipLabel(tooltip, ariaLabel, title, children)
+    const item = (
+      <ToggleGroupPrimitive.Item
+        ref={ref}
+        className={cn(
+          toggleGroupItemVariants({
+            variant: itemVariant,
+            size: size ?? context.size
+          }),
+          activeStateClass,
+          className
+        )}
+        aria-label={ariaLabel}
+        title={title}
+        {...props}
+      >
+        {children}
+      </ToggleGroupPrimitive.Item>
+    )
+
+    return resolvedTooltip ? (
+      <TooltipButton
+        label={resolvedTooltip}
+        disabled={props.disabled}
+        wrapperClassName={tooltipWrapperClassName}
+        preserveChildAttributes
+      >
+        {item}
+      </TooltipButton>
+    ) : (
+      item
+    )
+  }
+)
 ToggleGroupItem.displayName = ToggleGroupPrimitive.Item.displayName
 
 export { ToggleGroup, ToggleGroupItem }

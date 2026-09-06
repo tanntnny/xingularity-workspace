@@ -4,6 +4,7 @@ import { Check, ChevronRight, Circle } from './icons'
 
 import { cn } from '../../lib/utils'
 import { Shortcut, type ShortcutKey } from './kbd'
+import { menuItemDestructiveClassName, menuSubtriggerDestructiveClassName } from './menu-variants'
 
 const DropdownMenu = ({
   modal = false,
@@ -26,13 +27,15 @@ const DropdownMenuSubTrigger = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean
+    destructive?: boolean
   }
->(({ className, inset, children, ...props }, ref) => (
+>(({ className, inset, destructive = false, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
       'flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[state=open]:!bg-surface-subtle-hover data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
       inset && 'pl-8',
+      destructive && menuSubtriggerDestructiveClassName,
       className
     )}
     {...props}
@@ -80,13 +83,15 @@ const DropdownMenuItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean
+    destructive?: boolean
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, inset, destructive = false, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors duration-100 hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[highlighted]:!bg-surface-subtle-hover data-[highlighted]:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground',
       inset && 'pl-8',
+      destructive && menuItemDestructiveClassName,
       className
     )}
     {...props}

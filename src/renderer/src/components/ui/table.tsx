@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp } from './icons'
 
 import { cn } from '../../lib/utils'
 import type { TableSortDirection } from '../../lib/tableSort'
+import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
@@ -85,16 +86,8 @@ function SortIndicator({ isActive, direction }: SortIndicatorProps): React.React
   if (!isActive) {
     return (
       <span className="relative size-3 shrink-0" aria-hidden="true">
-        <ChevronUp
-          size={12}
-          aria-hidden="true"
-          className="absolute left-0 top-0 -translate-y-1"
-        />
-        <ChevronDown
-          size={12}
-          aria-hidden="true"
-          className="absolute left-0 top-0 translate-y-1"
-        />
+        <ChevronUp size={12} aria-hidden="true" className="absolute left-0 top-0 -translate-y-1" />
+        <ChevronDown size={12} aria-hidden="true" className="absolute left-0 top-0 translate-y-1" />
       </span>
     )
   }
@@ -112,14 +105,18 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
 
     return (
       <TableHead ref={ref} className={className} aria-sort={ariaSort} {...props}>
-        <button
-          type="button"
-          className="flex w-full items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-left transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={onToggleSort}
+        <TooltipButton
+          label={getButtonTooltipLabel(undefined, undefined, undefined, children) ?? 'Sort column'}
         >
-          <span className="min-w-0 flex-1">{children}</span>
-          <SortIndicator isActive={isActive} direction={sortDirection} />
-        </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-left transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onToggleSort}
+          >
+            <span className="min-w-0 flex-1">{children}</span>
+            <SortIndicator isActive={isActive} direction={sortDirection} />
+          </button>
+        </TooltipButton>
       </TableHead>
     )
   }

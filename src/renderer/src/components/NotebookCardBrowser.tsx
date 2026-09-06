@@ -86,17 +86,17 @@ export function NotebookCardBrowser({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col overflow-hidden"
+      className="flex min-h-0 flex-col overflow-hidden"
       data-testid="notebook-card-browser"
       onKeyDownCapture={handleCardKeyDown}
     >
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={!canCreateInCurrentFolder}>
           <div
-            className="flex min-h-0 flex-1 flex-col overflow-hidden text-card-foreground"
+            className="flex min-h-0 flex-col overflow-hidden text-card-foreground"
             data-testid="notebook-card-content"
           >
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="overflow-y-auto">
               {folderContents.children.length === 0 ? (
                 <EmptyFolderState
                   parentDir={currentFolderPath}
@@ -158,7 +158,7 @@ function EmptyFolderState({
   return (
     <EmptyState
       data-testid="notebook-card-empty-state"
-      className="h-full border-0 bg-transparent"
+      className="border-0 bg-transparent"
       icon={FolderOpen}
       title="This folder is empty"
       description="Create a notebook, drawing, or folder to get started."

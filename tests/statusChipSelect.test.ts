@@ -89,6 +89,37 @@ describe('StatusChipSelect', () => {
     expect(markup).toContain('break-words')
   })
 
+  it('passes label fading through to the selected chip and options', () => {
+    const markup = renderToStaticMarkup(
+      createElement(StatusChipSelect, {
+        label: 'Task status',
+        value: 'completed',
+        options,
+        labelOverflow: 'fade',
+        onValueChange: () => undefined
+      })
+    )
+
+    expect(markup).toContain('status-chip-label-fade')
+    expect(markup).not.toContain('truncate')
+  })
+
+  it('passes hard clipping through to the selected chip and options', () => {
+    const markup = renderToStaticMarkup(
+      createElement(StatusChipSelect, {
+        label: 'Task status',
+        value: 'completed',
+        options,
+        labelOverflow: 'clip',
+        onValueChange: () => undefined
+      })
+    )
+
+    expect(markup).toContain('status-chip-label-clip')
+    expect(markup).not.toContain('status-chip-label-fade')
+    expect(markup).not.toContain('truncate')
+  })
+
   it('supports muted selected labels', () => {
     const markup = renderToStaticMarkup(
       createElement(StatusChipSelect, {

@@ -117,6 +117,7 @@ test('creates, renames, and deletes an Excalidraw file', async () => {
 
     const canvas = page.locator('.excalidraw canvas').last()
     await expect(canvas).toBeVisible()
+    await page.getByTestId('toolbar-rectangle').click({ force: true })
     const canvasBounds = await canvas.boundingBox()
     if (!canvasBounds) {
       throw new Error('Expected the Excalidraw canvas to have a bounding box')

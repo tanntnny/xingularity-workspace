@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { ResourceFiltersPopover } from '../src/renderer/src/components/ResourceFiltersPopover'
 import { ResourceSearchInput, ResourcesPage } from '../src/renderer/src/pages/ResourcesPage'
 import type { ResourceFilterOptions } from '../src/renderer/src/lib/resourceRows'
+import type { ResourceWorkspaceViewState } from '../src/renderer/src/lib/workspaceViewState'
 import { normalizeResourceInput } from '../src/shared/resourceDomain'
 import type { Project } from '../src/shared/types'
 
@@ -19,6 +20,43 @@ const project: Project = {
 }
 
 describe('ResourcesPage', () => {
+  it('renders a controlled workspace view with its saved search', () => {
+    const resource = normalizeResourceInput({
+      canonicalUri: 'https://example.com/brief',
+      title: 'Brief',
+      labels: [{ key: 'status', value: 'active' }],
+      projectIds: [project.id]
+    })
+    const unrelatedResource = normalizeResourceInput({
+      canonicalUri: 'https://example.com/other',
+      title: 'Other resource'
+    })
+    const viewState: ResourceWorkspaceViewState = {
+      filters: { searchQuery: 'Brief', providers: ['web'] },
+      sortState: { columnId: 'location', direction: 'asc' }
+    }
+    const markup = renderToStaticMarkup(
+      createElement(ResourcesPage, {
+        projects: [project],
+        noteTree: [],
+        resources: [resource, unrelatedResource],
+        relations: [],
+        viewState,
+        onViewStateChange: () => undefined,
+        onCreateResource: async () => undefined,
+        onUpdateResource: async () => undefined,
+        onSetResourceProjectLinks: async () => undefined,
+        onRemoveResource: async () => undefined,
+        onOpenResource: async () => undefined,
+        onOpenNotebookResource: () => undefined
+      })
+    )
+
+    expect(markup).toContain('data-testid="resources-table"')
+    expect(markup).toContain('>Brief</span>')
+    expect(markup).not.toContain('>Other resource</span>')
+  })
+
   it('renders the global resource table with labels and project context', () => {
     const resource = normalizeResourceInput({
       canonicalUri: 'https://example.com/brief',
@@ -54,7 +92,8 @@ describe('ResourcesPage', () => {
     )
     expect(searchMarkup).toContain('data-testid="resource-search-input"')
     expect(searchMarkup).toContain('placeholder="Search resources"')
-    expect(searchMarkup).toContain('focus-visible:rounded-[var(--radius-button-pill)]')
+    expect(searchMarkup).toContain('focus-visible:ring-0')
+    expect(searchMarkup).not.toContain('focus-visible:ring-2')
     expect(searchMarkup).toContain('focus-within:w-80')
   })
 

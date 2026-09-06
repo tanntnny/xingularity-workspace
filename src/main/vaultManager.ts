@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { joinSafe } from '../shared/pathSafety'
 import { VaultInfo, VaultSettings } from '../shared/types'
+import { ensureVaultManifest, getVaultManifestPath, type VaultManifest } from './vaultManifest'
 import {
   deleteLegacyVaultPath,
   getLegacyVaultConfigPath,
@@ -29,7 +30,7 @@ import {
   writeVaultMigrations
 } from './vaultData'
 
-export interface VaultPaths {
+export interface VaultPathLocations {
   rootPath: string
   notebooksPath: string
   notesPath: string
@@ -39,6 +40,11 @@ export interface VaultPaths {
   vaultConfigPath: string
   fileMapPath: string
   indexPath: string
+  manifestPath: string
+}
+
+export interface VaultPaths extends VaultPathLocations {
+  manifest: VaultManifest
 }
 
 function toInfo(paths: VaultPaths): VaultInfo {
@@ -50,7 +56,7 @@ function toInfo(paths: VaultPaths): VaultInfo {
   }
 }
 
-export function createVaultPaths(rootPath: string): VaultPaths {
+export function createVaultPaths(rootPath: string): VaultPathLocations {
   const notebooksPath = getVaultNotebooksDir(rootPath)
   return {
     rootPath,
@@ -61,7 +67,8 @@ export function createVaultPaths(rootPath: string): VaultPaths {
     appMetaPath: rootPath,
     vaultConfigPath: getVaultConfigPath(rootPath),
     fileMapPath: getVaultFileMapPath(rootPath),
-    indexPath: getVaultIndexPath(rootPath)
+    indexPath: getVaultIndexPath(rootPath),
+    manifestPath: getVaultManifestPath(rootPath)
   }
 }
 
@@ -80,6 +87,7 @@ export async function chooseVaultFolder(title: string): Promise<string | null> {
 export async function initializeVault(rootPath: string): Promise<VaultPaths> {
   const paths = createVaultPaths(path.resolve(rootPath))
   await fs.mkdir(paths.rootPath, { recursive: true })
+  const manifest = await ensureVaultManifest(paths.rootPath)
   await ensureVaultPageDirectories(paths)
 
   const vaultSettings: VaultSettings = {
@@ -91,7 +99,7 @@ export async function initializeVault(rootPath: string): Promise<VaultPaths> {
   await ensureJsonFile(paths.fileMapPath, {})
   await writeVaultMigrations(paths.rootPath, { version: 2 })
 
-  return paths
+  return { ...paths, manifest }
 }
 
 export async function validateVault(rootPath: string): Promise<VaultPaths> {
@@ -99,6 +107,7 @@ export async function validateVault(rootPath: string): Promise<VaultPaths> {
   const paths = createVaultPaths(resolved)
 
   await fs.access(paths.rootPath)
+  const manifest = await ensureVaultManifest(paths.rootPath)
 
   let migrations = await readVaultMigrations(paths.rootPath)
   migrations = await migrateLegacyNotebookRoot(paths.rootPath, migrations)
@@ -111,11 +120,11 @@ export async function validateVault(rootPath: string): Promise<VaultPaths> {
   })
   await ensureJsonFile(paths.fileMapPath, {})
 
-  return paths
+  return { ...paths, manifest }
 }
 
 export function assertPathInVault(
-  paths: VaultPaths,
+  paths: VaultPathLocations,
   relPath: string,
   scope: 'notes' | 'attachments'
 ): string {
@@ -213,7 +222,7 @@ async function ensureJsonFile(filePath: string, defaultValue: object): Promise<v
   }
 }
 
-async function ensureVaultPageDirectories(paths: VaultPaths): Promise<void> {
+async function ensureVaultPageDirectories(paths: VaultPathLocations): Promise<void> {
   await Promise.all([
     fs.mkdir(paths.notebooksPath, { recursive: true }),
     fs.mkdir(getVaultFleetingDir(paths.rootPath), { recursive: true }),

@@ -49,6 +49,10 @@ module.exports = {
           foreground: 'var(--surface-subtle-foreground)',
           hover: 'var(--surface-subtle-hover)'
         },
+        'selection-counter': {
+          DEFAULT: 'var(--selection-counter-background)',
+          foreground: 'var(--selection-counter-foreground)'
+        },
         destructive: {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)'

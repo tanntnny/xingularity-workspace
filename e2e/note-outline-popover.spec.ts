@@ -183,17 +183,24 @@ test.describe('note outline panel', () => {
       await openNote(page, 'alpha.md')
       const fileTreePanel = page.getByTestId('note-file-tree-panel')
       const outlinePanel = page.getByTestId('note-outline-panel')
+      const backlinksPanel = page.getByTestId('note-backlinks-panel')
 
       await expect(fileTreePanel).toBeVisible()
       await expect(outlinePanel).toBeVisible()
+      await expect(backlinksPanel).toBeVisible()
+      await expect(backlinksPanel.getByTestId('note-backlinks-list')).toBeEmpty()
       await expect(
         fileTreePanel.getByRole('button', { name: 'Explorer', exact: true })
       ).toHaveAttribute('aria-expanded', 'true')
       await expect(
         outlinePanel.getByRole('button', { name: 'Outline', exact: true })
       ).toHaveAttribute('aria-expanded', 'true')
+      await expect(
+        backlinksPanel.getByRole('button', { name: 'Backlinks', exact: true })
+      ).toHaveAttribute('aria-expanded', 'true')
       await page.getByTestId('workspace-page-context-menu-trigger').click()
       await expect(page.getByTestId('workspace-page-context-menu-item:outline')).toHaveCount(0)
+      await expect(page.getByTestId('workspace-page-context-menu-item:backlinks')).toHaveCount(0)
       await page.keyboard.press('Escape')
 
       await expect(outlinePanel.getByTestId('note-outline-item:0')).toContainText('Alpha Title')
@@ -202,6 +209,33 @@ test.describe('note outline panel', () => {
       await openNote(page, 'beta.md')
       await expect(outlinePanel.getByTestId('note-outline-item:0')).toContainText('Beta Title')
       await expect(outlinePanel.getByTestId('note-outline-item:1')).toContainText('Beta Section')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('shows and opens notes that link to the current note', async () => {
+    const vaultRoot = await createFixtureVault(
+      '# Alpha Title\n\n## Alpha Section\n',
+      '[[alpha]]\n\n# Beta Title\n\n## Beta Section\n'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const backlinksPanel = page.getByTestId('note-backlinks-panel')
+      const backlinkItem = page.getByTestId('note-backlink-item:beta.md')
+      await expect(backlinksPanel).toBeVisible()
+      await expect(backlinkItem).toContainText('beta')
+
+      await backlinkItem.click()
+      await expect(
+        page.getByTestId('note-outline-panel').getByTestId('note-outline-item:0')
+      ).toContainText('Beta Title')
+      await expect(page.getByTestId('note-backlinks-panel')).toBeVisible()
+      await expect(page.getByTestId('note-backlinks-list')).toBeEmpty()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -344,16 +378,16 @@ test.describe('note outline panel', () => {
     }
   })
 
-  test('shows an empty state for a note without headings', async () => {
+  test('shows no outline content for a note without headings', async () => {
     const vaultRoot = await createFixtureVault('Plain paragraph\nAnother paragraph\n')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       await openNote(page, 'alpha.md')
       await expect(page.getByTestId('note-outline-panel')).toBeVisible()
-      await expect(page.getByTestId('note-outline-empty')).toContainText(
-        'Add a heading to make it available here.'
-      )
+      await expect(
+        page.getByTestId('note-outline-panel').getByTestId('note-outline-list')
+      ).toBeEmpty()
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

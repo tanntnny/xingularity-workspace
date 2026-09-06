@@ -3,6 +3,7 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '../../lib/utils'
+import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 const rowActionButtonClassName =
   'bg-transparent text-muted-foreground hover:bg-card-hover hover:text-foreground focus-visible:bg-card-hover focus-visible:text-foreground'
@@ -49,17 +50,51 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  tooltip?: string
+  tooltipWrapperClassName?: string
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, shape, asChild = false, ...props }, ref) => {
+  (
+    {
+      className,
+      variant,
+      size,
+      shape,
+      asChild = false,
+      tooltip,
+      tooltipWrapperClassName,
+      title,
+      'aria-label': ariaLabel,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Comp = asChild ? Slot : 'button'
-    return (
+    const resolvedTooltip = getButtonTooltipLabel(tooltip, ariaLabel, title, children)
+    const button = (
       <Comp
         className={cn(buttonVariants({ variant, size, shape, className }))}
         ref={ref}
+        aria-label={ariaLabel}
+        title={title}
         {...props}
-      />
+      >
+        {children}
+      </Comp>
+    )
+
+    return resolvedTooltip ? (
+      <TooltipButton
+        label={resolvedTooltip}
+        disabled={props.disabled}
+        wrapperClassName={tooltipWrapperClassName}
+      >
+        {button}
+      </TooltipButton>
+    ) : (
+      button
     )
   }
 )

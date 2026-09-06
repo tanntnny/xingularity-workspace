@@ -1,8 +1,14 @@
 import { type ReactElement } from 'react'
 
 import type { CalendarContentFilter, CalendarTaskTagOption } from '../lib/calendarTasks'
-import { Badge, ResponsivePicker, ToggleGroup, ToggleGroupItem, WorkspaceIconButton } from './ui'
-import { Funnel } from './ui/icons'
+import {
+  Badge,
+  Filter,
+  ResponsivePicker,
+  ToggleGroup,
+  ToggleGroupItem,
+  WorkspaceIconButton
+} from './ui'
 import { TagPickerContent } from './TagPickerPopover'
 
 export interface CalendarTaskFilterContentOption {
@@ -40,8 +46,9 @@ export function CalendarTaskFilter({
     <ResponsivePicker
       trigger={
         <WorkspaceIconButton
-          icon={<Funnel size={18} aria-hidden="true" />}
-          label={hasActiveFilters ? `Filter (${activeFilterCount})` : 'Filter'}
+          icon={<Filter size={18} aria-hidden="true" />}
+          label="Filter"
+          counter={activeFilterCount}
           active={hasActiveFilters}
           bordered
           title="Filter calendar tasks"

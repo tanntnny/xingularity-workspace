@@ -104,6 +104,7 @@ import {
   IconPlayerPlayFilled,
   IconPlusFilled,
   IconRefresh,
+  IconRepeat,
   IconSendFilled,
   IconSearch,
   IconShield,
@@ -192,7 +193,8 @@ export const Files = IconFiles
 export const FileText = IconFileTextFilled
 export const Flag = IconFlagFilled
 export const FlaskConical = IconFlaskFilled
-export const Filter2 = IconFilter2
+export const Filter = IconFilter2
+export const Filter2 = Filter
 export const Folder = IconFolderFilled
 export const FolderInput = IconFolderOpenFilled
 export const FolderKanban = IconLayoutKanbanFilled
@@ -250,6 +252,7 @@ export const Play = IconPlayerPlayFilled
 export const Plus = IconPlusFilled
 export const Python = IconBrandPython
 export const RefreshCw = IconRefresh
+export const Repeat = IconRepeat
 export const Rocket = IconSendFilled
 export const Rows3 = IconListDetailsFilled
 export const Save = IconDeviceFloppyFilled

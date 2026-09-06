@@ -351,7 +351,7 @@ export function VaultSwapperDialog({
         onOpenChange(nextOpen)
       }}
     >
-      <div className="flex w-full flex-col">
+      <div className="flex w-full min-w-0 max-w-full flex-col">
         <PalleteSearchBar>
           <PalleteInput
             ref={inputRef}
@@ -362,7 +362,7 @@ export function VaultSwapperDialog({
           />
         </PalleteSearchBar>
 
-        <div className="max-h-[360px] overflow-y-auto p-1">
+        <div className="flex min-w-0 max-w-full max-h-[360px] flex-col gap-1 overflow-x-hidden overflow-y-auto p-1">
           {loading && !savedVaultState ? (
             <div className="rounded-lg px-3 py-3 text-sm text-muted-foreground">
               Loading saved vaults...
@@ -396,7 +396,7 @@ export function VaultSwapperDialog({
               <div
                 key={vault.rootPath}
                 className={cn(
-                  'group flex items-center gap-1 rounded-lg',
+                  'group grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-lg',
                   isCurrent
                     ? 'bg-muted'
                     : isSelected
@@ -411,7 +411,10 @@ export function VaultSwapperDialog({
                   ref={(node) => {
                     rowRefs.current.set(selectionKey, node)
                   }}
-                  className={cn(paletteRowClassName, 'h-auto flex-1 justify-start text-left')}
+                  className={cn(
+                    paletteRowClassName,
+                    'h-auto w-full min-w-0 max-w-full justify-start text-left'
+                  )}
                   onClick={() => {
                     setSelectedItemKey(selectionKey)
                     void handleSwitch(vault.rootPath)
@@ -424,67 +427,72 @@ export function VaultSwapperDialog({
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center text-primary">
                     <VaultIcon size={16} />
                   </div>
-                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-                    <span className="shrink-0 font-medium text-foreground">{vault.name}</span>
-                    <span className="truncate text-muted-foreground">
-                      {detailParts.length > 0 ? `${detailParts.join(' · ')} · ` : ''}
+                  <span
+                    className="workspace-text-fade block max-w-full min-w-0 flex-1"
+                    title={vault.rootPath}
+                  >
+                    <span className="font-medium text-foreground">{vault.name}</span>
+                    <span className="text-muted-foreground">
+                      {detailParts.length > 0 ? ` · ${detailParts.join(' · ')}` : ''} ·{' '}
                       {vault.rootPath}
                     </span>
-                  </div>
+                  </span>
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="rowAction"
-                  size="icon"
-                  className={cn(
-                    paletteRowClassName,
-                    vault.isFavorite
-                      ? 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
-                      : 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
-                  )}
-                  onClick={() => {
-                    setSelectedItemKey(selectionKey)
-                    void handleToggleFavorite(vault.rootPath)
-                  }}
-                  disabled={busyKey !== null}
-                  aria-label={
-                    isFavoriting
-                      ? `Updating favorite for ${vault.name}`
-                      : vault.isFavorite
-                        ? `Remove ${vault.name} from favorites`
-                        : `Add ${vault.name} to favorites`
-                  }
-                >
-                  <Star
-                    size={16}
-                    className={vault.isFavorite ? 'fill-current text-muted-foreground' : ''}
-                  />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1 justify-self-end">
+                  <Button
+                    type="button"
+                    variant="rowAction"
+                    size="icon"
+                    className={cn(
+                      paletteRowClassName,
+                      vault.isFavorite
+                        ? 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
+                        : 'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-muted-foreground group-hover:text-muted-foreground'
+                    )}
+                    onClick={() => {
+                      setSelectedItemKey(selectionKey)
+                      void handleToggleFavorite(vault.rootPath)
+                    }}
+                    disabled={busyKey !== null}
+                    aria-label={
+                      isFavoriting
+                        ? `Updating favorite for ${vault.name}`
+                        : vault.isFavorite
+                          ? `Remove ${vault.name} from favorites`
+                          : `Add ${vault.name} to favorites`
+                    }
+                  >
+                    <Star
+                      size={16}
+                      className={vault.isFavorite ? 'fill-current text-muted-foreground' : ''}
+                    />
+                  </Button>
 
-                <Button
-                  type="button"
-                  variant="rowAction"
-                  size="icon"
-                  className={cn(
-                    paletteRowClassName,
-                    'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-foreground group-hover:text-foreground'
-                  )}
-                  onClick={() => {
-                    setSelectedItemKey(selectionKey)
-                    void handleRemove(vault.rootPath)
-                  }}
-                  disabled={busyKey !== null}
-                  aria-label={isRemoving ? `Removing ${vault.name}` : `Remove ${vault.name}`}
-                >
-                  <X size={16} />
-                </Button>
+                  <Button
+                    type="button"
+                    variant="rowAction"
+                    size="icon"
+                    className={cn(
+                      paletteRowClassName,
+                      'h-9 w-9 shrink-0 justify-center px-0 text-muted-foreground hover:text-foreground group-hover:text-foreground'
+                    )}
+                    onClick={() => {
+                      setSelectedItemKey(selectionKey)
+                      void handleRemove(vault.rootPath)
+                    }}
+                    disabled={busyKey !== null}
+                    aria-label={isRemoving ? `Removing ${vault.name}` : `Remove ${vault.name}`}
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
               </div>
             )
           })}
 
           {filteredVaults.length > 0 && filteredActions.length > 0 ? (
-            <div className="mx-1 my-1 h-[var(--border-width)] bg-border" />
+            <div className="mx-1 h-[var(--border-width)] bg-border" />
           ) : null}
 
           {filteredActions.map((action) => {
@@ -503,7 +511,7 @@ export function VaultSwapperDialog({
                 className={cn(
                   paletteRowClassName,
                   isSelected ? paletteRowSelectedClassName : paletteRowHoverClassName,
-                  'h-auto w-full justify-start text-left'
+                  'h-auto w-full min-w-0 max-w-full justify-start text-left'
                 )}
                 onClick={() => {
                   setSelectedItemKey(selectionKey)
@@ -514,7 +522,9 @@ export function VaultSwapperDialog({
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center text-primary">
                   <Icon size={16} />
                 </div>
-                <span className="truncate font-medium text-foreground">{action.label}</span>
+                <span className="workspace-text-fade block max-w-full min-w-0 flex-1 font-medium text-foreground">
+                  {action.label}
+                </span>
               </Button>
             )
           })}

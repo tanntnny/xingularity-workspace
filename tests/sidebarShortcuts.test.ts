@@ -7,6 +7,7 @@ import { SidebarHeader, SidebarProvider } from '../src/renderer/src/components/u
 import { Shortcut } from '../src/renderer/src/components/ui/kbd'
 import { ToggleGroup, ToggleGroupItem } from '../src/renderer/src/components/ui/toggle-group'
 import { WorkspaceTabManager } from '../src/renderer/src/components/ui/document-workspace'
+import { createWorkspaceView } from '../src/shared/workspaceViews'
 
 describe('sidebar shortcuts', () => {
   it('uses the native sidebar composition and keeps macOS clearance at the app boundary', () => {
@@ -54,17 +55,35 @@ describe('sidebar shortcuts', () => {
     expect(markup.match(/tabler-icon-mail/g)).toHaveLength(1)
     expect(markup.match(/tabler-icon-search/g)).toHaveLength(1)
     expect(markup).not.toContain('>Board</span>')
+    const workspaceIndex = markup.indexOf('>Workspace</span>')
+    expect(workspaceIndex).toBeGreaterThanOrEqual(0)
     const viewIndex = markup.indexOf('>View</span>')
     expect(viewIndex).toBeGreaterThanOrEqual(0)
     const inboxIndex = markup.indexOf('>Inbox</span>')
     expect(inboxIndex).toBeGreaterThanOrEqual(0)
     expect(markup.indexOf('>Capture</span>')).toBeGreaterThan(inboxIndex)
-    expect(inboxIndex).toBeLessThan(viewIndex)
-    expect(markup.indexOf('>Notebooks</span>')).toBeGreaterThan(viewIndex)
+    expect(inboxIndex).toBeLessThan(workspaceIndex)
+    expect(markup.indexOf('>Notebooks</span>')).toBeGreaterThan(workspaceIndex)
     expect(markup.indexOf('>Projects</span>')).toBeGreaterThan(markup.indexOf('>Notebooks</span>'))
     expect(markup.indexOf('>Calendar</span>')).toBeGreaterThan(markup.indexOf('>Projects</span>'))
-    expect(markup.indexOf('>Resources</span>')).toBeGreaterThan(markup.indexOf('>Calendar</span>'))
+    expect(markup.indexOf('>Tasks</span>')).toBeGreaterThan(markup.indexOf('>Calendar</span>'))
+    expect(markup.indexOf('>Resources</span>')).toBeGreaterThan(markup.indexOf('>Tasks</span>'))
     expect(markup.indexOf('>Knowledge</span>')).toBeGreaterThan(markup.indexOf('>Resources</span>'))
+
+    const taskPageButton = markup.match(
+      /<button[^>]*data-testid="sidebar-page:tasks"[^>]*>[\s\S]*?<\/button>/
+    )?.[0]
+    const resourcePageButton = markup.match(
+      /<button[^>]*data-testid="sidebar-page:resources"[^>]*>[\s\S]*?<\/button>/
+    )?.[0]
+
+    expect(taskPageButton).toContain('tabler-icon-table')
+    expect(resourcePageButton).toContain('tabler-icon-table')
+    expect(taskPageButton).not.toContain('tabler-icon-list-check-filled')
+    expect(markup.indexOf('>Workspace</span>')).toBeLessThan(viewIndex)
+    expect(markup).toContain('data-testid="sidebar-create-view"')
+    expect(markup).toContain('>Create View</span>')
+    expect(markup).not.toContain('data-sidebar="group-action"')
     expect(markup).toContain('>Automation</span>')
     expect(markup).toContain('>Scheduling</span>')
     expect(markup).toContain('data-testid="sidebar-page:schedules"')
@@ -120,6 +139,83 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('data-collapsible="min"')
     expect(markup).toContain('data-testid="sidebar-page:notes"')
     expect(markup).toContain('--sidebar-width-min:220px')
+  })
+
+  it('renders saved views below the View section', () => {
+    const view = createWorkspaceView('tasks-view', 'tasks', [], '2026-08-29T10:00:00.000Z')
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        null,
+        createElement(AppSidebar, {
+          activePage: 'notes',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
+          notesCount: 0,
+          projectsCount: 0,
+          calendarUndoneCount: 0,
+          workspaceViews: [view],
+          activeWorkspaceViewId: view.id,
+          onOpenWorkspaceView: () => undefined,
+          onCreateWorkspaceView: () => undefined,
+          onDeleteWorkspaceView: () => undefined
+        })
+      )
+    )
+
+    expect(markup).toContain(`data-testid="sidebar-view:${view.id}"`)
+    expect(markup).toContain(
+      `class="workspace-text-fade sidebar-workspace-text-fade block max-w-full min-w-0 flex-1">${view.name}</span>`
+    )
+    expect(markup).toContain('text-clip')
+    expect(markup).toContain(`data-testid="sidebar-view-actions:${view.id}"`)
+    expect(markup).toContain('data-testid="sidebar-create-view"')
+    expect(markup.indexOf(`data-testid="sidebar-view:${view.id}"`)).toBeLessThan(
+      markup.indexOf('data-testid="sidebar-create-view"')
+    )
+  })
+
+  it('keeps the source page in its hover state while a saved view is active', () => {
+    const taskView = createWorkspaceView('tasks-view', 'tasks', [], '2026-08-29T10:00:00.000Z')
+    const resourceView = createWorkspaceView(
+      'resources-view',
+      'resources',
+      [],
+      '2026-08-29T10:00:00.000Z'
+    )
+    const renderMarkup = (activePage: 'tasks' | 'resources', activeViewId: string): string =>
+      renderToStaticMarkup(
+        createElement(
+          SidebarProvider,
+          null,
+          createElement(AppSidebar, {
+            activePage,
+            onChange: () => undefined,
+            onOpenSearchPalette: () => undefined,
+            onOpenVaultManager: () => undefined,
+            notesCount: 0,
+            projectsCount: 0,
+            calendarUndoneCount: 0,
+            workspaceViews: [taskView, resourceView],
+            activeWorkspaceViewId: activeViewId
+          })
+        )
+      )
+
+    const taskMarkup = renderMarkup('tasks', taskView.id)
+    const resourceMarkup = renderMarkup('resources', resourceView.id)
+    const taskPageButton = taskMarkup.match(
+      /<button[^>]*data-testid="sidebar-page:tasks"[^>]*>/
+    )?.[0]
+    const resourcePageButton = resourceMarkup.match(
+      /<button[^>]*data-testid="sidebar-page:resources"[^>]*>/
+    )?.[0]
+
+    expect(taskPageButton).toContain('data-active="false"')
+    expect(resourcePageButton).toContain('data-active="false"')
+    expect(taskMarkup).toContain(`data-testid="sidebar-view:${taskView.id}"`)
+    expect(resourceMarkup).toContain(`data-testid="sidebar-view:${resourceView.id}"`)
   })
 
   it('shows the scheduling review count in the sidebar', () => {
@@ -264,6 +360,7 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('rounded-sm bg-workspace data-[active=true]:bg-transparent')
     expect(markup).toContain('text-xs font-semibold text-muted-foreground')
     expect(markup).toContain('workspace-tab-shortcut-overlay')
+    expect(markup).toContain('right-[var(--workspace-tab-control-height)]')
     expect(markup).toContain('workspace-tab-close-overlay')
     expect(markup).toContain('group-hover:opacity-100')
     expect(markup).toContain('group-focus-within:opacity-100')
@@ -281,5 +378,20 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('aria-label="Command"')
     expect(markup).toContain('aria-label="1"')
     expect(markup).toContain('data-active="true"')
+  })
+
+  it('insets the workspace tab manager for macOS traffic lights when requested', () => {
+    const markup = renderToStaticMarkup(
+      createElement(WorkspaceTabManager, {
+        tabs: [{ id: 'notes', label: 'Notes' }],
+        activeTabId: 'notes',
+        onSelectTab: () => undefined,
+        onCloseTab: () => undefined,
+        onAddTab: () => undefined,
+        macosTrafficLightInset: true
+      })
+    )
+
+    expect(markup).toContain('pl-24')
   })
 })

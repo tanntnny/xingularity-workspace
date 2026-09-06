@@ -5,6 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   StatusChip,
+  TooltipButton,
   WorkspaceIconButton,
   X
 } from '../ui'
@@ -87,16 +88,17 @@ export function SchedulingPythonTrustPopover({
               }}
               surface="attention"
             />
-            <button
-              type="button"
-              onClick={dismissNotice}
-              aria-label="Dismiss Python safety notice"
-              title="Dismiss Python safety notice"
-              className="relative inline-flex size-5 items-center justify-center rounded-full hover:bg-warning-border/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              data-testid="scheduling-python-trust-dismiss"
-            >
-              <X size={13} aria-hidden="true" />
-            </button>
+            <TooltipButton label="Dismiss Python safety notice">
+              <button
+                type="button"
+                onClick={dismissNotice}
+                aria-label="Dismiss Python safety notice"
+                className="relative inline-flex size-5 items-center justify-center rounded-full hover:bg-warning-border/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid="scheduling-python-trust-dismiss"
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </TooltipButton>
           </div>
         ) : null}
       </div>

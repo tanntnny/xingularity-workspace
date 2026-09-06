@@ -34,4 +34,13 @@ describe('Scheduling page availability', () => {
     expect(getAvailablePages(web)).not.toContain('schedulingGuide')
     expect(isPageAvailable(mobile, 'schedules')).toBe(false)
   })
+
+  it('exposes Tasks on every supported workspace platform', () => {
+    for (const kind of ['desktop', 'mobile', 'web'] as const) {
+      const platform: AppPlatform = { kind, capabilities }
+
+      expect(getAvailablePages(platform)).toContain('tasks')
+      expect(isPageAvailable(platform, 'tasks')).toBe(true)
+    }
+  })
 })

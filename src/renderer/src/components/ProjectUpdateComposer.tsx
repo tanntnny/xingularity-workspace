@@ -10,6 +10,7 @@ import { Button } from './ui/button'
 import { StatusChipSelect } from './ui/status-chip-select'
 import { PROJECT_UPDATE_CHIP_OPTIONS } from '../lib/statusChipMeta'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
+import { COMMAND_ENTER_ARIA_KEYSHORTCUT, handleCommandEnterAction } from '../lib/formShortcuts'
 
 interface ProjectUpdateComposerProps {
   update?: ProjectUpdate | null
@@ -72,6 +73,7 @@ export function ProjectUpdateComposer({
       className="rounded-lg border border-panel-border bg-panel p-4"
       aria-label="Project update composer"
       data-testid="project-update-composer"
+      onKeyDownCapture={(event) => handleCommandEnterAction(event, handleSubmit)}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -121,6 +123,7 @@ export function ProjectUpdateComposer({
           shape="pill"
           className="h-7"
           onClick={() => void handleSubmit()}
+          aria-keyshortcuts={COMMAND_ENTER_ARIA_KEYSHORTCUT}
           disabled={isSaving || !markdown.trim()}
           data-testid="project-update-submit"
         >

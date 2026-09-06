@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
@@ -37,6 +38,21 @@ import {
 import { getVaultFleetingDir } from './vaultData'
 import { buildVaultMigrationReport } from './vaultMigrationReport'
 import { VaultWatcher, type VaultEvent } from './watcher'
+import { VaultChangeCoordinator } from './vaultChangeCoordinator'
+import {
+  VaultRecoveryStore,
+  type VaultConflictRecord as DurableVaultConflictRecord,
+  type VaultQuarantineRecord as DurableVaultQuarantineRecord,
+  type VaultRecoveryPayloadReference
+} from './vaultRecoveryStore'
+import { hashVaultBytes, readVaultFileRevision, readVaultFileWithRevision } from './vaultRevision'
+import { createVaultBackup as createVaultBackupArchive } from './vaultTransferService'
+import {
+  StructuredFileWatcher,
+  type StructuredConflictEvent,
+  type StructuredFileChange,
+  type StructuredQuarantineRecord
+} from './structuredFileWatcher'
 import { SettingsStore, createDefaultAppSettings } from './settingsStore'
 import { ReminderService } from './reminderService'
 import { HistoryService } from './historyService'
@@ -61,10 +77,16 @@ import { buildProjectMarkdown, type ProjectMarkdownExternalDocument } from './pr
 import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import { isVaultRelativePath } from '../shared/projectFolders'
+import { getVaultDomainForPath, isDerivedVaultPath } from './vaultDomainCatalog'
+import { isDerivedVaultPath as isDerivedPortableVaultPath } from './vaultPortablePolicy'
 import { getProjectNotebookPath } from '../shared/projectNotebook'
 import { notebookPathFromResource, notebookResourceUri } from '../shared/resourceDomain'
 import { applyProjectMilestoneOrder, validateTaskRelationships } from '../shared/projectPlanning'
+import { resolveTaskPriority } from '../shared/taskDefaults'
+import { duplicateTaskRecord } from '../shared/taskDuplication'
 import { normalizeTaskTags } from '../shared/taskTags'
+import { initializeTaskRecurrence, reconcileTaskRecurrences } from '../shared/taskRecurrence'
+import { joinSafe } from '../shared/pathSafety'
 import {
   AppSettings,
   AgentChatEvent,
@@ -80,11 +102,13 @@ import {
   AppSettingsUpdate,
   AppSettingsUpdateOptions,
   CalendarTask,
+  ConfigureTaskRecurrenceInput,
   ReminderClickTarget,
   CreateProjectInput,
   CreateProjectMilestoneInput,
   CreateProjectUpdateInput,
   CreateTaskInput,
+  DuplicateTaskInput,
   DeleteProjectMilestoneInput,
   DeleteProjectMilestoneResult,
   DeleteProjectInput,
@@ -132,8 +156,21 @@ import {
   ResourcePreview,
   ResourceHealth,
   ResourceUpdateInput,
-  ResourceContextBundle
+  ResourceContextBundle,
+  VaultBackupResult
 } from '../shared/types'
+import type {
+  NoteDocumentReadResult,
+  VaultChangeKind,
+  VaultChangeEvent,
+  VaultConflict,
+  VaultFileRevision,
+  VaultReconcileResult,
+  VaultSyncSnapshot,
+  VaultStatus,
+  WriteNoteDocumentRequest,
+  WriteNoteResult
+} from '../shared/vaultProtocol'
 
 const AGENT_GOOGLE_DOC_EXCERPT_MAX_CHARS = 20_000
 const AGENT_GOOGLE_DOC_TOTAL_MAX_CHARS = 100_000
@@ -143,6 +180,10 @@ export class VaultRuntime {
   private fileService: FileService | null = null
   private fleetingNoteService: FleetingNoteService | null = null
   private watcher: VaultWatcher | null = null
+  private canonicalWatcher: VaultWatcher | null = null
+  private structuredWatcher: StructuredFileWatcher | null = null
+  private changeCoordinator: VaultChangeCoordinator | null = null
+  private recoveryStore: VaultRecoveryStore | null = null
   private indexer: SqliteIndexer | null = null
   private settings = new SettingsStore()
   private reminderService = new ReminderService()
@@ -156,6 +197,7 @@ export class VaultRuntime {
   private settingsQueue: Promise<void> = Promise.resolve()
   private vaultListeners: Array<(paths: VaultPaths | null) => void> = []
   private treeChangeListeners: Array<() => void> = []
+  private vaultEventListeners: Array<(event: VaultChangeEvent) => void> = []
   private agentChatListeners: Array<(event: AgentChatEvent) => void> = []
   private agentToolInvoker: ((name: string, input: unknown) => Promise<unknown>) | null = null
   private readonly cancelledAgentRequests = new Set<string>()
@@ -270,6 +312,11 @@ export class VaultRuntime {
     }
   }
 
+  async waitForVaultReady(): Promise<boolean> {
+    await this.activationQueue
+    return Boolean(this.currentPaths && this.fileService && this.indexer)
+  }
+
   getCurrentVaultRoot(): string {
     this.assertReady()
     return this.currentPaths!.rootPath
@@ -300,6 +347,50 @@ export class VaultRuntime {
     }
   }
 
+  onVaultEvent(listener: (event: VaultChangeEvent) => void): () => void {
+    this.vaultEventListeners.push(listener)
+    return () => {
+      this.vaultEventListeners = this.vaultEventListeners.filter((item) => item !== listener)
+    }
+  }
+
+  async getVaultStatus(): Promise<VaultStatus> {
+    this.assertReady()
+    return this.changeCoordinator!.getStatus()
+  }
+
+  async getVaultSyncSnapshot(): Promise<VaultSyncSnapshot> {
+    this.assertReady()
+    return {
+      status: this.changeCoordinator!.getStatus(),
+      events: this.changeCoordinator!.getEvents(),
+      conflicts: this.changeCoordinator!.getConflicts(),
+      quarantine: this.changeCoordinator!.getQuarantine()
+    }
+  }
+
+  async reconcileVault(): Promise<VaultReconcileResult> {
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const result = await this.changeCoordinator!.reconcile()
+      const hasNotebookChanges = result.changes.some(
+        (change) => change.domain === 'notes' || change.domain === 'drawings'
+      )
+      if (hasNotebookChanges) {
+        await this.indexer?.rebuild(this.currentPaths!.notebooksPath)
+      }
+      if (result.changes.length > 0) {
+        this.notifyTreeChange()
+      }
+      return result
+    })
+  }
+
+  async createVaultBackup(): Promise<VaultBackupResult> {
+    this.assertReady()
+    return createVaultBackupArchive(this.currentPaths!.rootPath)
+  }
+
   onReminderClick(listener: (target: ReminderClickTarget) => void): () => void {
     this.reminderClickListeners.push(listener)
     return () => {
@@ -326,11 +417,14 @@ export class VaultRuntime {
 
   async createFleetingNote(content: string): Promise<FleetingNote> {
     this.assertReady()
-    return this.fleetingNoteService!.create(content)
+    const note = await this.fleetingNoteService!.create(content)
+    await this.markCanonicalInternalWrite(`fleeting/${note.relPath}`)
+    return note
   }
 
   async removeFleetingNote(relPath: string): Promise<void> {
     this.assertReady()
+    this.canonicalWatcher?.markInternalDelete(`fleeting/${relPath}`)
     await this.fleetingNoteService!.delete(relPath)
   }
 
@@ -341,7 +435,9 @@ export class VaultRuntime {
     >
   ): Promise<FleetingNote> {
     this.assertReady()
-    return this.fleetingNoteService!.update(relPath, patch)
+    const note = await this.fleetingNoteService!.update(relPath, patch)
+    await this.markCanonicalInternalWrite(`fleeting/${note.relPath}`)
+    return note
   }
 
   async convertFleetingNote(
@@ -366,6 +462,7 @@ export class VaultRuntime {
           content: document,
           updatedAt: new Date().toISOString()
         })
+        this.canonicalWatcher?.markInternalDelete(`fleeting/${fleetingNote.relPath}`)
         await this.fleetingNoteService!.delete(fleetingNote.relPath)
         this.notifyTreeChange()
         return {
@@ -386,6 +483,7 @@ export class VaultRuntime {
           result: task
         }
       })
+      this.canonicalWatcher?.markInternalDelete(`fleeting/${fleetingNote.relPath}`)
       await this.fleetingNoteService!.delete(fleetingNote.relPath)
       return {
         sourceRelPath: fleetingNote.relPath,
@@ -410,6 +508,11 @@ export class VaultRuntime {
     return this.fileService!.readNoteDocument(relPath)
   }
 
+  async readNoteDocumentWithRevision(relPath: string): Promise<NoteDocumentReadResult> {
+    this.assertReady()
+    return this.fileService!.readNoteDocumentWithRevision(relPath)
+  }
+
   async readExcalidrawFileDocument(relPath: string): Promise<ExcalidrawFileReadResult> {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
@@ -428,7 +531,7 @@ export class VaultRuntime {
         content: serializeStoredNoteDocument(fresh),
         updatedAt: new Date().toISOString()
       })
-      this.notifyTreeChange()
+      await this.recordVaultFileChange(sanitizeNotePath(relPath), 'change', 'app')
     })
   }
 
@@ -442,7 +545,33 @@ export class VaultRuntime {
         content: serializeStoredNoteDocument(document),
         updatedAt: new Date().toISOString()
       })
-      this.notifyTreeChange()
+      await this.recordVaultFileChange(sanitizeNotePath(relPath), 'change', 'app')
+    })
+  }
+
+  async writeNoteDocumentWithRevision(request: WriteNoteDocumentRequest): Promise<WriteNoteResult> {
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const result = await this.fileService!.writeNoteDocumentWithRevision(request)
+      if (!result.ok) {
+        await this.recordNoteConflict(request, result)
+        return result
+      }
+
+      await this.indexer!.upsertFromRaw({
+        id: createStableId(result.path),
+        relPath: sanitizeNotePath(result.path),
+        content: serializeStoredNoteDocument(request.document),
+        updatedAt: new Date().toISOString()
+      })
+      await this.recordVaultFileChange(
+        result.path,
+        'change',
+        'app',
+        request.baseHash,
+        result.transactionId
+      )
+      return result
     })
   }
 
@@ -453,6 +582,7 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       await this.fileService!.writeExcalidrawFileDocument(relPath, document)
+      await this.recordVaultFileChange(relPath, 'change', 'app')
     })
   }
 
@@ -467,6 +597,7 @@ export class VaultRuntime {
         content,
         updatedAt: new Date().toISOString()
       })
+      await this.recordVaultFileChange(relPath, 'add', 'app')
       this.notifyTreeChange()
       return relPath
     })
@@ -486,6 +617,7 @@ export class VaultRuntime {
         content,
         updatedAt: new Date().toISOString()
       })
+      await this.recordVaultFileChange(nextRelPath, 'add', 'app')
       this.notifyTreeChange()
       return nextRelPath
     })
@@ -505,6 +637,7 @@ export class VaultRuntime {
 
         try {
           const createdPath = await this.fileService!.createExcalidrawFileAtPath(nextRelPath)
+          await this.recordVaultFileChange(createdPath, 'add', 'app')
           this.notifyTreeChange()
           return createdPath
         } catch (error) {
@@ -529,6 +662,7 @@ export class VaultRuntime {
         content,
         updatedAt: new Date().toISOString()
       })
+      await this.recordVaultFileChange(relPath, 'add', 'app')
       this.notifyTreeChange()
       return relPath
     })
@@ -538,6 +672,7 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       await this.assertFolderCreationAllowed(relPath)
+      this.watcher?.markInternalWrite(relPath)
       const nextRelPath = await this.fileService!.createFolder(relPath)
       await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
       this.notifyTreeChange()
@@ -574,6 +709,7 @@ export class VaultRuntime {
             content,
             updatedAt: new Date().toISOString()
           })
+          await this.recordVaultFileChange(nextImported.relPath, 'add', 'app')
           imported.push(nextImported)
         } catch (error) {
           failed.push({
@@ -645,6 +781,14 @@ export class VaultRuntime {
         content,
         updatedAt: new Date().toISOString()
       })
+      await this.recordVaultFileChange(
+        sanitizeNotePath(newPath),
+        'rename',
+        'app',
+        null,
+        undefined,
+        sanitizeNotePath(oldPath)
+      )
       this.notifyTreeChange()
     })
   }
@@ -655,6 +799,14 @@ export class VaultRuntime {
       await this.assertPathMutationAllowed(oldPath, newPath)
       await this.fileService!.renamePath(oldPath, newPath)
       await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      await this.recordVaultFileChange(
+        sanitizeEntryPath(newPath),
+        'rename',
+        'app',
+        null,
+        undefined,
+        sanitizeEntryPath(oldPath)
+      )
       this.notifyTreeChange()
     })
   }
@@ -663,8 +815,10 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       const safeRelPath = sanitizeNotePath(relPath)
+      await this.markNotebookInternalDelete(safeRelPath)
       const trashed = await this.createTrashService().moveEntryToTrash(safeRelPath)
       await this.indexer!.deleteByRelPath(safeRelPath)
+      await this.recordVaultFileChange(safeRelPath, 'delete', 'app')
       this.pushFileDeleteHistory('Delete note', [trashed])
       this.notifyTreeChange()
     })
@@ -674,8 +828,11 @@ export class VaultRuntime {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
       await this.assertPathDeletionAllowed(relPath)
-      const trashed = await this.createTrashService().moveEntryToTrash(relPath)
+      const safeRelPath = sanitizeEntryPath(relPath)
+      await this.markNotebookInternalDelete(safeRelPath)
+      const trashed = await this.createTrashService().moveEntryToTrash(safeRelPath)
       await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
+      await this.recordVaultFileChange(safeRelPath, 'delete', 'app')
       this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
         trashed
       ])
@@ -698,7 +855,10 @@ export class VaultRuntime {
       const trash = this.createTrashService()
       const trashedEntries: TrashedEntry[] = []
       for (const relPath of uniqueRelPaths) {
-        trashedEntries.push(await trash.moveEntryToTrash(relPath))
+        const safeRelPath = sanitizeEntryPath(relPath)
+        await this.markNotebookInternalDelete(safeRelPath)
+        trashedEntries.push(await trash.moveEntryToTrash(safeRelPath))
+        await this.recordVaultFileChange(safeRelPath, 'delete', 'app')
       }
       await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
       this.pushFileDeleteHistory(
@@ -968,6 +1128,39 @@ export class VaultRuntime {
     if (openError) {
       throw new Error(openError)
     }
+  }
+
+  async openTerminal(): Promise<void> {
+    this.assertReady()
+    const rootPath = this.currentPaths!.rootPath
+    if (process.platform === 'darwin') {
+      await spawnDetached('open', ['-a', 'Terminal', rootPath], rootPath)
+      return
+    }
+
+    if (process.platform === 'win32') {
+      await spawnDetached('cmd.exe', ['/d', '/s', '/c', 'start', '', rootPath], rootPath)
+      return
+    }
+
+    const candidates = [
+      'x-terminal-emulator',
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'kitty',
+      'alacritty'
+    ]
+    let lastError: unknown
+    for (const command of candidates) {
+      try {
+        await spawnDetached(command, [], rootPath)
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+    throw new Error(`No supported terminal application was found: ${describeError(lastError)}`)
   }
 
   async openExternal(url: string): Promise<void> {
@@ -1557,12 +1750,16 @@ export class VaultRuntime {
 
   async importAttachment(sourcePath: string): Promise<string> {
     this.assertReady()
-    return this.fileService!.importAttachment(sourcePath)
+    const relPath = await this.fileService!.importAttachment(sourcePath)
+    await this.markCanonicalInternalWrite(relPath)
+    return relPath
   }
 
   async importAttachmentFromBuffer(buffer: Uint8Array, fileExtension: string): Promise<string> {
     this.assertReady()
-    return this.fileService!.importAttachmentFromBuffer(buffer, fileExtension)
+    const relPath = await this.fileService!.importAttachmentFromBuffer(buffer, fileExtension)
+    await this.markCanonicalInternalWrite(relPath)
+    return relPath
   }
 
   async completeNoteWithAi(input: CompleteNoteWithAiInput): Promise<string> {
@@ -1951,7 +2148,10 @@ export class VaultRuntime {
       }
 
       console.log('[VaultRuntime] getSettings for vault', activeRootPath)
-      const settings = await this.settings.readVault(activeRootPath)
+      const settings = await this.reconcilePersistedTaskRecurrences(
+        activeRootPath,
+        await this.settings.readVault(activeRootPath)
+      )
       // Initialize reminder service with current tasks
       this.reminderService.updateTasks(settings.calendarTasks)
       return settings
@@ -2445,7 +2645,7 @@ export class VaultRuntime {
         completed: false,
         status: 'pending',
         createdAt: new Date().toISOString(),
-        priority: input.priority ?? 'low',
+        priority: resolveTaskPriority(input.priority),
         taskType: input.taskType ?? 'assignment',
         reminders: input.reminders ?? [],
         dependencyIds: Array.from(new Set(input.dependencyIds ?? [])),
@@ -2456,17 +2656,83 @@ export class VaultRuntime {
             : Math.max(0, Math.round(input.estimateMinutes)),
         updatedAt: new Date().toISOString()
       }
+      const storedTask = input.recurrence ? initializeTaskRecurrence(task, input.recurrence) : task
 
-      assertValidTaskRelationships([...settings.calendarTasks, task])
+      assertValidTaskRelationships([...settings.calendarTasks, storedTask])
 
       return {
         next: {
-          calendarTasks: [...settings.calendarTasks, task],
-          tasks: [...settings.calendarTasks, task]
+          calendarTasks: [...settings.calendarTasks, storedTask],
+          tasks: [...settings.calendarTasks, storedTask]
         },
-        result: task
+        result: storedTask
       }
     })
+  }
+
+  async duplicateTask(input: DuplicateTaskInput): Promise<CalendarTask> {
+    return this.mutateSettings(
+      (settings) => {
+        const source = settings.calendarTasks.find((task) => task.id === input.taskId)
+        if (!source) {
+          throw new Error('Task not found')
+        }
+
+        const now = new Date().toISOString()
+        const task = duplicateTaskRecord(source, {
+          schedule: input.schedule,
+          id: `task-${randomUUID()}`,
+          now,
+          reminderId: () => `reminder-${randomUUID()}`
+        })
+
+        assertValidTaskRelationships([...settings.calendarTasks, task])
+
+        return {
+          next: {
+            calendarTasks: [...settings.calendarTasks, task],
+            tasks: [...settings.calendarTasks, task]
+          },
+          result: task
+        }
+      },
+      { label: 'Duplicate task' }
+    )
+  }
+
+  async configureTaskRecurrence(input: ConfigureTaskRecurrenceInput): Promise<CalendarTask> {
+    return this.mutateSettings(
+      (settings) => {
+        const selectedTask = settings.calendarTasks.find((task) => task.id === input.taskId)
+        if (!selectedTask) {
+          throw new Error('Task not found')
+        }
+
+        const anchorTaskId = selectedTask.recurrence?.generated
+          ? selectedTask.recurrence.anchorTaskId
+          : selectedTask.id
+        const anchorTask = settings.calendarTasks.find((task) => task.id === anchorTaskId)
+        if (!anchorTask) {
+          throw new Error('Repeating task series anchor not found')
+        }
+
+        const nextAnchor = input.recurrence
+          ? initializeTaskRecurrence(anchorTask, input.recurrence)
+          : { ...anchorTask, recurrence: undefined }
+        const nextTasks = settings.calendarTasks.map((task) =>
+          task.id === anchorTask.id ? nextAnchor : task
+        )
+
+        return {
+          next: {
+            calendarTasks: nextTasks,
+            tasks: nextTasks
+          },
+          result: nextAnchor
+        }
+      },
+      { label: input.recurrence ? 'Configure repeating task' : 'Disable repeating task' }
+    )
   }
 
   private async updateSettingsInternal(
@@ -2478,13 +2744,45 @@ export class VaultRuntime {
   ): Promise<AppSettings> {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
-      const nextTasks = next.tasks ?? next.calendarTasks
+      const requestedTasks = next.tasks ?? next.calendarTasks
+      const reconciledTasks = requestedTasks
+        ? reconcileTaskRecurrences(current.calendarTasks, requestedTasks, {
+            createTaskId: () => `task-${randomUUID()}`,
+            createReminderId: () => `reminder-${randomUUID()}`
+          })
+        : undefined
+      const nextUpdate = requestedTasks
+        ? {
+            ...next,
+            calendarTasks: reconciledTasks,
+            tasks: reconciledTasks
+          }
+        : next
+      const nextTasks = nextUpdate.tasks ?? nextUpdate.calendarTasks
       if (nextTasks) {
         assertValidTaskRelationships(nextTasks)
       }
-      const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
+      const structuredRoots = [
+        ...(nextUpdate.projects !== undefined || nextUpdate.projectIcons !== undefined
+          ? ['projects']
+          : []),
+        ...(nextUpdate.tasks !== undefined || nextUpdate.calendarTasks !== undefined
+          ? ['tasks']
+          : [])
+      ]
+      const previousStructuredPaths = await this.listStructuredJsonFiles(structuredRoots)
+      const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), nextUpdate)
 
-      if (next.calendarTasks || next.tasks) {
+      if (
+        Object.keys(nextUpdate).some(
+          (key) => !['projects', 'projectIcons', 'tasks', 'calendarTasks'].includes(key)
+        )
+      ) {
+        await this.markCanonicalInternalWrite('settings.json')
+      }
+      await this.markStructuredInternalWrites(structuredRoots, previousStructuredPaths)
+
+      if (nextUpdate.calendarTasks || nextUpdate.tasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
       }
 
@@ -2511,12 +2809,40 @@ export class VaultRuntime {
   ): Promise<T> {
     return this.enqueueSettingsUpdate(async () => {
       const current = await this.settings.readVault(this.getCurrentVaultRoot())
-      const { next, result } = await updater(current)
+      const { next: requestedUpdate, result } = await updater(current)
+      const requestedTasks = requestedUpdate.tasks ?? requestedUpdate.calendarTasks
+      const reconciledTasks = requestedTasks
+        ? reconcileTaskRecurrences(current.calendarTasks, requestedTasks, {
+            createTaskId: () => `task-${randomUUID()}`,
+            createReminderId: () => `reminder-${randomUUID()}`
+          })
+        : undefined
+      const next = requestedTasks
+        ? {
+            ...requestedUpdate,
+            calendarTasks: reconciledTasks,
+            tasks: reconciledTasks
+          }
+        : requestedUpdate
       const nextTasks = next.tasks ?? next.calendarTasks
       if (nextTasks) {
         assertValidTaskRelationships(nextTasks)
       }
+      const structuredRoots = [
+        ...(next.projects !== undefined || next.projectIcons !== undefined ? ['projects'] : []),
+        ...(next.tasks !== undefined || next.calendarTasks !== undefined ? ['tasks'] : [])
+      ]
+      const previousStructuredPaths = await this.listStructuredJsonFiles(structuredRoots)
       const merged = await this.settings.updateVault(this.getCurrentVaultRoot(), next)
+
+      if (
+        Object.keys(next).some(
+          (key) => !['projects', 'projectIcons', 'tasks', 'calendarTasks'].includes(key)
+        )
+      ) {
+        await this.markCanonicalInternalWrite('settings.json')
+      }
+      await this.markStructuredInternalWrites(structuredRoots, previousStructuredPaths)
 
       if (next.calendarTasks || next.tasks) {
         this.reminderService.updateTasks(merged.calendarTasks)
@@ -2584,6 +2910,7 @@ export class VaultRuntime {
           await this.indexExternalNote(safeRelPath, absPath)
         }
       }
+      await this.recordVaultFileChange(safeRelPath, 'delete', 'external')
       this.notifyTreeChange()
       return
     }
@@ -2593,7 +2920,473 @@ export class VaultRuntime {
       await this.indexExternalNote(safeRelPath, absPath)
     }
 
-    this.notifyTreeChange()
+    await this.recordVaultFileChange(
+      safeRelPath,
+      eventType === 'add' ? 'add' : 'change',
+      'external'
+    )
+    if (eventType === 'add') {
+      this.notifyTreeChange()
+    }
+  }
+
+  private async recordVaultFileChange(
+    relPath: string,
+    kind: VaultChangeKind,
+    source: 'app' | 'external' | 'reconcile' | 'sync',
+    baseHash?: string | null,
+    transactionId?: string,
+    previousPath?: string
+  ): Promise<void> {
+    if (!this.changeCoordinator) {
+      return
+    }
+
+    const diskRelPath = relPath.startsWith('notebooks/')
+      ? relPath.slice('notebooks/'.length)
+      : relPath
+    const canonicalRelPath = relPath.startsWith('notebooks/') ? relPath : `notebooks/${relPath}`
+    let revision
+    if (kind !== 'delete' && this.currentPaths) {
+      try {
+        const absolutePath = assertPathInVault(this.currentPaths, diskRelPath, 'notes')
+        const stats = await fs.stat(absolutePath)
+        if (stats.isFile()) {
+          revision = await readVaultFileRevision(absolutePath)
+        }
+      } catch (error) {
+        if (!isMissingPathError(error)) {
+          throw error
+        }
+      }
+    }
+
+    this.changeCoordinator.recordChange({
+      path: canonicalRelPath,
+      kind,
+      source,
+      ...(baseHash ? { baseHash } : {}),
+      ...(previousPath
+        ? {
+            previousPath: previousPath.startsWith('notebooks/')
+              ? previousPath
+              : `notebooks/${previousPath}`
+          }
+        : {}),
+      ...(revision
+        ? {
+            contentHash: revision.contentHash,
+            revision: revision.revision ?? revision.contentHash
+          }
+        : {}),
+      ...(transactionId ? { transactionId } : {})
+    })
+  }
+
+  private async loadRecoveryState(): Promise<void> {
+    if (!this.changeCoordinator || !this.recoveryStore) {
+      return
+    }
+
+    const [conflicts, quarantines] = await Promise.all([
+      this.recoveryStore.listConflicts(),
+      this.recoveryStore.listQuarantine()
+    ])
+    for (const conflict of conflicts) {
+      this.changeCoordinator.recordConflict(toProtocolConflict(conflict, this.changeCoordinator.id))
+    }
+    for (const quarantine of quarantines) {
+      this.changeCoordinator.recordQuarantine(
+        toProtocolQuarantine(quarantine, this.changeCoordinator.id)
+      )
+    }
+  }
+
+  private createCanonicalWatcher(rootPath: string): VaultWatcher {
+    return new VaultWatcher(
+      rootPath,
+      async (relPath, eventType) =>
+        this.enqueueNotebookMutation(() => this.handleCanonicalExternalEvent(relPath, eventType)),
+      { pathFilter: isCanonicalWatchPath }
+    )
+  }
+
+  private async handleCanonicalExternalEvent(
+    relPath: string,
+    eventType: VaultEvent
+  ): Promise<void> {
+    if (!this.changeCoordinator || !this.currentPaths) {
+      return
+    }
+
+    if (eventType === 'addDir' || eventType === 'unlinkDir') {
+      this.notifyTreeChange()
+      return
+    }
+
+    const safeRelPath = sanitizeEntryPath(relPath)
+    const domain = getVaultDomainForPath(safeRelPath)
+    if (!domain || isDerivedVaultPath(safeRelPath)) {
+      return
+    }
+
+    let revision: VaultFileRevision | undefined
+    if (eventType !== 'unlink') {
+      try {
+        revision = await readVaultFileRevision(joinSafe(this.currentPaths.rootPath, safeRelPath))
+      } catch (error) {
+        if (!isMissingPathError(error)) {
+          throw error
+        }
+      }
+    }
+
+    this.changeCoordinator.recordChange({
+      domain,
+      path: safeRelPath,
+      kind: eventType === 'add' ? 'add' : eventType === 'unlink' ? 'delete' : 'change',
+      source: 'external',
+      ...(revision
+        ? {
+            contentHash: revision.contentHash,
+            revision: revision.revision ?? revision.contentHash
+          }
+        : {})
+    })
+  }
+
+  private async markCanonicalInternalWrite(relPath: string): Promise<void> {
+    if (!this.currentPaths || !this.canonicalWatcher) {
+      return
+    }
+
+    try {
+      const revision = await readVaultFileRevision(joinSafe(this.currentPaths.rootPath, relPath))
+      this.canonicalWatcher.markInternalWrite(relPath, revision.contentHash)
+    } catch (error) {
+      if (!isMissingPathError(error)) {
+        throw error
+      }
+      this.canonicalWatcher.markInternalDelete(relPath)
+    }
+  }
+
+  private async markNotebookInternalDelete(relPath: string): Promise<void> {
+    if (!this.currentPaths || !this.watcher) {
+      return
+    }
+
+    const absolutePath = assertPathInVault(this.currentPaths, relPath, 'notes')
+    const markPath = async (candidatePath: string): Promise<void> => {
+      const candidateRelPath = path.relative(this.currentPaths!.notebooksPath, candidatePath)
+      this.watcher?.markInternalDelete(candidateRelPath)
+      let stats: import('node:fs').Stats
+      try {
+        stats = await fs.lstat(candidatePath)
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          return
+        }
+        throw error
+      }
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        return
+      }
+      const entries = await fs.readdir(candidatePath, { withFileTypes: true })
+      for (const entry of entries) {
+        await markPath(path.join(candidatePath, entry.name))
+      }
+    }
+
+    await markPath(absolutePath)
+  }
+
+  private async listStructuredJsonFiles(rootNames: readonly string[]): Promise<string[]> {
+    if (!this.currentPaths) {
+      return []
+    }
+
+    const files: string[] = []
+    for (const rootName of rootNames) {
+      files.push(...(await listJsonFiles(path.join(this.currentPaths.rootPath, rootName))))
+    }
+    return files.sort()
+  }
+
+  private async markStructuredInternalWrites(
+    rootNames: readonly string[],
+    previousPaths: readonly string[]
+  ): Promise<void> {
+    if (!this.structuredWatcher || !this.currentPaths) {
+      return
+    }
+
+    const previous = new Set(previousPaths.map((filePath) => path.resolve(filePath)))
+    const currentPaths = await this.listStructuredJsonFiles(rootNames)
+    const current = new Set(currentPaths.map((filePath) => path.resolve(filePath)))
+    for (const filePath of currentPaths) {
+      const raw = await fs.readFile(filePath, 'utf8')
+      this.structuredWatcher.markLocalWrite(filePath, raw)
+    }
+    for (const filePath of previous) {
+      if (!current.has(filePath)) {
+        this.structuredWatcher.markLocalDelete(filePath)
+      }
+    }
+  }
+
+  private createStructuredWatcher(rootPath: string): StructuredFileWatcher {
+    const rootNames = [
+      'projects',
+      'tasks',
+      'calendar',
+      'weekly-plan',
+      'subscriptions',
+      'schedules',
+      'agent',
+      'resources'
+    ]
+    const quarantineRoot = path.join(rootPath, '.xingularity', 'quarantine')
+    return new StructuredFileWatcher({
+      roots: rootNames.map((name) => ({
+        name,
+        path: path.join(rootPath, name),
+        extensions: ['.json'],
+        pathFilter: (relativePath: string) =>
+          name === 'calendar'
+            ? relativePath === 'state.json'
+            : !isDerivedVaultPath(`${name}/${relativePath}`) &&
+              !isDerivedPortableVaultPath(`${name}/${relativePath}`)
+      })),
+      quarantineRoot,
+      onExternalChange: (change) =>
+        this.enqueueNotebookMutation(() => this.handleStructuredExternalChange(change)),
+      onConflict: (event) => this.recordStructuredConflict(event),
+      onQuarantine: (record) => this.recordStructuredQuarantine(record),
+      onError: ({ error }) => {
+        this.changeCoordinator?.setState('needs-repair', describeError(error))
+      }
+    })
+  }
+
+  private async handleStructuredExternalChange(change: StructuredFileChange): Promise<void> {
+    const canonicalPath = `${change.root}/${change.relativePath}`
+    const domain = getVaultDomainForPath(canonicalPath)
+    if (!domain || isDerivedVaultPath(canonicalPath)) {
+      return
+    }
+    this.changeCoordinator?.recordChange({
+      path: canonicalPath,
+      kind: change.event === 'add' ? 'add' : 'change',
+      source: 'external',
+      ...(change.version?.contentHash ? { contentHash: change.version.contentHash } : {}),
+      ...(change.version?.contentHash ? { revision: change.version.contentHash } : {})
+    })
+  }
+
+  private async recordStructuredConflict(event: StructuredConflictEvent): Promise<void> {
+    if (!this.changeCoordinator) {
+      return
+    }
+
+    const conflict = event.conflict
+    const canonicalPath = `${conflict.root}/${conflict.relativePath}`
+    let localPayload: VaultRecoveryPayloadReference | null = null
+    let externalPayload: VaultRecoveryPayloadReference | null = null
+    if (this.recoveryStore) {
+      try {
+        if (conflict.localContent !== undefined) {
+          localPayload = await this.recoveryStore.writePayload(
+            { path: `conflicts/${conflict.id}.local`, mediaType: 'application/json' },
+            conflict.localContent
+          )
+        }
+        if (conflict.disk && event.change.content !== undefined) {
+          externalPayload = await this.recoveryStore.writePayload(
+            { path: `conflicts/${conflict.id}.external`, mediaType: 'application/json' },
+            event.change.content
+          )
+        }
+      } catch (error) {
+        this.changeCoordinator.setState(
+          'needs-repair',
+          `Unable to persist structured conflict payload: ${describeError(error)}`
+        )
+        console.error('[VaultRuntime] failed to persist structured conflict payload', error)
+      }
+    }
+    const protocolConflict: VaultConflict = {
+      id: conflict.id,
+      vaultId: this.changeCoordinator.id,
+      domain: getVaultDomainForPath(canonicalPath) ?? 'vault',
+      path: canonicalPath,
+      kind: 'content',
+      detectedAt: conflict.detectedAt,
+      base: toStructuredRevision(conflict.base),
+      local: toStructuredRevision(conflict.local),
+      external: toStructuredRevision(conflict.disk),
+      ...(localPayload ? { localContentPath: localPayload.path } : {}),
+      ...(externalPayload ? { externalContentPath: externalPayload.path } : {}),
+      status: 'unresolved'
+    }
+    this.changeCoordinator.recordConflict(protocolConflict)
+    if (this.recoveryStore && (localPayload || externalPayload)) {
+      try {
+        await this.recoveryStore.upsertConflict({
+          id: conflict.id,
+          path: canonicalPath,
+          detectedAt: conflict.detectedAt,
+          payloads: {
+            local: localPayload,
+            external: externalPayload
+          },
+          reason: 'Concurrent structured-file edit'
+        })
+      } catch (error) {
+        this.changeCoordinator.setState(
+          'needs-repair',
+          `Unable to persist structured conflict metadata: ${describeError(error)}`
+        )
+        console.error('[VaultRuntime] failed to persist structured conflict metadata', error)
+      }
+    }
+  }
+
+  private async recordStructuredQuarantine(record: StructuredQuarantineRecord): Promise<void> {
+    if (!this.changeCoordinator || !this.currentPaths) {
+      return
+    }
+
+    let contentHash = 'unknown'
+    try {
+      contentHash = (await readVaultFileRevision(record.quarantinePath)).contentHash
+    } catch {
+      // The watcher already preserved the bytes; metadata can still be repaired later.
+    }
+    const id = `quarantine-${hashVaultBytes(`${record.absolutePath}:${record.quarantinedAt}`).slice(0, 20)}`
+    const canonicalPath = `${record.root}/${record.relativePath}`
+    const recoveryRoot = path.join(this.currentPaths.rootPath, '.xingularity')
+    const recoveryRelativePath = path
+      .relative(recoveryRoot, record.quarantinePath)
+      .replace(/\\/g, '/')
+    const protocolRecord = {
+      id,
+      vaultId: this.changeCoordinator.id,
+      domain: getVaultDomainForPath(canonicalPath) ?? 'vault',
+      path: canonicalPath,
+      quarantinePath: recoveryRelativePath,
+      contentHash,
+      quarantinedAt: record.quarantinedAt,
+      reason: record.reason
+    }
+    this.changeCoordinator.recordQuarantine(protocolRecord)
+    await this.recoveryStore?.upsertQuarantine({
+      id,
+      path: canonicalPath,
+      quarantinedAt: record.quarantinedAt,
+      reason: record.reason,
+      payload: { path: recoveryRelativePath, contentHash },
+      metadata: { root: record.root, parser: 'json' }
+    })
+  }
+
+  private async recordNoteConflict(
+    request: WriteNoteDocumentRequest,
+    result: Extract<WriteNoteResult, { ok: false }>
+  ): Promise<void> {
+    const conflictId = randomUUID()
+    const localContent = serializeStoredNoteDocument(request.document)
+    const localRevision = {
+      contentHash: hashVaultBytes(localContent),
+      size: Buffer.byteLength(localContent, 'utf8'),
+      mtimeMs: Date.now()
+    }
+    let actualRevision =
+      result.error.code === 'compare-and-swap-conflict' ? result.error.actualRevision : null
+    let externalContent: Buffer | null = null
+    const canonicalPath = `notebooks/${result.path}`
+
+    if (actualRevision && this.currentPaths) {
+      try {
+        const diskRead = await readVaultFileWithRevision(
+          assertPathInVault(this.currentPaths, result.path, 'notes')
+        )
+        actualRevision = diskRead.revision
+        externalContent = diskRead.content
+      } catch (error) {
+        if (!isMissingPathError(error)) {
+          console.error('[VaultRuntime] failed to capture external conflict payload', error)
+        } else {
+          actualRevision = null
+        }
+      }
+    }
+
+    let localPayload: VaultRecoveryPayloadReference | null = null
+    let externalPayload: VaultRecoveryPayloadReference | null = null
+    if (this.recoveryStore) {
+      try {
+        localPayload = await this.recoveryStore.writePayload(
+          { path: `conflicts/${conflictId}.local`, mediaType: 'text/markdown' },
+          localContent
+        )
+        if (externalContent) {
+          externalPayload = await this.recoveryStore.writePayload(
+            { path: `conflicts/${conflictId}.external`, mediaType: 'text/markdown' },
+            externalContent
+          )
+        }
+      } catch (error) {
+        this.changeCoordinator?.setState(
+          'needs-repair',
+          `Unable to persist note conflict payload: ${describeError(error)}`
+        )
+        console.error('[VaultRuntime] failed to persist note conflict payload', error)
+      }
+    }
+
+    const conflict: VaultConflict = {
+      id: conflictId,
+      vaultId: this.changeCoordinator?.id ?? 'unknown',
+      domain: 'notes',
+      path: canonicalPath,
+      kind: 'compare-and-swap',
+      detectedAt: new Date().toISOString(),
+      base:
+        request.baseHash !== null
+          ? {
+              contentHash: request.baseHash,
+              size: 0,
+              mtimeMs: 0,
+              revision: request.baseHash
+            }
+          : null,
+      local: localRevision,
+      external: actualRevision,
+      ...(localPayload ? { localContentPath: localPayload.path } : {}),
+      ...(externalPayload ? { externalContentPath: externalPayload.path } : {})
+    }
+    this.changeCoordinator?.recordConflict(conflict)
+    if (this.recoveryStore && (localPayload || externalPayload)) {
+      try {
+        await this.recoveryStore.upsertConflict({
+          id: conflictId,
+          path: canonicalPath,
+          detectedAt: conflict.detectedAt,
+          payloads: {
+            local: localPayload,
+            external: externalPayload
+          },
+          reason: result.error.message
+        })
+      } catch (error) {
+        this.changeCoordinator?.setState(
+          'needs-repair',
+          `Unable to persist note conflict metadata: ${describeError(error)}`
+        )
+        console.error('[VaultRuntime] failed to persist note conflict metadata', error)
+      }
+    }
   }
 
   private async indexExternalNote(relPath: string, absPath: string): Promise<void> {
@@ -2626,6 +3419,18 @@ export class VaultRuntime {
     this.currentPaths = createMode
       ? await initializeVault(folderPath)
       : await validateVault(folderPath)
+    this.changeCoordinator = new VaultChangeCoordinator({
+      rootPath: this.currentPaths.rootPath,
+      vaultId: this.currentPaths.manifest.vaultId,
+      onEvent: (event) => this.notifyVaultEvent(event),
+      onStatus: () => undefined
+    })
+    this.recoveryStore = new VaultRecoveryStore(
+      path.join(this.currentPaths.rootPath, '.xingularity')
+    )
+    await this.loadRecoveryState()
+    this.structuredWatcher = this.createStructuredWatcher(this.currentPaths.rootPath)
+    this.canonicalWatcher = this.createCanonicalWatcher(this.currentPaths.rootPath)
 
     this.watcher = new VaultWatcher(this.currentPaths.notebooksPath, async (relPath, eventType) => {
       await this.enqueueNotebookMutation(() => this.handleExternalEvent(relPath, eventType))
@@ -2634,7 +3439,9 @@ export class VaultRuntime {
     this.fileService = new FileService(
       this.currentPaths.notebooksPath,
       this.currentPaths.attachmentsPath,
-      (relPath) => this.watcher?.markInternalWrite(relPath)
+      (relPath, contentHash, transactionId) =>
+        this.watcher?.markInternalWrite(relPath, contentHash, transactionId),
+      (relPath, transactionId) => this.watcher?.markInternalDelete(relPath, transactionId)
     )
     this.fleetingNoteService = new FleetingNoteService(
       getVaultFleetingDir(this.currentPaths.rootPath)
@@ -2655,7 +3462,10 @@ export class VaultRuntime {
       if (Object.keys(migratedLegacyPaths).length > 0) {
         await this.remapSettingsForMigratedNotes(migratedLegacyPaths)
       }
-      vaultSettings = await this.settings.readVault(activeVaultRoot)
+      vaultSettings = await this.reconcilePersistedTaskRecurrences(
+        activeVaultRoot,
+        await this.settings.readVault(activeVaultRoot)
+      )
       this.resourceService = new ResourceService(activeVaultRoot)
       this.resourceWriteService = new ResourceWriteService(activeVaultRoot)
       const googleDriveClientId = process.env.XINGULARITY_GOOGLE_CLIENT_ID?.trim()
@@ -2688,6 +3498,12 @@ export class VaultRuntime {
     } catch (error) {
       await this.watcher?.stop()
       this.watcher = null
+      await this.structuredWatcher?.stop()
+      this.structuredWatcher = null
+      await this.canonicalWatcher?.stop()
+      this.canonicalWatcher = null
+      this.changeCoordinator = null
+      this.recoveryStore = null
       this.currentPaths = null
       this.fileService = null
       this.fleetingNoteService = null
@@ -2706,6 +3522,17 @@ export class VaultRuntime {
       this.currentPaths.notebooksPath
     )
     this.watcher.start()
+    this.structuredWatcher.start()
+    this.canonicalWatcher.start()
+    await this.structuredWatcher.rescan(undefined, { emitChanges: false })
+    const initialReconciliation = await this.changeCoordinator.reconcile()
+    if (
+      initialReconciliation.changes.some(
+        (change) => change.domain === 'notes' || change.domain === 'drawings'
+      )
+    ) {
+      await this.indexer.rebuild(this.currentPaths.notebooksPath)
+    }
 
     console.log('[VaultRuntime] persist global last vault', this.currentPaths.rootPath)
     await this.settings.rememberVault(this.currentPaths.rootPath)
@@ -2719,6 +3546,27 @@ export class VaultRuntime {
     }
   }
 
+  private async reconcilePersistedTaskRecurrences(
+    vaultRoot: string,
+    settings: AppSettings
+  ): Promise<AppSettings> {
+    const nextTasks = reconcileTaskRecurrences(settings.calendarTasks, settings.calendarTasks, {
+      createTaskId: () => `task-${randomUUID()}`,
+      createReminderId: () => `reminder-${randomUUID()}`
+    })
+    if (sameJson(settings.calendarTasks, nextTasks)) {
+      return settings
+    }
+
+    const previousStructuredPaths = await this.listStructuredJsonFiles(['tasks'])
+    const merged = await this.settings.updateVault(vaultRoot, {
+      calendarTasks: nextTasks,
+      tasks: nextTasks
+    })
+    await this.markStructuredInternalWrites(['tasks'], previousStructuredPaths)
+    return merged
+  }
+
   private async closeCurrentVault(): Promise<void> {
     this.reminderService.stop()
     this.reminderService.setScope(null)
@@ -2730,6 +3578,12 @@ export class VaultRuntime {
     this.history.clear()
     await this.watcher?.stop()
     this.watcher = null
+    await this.structuredWatcher?.stop()
+    this.structuredWatcher = null
+    await this.canonicalWatcher?.stop()
+    this.canonicalWatcher = null
+    this.changeCoordinator = null
+    this.recoveryStore = null
     this.fileService = null
     this.fleetingNoteService = null
     this.resourceService = null
@@ -2779,6 +3633,16 @@ export class VaultRuntime {
         listener()
       } catch (error) {
         console.error('[VaultRuntime] tree change listener failed', error)
+      }
+    }
+  }
+
+  private notifyVaultEvent(event: VaultChangeEvent): void {
+    for (const listener of this.vaultEventListeners) {
+      try {
+        listener({ ...event })
+      } catch (error) {
+        console.error('[VaultRuntime] vault event listener failed', error)
       }
     }
   }
@@ -3366,6 +4230,165 @@ function isSqliteCorruptionError(error: unknown): boolean {
   }
 
   return /database disk image is malformed/i.test(error.message)
+}
+
+function toProtocolConflict(record: DurableVaultConflictRecord, vaultId: string): VaultConflict {
+  const local = toRevision(record.payloads.local)
+  const external = toRevision(record.payloads.external ?? record.payloads.disk)
+  return {
+    id: record.id,
+    vaultId,
+    domain: getVaultDomainForPath(record.path) ?? 'vault',
+    path: record.path,
+    kind: 'compare-and-swap',
+    detectedAt: record.detectedAt,
+    base: toRevision(record.payloads.base),
+    local,
+    external,
+    ...(getPayloadPath(record.payloads.local)
+      ? { localContentPath: getPayloadPath(record.payloads.local) }
+      : {}),
+    ...(getPayloadPath(record.payloads.external ?? record.payloads.disk)
+      ? { externalContentPath: getPayloadPath(record.payloads.external ?? record.payloads.disk) }
+      : {}),
+    status: 'unresolved'
+  }
+}
+
+function toStructuredRevision(
+  version: { contentHash: string; version?: number | string; updatedAt?: string } | null | undefined
+): VaultFileRevision | null {
+  if (!version) {
+    return null
+  }
+
+  return {
+    contentHash: version.contentHash,
+    size: 0,
+    mtimeMs: 0,
+    revision: version.contentHash
+  }
+}
+
+function describeError(error: unknown): string {
+  return String(error instanceof Error ? error.message : error).slice(0, 500)
+}
+
+function toProtocolQuarantine(
+  record: DurableVaultQuarantineRecord,
+  vaultId: string
+): import('../shared/vaultProtocol').VaultQuarantineRecord {
+  const payload = toPayloadReference(record.payload)
+  return {
+    id: record.id,
+    vaultId,
+    domain: getVaultDomainForPath(record.path) ?? 'vault',
+    path: record.path,
+    quarantinePath: payload.path,
+    contentHash: payload.contentHash ?? 'unknown',
+    quarantinedAt: record.quarantinedAt,
+    reason: record.reason
+  }
+}
+
+function toRevision(
+  payload: DurableVaultConflictRecord['payloads'][keyof DurableVaultConflictRecord['payloads']]
+): import('../shared/vaultProtocol').VaultFileRevision | null {
+  if (!payload || typeof payload === 'string') {
+    return null
+  }
+
+  return {
+    contentHash: payload.contentHash ?? 'unknown',
+    size: payload.size ?? 0,
+    mtimeMs: 0,
+    revision: payload.contentHash
+  }
+}
+
+function toPayloadReference(
+  payload: DurableVaultQuarantineRecord['payload']
+): VaultRecoveryPayloadReference {
+  return typeof payload === 'string' ? { path: payload } : payload
+}
+
+function getPayloadPath(
+  payload: DurableVaultConflictRecord['payloads'][keyof DurableVaultConflictRecord['payloads']]
+): string | undefined {
+  return payload && typeof payload !== 'string' ? payload.path : (payload ?? undefined)
+}
+
+const STRUCTURED_WATCH_ROOTS = [
+  'projects',
+  'tasks',
+  'calendar',
+  'weekly-plan',
+  'subscriptions',
+  'schedules',
+  'agent',
+  'resources'
+]
+
+function isCanonicalWatchPath(relPath: string, eventType: VaultEvent): boolean {
+  if (eventType === 'addDir' || eventType === 'unlinkDir') {
+    return ['attachments', 'fleeting', 'excalidraw'].includes(relPath)
+  }
+
+  if (
+    !relPath ||
+    relPath.startsWith('notebooks/') ||
+    isDerivedVaultPath(relPath) ||
+    STRUCTURED_WATCH_ROOTS.some((root) => relPath === root || relPath.startsWith(`${root}/`))
+  ) {
+    return false
+  }
+
+  const domain = getVaultDomainForPath(relPath)
+  return (
+    domain === 'attachments' ||
+    domain === 'fleeting' ||
+    domain === 'settings' ||
+    domain === 'vault' ||
+    domain === 'drawings'
+  )
+}
+
+function spawnDetached(command: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      detached: true,
+      stdio: 'ignore'
+    })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
+}
+
+async function listJsonFiles(rootPath: string): Promise<string[]> {
+  let entries: Array<import('node:fs').Dirent>
+  try {
+    entries = await fs.readdir(rootPath, { withFileTypes: true })
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return []
+    }
+    throw error
+  }
+
+  const files: string[] = []
+  for (const entry of entries) {
+    const absolutePath = path.join(rootPath, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...(await listJsonFiles(absolutePath)))
+    } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.json') {
+      files.push(absolutePath)
+    }
+  }
+  return files
 }
 
 function createStableId(relPath: string): string {

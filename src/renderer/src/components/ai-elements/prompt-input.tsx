@@ -3,6 +3,7 @@ import { ArrowUp, LoaderCircle } from '../ui/icons'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
+import { handleCommandEnterSubmit } from '../../lib/formShortcuts'
 
 export interface PromptInputMessage {
   text: string
@@ -19,7 +20,7 @@ export const PromptInput = React.forwardRef<
   React.FormHTMLAttributes<HTMLFormElement> & {
     onSubmit?: (message: PromptInputMessage, event: React.FormEvent<HTMLFormElement>) => void
   }
->(({ className, onSubmit, children, ...props }, ref) => {
+>(({ className, onSubmit, onKeyDownCapture, children, ...props }, ref) => {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
@@ -33,6 +34,10 @@ export const PromptInput = React.forwardRef<
         ref={ref}
         className={cn('rounded-lg border bg-card p-3 text-card-foreground', className)}
         onSubmit={handleSubmit}
+        onKeyDownCapture={(event) => {
+          handleCommandEnterSubmit(event)
+          onKeyDownCapture?.(event)
+        }}
         {...props}
       >
         {children}

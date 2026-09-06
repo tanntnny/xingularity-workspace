@@ -17,8 +17,9 @@ import {
   CommandList
 } from './ui/command'
 import { Button } from './ui/button'
-import { Check, Filter2, X } from './ui/icons'
+import { Filter, X } from './ui/icons'
 import { ResponsivePicker } from './ui/responsive-picker'
+import { SelectionCheckbox } from './ui/selection-checkbox'
 import { WorkspaceIconButton } from './ui/document-workspace'
 
 export interface ResourceFiltersPopoverProps {
@@ -115,7 +116,8 @@ export function ResourceFiltersPopover({
       trigger={
         <WorkspaceIconButton
           label="Filter"
-          icon={<Filter2 aria-hidden="true" />}
+          counter={activeFilters.length}
+          icon={<Filter aria-hidden="true" />}
           active={filtersActive}
           bordered
           aria-label={filtersActive ? 'Filter resources, active' : 'Filter resources'}
@@ -253,19 +255,11 @@ function ResourceFilterGroup({
             data-checked={selected ? 'true' : 'false'}
             data-testid={`resource-filter-${testIdPrefix}:${option.value}`}
             className={cn(
-              'min-h-9 cursor-pointer rounded-[var(--radius-control)] px-2 text-sm text-foreground hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground',
+              'group min-h-9 cursor-pointer rounded-sm px-2 text-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground',
               selected && 'bg-muted'
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                'flex size-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border text-primary',
-                selected && 'border-primary bg-primary text-primary-foreground'
-              )}
-            >
-              {selected ? <Check size={12} /> : null}
-            </span>
+            <SelectionCheckbox checked={selected} />
             <span className="min-w-0 flex-1 truncate">{option.label}</span>
             {selected ? (
               <Badge variant="neutral" className="h-5 px-1.5 text-[11px]">

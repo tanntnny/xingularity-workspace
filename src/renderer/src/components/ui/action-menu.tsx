@@ -16,7 +16,6 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger
 } from './dropdown-menu'
-import { cn } from '../../lib/utils'
 
 export type ActionMenuVariant = 'context' | 'dropdown'
 
@@ -75,17 +74,14 @@ function ActionMenuItem({
     return <ActionMenuSubmenu item={item} variant={variant} />
   }
 
-  const className = cn(
-    item.className,
-    item.destructive &&
-      'text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive data-[highlighted]:!bg-destructive/10 data-[highlighted]:!text-destructive [&>svg]:text-destructive'
-  )
+  const className = item.className
 
   if (variant === 'context') {
     return (
       <ContextMenuItem
         data-testid={item.contextTestId ?? item.testId}
         disabled={item.disabled}
+        destructive={item.destructive}
         className={className}
         onSelect={item.onSelect}
       >
@@ -101,6 +97,7 @@ function ActionMenuItem({
     <DropdownMenuItem
       data-testid={item.dropdownTestId ?? item.testId}
       disabled={item.disabled}
+      destructive={item.destructive}
       className={className}
       onSelect={item.onSelect}
     >
@@ -119,11 +116,7 @@ function ActionMenuSubmenu({
   item: ActionMenuItemDefinition
   variant: ActionMenuVariant
 }): ReactElement {
-  const className = cn(
-    item.className,
-    item.destructive &&
-      'text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive data-[state=open]:!bg-destructive/10 data-[state=open]:!text-destructive [&_svg]:text-destructive'
-  )
+  const className = item.className
 
   if (variant === 'context') {
     return (
@@ -131,6 +124,7 @@ function ActionMenuSubmenu({
         <ContextMenuSubTrigger
           data-testid={item.contextTestId ?? item.testId}
           disabled={item.disabled}
+          destructive={item.destructive}
           className={className}
         >
           {item.icon}
@@ -151,6 +145,7 @@ function ActionMenuSubmenu({
       <DropdownMenuSubTrigger
         data-testid={item.dropdownTestId ?? item.testId}
         disabled={item.disabled}
+        destructive={item.destructive}
         className={className}
       >
         {item.icon}

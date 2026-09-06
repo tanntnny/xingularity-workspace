@@ -5,6 +5,7 @@ import { MoreVertical, PanelRightClose, PanelRightOpen, Plus, X } from './icons'
 
 import { cn } from '../../lib/utils'
 import { ActionButtonGroup } from './button-group'
+import { SelectionCounter } from './badge'
 import { Button, type ButtonProps } from './button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './dropdown-menu'
 import { Shortcut, type ShortcutKey } from './kbd'
@@ -51,58 +52,72 @@ interface WorkspaceIconButtonProps extends Omit<
 > {
   icon: React.ReactNode
   label?: string
+  tooltip?: string
+  tooltipWrapperClassName?: string
   active?: boolean
   bordered?: boolean
   borderless?: boolean
   variant?: ButtonProps['variant']
+  counter?: number
   'data-testid'?: string
 }
 
 const WorkspaceIconButton = React.forwardRef<
   React.ElementRef<typeof Button>,
   WorkspaceIconButtonProps
->(({ className, icon, label, active = false, type = 'button', variant, ...props }, ref) => {
-  const { bordered = false, borderless = false, ...buttonProps } = props
-  const actionAppearance = React.useContext(WorkspaceHeaderActionAppearanceContext)
-  const isPlainAppearance = actionAppearance === 'plain'
-  const isMutedAppearance = actionAppearance === 'muted'
-  const inferredLabel =
-    label ??
-    (typeof buttonProps['aria-label'] === 'string' ? buttonProps['aria-label'] : undefined) ??
-    (typeof buttonProps.title === 'string' ? buttonProps.title : undefined)
+>(
+  (
+    { className, icon, label, counter, active = false, type = 'button', variant, ...props },
+    ref
+  ) => {
+    const { bordered = false, borderless = false, ...buttonProps } = props
+    const actionAppearance = React.useContext(WorkspaceHeaderActionAppearanceContext)
+    const isPlainAppearance = actionAppearance === 'plain'
+    const isMutedAppearance = actionAppearance === 'muted'
+    const hasLabel = Boolean(label)
+    const hasCounter = counter !== undefined && counter > 0
+    const hasContent = hasLabel || hasCounter
+    const inferredLabel =
+      label ??
+      (typeof buttonProps['aria-label'] === 'string' ? buttonProps['aria-label'] : undefined) ??
+      (typeof buttonProps.title === 'string' ? buttonProps.title : undefined)
 
-  return (
-    <Button
-      ref={ref}
-      type={type}
-      variant={variant ?? (active ? 'secondary' : 'ghost')}
-      size={label ? 'sm' : 'icon'}
-      data-active={active ? 'true' : 'false'}
-      className={cn(
-        'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
-        isPlainAppearance
-          ? 'border-0'
-          : bordered || (!label && !borderless)
-            ? 'border border-input'
+    return (
+      <Button
+        ref={ref}
+        type={type}
+        variant={variant ?? (active ? 'secondary' : 'ghost')}
+        size={hasContent ? 'sm' : 'icon'}
+        data-active={active ? 'true' : 'false'}
+        className={cn(
+          'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
+          isPlainAppearance
+            ? 'border-0'
+            : bordered || (!hasContent && !borderless)
+              ? 'border border-input'
+              : undefined,
+          isPlainAppearance && !active
+            ? 'bg-transparent hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground'
             : undefined,
-        isPlainAppearance && !active
-          ? 'bg-transparent hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground'
-          : undefined,
-        isMutedAppearance && !label && !active
-          ? 'text-muted-foreground hover:text-foreground focus-visible:text-foreground'
-          : undefined,
-        label ? 'gap-1.5' : undefined,
-        className
-      )}
-      aria-label={buttonProps['aria-label'] ?? inferredLabel}
-      title={buttonProps.title ?? inferredLabel}
-      {...buttonProps}
-    >
-      {icon}
-      {label ? <span>{label}</span> : null}
-    </Button>
-  )
-})
+          isMutedAppearance && !hasLabel && !active
+            ? 'text-muted-foreground hover:text-foreground focus-visible:text-foreground'
+            : undefined,
+          hasContent ? 'gap-1.5' : undefined,
+          className
+        )}
+        tooltip={buttonProps.tooltip ?? inferredLabel}
+        tooltipWrapperClassName={buttonProps.tooltipWrapperClassName}
+        aria-label={buttonProps['aria-label'] ?? inferredLabel}
+        title={buttonProps.title ?? inferredLabel}
+        {...buttonProps}
+      >
+        {icon}
+        {hasLabel ? <span>{label}</span> : null}
+        <SelectionCounter count={counter ?? 0} />
+      </Button>
+    )
+  }
+)
 WorkspaceIconButton.displayName = 'WorkspaceIconButton'
 
 interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
@@ -112,6 +127,7 @@ interface WorkspaceTabManagerProps extends React.HTMLAttributes<HTMLElement> {
   onCloseTab: (tabId: string) => void
   onAddTab: () => void
   addDisabled?: boolean
+  macosTrafficLightInset?: boolean
 }
 
 const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerProps>(
@@ -124,6 +140,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       onCloseTab,
       onAddTab,
       addDisabled = false,
+      macosTrafficLightInset = false,
       ...props
     },
     ref
@@ -133,6 +150,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
       aria-label="Workspace tabs"
       className={cn(
         'app-drag-region flex h-[var(--workspace-chrome-height)] min-w-0 shrink-0 items-center py-2',
+        macosTrafficLightInset && 'pl-24',
         className
       )}
       {...props}
@@ -155,8 +173,17 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   key={tab.id}
                   role="presentation"
                   data-active={tab.id === activeTabId ? 'true' : 'false'}
+                  data-has-shortcut={tab.shortcut ? 'true' : 'false'}
                   data-toggle-group-indicator-target="true"
                   className="workspace-tab-card group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center overflow-hidden rounded-sm bg-workspace data-[active=true]:bg-transparent"
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) {
+                      return
+                    }
+
+                    event.preventDefault()
+                    onCloseTab(tab.id)
+                  }}
                 >
                   <ToggleGroupItem
                     value={tab.id}
@@ -164,10 +191,11 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     id={`workspace-tab:${tab.id}`}
                     aria-label={tab.label}
                     title={tab.label}
+                    tooltipWrapperClassName="min-w-0 flex-1"
                     aria-selected={tab.id === activeTabId}
                     role="tab"
                     data-testid={`workspace-tab:${tab.id}`}
-                    className="relative h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-semibold text-muted-foreground transition-none hover:bg-surface-subtle-hover hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                    className="workspace-tab-trigger relative h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-semibold text-muted-foreground transition-none hover:bg-surface-subtle-hover hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                   >
                     {tab.icon ? (
                       <span
@@ -184,15 +212,15 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     >
                       {tab.label}
                     </span>
-                    {tab.shortcut ? (
-                      <Shortcut
-                        keys={tab.shortcut}
-                        data-testid={`workspace-tab-shortcut:${tab.id}`}
-                        className="workspace-tab-shortcut-overlay pointer-events-none absolute right-7 top-1/2 z-20 h-4 -translate-y-1/2 px-1 text-xs opacity-0 transition-opacity motion-reduce:transition-none group-hover:opacity-100 group-focus-within:opacity-100"
-                        keyClassName="[&_svg]:h-2 [&_svg]:w-2"
-                      />
-                    ) : null}
                   </ToggleGroupItem>
+                  {tab.shortcut ? (
+                    <Shortcut
+                      keys={tab.shortcut}
+                      data-testid={`workspace-tab-shortcut:${tab.id}`}
+                      className="workspace-tab-shortcut-overlay pointer-events-none absolute right-[var(--workspace-tab-control-height)] top-1/2 z-20 h-4 -translate-y-1/2 px-1 text-xs opacity-0 transition-opacity motion-reduce:transition-none group-hover:opacity-100 group-focus-within:opacity-100"
+                      keyClassName="[&_svg]:h-2 [&_svg]:w-2"
+                    />
+                  ) : null}
                   <WorkspaceIconButton
                     variant="rowAction"
                     aria-label={`Close ${tab.label} tab`}
@@ -238,7 +266,7 @@ interface WorkspaceHeaderContextValue {
   footerSlot: HTMLDivElement | null
   setFooterSlot: (slot: HTMLDivElement | null) => void
   hasPanel: boolean
-  panelCollapsed: boolean
+  panelOpen: boolean
   onTogglePanel?: () => void
 }
 
@@ -252,20 +280,20 @@ const WorkspaceHeaderContext = React.createContext<WorkspaceHeaderContextValue>(
   footerSlot: null,
   setFooterSlot: () => undefined,
   hasPanel: false,
-  panelCollapsed: false
+  panelOpen: false
 })
 
 interface WorkspaceContextProviderProps {
   children?: React.ReactNode
   hasPanel?: boolean
-  panelCollapsed?: boolean
+  panelOpen?: boolean
   onTogglePanel?: () => void
 }
 
 const WorkspaceContextProvider = ({
   children,
   hasPanel = false,
-  panelCollapsed = false,
+  panelOpen = true,
   onTogglePanel
 }: WorkspaceContextProviderProps): React.ReactElement => {
   const [mainActionSlot, setMainActionSlot] = React.useState<HTMLDivElement | null>(null)
@@ -284,7 +312,7 @@ const WorkspaceContextProvider = ({
       footerSlot,
       setFooterSlot,
       hasPanel,
-      panelCollapsed,
+      panelOpen,
       onTogglePanel
     }),
     [
@@ -293,7 +321,7 @@ const WorkspaceContextProvider = ({
       mainActionSlot,
       onTogglePanel,
       panelActionSlot,
-      panelCollapsed,
+      panelOpen,
       secondaryRightActionSlot
     ]
   )
@@ -361,6 +389,62 @@ const DocumentWorkspaceMain = React.forwardRef<
 ))
 DocumentWorkspaceMain.displayName = 'DocumentWorkspaceMain'
 
+type WorkspacePanelMotionState = 'entering' | 'open' | 'exiting' | 'collapsed'
+
+function parseTransitionTime(value: string): number {
+  const normalized = value.trim()
+  const amount = Number.parseFloat(normalized)
+  if (!Number.isFinite(amount)) {
+    return 0
+  }
+
+  return normalized.endsWith('ms') ? amount : normalized.endsWith('s') ? amount * 1000 : 0
+}
+
+function getWorkspacePanelTransitionTimeout(element: HTMLElement): number {
+  if (typeof window === 'undefined') {
+    return 0
+  }
+
+  const styles = window.getComputedStyle(element)
+  const durations = styles.transitionDuration.split(',').map(parseTransitionTime)
+  const delays = styles.transitionDelay.split(',').map(parseTransitionTime)
+  const duration = Math.max(0, ...durations)
+  const delay = Math.max(0, ...delays)
+
+  return duration + delay + 50
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+interface WorkspacePanelPresenceProps extends React.HTMLAttributes<HTMLDivElement> {
+  motionState: WorkspacePanelMotionState
+}
+
+const WorkspacePanelPresence = React.forwardRef<HTMLDivElement, WorkspacePanelPresenceProps>(
+  ({ className, motionState, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-panel-state={motionState}
+      data-panel-resizable="true"
+      aria-hidden={motionState !== 'open'}
+      inert={motionState !== 'open' ? true : undefined}
+      className={cn(
+        'motion-workspace-panel flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col overflow-hidden',
+        className
+      )}
+      {...props}
+    />
+  )
+)
+WorkspacePanelPresence.displayName = 'WorkspacePanelPresence'
+
 const DocumentWorkspacePanel = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -368,7 +452,7 @@ const DocumentWorkspacePanel = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'motion-workspace-panel flex h-full min-h-0 w-[var(--workspace-pane-width)] basis-[var(--workspace-pane-width)] shrink-0 flex-col overflow-hidden bg-transparent',
+      'flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col overflow-hidden bg-transparent',
       className
     )}
     {...props}
@@ -376,54 +460,20 @@ const DocumentWorkspacePanel = React.forwardRef<
 ))
 DocumentWorkspacePanel.displayName = 'DocumentWorkspacePanel'
 
-interface WorkspaceRightPanelProps extends React.HTMLAttributes<HTMLDivElement> {
-  hasPanel?: boolean
-  panelCollapsed?: boolean
-  panelHidden?: boolean
-}
+type WorkspaceRightPanelProps = React.HTMLAttributes<HTMLDivElement>
 
 const WorkspaceRightPanel = React.forwardRef<HTMLDivElement, WorkspaceRightPanelProps>(
-  (
-    {
-      children,
-      className,
-      hasPanel = true,
-      panelCollapsed = false,
-      panelHidden = false,
-      style,
-      ...props
-    },
-    ref
-  ) => {
-    const isOpen = hasPanel && !panelCollapsed && !panelHidden
-
-    return (
-      <div
-        ref={ref}
-        data-panel-state={isOpen ? 'open' : 'collapsed'}
-        data-panel-resizable={hasPanel ? 'true' : undefined}
-        data-workspace-scrollport="true"
-        className={cn(
-          'motion-workspace-panel flex h-full min-h-0 w-full min-w-0 basis-auto shrink-0 flex-col gap-3 overflow-y-auto scrollbar-none',
-          isOpen ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-full opacity-0',
-          className
-        )}
-        style={
-          isOpen
-            ? style
-            : {
-                ...style,
-                width: '0px',
-                flexBasis: '0px',
-                borderWidth: '0px'
-              }
-        }
-        {...props}
-      >
-        {children}
-      </div>
-    )
-  }
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-workspace-scrollport="true"
+      className={cn(
+        'flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col gap-3 overflow-y-auto scrollbar-none',
+        className
+      )}
+      {...props}
+    />
+  )
 )
 WorkspaceRightPanel.displayName = 'WorkspaceRightPanel'
 
@@ -451,6 +501,7 @@ function useIsNarrowWorkspace(): boolean {
 interface WorkspaceResizableLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
   hasPanel?: boolean
   panelWidth: number
+  panelKey?: string
   panelCollapsed?: boolean
   panelHidden?: boolean
   onPanelWidthChange?: (width: number) => void
@@ -464,6 +515,7 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
       className,
       hasPanel = true,
       panelWidth,
+      panelKey = 'workspace-panel',
       panelCollapsed = false,
       panelHidden = false,
       onPanelWidthChange,
@@ -475,11 +527,288 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
     const isNarrow = useIsNarrowWorkspace()
     const panelRef = React.useRef<PanelImperativeHandle | null>(null)
     const panelElementRef = React.useRef<HTMLDivElement | null>(null)
+    const panelPresenceRef = React.useRef<HTMLDivElement | null>(null)
     const latestPanelWidthRef = React.useRef(panelWidth)
     const persistLayoutFrameRef = React.useRef<number | null>(null)
-    const [initialPanelWidth] = React.useState(panelWidth)
     const [mainContent, ...panelContents] = React.Children.toArray(children)
     const hasPanelContent = panelContents.length > 0
+    const rightPanelContent =
+      panelContents.length === 0 ? null : panelContents.length === 1 ? (
+        panelContents[0]
+      ) : (
+        <WorkspaceRightPanel>{panelContents}</WorkspaceRightPanel>
+      )
+    const shouldOpenPanel = hasPanel && hasPanelContent && !panelCollapsed && !panelHidden
+    const initialPanelMotionState: WorkspacePanelMotionState = shouldOpenPanel
+      ? 'entering'
+      : 'collapsed'
+    const [isPanelMounted, setIsPanelMounted] = React.useState(shouldOpenPanel)
+    const [panelMotionState, setPanelMotionState] =
+      React.useState<WorkspacePanelMotionState>(initialPanelMotionState)
+    const [renderedPanelKey, setRenderedPanelKey] = React.useState(panelKey)
+    const [renderedPanelContent, setRenderedPanelContent] =
+      React.useState<React.ReactNode>(rightPanelContent)
+    const motionStateRef = React.useRef(panelMotionState)
+    const latestPanelKeyRef = React.useRef(panelKey)
+    const latestPanelContentRef = React.useRef<React.ReactNode>(rightPanelContent)
+    const desiredPanelOpenRef = React.useRef(shouldOpenPanel)
+    const hasPanelRef = React.useRef(hasPanel)
+    const hasPanelContentRef = React.useRef(hasPanelContent)
+    const panelHiddenRef = React.useRef(panelHidden)
+    const isNarrowRef = React.useRef(isNarrow)
+    const transitionFrameRef = React.useRef<number | null>(null)
+    const transitionTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+    const previousPanelKeyRef = React.useRef(panelKey)
+    const lastAppliedPanelKeyRef = React.useRef<string | null>(null)
+
+    const updateMotionState = React.useCallback((nextState: WorkspacePanelMotionState): void => {
+      motionStateRef.current = nextState
+      setPanelMotionState(nextState)
+    }, [])
+
+    const clearPanelMotion = React.useCallback((): void => {
+      if (transitionFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(transitionFrameRef.current)
+        transitionFrameRef.current = null
+      }
+
+      if (transitionTimerRef.current !== null) {
+        clearTimeout(transitionTimerRef.current)
+        transitionTimerRef.current = null
+      }
+    }, [])
+
+    const schedulePanelEnter = React.useCallback((): void => {
+      clearPanelMotion()
+
+      if (prefersReducedMotion()) {
+        updateMotionState('open')
+        return
+      }
+
+      transitionFrameRef.current = window.requestAnimationFrame(() => {
+        transitionFrameRef.current = null
+        if (desiredPanelOpenRef.current) {
+          updateMotionState('open')
+        }
+      })
+    }, [clearPanelMotion, updateMotionState])
+
+    const finishPanelExit = React.useCallback((): void => {
+      if (motionStateRef.current !== 'exiting') {
+        return
+      }
+
+      clearPanelMotion()
+
+      if (desiredPanelOpenRef.current) {
+        setRenderedPanelContent(latestPanelContentRef.current)
+        setRenderedPanelKey(latestPanelKeyRef.current)
+        updateMotionState('entering')
+        schedulePanelEnter()
+        return
+      }
+
+      updateMotionState('collapsed')
+      if (!isNarrowRef.current) {
+        panelRef.current?.collapse()
+      }
+      if (!hasPanelRef.current || !hasPanelContentRef.current) {
+        setIsPanelMounted(false)
+      }
+    }, [clearPanelMotion, schedulePanelEnter, updateMotionState])
+
+    const startPanelExit = React.useCallback((): void => {
+      if (
+        motionStateRef.current === 'collapsed' ||
+        motionStateRef.current === 'exiting' ||
+        !isPanelMounted
+      ) {
+        return
+      }
+
+      clearPanelMotion()
+      updateMotionState('exiting')
+
+      if (prefersReducedMotion()) {
+        finishPanelExit()
+        return
+      }
+
+      const element = panelPresenceRef.current
+      const timeout = element ? getWorkspacePanelTransitionTimeout(element) : 0
+      if (timeout <= 0) {
+        finishPanelExit()
+        return
+      }
+
+      transitionTimerRef.current = setTimeout(() => {
+        transitionTimerRef.current = null
+        finishPanelExit()
+      }, timeout)
+    }, [clearPanelMotion, finishPanelExit, isPanelMounted, updateMotionState])
+
+    React.useEffect(() => {
+      latestPanelKeyRef.current = panelKey
+      latestPanelContentRef.current = rightPanelContent
+      desiredPanelOpenRef.current = shouldOpenPanel
+      hasPanelRef.current = hasPanel
+      hasPanelContentRef.current = hasPanelContent
+      panelHiddenRef.current = panelHidden
+      isNarrowRef.current = isNarrow
+    }, [
+      hasPanel,
+      hasPanelContent,
+      isNarrow,
+      panelHidden,
+      panelKey,
+      rightPanelContent,
+      shouldOpenPanel
+    ])
+
+    React.useEffect(() => {
+      const panelKeyChanged = previousPanelKeyRef.current !== panelKey
+      previousPanelKeyRef.current = panelKey
+
+      if (!isPanelMounted) {
+        if (shouldOpenPanel) {
+          setIsPanelMounted(true)
+          setRenderedPanelContent(latestPanelContentRef.current)
+          setRenderedPanelKey(latestPanelKeyRef.current)
+          updateMotionState('entering')
+          schedulePanelEnter()
+        }
+        return
+      }
+
+      const currentState = motionStateRef.current
+      if (!shouldOpenPanel) {
+        if (currentState === 'collapsed') {
+          if (!hasPanel || !hasPanelContent) {
+            setIsPanelMounted(false)
+          }
+        } else {
+          startPanelExit()
+        }
+        return
+      }
+
+      if (currentState === 'collapsed') {
+        setRenderedPanelContent(latestPanelContentRef.current)
+        setRenderedPanelKey(latestPanelKeyRef.current)
+        updateMotionState('entering')
+        schedulePanelEnter()
+        return
+      }
+
+      if (currentState === 'entering') {
+        schedulePanelEnter()
+        return
+      }
+
+      if (panelKeyChanged && currentState !== 'exiting') {
+        startPanelExit()
+      }
+    }, [
+      hasPanel,
+      hasPanelContent,
+      isPanelMounted,
+      panelKey,
+      schedulePanelEnter,
+      shouldOpenPanel,
+      startPanelExit,
+      updateMotionState
+    ])
+
+    React.useEffect(() => {
+      return () => clearPanelMotion()
+    }, [clearPanelMotion])
+
+    React.useEffect(() => {
+      if (!isPanelMounted) {
+        lastAppliedPanelKeyRef.current = null
+      }
+    }, [isPanelMounted])
+
+    React.useEffect(() => {
+      if (isNarrow || !isPanelMounted) {
+        return
+      }
+
+      const panel = panelRef.current
+      if (!panel) {
+        return
+      }
+
+      if (!shouldOpenPanel) {
+        if (panelMotionState === 'collapsed') {
+          panel.collapse()
+        }
+        return
+      }
+
+      if (panelMotionState !== 'entering' && panelMotionState !== 'open') {
+        return
+      }
+
+      const wasCollapsed = panel.isCollapsed()
+      if (wasCollapsed) {
+        panel.expand()
+      }
+
+      if (
+        renderedPanelKey === panelKey &&
+        (wasCollapsed || lastAppliedPanelKeyRef.current !== panelKey)
+      ) {
+        panel.resize(`${panelWidth}px`)
+        lastAppliedPanelKeyRef.current = panelKey
+      }
+    }, [
+      isNarrow,
+      isPanelMounted,
+      panelKey,
+      panelMotionState,
+      panelWidth,
+      renderedPanelKey,
+      shouldOpenPanel
+    ])
+
+    const handlePanelTransitionEnd = React.useCallback(
+      (event: React.TransitionEvent<HTMLDivElement>): void => {
+        if (event.target !== event.currentTarget || event.propertyName !== 'transform') {
+          return
+        }
+
+        finishPanelExit()
+      },
+      [finishPanelExit]
+    )
+
+    const handlePanelTransitionCancel = React.useCallback(
+      (event: React.TransitionEvent<HTMLDivElement>): void => {
+        if (event.target !== event.currentTarget || event.propertyName !== 'transform') {
+          return
+        }
+
+        finishPanelExit()
+      },
+      [finishPanelExit]
+    )
+
+    const panelContentToRender =
+      panelMotionState === 'exiting' || renderedPanelKey !== panelKey
+        ? renderedPanelContent
+        : rightPanelContent
+    const panelPresence = (
+      <WorkspacePanelPresence
+        ref={panelPresenceRef}
+        motionState={panelMotionState}
+        onTransitionEnd={handlePanelTransitionEnd}
+        onTransitionCancel={handlePanelTransitionCancel}
+      >
+        {panelContentToRender}
+      </WorkspacePanelPresence>
+    )
 
     React.useEffect(() => {
       return () => {
@@ -489,46 +818,15 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
       }
     }, [])
 
-    React.useEffect(() => {
-      if (isNarrow) {
-        return
-      }
-
-      const panel = panelRef.current
-      if (!panel) {
-        return
-      }
-
-      const shouldCollapse = panelCollapsed || panelHidden
-      if (shouldCollapse && !panel.isCollapsed()) {
-        panel.collapse()
-      } else if (!shouldCollapse && panel.isCollapsed()) {
-        panel.expand()
-      }
-    }, [isNarrow, panelCollapsed, panelHidden])
-
-    if (!hasPanel || !hasPanelContent) {
+    if (!isPanelMounted && !shouldOpenPanel) {
       return <>{mainContent}</>
     }
-
-    const rightPanelContent =
-      panelContents.length === 1 ? (
-        panelContents[0]
-      ) : (
-        <WorkspaceRightPanel
-          hasPanel={hasPanel}
-          panelCollapsed={panelCollapsed}
-          panelHidden={panelHidden}
-        >
-          {panelContents}
-        </WorkspaceRightPanel>
-      )
 
     if (isNarrow) {
       return (
         <>
           {mainContent}
-          {rightPanelContent}
+          {panelPresence}
         </>
       )
     }
@@ -546,7 +844,12 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
 
           persistLayoutFrameRef.current = window.requestAnimationFrame(() => {
             persistLayoutFrameRef.current = null
-            if (panelHidden || panelRef.current?.isCollapsed()) {
+            if (
+              panelHidden ||
+              !hasPanel ||
+              panelMotionState !== 'open' ||
+              panelRef.current?.isCollapsed()
+            ) {
               return
             }
 
@@ -579,7 +882,7 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
         <ResizablePanel
           id="workspace-right-panel"
           className="min-w-0"
-          defaultSize={initialPanelWidth}
+          defaultSize={panelWidth}
           minSize={220}
           maxSize={480}
           collapsedSize={0}
@@ -590,14 +893,16 @@ const WorkspaceResizableLayout = React.forwardRef<HTMLDivElement, WorkspaceResiz
           onResize={(size) => {
             latestPanelWidthRef.current = size.inPixels
             if (size.inPixels <= 0) {
-              if (!panelHidden) {
+              clearPanelMotion()
+              updateMotionState('collapsed')
+              if (hasPanel && !panelHiddenRef.current) {
                 onPanelCollapsedChange?.(true)
               }
               return
             }
           }}
         >
-          {rightPanelContent}
+          {panelPresence}
         </ResizablePanel>
       </ResizablePanelGroup>
     )
@@ -674,7 +979,7 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
     const {
       hasPanel,
       onTogglePanel,
-      panelCollapsed,
+      panelOpen,
       setMainActionSlot,
       setPanelActionSlot,
       setSecondaryRightActionSlot
@@ -733,7 +1038,7 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           >
             <div
               className={cn(
-                'app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto',
+                'app-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none',
                 workspaceTopbarControlClass
               )}
             >
@@ -759,9 +1064,23 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
               />
               {hasPanel && onTogglePanel ? (
                 <WorkspaceIconButton
-                  aria-label={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
-                  title={panelCollapsed ? 'Open right sidebar' : 'Close right sidebar'}
-                  icon={panelCollapsed ? <PanelRightOpen /> : <PanelRightClose />}
+                  data-testid="workspace-right-panel-toggle"
+                  data-panel-toggle-state={panelOpen ? 'open' : 'collapsed'}
+                  aria-label={panelOpen ? 'Close right sidebar' : 'Open right sidebar'}
+                  title={panelOpen ? 'Close right sidebar' : 'Open right sidebar'}
+                  icon={
+                    panelOpen ? (
+                      <PanelRightClose
+                        data-testid="workspace-right-panel-close-icon"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <PanelRightOpen
+                        data-testid="workspace-right-panel-open-icon"
+                        aria-hidden="true"
+                      />
+                    )
+                  }
                   onClick={onTogglePanel}
                 />
               ) : null}

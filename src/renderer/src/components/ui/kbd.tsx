@@ -25,6 +25,7 @@ const SHORTCUT_DEFINITIONS: Record<string, ShortcutDefinition> = {
   control: { ariaLabel: 'Control', label: '⌃' },
   ctrl: { ariaLabel: 'Control', label: '⌃' },
   delete: { ariaLabel: 'Delete', label: '⌦' },
+  drag: { ariaLabel: 'Drag', label: 'drag' },
   down: { ariaLabel: 'Down Arrow', label: '↓' },
   enter: { ariaLabel: 'Enter', label: 'Enter' },
   esc: { ariaLabel: 'Escape', label: 'Esc' },

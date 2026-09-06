@@ -1,7 +1,15 @@
 import fs from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { z } from 'zod'
 import { createFileAtomically, writeFileAtomically } from './atomicFile'
+import {
+  compareAndSwapWriteFile,
+  hashVaultBytes,
+  readVaultFileWithRevision,
+  readVaultFileRevision,
+  VaultRevisionConflictError
+} from './vaultRevision'
 import { createDirectoryAncestors, getDirectoryTraversal } from './directoryTraversal'
 import {
   createEmptyExcalidrawFileDocument,
@@ -47,6 +55,11 @@ import {
   StoredExcalidrawFileDocument,
   StoredNoteDocument
 } from '../shared/types'
+import type {
+  NoteDocumentReadResult,
+  WriteNoteDocumentRequest,
+  WriteNoteResult
+} from '../shared/vaultProtocol'
 
 const notePathSchema = z.string().min(1).max(512)
 const genericPathSchema = z.string().min(1).max(512)
@@ -55,7 +68,8 @@ const EXCALIDRAW_BACKUP_SUFFIX = '.bak'
 const EXCALIDRAW_READ_RETRY_COUNT = 3
 const EXCALIDRAW_READ_RETRY_DELAY_MS = 30
 
-type InternalWriteCallback = (relPath: string) => void
+type InternalWriteCallback = (relPath: string, contentHash?: string, transactionId?: string) => void
+type InternalDeleteCallback = (relPath: string, transactionId?: string) => void
 
 export interface FolderNoteDocumentsResult {
   notes: Array<{ relPath: string; document: StoredNoteDocument }>
@@ -66,7 +80,8 @@ export class FileService {
   constructor(
     private readonly notesRoot: string,
     private readonly attachmentsRoot: string,
-    private readonly onInternalWrite: InternalWriteCallback
+    private readonly onInternalWrite: InternalWriteCallback,
+    private readonly onInternalDelete: InternalDeleteCallback = () => undefined
   ) {}
 
   async listNotes(): Promise<NoteListItem[]> {
@@ -92,6 +107,16 @@ export class FileService {
     const absolutePath = joinSafe(this.notesRoot, relPath)
     const raw = await fs.readFile(absolutePath, 'utf-8')
     return parseStoredNoteDocument(raw)
+  }
+
+  async readNoteDocumentWithRevision(relPathInput: string): Promise<NoteDocumentReadResult> {
+    const relPath = sanitizeNotePath(relPathInput)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    const readResult = await readVaultFileWithRevision(absolutePath)
+    const raw = readResult.content.toString('utf8')
+    const document = parseStoredNoteDocument(raw)
+    const revision = readResult.revision
+    return { document, revision }
   }
 
   async listNoteDocumentsInFolder(folderRelPathInput: string): Promise<FolderNoteDocumentsResult> {
@@ -155,8 +180,9 @@ export class FileService {
     try {
       const backupRaw = await fs.readFile(backupPath, 'utf-8')
       const document = parseStoredExcalidrawFileDocument(backupRaw)
-      await writeFileAtomically(absolutePath, serializeStoredExcalidrawFileDocument(document))
-      this.onInternalWrite(relPath)
+      const serialized = serializeStoredExcalidrawFileDocument(document)
+      await writeFileAtomically(absolutePath, serialized)
+      this.onInternalWrite(relPath, hashVaultBytes(serialized))
       console.warn('[FileService] Recovered Excalidraw file from backup', { relPath })
       return { document, recovered: true }
     } catch (backupError) {
@@ -176,8 +202,50 @@ export class FileService {
     const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, serializeStoredNoteDocument(document), 'utf-8')
-    this.onInternalWrite(relPath)
+    const serialized = serializeStoredNoteDocument(document)
+    await writeFileAtomically(absolutePath, serialized)
+    this.onInternalWrite(relPath, hashVaultBytes(serialized))
+  }
+
+  async writeNoteDocumentWithRevision(request: WriteNoteDocumentRequest): Promise<WriteNoteResult> {
+    const relPath = sanitizeNotePath(request.path)
+    const absolutePath = joinSafe(this.notesRoot, relPath)
+    const serialized = serializeStoredNoteDocument(request.document)
+    const transactionId = randomUUID()
+
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true })
+    try {
+      const revision = await compareAndSwapWriteFile(
+        absolutePath,
+        serialized,
+        request.baseHash,
+        undefined,
+        transactionId
+      )
+      this.onInternalWrite(relPath, revision.contentHash, transactionId)
+      return {
+        ok: true,
+        path: relPath,
+        revision,
+        transactionId
+      }
+    } catch (error) {
+      if (!(error instanceof VaultRevisionConflictError)) {
+        throw error
+      }
+
+      return {
+        ok: false,
+        path: relPath,
+        error: {
+          code: 'compare-and-swap-conflict',
+          message: error.message,
+          path: relPath,
+          expectedBaseHash: request.baseHash,
+          actualRevision: error.details.actual
+        }
+      }
+    }
   }
 
   async writeExcalidrawFileDocument(
@@ -201,7 +269,7 @@ export class FileService {
     }
 
     await writeFileAtomically(absolutePath, serialized)
-    this.onInternalWrite(relPath)
+    this.onInternalWrite(relPath, hashVaultBytes(serialized))
   }
 
   async createNote(nameInput: string): Promise<string> {
@@ -213,10 +281,8 @@ export class FileService {
     const relPath = sanitizeNotePath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument()), {
-      flag: 'wx'
-    })
-    this.onInternalWrite(relPath)
+    await createFileAtomically(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument()))
+    await this.notifyInternalWrite(relPath, absolutePath)
     return relPath
   }
 
@@ -229,7 +295,7 @@ export class FileService {
       serializeStoredExcalidrawFileDocument(createEmptyExcalidrawFileDocument())
     )
     await fs.rm(getExcalidrawBackupPath(absolutePath), { force: true })
-    this.onInternalWrite(relPath)
+    await this.notifyInternalWrite(relPath, absolutePath)
     return relPath
   }
 
@@ -238,10 +304,11 @@ export class FileService {
     const relPath = `${sanitizedName}${NOTE_FILE_EXTENSION}`
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(absolutePath, serializeStoredNoteDocument(createEmptyNoteDocument(tags)), {
-      flag: 'wx'
-    })
-    this.onInternalWrite(relPath)
+    await createFileAtomically(
+      absolutePath,
+      serializeStoredNoteDocument(createEmptyNoteDocument(tags))
+    )
+    await this.notifyInternalWrite(relPath, absolutePath)
     return relPath
   }
 
@@ -253,12 +320,11 @@ export class FileService {
     )
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
-    await fs.writeFile(
+    await createFileAtomically(
       absolutePath,
-      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(markdown)),
-      { flag: 'wx' }
+      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(markdown))
     )
-    this.onInternalWrite(relPath)
+    await this.notifyInternalWrite(relPath, absolutePath)
     return relPath
   }
 
@@ -266,7 +332,6 @@ export class FileService {
     const relPath = sanitizeEntryPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     await fs.mkdir(absolutePath, { recursive: false })
-    this.onInternalWrite(relPath)
     return relPath
   }
 
@@ -305,15 +370,14 @@ export class FileService {
       const raw = await fs.readFile(legacyAbsolutePath, 'utf-8')
 
       await fs.mkdir(path.dirname(nextAbsolutePath), { recursive: true })
-      await fs.writeFile(
+      await createFileAtomically(
         nextAbsolutePath,
-        serializeStoredNoteDocument(parseLegacyStoredNoteDocument(raw)),
-        { flag: 'wx' }
+        serializeStoredNoteDocument(parseLegacyStoredNoteDocument(raw))
       )
       await fs.rm(legacyAbsolutePath)
 
       migrated[legacyRelPath] = nextRelPath
-      this.onInternalWrite(nextRelPath)
+      await this.notifyInternalWrite(nextRelPath, nextAbsolutePath)
     }
 
     return migrated
@@ -337,8 +401,9 @@ export class FileService {
           continue
         }
 
-        await fs.writeFile(absolutePath, serializeStoredNoteDocument(converted), 'utf-8')
-        this.onInternalWrite(relPath)
+        const serialized = serializeStoredNoteDocument(converted)
+        await writeFileAtomically(absolutePath, serialized)
+        await this.notifyInternalWrite(relPath, absolutePath)
         result.converted += 1
       } catch (error) {
         result.failed.push({
@@ -379,8 +444,8 @@ export class FileService {
           continue
         }
 
-        await fs.writeFile(absolutePath, normalized, 'utf-8')
-        this.onInternalWrite(relPath)
+        await writeFileAtomically(absolutePath, normalized)
+        await this.notifyInternalWrite(relPath, absolutePath)
         result.converted += 1
       } catch (error) {
         result.failed.push({
@@ -429,12 +494,9 @@ export class FileService {
           continue
         }
 
-        await fs.writeFile(
-          absolutePath,
-          serializeStoredNoteDocument({ ...document, markdown: migrated.markdown }),
-          'utf-8'
-        )
-        this.onInternalWrite(relPath)
+        const serialized = serializeStoredNoteDocument({ ...document, markdown: migrated.markdown })
+        await writeFileAtomically(absolutePath, serialized)
+        await this.notifyInternalWrite(relPath, absolutePath)
         result.converted += 1
         result.imagesConverted += migrated.imagesConverted
         result.attachmentsCopied += migrated.attachmentsCopied
@@ -466,6 +528,13 @@ export class FileService {
       throw new Error(`A file or folder already exists at ${newRelPath}`)
     }
     await fs.mkdir(path.dirname(to), { recursive: true })
+    this.onInternalDelete(oldRelPath)
+    if (!fromStats.isDirectory()) {
+      const sourceRevision = await readVaultFileRevision(from)
+      this.onInternalWrite(newRelPath, sourceRevision.contentHash)
+    } else {
+      this.onInternalWrite(newRelPath)
+    }
     await fs.rename(from, to)
     if (!fromStats.isDirectory() && isExcalidrawPath(oldRelPath)) {
       await moveExcalidrawBackup(from, to)
@@ -476,8 +545,7 @@ export class FileService {
       newRelPath,
       fromStats.isDirectory()
     )
-    this.onInternalWrite(oldRelPath)
-    this.onInternalWrite(newRelPath)
+    await this.notifyInternalWrite(newRelPath, to)
   }
 
   async delete(relPathInput: string): Promise<void> {
@@ -489,6 +557,7 @@ export class FileService {
     const relPath = sanitizeEntryPath(relPathInput)
     const absolutePath = joinSafe(this.notesRoot, relPath)
     const stats = await fs.stat(absolutePath)
+    this.onInternalDelete(relPath)
     if (stats.isDirectory()) {
       await fs.rm(absolutePath, { recursive: true })
     } else {
@@ -497,7 +566,6 @@ export class FileService {
         await fs.rm(getExcalidrawBackupPath(absolutePath), { force: true })
       }
     }
-    this.onInternalWrite(relPath)
   }
 
   async importAttachment(sourcePath: string): Promise<string> {
@@ -536,8 +604,16 @@ export class FileService {
     const fileName = `${Date.now()}-pasted${ext.toLowerCase()}`
     const absoluteTarget = joinSafe(this.attachmentsRoot, fileName)
 
-    await fs.writeFile(absoluteTarget, Buffer.from(buffer))
+    await writeFileAtomically(absoluteTarget, Buffer.from(buffer))
     return `attachments/${fileName}`
+  }
+
+  private async notifyInternalWrite(relPath: string, absolutePath: string): Promise<void> {
+    const stats = await fs.stat(absolutePath)
+    if (!stats.isFile()) return
+
+    const revision = await readVaultFileRevision(absolutePath)
+    this.onInternalWrite(relPath, revision.contentHash)
   }
 
   private async importSingleNote(sourcePath: string): Promise<ImportedNoteResult> {
@@ -549,12 +625,11 @@ export class FileService {
     )
     const absolutePath = joinSafe(this.notesRoot, relPath)
     const content = await fs.readFile(sourcePath, 'utf-8')
-    await fs.writeFile(
+    await createFileAtomically(
       absolutePath,
-      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(content)),
-      { flag: 'wx' }
+      serializeStoredNoteDocument(createStoredNoteDocumentFromMarkdown(content))
     )
-    this.onInternalWrite(relPath)
+    await this.notifyInternalWrite(relPath, absolutePath)
 
     return {
       sourceName,

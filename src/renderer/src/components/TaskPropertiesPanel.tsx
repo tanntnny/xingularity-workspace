@@ -4,6 +4,7 @@ import {
   CalendarTaskType,
   Project,
   TaskPriority,
+  TaskRecurrenceDraft,
   TaskReminder,
   TaskStatus
 } from '../../../shared/types'
@@ -30,6 +31,7 @@ import { CollapsibleWorkspacePanelSection } from './ui/workspace-panel-section'
 import { WorkspacePanelStack, WorkspaceIconButton } from './ui/document-workspace'
 import { WorkspacePropertyRow } from './ui/workspace-property-row'
 import { Bell, BellRing, Check, X } from './ui/icons'
+import { TaskRecurrenceEditor } from './TaskRecurrenceEditor'
 import { getTaskStatus } from '../lib/taskStatus'
 import {
   CALENDAR_TASK_TYPE_CHIP_OPTIONS,
@@ -48,13 +50,18 @@ export interface TaskPropertiesPanelProps {
   projects: Project[]
   availableTags?: readonly string[]
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
+  onConfigureRecurrence?: (
+    taskId: string,
+    recurrence: TaskRecurrenceDraft | null
+  ) => void | Promise<void>
 }
 
 export function TaskPropertiesPanel({
   task,
   projects,
   availableTags = [],
-  onUpdateTask
+  onUpdateTask,
+  onConfigureRecurrence
 }: TaskPropertiesPanelProps): ReactElement {
   const selectedProject = projects.find((project) => project.id === task.projectId)
   const selectedMilestone = selectedProject?.milestones?.find(
@@ -187,6 +194,14 @@ export function TaskPropertiesPanel({
               onChange={(value) => update({ endTime: value })}
             />
           </WorkspacePropertyRow>
+          {onConfigureRecurrence ? (
+            <WorkspacePropertyRow label="Repeats" testId="task-property-recurrence">
+              <TaskRecurrenceEditor
+                task={task}
+                onChange={(recurrence) => onConfigureRecurrence(task.id, recurrence)}
+              />
+            </WorkspacePropertyRow>
+          ) : null}
           <WorkspacePropertyRow label="Tags" testId="task-property-tags">
             <TagEditor
               value={task.tags ?? []}

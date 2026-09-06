@@ -28,12 +28,29 @@ import {
 
 const TICK_INTERVAL_MS = 60_000 // check every minute
 
+interface ScheduleContext {
+  generation: number
+  rootPath: string
+  store: ScheduleStore
+}
+
+interface RunningJob {
+  controller: AbortController
+}
+
+class ScheduleVaultChangedError extends Error {
+  constructor() {
+    super('Vault changed while the scheduled job was running')
+    this.name = 'ScheduleVaultChangedError'
+  }
+}
+
 export class ScheduleService {
   private runtime: VaultRuntime
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private vaultRoot: string | null = null
-  private readonly runningJobs = new Set<string>()
-  private readonly cancellationControllers = new Map<string, AbortController>()
+  private vaultGeneration = 0
+  private readonly runningJobs = new Map<string, RunningJob>()
 
   constructor(runtime: VaultRuntime) {
     this.runtime = runtime
@@ -44,36 +61,49 @@ export class ScheduleService {
   }
 
   destroy(): void {
+    this.vaultGeneration += 1
     if (this.tickTimer) {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
     this.vaultRoot = null
-    for (const controller of this.cancellationControllers.values()) {
+    for (const { controller } of this.runningJobs.values()) {
       controller.abort()
     }
-    this.cancellationControllers.clear()
     this.runningJobs.clear()
   }
 
   async handleVaultChange(vaultRoot: string | null): Promise<void> {
+    const generation = ++this.vaultGeneration
     if (this.tickTimer) {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
 
+    for (const { controller } of this.runningJobs.values()) {
+      controller.abort()
+    }
+    this.runningJobs.clear()
     this.vaultRoot = vaultRoot
 
     if (!vaultRoot) {
       return
     }
 
-    const store = this.createStore()
-    const jobs = await store.readJobs()
+    const context = this.createContextForVault(vaultRoot, generation)
+    const jobs = await context.store.readJobs()
+    if (!this.isCurrentContext(context)) {
+      return
+    }
+
     for (const job of jobs) {
       if (job.enabled && job.trigger.type === 'on_app_start') {
-        void this.executeScheduledJob(job)
+        void this.executeScheduledJob(job, context)
       }
+    }
+
+    if (!this.isCurrentContext(context)) {
+      return
     }
 
     this.tickTimer = setInterval(() => {
@@ -84,13 +114,16 @@ export class ScheduleService {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   async listJobs(): Promise<ScheduleJob[]> {
-    return this.createStore().readJobs()
+    const context = await this.createReadContext()
+    return context ? context.store.readJobs() : []
   }
 
   async saveJob(input: ScheduleJobInput): Promise<ScheduleJob> {
     const now = new Date().toISOString()
-    const store = this.createStore()
-    const existing = input.id ? (await store.readJobs()).find((j) => j.id === input.id) : null
+    const context = await this.createContext()
+    const existing = input.id
+      ? (await context.store.readJobs()).find((j) => j.id === input.id)
+      : null
 
     const permissions = normalizeSchedulePermissions(input.permissions)
     const secretRefs = input.secretRefs ?? existing?.secretRefs ?? []
@@ -120,35 +153,37 @@ export class ScheduleService {
       nextRunAt: computeNextRunAt(input.trigger)
     }
 
-    await store.upsertJob(job)
+    await context.store.upsertJob(job)
     return job
   }
 
   async deleteJob(id: string): Promise<void> {
-    await this.createStore().deleteJob(id)
+    const context = await this.createContext()
+    await context.store.deleteJob(id)
   }
 
   async runNow(id: string): Promise<ScheduleRunRecord> {
-    const store = this.createStore()
-    const jobs = await store.readJobs()
+    const context = await this.createContext()
+    const jobs = await context.store.readJobs()
     const job = jobs.find((j) => j.id === id)
     if (!job) {
       throw new Error(`Schedule job not found: ${id}`)
     }
-    return this.executeJob(job)
+    return this.executeJob(job, context)
   }
 
   async cancelRun(jobId: string): Promise<boolean> {
-    const controller = this.cancellationControllers.get(jobId)
-    if (!controller) {
+    const runningJob = this.runningJobs.get(jobId)
+    if (!runningJob) {
       return false
     }
-    controller.abort()
+    runningJob.controller.abort()
     return true
   }
 
   async listRuns(jobId: string): Promise<ScheduleRunRecord[]> {
-    return this.createStore().readRunsForJob(jobId)
+    const context = await this.createReadContext()
+    return context ? context.store.readRunsForJob(jobId) : []
   }
 
   async listSecrets(): Promise<string[]> {
@@ -164,16 +199,16 @@ export class ScheduleService {
   }
 
   async applyActions(runId: string): Promise<void> {
-    const store = this.createStore()
-    const run = await store.findRun(runId)
+    const context = await this.createContext()
+    const run = await context.store.findRun(runId)
     if (!run) throw new Error(`Run not found: ${runId}`)
     if (run.status !== 'review') throw new Error(`Run ${runId} is not in review status`)
 
-    const jobs = await store.readJobs()
+    const jobs = await context.store.readJobs()
     const job = jobs.find((j) => j.id === run.jobId)
     if (!job) throw new Error(`Job not found for run ${runId}`)
 
-    const appliedResult = await this.applyScriptActions(run.proposedActions, job)
+    const appliedResult = await this.applyScriptActions(run.proposedActions, job, context)
 
     const updatedRun: ScheduleRunRecord = {
       ...run,
@@ -181,17 +216,17 @@ export class ScheduleService {
       appliedActions: appliedResult.applied,
       actionErrors: appliedResult.errors
     }
-    await store.upsertRun(updatedRun)
-    await this.syncJobStatusFromLatestRun(store, run.jobId)
+    await context.store.upsertRun(updatedRun)
+    await this.syncJobStatusFromLatestRun(context.store, run.jobId)
   }
 
   async dismissRun(runId: string): Promise<void> {
-    const store = this.createStore()
-    const run = await store.findRun(runId)
+    const context = await this.createContext()
+    const run = await context.store.findRun(runId)
     if (!run) throw new Error(`Run not found: ${runId}`)
 
-    await store.upsertRun({ ...run, status: 'cancelled' })
-    await this.syncJobStatusFromLatestRun(store, run.jobId)
+    await context.store.upsertRun({ ...run, status: 'cancelled' })
+    await this.syncJobStatusFromLatestRun(context.store, run.jobId)
   }
 
   private async syncJobStatusFromLatestRun(store: ScheduleStore, jobId: string): Promise<void> {
@@ -213,58 +248,66 @@ export class ScheduleService {
   // ── Internal execution ─────────────────────────────────────────────────────
 
   private async tick(): Promise<void> {
-    if (!this.vaultRoot) {
+    const context = await this.createReadContext()
+    if (!context || !this.isCurrentContext(context)) {
       return
     }
     const now = new Date()
-    const jobs = await this.createStore().readJobs()
+    const jobs = await context.store.readJobs()
+    if (!this.isCurrentContext(context)) {
+      return
+    }
 
     for (const job of jobs) {
       if (!job.enabled) continue
       if (job.trigger.type === 'manual' || job.trigger.type === 'on_app_start') continue
       if (!job.nextRunAt) continue
       if (new Date(job.nextRunAt) <= now) {
-        void this.executeScheduledJob(job)
+        void this.executeScheduledJob(job, context)
       }
     }
   }
 
-  private async executeScheduledJob(job: ScheduleJob): Promise<void> {
+  private async executeScheduledJob(job: ScheduleJob, context: ScheduleContext): Promise<void> {
     if (this.runningJobs.has(job.id)) {
       return
     }
 
     try {
-      await this.executeJob(job)
+      await this.executeJob(job, context)
     } catch (error) {
       console.error(`[ScheduleService] Scheduled job ${job.id} failed:`, error)
     }
   }
 
-  private async executeJob(job: ScheduleJob): Promise<ScheduleRunRecord> {
+  private async executeJob(job: ScheduleJob, context: ScheduleContext): Promise<ScheduleRunRecord> {
     if (this.runningJobs.has(job.id)) {
       throw new Error(`Schedule job is already running: ${job.id}`)
     }
 
-    this.runningJobs.add(job.id)
+    this.assertCurrentContext(context)
     const controller = new AbortController()
-    this.cancellationControllers.set(job.id, controller)
+    this.runningJobs.set(job.id, { controller })
     try {
-      return await this.executeJobInternal(job, controller.signal)
+      return await this.executeJobInternal(job, context, controller.signal)
     } finally {
-      this.cancellationControllers.delete(job.id)
-      this.runningJobs.delete(job.id)
+      const runningJob = this.runningJobs.get(job.id)
+      if (runningJob?.controller === controller) {
+        this.runningJobs.delete(job.id)
+      }
     }
   }
 
   private async executeJobInternal(
     job: ScheduleJob,
+    context: ScheduleContext,
     signal: AbortSignal
   ): Promise<ScheduleRunRecord> {
     const startedAt = new Date().toISOString()
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    const store = this.createStore()
+    this.assertCurrentContext(context)
+    const store = context.store
 
     await store.upsertJob({
       ...job,
@@ -291,12 +334,15 @@ export class ScheduleService {
         job.permissions.includes('useSecrets') && job.secretRefs?.length
           ? await new ScheduleSecretsStore().resolve(job.secretRefs)
           : {}
+      this.assertCurrentContext(context)
       const settings = await this.runtime.getSettings()
+      this.assertCurrentContext(context)
       const result = await runScript(job, secretEnv, {
         condaEnvironmentPath: settings.pythonCondaEnvironmentPath,
         condaExecutablePath: settings.pythonCondaExecutablePath,
         signal
       })
+      this.assertCurrentContext(context)
       const endedAt = new Date().toISOString()
 
       let finalStatus: RunStatus = result.cancelled ? 'cancelled' : 'success'
@@ -311,7 +357,7 @@ export class ScheduleService {
         finalStatus = result.actions.length > 0 ? 'review' : 'success'
       } else {
         // auto_apply
-        const appliedResult = await this.applyScriptActions(result.actions, job)
+        const appliedResult = await this.applyScriptActions(result.actions, job, context)
         appliedActions = appliedResult.applied
         actionErrors = appliedResult.errors
         finalStatus = actionErrors.length > 0 ? 'error' : 'success'
@@ -329,11 +375,13 @@ export class ScheduleService {
         actionErrors
       }
     } catch (err) {
+      const vaultChanged =
+        err instanceof ScheduleVaultChangedError || !this.isCurrentContext(context)
       run = {
         ...run,
         endedAt: new Date().toISOString(),
-        status: 'error',
-        errorMessage: err instanceof Error ? err.message : String(err)
+        status: vaultChanged ? 'cancelled' : 'error',
+        ...(vaultChanged ? {} : { errorMessage: err instanceof Error ? err.message : String(err) })
       }
     }
 
@@ -355,20 +403,26 @@ export class ScheduleService {
 
   private async applyScriptActions(
     actions: ScriptAction[],
-    job: ScheduleJob
+    job: ScheduleJob,
+    context: ScheduleContext
   ): Promise<{ applied: ScriptAction[]; errors: string[] }> {
     const applied: ScriptAction[] = []
     const errors: string[] = []
 
     for (const action of actions) {
+      this.assertCurrentContext(context)
       try {
         const ok = await this.applyOneAction(action, job)
+        this.assertCurrentContext(context)
         if (ok) {
           applied.push(action)
         } else {
           errors.push(describeActionFailure(action))
         }
       } catch (err) {
+        if (!this.isCurrentContext(context)) {
+          throw new ScheduleVaultChangedError()
+        }
         console.error(`[ScheduleService] Failed to apply action ${action.type}:`, err)
         errors.push(
           `${describeActionFailure(action)}: ${err instanceof Error ? err.message : String(err)}`
@@ -622,11 +676,38 @@ export class ScheduleService {
     )
   }
 
-  private createStore(): ScheduleStore {
-    if (!this.vaultRoot) {
+  private async createContext(): Promise<ScheduleContext> {
+    const ready = await this.runtime.waitForVaultReady()
+    if (!ready || !this.vaultRoot) {
       throw new Error('No vault selected for schedule operations')
     }
-    return new ScheduleStore(this.vaultRoot)
+    return this.createContextForVault(this.vaultRoot, this.vaultGeneration)
+  }
+
+  private async createReadContext(): Promise<ScheduleContext | null> {
+    const ready = await this.runtime.waitForVaultReady()
+    if (!ready || !this.vaultRoot) {
+      return null
+    }
+    return this.createContextForVault(this.vaultRoot, this.vaultGeneration)
+  }
+
+  private createContextForVault(rootPath: string, generation: number): ScheduleContext {
+    return {
+      generation,
+      rootPath,
+      store: new ScheduleStore(rootPath)
+    }
+  }
+
+  private isCurrentContext(context: ScheduleContext): boolean {
+    return context.generation === this.vaultGeneration && context.rootPath === this.vaultRoot
+  }
+
+  private assertCurrentContext(context: ScheduleContext): void {
+    if (!this.isCurrentContext(context)) {
+      throw new ScheduleVaultChangedError()
+    }
   }
 }
 

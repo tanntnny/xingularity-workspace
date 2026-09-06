@@ -171,6 +171,7 @@ function makeSettings(): AppSettings {
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
+    workspaceViews: [],
     projectIcons: {},
     projects: [],
     gridBoard: {

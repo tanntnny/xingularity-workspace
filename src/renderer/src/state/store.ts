@@ -65,6 +65,7 @@ export const useVaultStore = create<VaultState>((set) => ({
     editorVimKeyMappings: [],
     calendarTasks: [],
     projectIcons: {},
+    workspaceViews: [],
     projects: [],
     gridBoard: {
       viewport: {

@@ -8,7 +8,14 @@ import { PanelLeft } from './icons'
 import { cn } from '../../lib/utils'
 import { Button } from './button'
 import { Input } from './input'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'
+import {
+  getButtonTooltipLabel,
+  Tooltip,
+  TooltipButton,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from './tooltip'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -190,26 +197,24 @@ const SidebarProvider = React.forwardRef<
 
     return (
       <SidebarContext.Provider value={contextValue}>
-        <TooltipProvider delayDuration={0}>
-          <div
-            style={
-              {
-                '--sidebar-width': `${sidebarWidth}px`,
-                '--sidebar-width-min': `${SIDEBAR_MIN_WIDTH}px`,
-                '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
-                ...style
-              } as React.CSSProperties
-            }
-            className={cn(
-              'group/sidebar-wrapper flex w-full has-[[data-variant=inset]]:bg-sidebar',
-              className
-            )}
-            ref={ref}
-            {...props}
-          >
-            {children}
-          </div>
-        </TooltipProvider>
+        <div
+          style={
+            {
+              '--sidebar-width': `${sidebarWidth}px`,
+              '--sidebar-width-min': `${SIDEBAR_MIN_WIDTH}px`,
+              '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
+              ...style
+            } as React.CSSProperties
+          }
+          className={cn(
+            'group/sidebar-wrapper flex w-full has-[[data-variant=inset]]:bg-sidebar',
+            className
+          )}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </div>
       </SidebarContext.Provider>
     )
   }
@@ -256,7 +261,7 @@ const Sidebar = React.forwardRef<
       return (
         <div
           className={cn(
-            'fixed inset-0 z-50 bg-overlay-muted transition-opacity motion-reduce:transition-none',
+            'motion-sidebar-overlay fixed inset-0 z-50 bg-overlay-muted motion-reduce:transition-none',
             openMobile ? 'opacity-100' : 'pointer-events-none opacity-0'
           )}
           onClick={() => setOpenMobile(false)}
@@ -265,7 +270,7 @@ const Sidebar = React.forwardRef<
             data-sidebar="sidebar"
             data-mobile="true"
             className={cn(
-              'fixed inset-y-0 z-50 flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-linear motion-reduce:transition-none',
+              'motion-sidebar fixed inset-y-0 z-50 flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground motion-reduce:transition-none',
               side === 'left'
                 ? 'left-0 border-r border-sidebar-border'
                 : 'right-0 border-l border-sidebar-border',
@@ -300,7 +305,7 @@ const Sidebar = React.forwardRef<
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            'relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear motion-reduce:transition-none',
+            'motion-sidebar-gap relative h-svh w-[--sidebar-width] bg-transparent motion-reduce:transition-none',
             'group-data-[collapsible=offcanvas]:w-0',
             'group-data-[side=right]:rotate-180',
             variant === 'floating' || variant === 'inset'
@@ -314,7 +319,7 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            'fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear motion-reduce:transition-none md:flex',
+            'motion-sidebar fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] md:flex motion-reduce:transition-none',
             side === 'left'
               ? 'left-0 group-data-[collapsible=offcanvas]:-translate-x-full'
               : 'right-0 group-data-[collapsible=offcanvas]:translate-x-full',
@@ -372,10 +377,18 @@ const SidebarTrigger = React.forwardRef<
 })
 SidebarTrigger.displayName = 'SidebarTrigger'
 
-const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'button'>>(
+const SidebarRail = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<'button'> & {
+    tooltip?: string
+    tooltipWrapperClassName?: string
+  }
+>(
   (
     {
       className,
+      tooltip = 'Resize or toggle Sidebar',
+      tooltipWrapperClassName,
       onClick,
       onKeyDown,
       onPointerDown,
@@ -429,7 +442,7 @@ const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'bu
       onFinished?.(event)
     }
 
-    return (
+    const rail = (
       <button
         ref={ref}
         type="button"
@@ -539,6 +552,16 @@ const SidebarRail = React.forwardRef<HTMLButtonElement, React.ComponentProps<'bu
         )}
         {...props}
       />
+    )
+
+    return (
+      <TooltipButton
+        label={tooltip}
+        disabled={props.disabled}
+        wrapperClassName={tooltipWrapperClassName}
+      >
+        {rail}
+      </TooltipButton>
     )
   }
 )
@@ -733,7 +756,7 @@ const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<'li
 SidebarMenuItem.displayName = 'SidebarMenuItem'
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md border border-transparent px-2 py-2 text-left text-sm font-bold text-muted-foreground outline-none ring-sidebar-ring transition-[background-color,color,width,height,padding] duration-150 motion-reduce:transition-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-bold data-[active=true]:text-sidebar-accent-foreground group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:[&>span]:hidden [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+  'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md border border-transparent px-2 py-2 text-left text-sm font-bold text-muted-foreground outline-none ring-sidebar-ring transition-[background-color,color,width,height,padding] duration-150 motion-reduce:transition-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-bold data-[active=true]:text-sidebar-accent-foreground group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:[&>span]:hidden [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -745,11 +768,16 @@ const sidebarMenuButtonVariants = cva(
         default: 'h-8 text-sm',
         sm: 'h-7 text-xs',
         lg: 'h-12 text-sm group-data-[collapsible=icon]:!p-0'
+      },
+      labelOverflow: {
+        truncate: '[&>span:last-child]:truncate',
+        fade: '[&>span:last-child]:!text-clip'
       }
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default'
+      size: 'default',
+      labelOverflow: 'truncate'
     }
   }
 )
@@ -768,6 +796,7 @@ const SidebarMenuButton = React.forwardRef<
       isActive = false,
       variant = 'default',
       size = 'default',
+      labelOverflow = 'truncate',
       tooltip,
       className,
       style,
@@ -776,7 +805,7 @@ const SidebarMenuButton = React.forwardRef<
     ref
   ) => {
     const Comp = asChild ? Slot : 'button'
-    const { isMobile, state } = useSidebar()
+    const { isMobile } = useSidebar()
 
     const button = (
       <Comp
@@ -784,13 +813,20 @@ const SidebarMenuButton = React.forwardRef<
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
-        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        className={cn(sidebarMenuButtonVariants({ variant, size, labelOverflow }), className)}
         style={style}
         {...props}
       />
     )
 
-    if (!tooltip) {
+    const tooltipLabel =
+      typeof tooltip === 'string'
+        ? tooltip
+        : tooltip?.children
+          ? getButtonTooltipLabel(undefined, undefined, undefined, tooltip.children)
+          : getButtonTooltipLabel(undefined, props['aria-label'], props.title, props.children)
+
+    if (!tooltip && !tooltipLabel) {
       return button
     }
 
@@ -798,18 +834,19 @@ const SidebarMenuButton = React.forwardRef<
       tooltip = {
         children: tooltip
       }
+    } else if (!tooltip) {
+      tooltip = {
+        children: tooltipLabel
+      }
     }
 
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent
-          side="right"
-          align="center"
-          hidden={state !== 'collapsed' || isMobile}
-          {...tooltip}
-        />
-      </Tooltip>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent side="right" align="center" hidden={isMobile} {...tooltip} />
+        </Tooltip>
+      </TooltipProvider>
     )
   }
 )
@@ -820,30 +857,63 @@ const SidebarMenuAction = React.forwardRef<
   React.ComponentProps<'button'> & {
     asChild?: boolean
     showOnHover?: boolean
+    tooltip?: string
+    tooltipWrapperClassName?: string
   }
->(({ className, asChild = false, showOnHover = false, ...props }, ref) => {
-  const Comp = asChild ? Slot : 'button'
+>(
+  (
+    {
+      className,
+      asChild = false,
+      showOnHover = false,
+      tooltip,
+      tooltipWrapperClassName,
+      title,
+      'aria-label': ariaLabel,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    const Comp = asChild ? Slot : 'button'
+    const resolvedTooltip = getButtonTooltipLabel(tooltip, ariaLabel, title, children)
+    const button = (
+      <Comp
+        ref={ref}
+        data-sidebar="menu-action"
+        className={cn(
+          'absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
+          // Increases the hit area of the button on mobile.
+          'after:absolute after:-inset-2 after:md:hidden',
+          'peer-data-[size=sm]/menu-button:top-1',
+          'peer-data-[size=default]/menu-button:top-1.5',
+          'peer-data-[size=lg]/menu-button:top-2.5',
+          'group-data-[collapsible=icon]:hidden',
+          showOnHover &&
+            'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 group-focus-within/menu-item:duration-150 group-hover/menu-item:duration-150 data-[state=open]:duration-150 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0',
+          className
+        )}
+        aria-label={ariaLabel}
+        title={title}
+        {...props}
+      >
+        {children}
+      </Comp>
+    )
 
-  return (
-    <Comp
-      ref={ref}
-      data-sidebar="menu-action"
-      className={cn(
-        'absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform motion-reduce:transition-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
-        // Increases the hit area of the button on mobile.
-        'after:absolute after:-inset-2 after:md:hidden',
-        'peer-data-[size=sm]/menu-button:top-1',
-        'peer-data-[size=default]/menu-button:top-1.5',
-        'peer-data-[size=lg]/menu-button:top-2.5',
-        'group-data-[collapsible=icon]:hidden',
-        showOnHover &&
-          'group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0',
-        className
-      )}
-      {...props}
-    />
-  )
-})
+    return resolvedTooltip ? (
+      <TooltipButton
+        label={resolvedTooltip}
+        disabled={props.disabled}
+        wrapperClassName={tooltipWrapperClassName}
+      >
+        {button}
+      </TooltipButton>
+    ) : (
+      button
+    )
+  }
+)
 SidebarMenuAction.displayName = 'SidebarMenuAction'
 
 const SidebarMenuBadge = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(

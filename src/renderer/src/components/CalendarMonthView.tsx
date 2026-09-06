@@ -1,8 +1,14 @@
-import { ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import { Draggable, DropArg, EventDragStopArg, EventResizeDoneArg } from '@fullcalendar/interaction'
+import {
+  Draggable,
+  DropArg,
+  EventDragStartArg,
+  EventDragStopArg,
+  EventResizeDoneArg
+} from '@fullcalendar/interaction'
 import {
   DayCellMountArg,
   EventApi,
@@ -17,6 +23,7 @@ import {
   TaskPriority,
   TaskReminder
 } from '../../../shared/types'
+import type { TaskScheduleOverride } from '../../../shared/types'
 import { isTaskStatusDone } from '../../../shared/taskStatus'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { TaskContextMenu } from './TaskContextMenu'
@@ -27,9 +34,14 @@ import {
   type CalendarEventInput,
   normalizeCalendarTasks
 } from '../lib/calendarTasks'
-import { toIsoDate } from '../lib/calendarDate'
+import { parseIsoDate, toIsoDate } from '../lib/calendarDate'
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
-import { setCalendarTaskUnscheduledDragOver } from '../lib/calendarTaskDragSession'
+import {
+  getCalendarTaskDragSession,
+  setCalendarTaskDragSession,
+  setCalendarTaskUnscheduledDragOver,
+  type CalendarTaskDragMode
+} from '../lib/calendarTaskDragSession'
 import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 
@@ -40,6 +52,8 @@ interface CalendarMonthViewProps {
   onSelectDate: (date: string) => void
   onCreateTask?: (date: string) => Promise<CalendarTask>
   onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
+  onCopyTaskToSchedule?: (taskId: string, schedule: TaskScheduleOverride) => void | Promise<void>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onResizeTaskStart?: (taskId: string, newStartDate: string) => void
   onResizeTaskEnd?: (taskId: string, newEndDate: string) => void
@@ -58,6 +72,8 @@ export function CalendarMonthView({
   onSelectDate,
   onCreateTask,
   onOpenTask,
+  onDuplicateTask,
+  onCopyTaskToSchedule,
   onRescheduleTask,
   onResizeTaskStart,
   onResizeTaskEnd,
@@ -90,6 +106,21 @@ export function CalendarMonthView({
   const contextMenuNonceRef = useRef(0)
   const dayCellListenerMapRef = useRef(new Map<HTMLElement, (event: MouseEvent) => void>())
   const unscheduledDragCleanupRef = useRef<(() => void) | null>(null)
+  const dragModeRef = useRef<'move' | 'copy'>('move')
+  const activeDragSourceRef = useRef<HTMLElement | null>(null)
+
+  const syncCalendarDragOperation = useCallback((mode: CalendarTaskDragMode): void => {
+    const source = activeDragSourceRef.current
+    if (source) {
+      setCalendarTaskDragVisual(source, mode)
+    }
+    dragModeRef.current = mode
+
+    const session = getCalendarTaskDragSession()
+    if (session && session.mode !== mode) {
+      setCalendarTaskDragSession({ ...session, mode })
+    }
+  }, [])
 
   const normalizedTasks = useMemo(() => normalizeCalendarTasks(tasks), [tasks])
   const projectsById = useMemo(
@@ -120,6 +151,44 @@ export function CalendarMonthView({
   useEffect(() => {
     isInteractingRef.current = isInteracting
   }, [isInteracting])
+
+  useEffect(() => {
+    const handleModifierKey = (event: KeyboardEvent): void => {
+      if (
+        event.key !== 'Alt' &&
+        event.key !== 'Option' &&
+        event.code !== 'AltLeft' &&
+        event.code !== 'AltRight'
+      ) {
+        return
+      }
+
+      if (!activeDragSourceRef.current) {
+        return
+      }
+
+      syncCalendarDragOperation(event.type === 'keydown' ? 'copy' : 'move')
+    }
+    const handleDragModifier = (event: DragEvent): void => {
+      if (!activeDragSourceRef.current) {
+        return
+      }
+
+      syncCalendarDragOperation(event.altKey ? 'copy' : 'move')
+    }
+
+    window.addEventListener('keydown', handleModifierKey, true)
+    window.addEventListener('keyup', handleModifierKey, true)
+    window.addEventListener('drag', handleDragModifier, true)
+    window.addEventListener('dragover', handleDragModifier, true)
+
+    return () => {
+      window.removeEventListener('keydown', handleModifierKey, true)
+      window.removeEventListener('keyup', handleModifierKey, true)
+      window.removeEventListener('drag', handleDragModifier, true)
+      window.removeEventListener('dragover', handleDragModifier, true)
+    }
+  }, [syncCalendarDragOperation])
 
   useEffect(() => {
     const dayCellListenerMap = dayCellListenerMapRef.current
@@ -251,7 +320,10 @@ export function CalendarMonthView({
 
     const handleExternalDragStart = (event: MonthlyExternalDragEvent): void => {
       activeSource = event.subjectEl
-      activeSource.dataset.dragging = 'true'
+      activeDragSourceRef.current = activeSource
+      const mode = getCalendarTaskDragSession()?.mode ?? 'move'
+      setCalendarTaskDragVisual(activeSource, mode)
+      dragModeRef.current = mode
       startCalendarDragAutoScroll()
     }
 
@@ -269,10 +341,14 @@ export function CalendarMonthView({
 
     const handleExternalDragEnd = (): void => {
       if (activeSource) {
-        activeSource.dataset.dragging = 'false'
+        clearCalendarTaskDragVisual(activeSource)
+        if (activeDragSourceRef.current === activeSource) {
+          activeDragSourceRef.current = null
+        }
         activeSource = null
       }
       setActiveDropCell(null)
+      dragModeRef.current = 'move'
       stopCalendarDragAutoScroll()
     }
 
@@ -287,13 +363,21 @@ export function CalendarMonthView({
       handleExternalDragEnd()
       draggable.destroy()
     }
-  }, [startCalendarDragAutoScroll, stopCalendarDragAutoScroll])
+  }, [startCalendarDragAutoScroll, stopCalendarDragAutoScroll, syncCalendarDragOperation])
 
   const handleEventDrop = (dropInfo: EventDropArg): void => {
     if (!dropInfo.event.start) {
       return
     }
     const nextDate = toIsoDate(dropInfo.event.start)
+    const sourceTask = tasksById[dropInfo.event.id]
+    const mode = dragModeRef.current
+    dragModeRef.current = 'move'
+    if (mode === 'copy' && sourceTask) {
+      dropInfo.revert()
+      void onCopyTaskToSchedule?.(sourceTask.id, buildMonthlyDropSchedule(sourceTask, nextDate))
+      return
+    }
     onRescheduleTask?.(dropInfo.event.id, nextDate)
   }
 
@@ -321,10 +405,21 @@ export function CalendarMonthView({
     if (!taskId) {
       return
     }
-    onRescheduleTask?.(taskId, toIsoDate(dropInfo.date))
+    const mode = dragModeRef.current
+    const nextDate = toIsoDate(dropInfo.date)
+    const sourceTask = tasksById[taskId]
+    if (mode === 'copy' && sourceTask) {
+      void onCopyTaskToSchedule?.(taskId, buildMonthlyDropSchedule(sourceTask, nextDate))
+      return
+    }
+    onRescheduleTask?.(taskId, nextDate)
   }
 
   const handleEventDragStop = (dragInfo: EventDragStopArg): void => {
+    clearCalendarTaskDragVisual(dragInfo.el)
+    if (activeDragSourceRef.current === dragInfo.el) {
+      activeDragSourceRef.current = null
+    }
     unscheduledDragCleanupRef.current?.()
     unscheduledDragCleanupRef.current = null
     stopCalendarDragAutoScroll()
@@ -343,11 +438,21 @@ export function CalendarMonthView({
       clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
 
     if (droppedInUnscheduled) {
-      onRescheduleTask?.(dragInfo.event.id, undefined)
+      const mode = dragModeRef.current
+      dragModeRef.current = 'move'
+      if (mode === 'copy') {
+        void onCopyTaskToSchedule?.(dragInfo.event.id, {})
+      } else {
+        onRescheduleTask?.(dragInfo.event.id, undefined)
+      }
     }
   }
 
-  const handleEventDragStart = (): void => {
+  const handleEventDragStart = (dragInfo: EventDragStartArg): void => {
+    const mode: CalendarTaskDragMode = dragInfo.jsEvent.altKey ? 'copy' : 'move'
+    activeDragSourceRef.current = dragInfo.el
+    dragModeRef.current = mode
+    setCalendarTaskDragVisual(dragInfo.el, mode)
     unscheduledDragCleanupRef.current?.()
     unscheduledDragCleanupRef.current = trackUnscheduledDragHover()
     startCalendarDragAutoScroll()
@@ -462,6 +567,7 @@ export function CalendarMonthView({
   const safeRescheduleTask = onRescheduleTask ?? (() => undefined)
 
   const handleEventWillUnmount = (mountInfo: EventMountArg): void => {
+    clearCalendarTaskDragVisual(mountInfo.el)
     const handlers = eventListenerMapRef.current.get(mountInfo.el)
     if (!handlers) {
       return
@@ -652,6 +758,8 @@ export function CalendarMonthView({
           task={tasksById[calendarContextMenu.taskId]}
           selectedDate={selectedDate}
           onDelete={safeDeleteTask}
+          onDuplicateTask={onDuplicateTask}
+          showCopyGestureHint
           onUpdateStatus={(taskId, status) =>
             safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
           }
@@ -693,6 +801,62 @@ function addIsoDays(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
   return next
+}
+
+function setCalendarTaskDragVisual(element: HTMLElement | null, mode: CalendarTaskDragMode): void {
+  if (!element) {
+    return
+  }
+
+  element.dataset.dragging = 'true'
+  element.dataset.dragOperation = mode
+
+  document
+    .querySelectorAll<HTMLElement>(
+      '.calendar-full .fc-event.calendar-task-event.fc-event-dragging, .calendar-full .fc-event.calendar-task-event.fc-event-mirror, .fc-event-dragging.calendar-task-event, .fc-event-mirror.calendar-task-event'
+    )
+    .forEach((mirror) => {
+      mirror.dataset.dragging = 'true'
+      mirror.dataset.dragOperation = mode
+    })
+}
+
+function clearCalendarTaskDragVisual(element: HTMLElement | null): void {
+  if (!element) {
+    return
+  }
+
+  element.dataset.dragging = 'false'
+  delete element.dataset.dragOperation
+}
+
+function buildMonthlyDropSchedule(task: CalendarTask, date: string): TaskScheduleOverride {
+  if (!task.date) {
+    return {
+      date: null,
+      endDate: date,
+      time: null,
+      endTime: null,
+      weeklyHeightMode: null
+    }
+  }
+
+  const sourceEndDate = task.endDate && task.endDate >= task.date ? task.endDate : task.date
+  const durationDays = Math.max(
+    0,
+    Math.round(
+      (parseIsoDate(sourceEndDate).getTime() - parseIsoDate(task.date).getTime()) /
+        (24 * 60 * 60 * 1000)
+    )
+  )
+
+  return {
+    date,
+    endDate: toIsoDate(addIsoDays(parseIsoDate(date), durationDays)),
+    time: task.time ?? null,
+    endTime: task.endTime ?? null,
+    weeklyHeightMode: task.weeklyHeightMode ?? null
+  }
 }
 
 interface MonthlyExternalDragEvent {

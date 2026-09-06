@@ -11,9 +11,10 @@ import {
   CommandItem,
   CommandList
 } from './ui/command'
-import { Check, Plus, Search, TagOutline } from './ui/icons'
+import { Plus, Search, TagOutline } from './ui/icons'
 import { ResponsivePicker } from './ui/responsive-picker'
 import { useResponsivePickerOpen } from './ui/responsive-picker-context'
+import { SelectionCheckbox } from './ui/selection-checkbox'
 import { StatusChip, type StatusChipSurface } from './ui/status-chip'
 import { TagChip } from './TagChip'
 
@@ -286,17 +287,9 @@ export function TagPickerContent({
                           ? `${testId}-option:${option.value}`
                           : undefined
                     }
-                    className="min-h-9 cursor-pointer gap-2 rounded-[var(--radius-control)] px-2.5 py-1.5 text-foreground hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[checked=true]:bg-muted data-[checked=true]:text-foreground"
+                    className="group min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[checked=true]:bg-muted data-[checked=true]:text-foreground"
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'flex size-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border text-primary',
-                        selected && 'border-primary bg-primary text-primary-foreground'
-                      )}
-                    >
-                      {selected ? <Check size={12} /> : null}
-                    </span>
+                    <SelectionCheckbox checked={selected} />
                     <span
                       className={cn(
                         'min-w-0 flex-1 text-left',
@@ -362,20 +355,11 @@ export function TagPickerPopover({
     <StatusChip
       as="button"
       item={{
-        label:
-          value.length > 0 ? (
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              <span>Tags</span>
-              <Badge variant="neutral" className="h-5 min-w-5 justify-center px-1 text-[11px]">
-                {value.length}
-              </Badge>
-            </span>
-          ) : (
-            'Tags'
-          ),
+        label: 'Tags',
         icon: <TagOutline aria-hidden="true" />,
         iconColorToken: 'var(--muted-foreground)'
       }}
+      counter={value.length}
       type="button"
       surface={surface}
       title={label}

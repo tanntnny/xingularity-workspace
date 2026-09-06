@@ -1,13 +1,28 @@
 import { useMemo, useState, type ReactElement } from 'react'
-import { ChevronDown, Search, ChevronRight, type FilledIcon } from './ui/icons'
+import {
+  ChevronDown,
+  ChevronRight,
+  ListTodo,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Table,
+  Trash2,
+  type FilledIcon
+} from './ui/icons'
 
 import { ALL_APP_PAGES, type AppPage } from '../navigation'
 import { cn } from '../lib/utils'
 import { APP_PAGE_ICONS, VaultIcon } from '../lib/pageIcons'
+import type { WorkspaceView, WorkspaceViewSource } from '../../../shared/types'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -16,12 +31,14 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator
 } from './ui'
+import { NoteShapeIcon } from './NoteShapeIcon'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
 import appLogo from '../../../../assets/logo.png'
 
@@ -41,6 +58,12 @@ interface AppSidebarProps {
   className?: string
   collapsible?: 'offcanvas' | 'icon' | 'min' | 'none'
   macosTrafficLightInset?: boolean
+  workspaceViews?: readonly WorkspaceView[]
+  activeWorkspaceViewId?: string | null
+  onOpenWorkspaceView?: (viewId: string) => void
+  onCreateWorkspaceView?: (source: WorkspaceViewSource) => void
+  onDeleteWorkspaceView?: (viewId: string) => void
+  resourceViewsEnabled?: boolean
 }
 
 type SidebarPageItem = {
@@ -51,7 +74,7 @@ type SidebarPageItem = {
 }
 
 type SidebarSection = {
-  id: 'inbox' | 'view' | 'automation' | 'finance'
+  id: 'inbox' | 'workspace' | 'view' | 'automation' | 'finance'
   label: string
   items: readonly SidebarPageItem[]
 }
@@ -63,15 +86,21 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
     items: [{ id: 'capture', label: 'Capture', icon: APP_PAGE_ICONS.capture }]
   },
   {
-    id: 'view',
-    label: 'View',
+    id: 'workspace',
+    label: 'Workspace',
     items: [
       { id: 'notes', label: 'Notebooks', icon: APP_PAGE_ICONS.notes },
       { id: 'projects', label: 'Projects', icon: APP_PAGE_ICONS.projects },
       { id: 'calendar', label: 'Calendar', icon: APP_PAGE_ICONS.calendar },
+      { id: 'tasks', label: 'Tasks', icon: APP_PAGE_ICONS.resources },
       { id: 'resources', label: 'Resources', icon: APP_PAGE_ICONS.resources },
       { id: 'knowledge', label: 'Knowledge', icon: APP_PAGE_ICONS.knowledge }
     ]
+  },
+  {
+    id: 'view',
+    label: 'View',
+    items: []
   },
   {
     id: 'automation',
@@ -91,6 +120,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
   inbox: true,
+  workspace: true,
   view: true,
   automation: true,
   finance: true
@@ -111,13 +141,21 @@ export function AppSidebar({
   availablePages = ALL_APP_PAGES,
   className,
   collapsible = 'min',
-  macosTrafficLightInset = false
+  macosTrafficLightInset = false,
+  workspaceViews = [],
+  activeWorkspaceViewId = null,
+  onOpenWorkspaceView,
+  onCreateWorkspaceView,
+  onDeleteWorkspaceView,
+  resourceViewsEnabled = true
 }: AppSidebarProps): ReactElement {
   const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
   const [openSections, setOpenSections] =
     useState<Record<SidebarSection['id'], boolean>>(SIDEBAR_SECTION_DEFAULTS)
   const isPageDisabled = (): boolean => isLocked
   const toBadgeLabel = (count: number): string => (count > 99 ? '99+' : String(count))
+  const activeWorkspaceViewSource =
+    workspaceViews.find((view) => view.id === activeWorkspaceViewId)?.source ?? null
 
   const renderBadge = (pageId: AppPage): ReactElement | null => {
     const count =
@@ -152,7 +190,7 @@ export function AppSidebar({
     return (
       <SidebarMenuItem key={page.id}>
         <SidebarMenuButton
-          isActive={activePage === page.id}
+          isActive={activePage === page.id && activeWorkspaceViewSource !== page.id}
           onClick={disabled ? undefined : () => onChange(page.id)}
           disabled={disabled}
           tooltip={page.label}
@@ -173,6 +211,98 @@ export function AppSidebar({
       </SidebarMenuItem>
     )
   }
+
+  const renderWorkspaceView = (view: WorkspaceView): ReactElement => {
+    const disabled = isPageDisabled()
+
+    return (
+      <SidebarMenuItem key={view.id}>
+        <SidebarMenuButton
+          isActive={activeWorkspaceViewId === view.id}
+          labelOverflow="fade"
+          onClick={disabled ? undefined : () => onOpenWorkspaceView?.(view.id)}
+          disabled={disabled}
+          tooltip={view.name}
+          aria-label={view.name}
+          data-testid={`sidebar-view:${view.id}`}
+        >
+          <NoteShapeIcon icon={view.icon} size={18} />
+          <span className="workspace-text-fade sidebar-workspace-text-fade block max-w-full min-w-0 flex-1">
+            {view.name}
+          </span>
+        </SidebarMenuButton>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuAction
+              showOnHover
+              aria-label={`Manage ${view.name}`}
+              title={`Manage ${view.name}`}
+              data-testid={`sidebar-view-actions:${view.id}`}
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </SidebarMenuAction>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="start">
+            <DropdownMenuItem
+              onSelect={() => onOpenWorkspaceView?.(view.id)}
+              data-testid={`sidebar-view-open:${view.id}`}
+            >
+              {view.source === 'resources' ? (
+                <Table aria-hidden="true" />
+              ) : (
+                <ListTodo aria-hidden="true" />
+              )}
+              Open view
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onDeleteWorkspaceView?.(view.id)}
+              destructive
+              data-testid={`sidebar-view-delete:${view.id}`}
+            >
+              <Trash2 aria-hidden="true" />
+              Delete view
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    )
+  }
+
+  const renderViewCreateAction = (): ReactElement => (
+    <SidebarMenuItem>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <SidebarMenuButton
+            disabled={isPageDisabled()}
+            aria-label="Create view"
+            title="Create view"
+            data-testid="sidebar-create-view"
+          >
+            <Plus aria-hidden="true" />
+            <span>Create View</span>
+          </SidebarMenuButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start">
+          <DropdownMenuItem
+            onSelect={() => onCreateWorkspaceView?.('tasks')}
+            data-testid="sidebar-create-view-option:tasks"
+          >
+            <ListTodo aria-hidden="true" />
+            Tasks table
+          </DropdownMenuItem>
+          {resourceViewsEnabled ? (
+            <DropdownMenuItem
+              onSelect={() => onCreateWorkspaceView?.('resources')}
+              data-testid="sidebar-create-view-option:resources"
+            >
+              <Table aria-hidden="true" />
+              Resources table
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarMenuItem>
+  )
 
   return (
     <Sidebar
@@ -248,8 +378,9 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {SIDEBAR_SECTIONS.filter((section) =>
-          section.items.some((item) => availablePageSet.has(item.id))
+        {SIDEBAR_SECTIONS.filter(
+          (section) =>
+            section.id === 'view' || section.items.some((item) => availablePageSet.has(item.id))
         ).map((section) => {
           const isOpen = openSections[section.id]
 
@@ -266,7 +397,7 @@ export function AppSidebar({
                 }))
               }}
             >
-              <SidebarGroup className="group/collapsible">
+              <SidebarGroup className={cn('group/collapsible', section.id === 'view' && 'px-0')}>
                 <SidebarGroupLabel asChild className="cursor-pointer" title={section.label}>
                   <CollapsibleTrigger className="w-full justify-between">
                     <span>{section.label}</span>
@@ -277,11 +408,14 @@ export function AppSidebar({
                   </CollapsibleTrigger>
                 </SidebarGroupLabel>
                 <CollapsibleContent asChild>
-                  <SidebarGroupContent className="pl-4 group-data-[collapsible=icon]:pl-0">
+                  <SidebarGroupContent className={cn('pl-4', 'group-data-[collapsible=icon]:pl-0')}>
                     <SidebarMenu>
-                      {section.items
-                        .filter((item) => availablePageSet.has(item.id))
-                        .map(renderItem)}
+                      {section.id === 'view'
+                        ? workspaceViews.map(renderWorkspaceView)
+                        : section.items
+                            .filter((item) => availablePageSet.has(item.id))
+                            .map(renderItem)}
+                      {section.id === 'view' ? renderViewCreateAction() : null}
                     </SidebarMenu>
                   </SidebarGroupContent>
                 </CollapsibleContent>

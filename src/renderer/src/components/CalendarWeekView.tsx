@@ -9,8 +9,13 @@ import {
   useRef,
   useState
 } from 'react'
-import { CalendarTask, Project, WeeklyHeightMode } from '../../../shared/types'
-import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
+import {
+  CalendarTask,
+  Project,
+  TaskScheduleOverride,
+  WeeklyHeightMode
+} from '../../../shared/types'
+import { isTaskStatusDone } from '../../../shared/taskStatus'
 import {
   buildWeeklyCalendarEntries,
   getWeeklyAllDaySurfaceHeightPx,
@@ -45,13 +50,16 @@ import {
   buildWeeklyAllDayDropSchedule,
   buildWeeklyTimedCreateSchedule,
   buildWeeklyTimedDropPreview,
-  buildWeeklyTimedDropSchedule
+  buildWeeklyTimedDropSchedule,
+  type WeeklyTimedCreateSchedule
 } from '../lib/calendarWeekDrag'
 import {
   clearCalendarTaskDragSession,
   getCalendarTaskDragSession,
+  parseCalendarTaskDragPayload,
   setCalendarTaskDragSession
 } from '../lib/calendarTaskDragSession'
+import type { CalendarTaskDragMode } from '../lib/calendarTaskDragSession'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
@@ -65,13 +73,10 @@ interface CalendarWeekViewProps {
   tasks: CalendarTask[]
   projects?: Project[]
   onSelectDate: (date: string) => void
-  onCreateTask?: (schedule: {
-    date: string
-    endDate: undefined
-    time: string
-    endTime: string
-  }) => Promise<CalendarTask>
+  onCreateTask?: (schedule: WeeklyTimedCreateSchedule) => Promise<CalendarTask>
   onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
+  onCopyTaskToSchedule?: (taskId: string, schedule: TaskScheduleOverride) => void | Promise<void>
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
@@ -109,6 +114,7 @@ type TimedInteractionState = ResizeStartInteractionState | ResizeEndInteractionS
 
 type WeeklyTaskDragState = {
   taskId: string
+  mode: CalendarTaskDragMode
   pointerOffsetMinutes: number
 }
 
@@ -153,6 +159,8 @@ export function CalendarWeekView({
   onSelectDate,
   onCreateTask,
   onOpenTask,
+  onDuplicateTask,
+  onCopyTaskToSchedule,
   onRescheduleTask,
   onDeleteTask,
   onUpdateTask,
@@ -360,11 +368,14 @@ export function CalendarWeekView({
   const safeUpdateTask = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskStatus = onUpdateTask ?? (() => undefined)
   const safeUpdateTaskSchedule = onUpdateTaskSchedule ?? NOOP_UPDATE_TASK_SCHEDULE
+  const safeDuplicateTask = onDuplicateTask ?? (() => undefined)
   const wrapTaskContextMenu = (task: CalendarTask, content: ReactElement): ReactElement => (
     <TaskContextMenu
       key={task.id}
       task={task}
       selectedDate={selectedDate}
+      onDuplicateTask={safeDuplicateTask}
+      showCopyGestureHint
       onDelete={safeDeleteTask}
       onUpdateStatus={(taskId, status) =>
         safeUpdateTask(taskId, { status, completed: isTaskStatusDone(status) })
@@ -557,7 +568,8 @@ export function CalendarWeekView({
     event.preventDefault()
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
-    const taskId = getDraggedTaskId(event)
+    const parsedDrag = getDraggedTask(event)
+    const taskId = parsedDrag?.taskId
     if (!taskId) {
       return
     }
@@ -568,13 +580,26 @@ export function CalendarWeekView({
       weeklyHourHeightPx
     )
     const sourceTask = tasksById[taskId]
+    if (!sourceTask) {
+      onRescheduleTask?.(taskId, date)
+      return
+    }
     const dragState = dragStateRef.current
     const pointerOffsetMinutes =
       dragState && dragState.taskId === taskId ? dragState.pointerOffsetMinutes : 0
 
-    safeUpdateTaskSchedule(taskId, {
-      ...buildWeeklyTimedDropSchedule(sourceTask, date, pointerMinutes, pointerOffsetMinutes)
-    })
+    const schedule = buildWeeklyTimedDropSchedule(
+      sourceTask,
+      date,
+      pointerMinutes,
+      pointerOffsetMinutes
+    )
+    if (parsedDrag?.mode === 'copy') {
+      void onCopyTaskToSchedule?.(taskId, toTaskScheduleOverride(schedule))
+      return
+    }
+
+    safeUpdateTaskSchedule(taskId, schedule)
   }
 
   const handleTimedCellDoubleClick = (
@@ -602,12 +627,13 @@ export function CalendarWeekView({
     setHoveredTaskCard(null)
     onSelectDate(date)
 
-    void onCreateTask(
-      buildWeeklyTimedCreateSchedule(
-        date,
-        getPointerMinutesForClientY(event.clientY, daySurface, weeklyHourHeightPx)
-      )
+    const pointerMinutes = getPointerMinutesForClientY(
+      event.clientY,
+      daySurface,
+      weeklyHourHeightPx
     )
+
+    void onCreateTask(buildWeeklyTimedCreateSchedule(date, pointerMinutes))
       .then((task) => {
         onOpenTask?.(task.id, { isNewTask: true })
       })
@@ -618,7 +644,8 @@ export function CalendarWeekView({
 
   const handleAllDayDrop = (event: DragEvent<HTMLElement>, date: string): void => {
     event.preventDefault()
-    const taskId = getDraggedTaskId(event)
+    const parsedDrag = getDraggedTask(event)
+    const taskId = parsedDrag?.taskId
     setTimedDropIndicator(null)
     setAllDayDropIndicator(null)
     if (!taskId) {
@@ -631,7 +658,13 @@ export function CalendarWeekView({
       return
     }
 
-    safeUpdateTaskSchedule(taskId, buildWeeklyAllDayDropSchedule(sourceTask, date))
+    const schedule = buildWeeklyAllDayDropSchedule(sourceTask, date)
+    if (parsedDrag?.mode === 'copy') {
+      void onCopyTaskToSchedule?.(taskId, toTaskScheduleOverride(schedule))
+      return
+    }
+
+    safeUpdateTaskSchedule(taskId, schedule)
   }
 
   const handleTaskDragStart = (
@@ -648,12 +681,14 @@ export function CalendarWeekView({
       return
     }
 
-    event.dataTransfer.setData('text/plain', `move:${task.id}`)
-    event.dataTransfer.effectAllowed = 'move'
+    const mode: CalendarTaskDragMode = event.altKey ? 'copy' : 'move'
+    event.dataTransfer.setData('text/plain', `${mode}:${task.id}`)
+    event.dataTransfer.effectAllowed = 'copyMove'
     setHoveredTaskCard(null)
     setTimedDropIndicator(null)
     const dragState = {
       taskId: task.id,
+      mode,
       pointerOffsetMinutes:
         source === 'timed'
           ? snapMinutes(
@@ -667,6 +702,17 @@ export function CalendarWeekView({
     dragStateRef.current = dragState
     setCalendarTaskDragSession(dragState)
     startCalendarDragAutoScroll()
+  }
+
+  const handleTaskDragOperationChange = (taskId: string, mode: CalendarTaskDragMode): void => {
+    const dragState = dragStateRef.current
+    if (!dragState || dragState.taskId !== taskId || dragState.mode === mode) {
+      return
+    }
+
+    const nextDragState = { ...dragState, mode }
+    dragStateRef.current = nextDragState
+    setCalendarTaskDragSession(nextDragState)
   }
 
   const startResizeInteraction = (
@@ -746,6 +792,7 @@ export function CalendarWeekView({
             data-start-date={layout.startDate}
             data-end-date={layout.endDate}
             onDragStart={(event) => handleTaskDragStart(event, task, 'all-day')}
+            onDragOperationChange={(mode) => handleTaskDragOperationChange(task.id, mode)}
             onDragEnd={handleTaskDragEnd}
             onClick={(event) => {
               event.stopPropagation()
@@ -780,7 +827,7 @@ export function CalendarWeekView({
               setHoveredTaskCard(null)
               onOpenTask?.(task.id)
             }}
-            className={`pointer-events-auto w-full transition-colors ${isTaskDone(task) ? 'line-through' : ''}`}
+            className="pointer-events-auto w-full transition-colors"
           >
             <CalendarTaskCard
               ref={(element) => registerAllDayTaskElement(task.id, element)}
@@ -791,6 +838,7 @@ export function CalendarWeekView({
               project={task.projectId ? projectsById.get(task.projectId) : undefined}
               showProject={Boolean(task.projectId)}
               showTime={Boolean(task.time || task.endTime)}
+              strikeCompleted={false}
               onStatusChange={(taskId, status) =>
                 safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
               }
@@ -834,6 +882,7 @@ export function CalendarWeekView({
         data-testid={`calendar-week-task:${task.id}`}
         style={blockStyle}
         onDragStart={(event) => handleTaskDragStart(event, task, 'timed')}
+        onDragOperationChange={(mode) => handleTaskDragOperationChange(task.id, mode)}
         onDragEnd={handleTaskDragEnd}
         onMouseMove={(event) => {
           if (timedInteractionRef.current) {
@@ -883,7 +932,7 @@ export function CalendarWeekView({
         }}
         className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-muted ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'
-        } ${isTaskDone(task) ? 'line-through' : ''} cursor-grab active:cursor-grabbing`}
+        } cursor-grab active:cursor-grabbing`}
       >
         <button
           type="button"
@@ -926,6 +975,7 @@ export function CalendarWeekView({
             project={task.projectId ? projectsById.get(task.projectId) : undefined}
             showProject={shouldShowWeeklyProject(layout.heightPx)}
             showTime={false}
+            strikeCompleted={false}
             heightMode={layout.heightMode === 'content' ? 'content' : 'fill'}
             onStatusChange={(taskId, status) =>
               safeUpdateTaskStatus(taskId, { status, completed: isTaskStatusDone(status) })
@@ -1002,10 +1052,11 @@ export function CalendarWeekView({
                   onClick={() => onSelectDate(date)}
                   onDragOver={(event) => {
                     event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
+                    event.dataTransfer.dropEffect =
+                      getCalendarTaskDragSession()?.mode === 'copy' ? 'copy' : 'move'
                     setTimedDropIndicator(null)
                     const dragState = getCalendarTaskDragSession()
-                    const taskId = dragState?.taskId ?? getDraggedTaskId(event)
+                    const taskId = dragState?.taskId ?? getDraggedTask(event)?.taskId
                     if (!taskId) {
                       setAllDayDropIndicator(null)
                       return
@@ -1126,12 +1177,21 @@ export function CalendarWeekView({
                 onDoubleClick={(event) => handleTimedCellDoubleClick(event, date)}
                 onDragOver={(event) => {
                   event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
+                  event.dataTransfer.dropEffect =
+                    getCalendarTaskDragSession()?.mode === 'copy' ? 'copy' : 'move'
                   setAllDayDropIndicator(null)
                   const dragState = getCalendarTaskDragSession()
-                  const taskId = dragState?.taskId ?? getDraggedTaskId(event)
+                  const taskId = dragState?.taskId ?? getDraggedTask(event)?.taskId
                   if (!taskId) {
                     setTimedDropIndicator(null)
+                    return
+                  }
+                  const sourceTask = tasksById[taskId]
+                  if (!sourceTask?.date) {
+                    setTimedDropIndicator(null)
+                    setAllDayDropIndicator(
+                      buildWeeklyAllDayDropIndicator(sourceTask, date, weekStart)
+                    )
                     return
                   }
                   const pointerMinutes = getPointerMinutesForClientY(
@@ -1139,7 +1199,6 @@ export function CalendarWeekView({
                     daySurfaceRefs.current[date] ?? event.currentTarget,
                     weeklyHourHeightPx
                   )
-                  const sourceTask = tasksById[taskId]
                   const pointerOffsetMinutes =
                     dragState && dragState.taskId === taskId ? dragState.pointerOffsetMinutes : 0
                   const nextRange = buildWeeklyTimedDropPreview(
@@ -1180,6 +1239,7 @@ export function CalendarWeekView({
                     return
                   }
                   setTimedDropIndicator((current) => (current?.date === date ? null : current))
+                  setAllDayDropIndicator(null)
                 }}
                 onDrop={(event) => handleTimedDrop(event, date)}
                 className="relative border-r border-panel-border bg-transparent last:border-r-0"
@@ -1235,6 +1295,7 @@ export function CalendarWeekView({
                             showStatusValue
                             showProject={Boolean(timedDropIndicator.task.projectId)}
                             showTime={false}
+                            strikeCompleted={false}
                             heightMode="content"
                             className="invisible min-h-0"
                           />
@@ -1304,13 +1365,28 @@ function getWeeklyResizeBandPx(heightPx: number): number {
   return Math.max(4, Math.min(WEEKLY_TASK_RESIZE_BAND_MAX_PX, Math.floor(heightPx / 4)))
 }
 
-function getDraggedTaskId(event: DragEvent<HTMLElement>): string | null {
-  const payload = event.dataTransfer.getData('text/plain').trim()
-  if (!payload) {
-    return null
-  }
+function getDraggedTask(event: DragEvent<HTMLElement>): {
+  taskId: string
+  mode: 'move' | 'copy'
+} | null {
+  const session = getCalendarTaskDragSession()
+  return session ?? parseCalendarTaskDragPayload(event.dataTransfer.getData('text/plain'))
+}
 
-  return payload.startsWith('move:') ? payload.slice(5) : payload
+function toTaskScheduleOverride(schedule: {
+  date: string | undefined
+  endDate: string | undefined
+  time: string | undefined
+  endTime: string | undefined
+  weeklyHeightMode?: WeeklyHeightMode
+}): TaskScheduleOverride {
+  return {
+    date: schedule.date ?? null,
+    endDate: schedule.endDate ?? null,
+    time: schedule.time ?? null,
+    endTime: schedule.endTime ?? null,
+    weeklyHeightMode: schedule.weeklyHeightMode ?? null
+  }
 }
 
 function hasTimedTaskScheduleChanged(

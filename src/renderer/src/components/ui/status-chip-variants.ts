@@ -11,7 +11,7 @@ export const statusChipVariants = cva(
       },
       surface: {
         none: '',
-        pill: 'px-2 border border-border bg-surface-subtle hover:bg-surface-subtle-hover focus-visible:bg-surface-subtle-hover',
+        pill: 'rounded-[var(--radius-button-pill)] px-2 border border-border bg-surface-subtle hover:bg-surface-subtle-hover focus-visible:bg-surface-subtle-hover',
         attention:
           'px-2 border border-warning-border bg-warning-muted text-warning-muted-foreground hover:bg-warning-muted focus-visible:bg-warning-muted',
         hover: 'px-2 bg-transparent hover:bg-card-hover focus-visible:bg-card-hover',

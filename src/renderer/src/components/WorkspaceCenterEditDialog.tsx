@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode, RefObject } from 'react'
 import { Check, Maximize, Trash2 } from './ui/icons'
 import { Input } from './ui/input'
 import { WorkspaceIconButton } from './ui/document-workspace'
+import { COMMAND_ENTER_ARIA_KEYSHORTCUT, handleCommandEnterAction } from '../lib/formShortcuts'
 import {
   Dialog,
   DialogActionButton,
@@ -26,6 +27,8 @@ interface WorkspaceCenterEditDialogProps {
   headerTestId: string
   closeTestId: string
   openFullPageTestId?: string
+  headerLeadingAction?: ReactNode
+  duplicateAction?: ReactNode
   children: ReactNode
   onTitleChange: (value: string) => void
   onClose: () => void | Promise<void>
@@ -51,6 +54,8 @@ export function WorkspaceCenterEditDialog({
   headerTestId,
   closeTestId,
   openFullPageTestId,
+  headerLeadingAction,
+  duplicateAction,
   children,
   onTitleChange,
   onClose,
@@ -72,6 +77,7 @@ export function WorkspaceCenterEditDialog({
         className="max-h-[min(760px,calc(100vh-2rem))] overflow-hidden"
         data-testid={dialogTestId}
         showCloseButton={false}
+        onKeyDownCapture={(event) => handleCommandEnterAction(event, onSave)}
         onOpenAutoFocus={(event) => {
           if (!isNew) return
           event.preventDefault()
@@ -87,15 +93,21 @@ export function WorkspaceCenterEditDialog({
             onClose={() => void onClose()}
             closeTestId={closeTestId}
             actions={
-              onOpenFullPage ? (
-                <WorkspaceIconButton
-                  onClick={() => void onOpenFullPage()}
-                  aria-label="Open full page"
-                  title="Open full page"
-                  icon={<Maximize />}
-                  borderless
-                  data-testid={openFullPageTestId}
-                />
+              headerLeadingAction || onOpenFullPage || duplicateAction ? (
+                <>
+                  {headerLeadingAction}
+                  {duplicateAction}
+                  {onOpenFullPage ? (
+                    <WorkspaceIconButton
+                      onClick={() => void onOpenFullPage()}
+                      aria-label="Open full page"
+                      title="Open full page"
+                      icon={<Maximize />}
+                      borderless
+                      data-testid={openFullPageTestId}
+                    />
+                  ) : null}
+                </>
               ) : undefined
             }
           />
@@ -131,6 +143,8 @@ export function WorkspaceCenterEditDialog({
               aria-label={saveLabel}
               icon={<Check />}
               label={saveLabel}
+              shortcutKeys={['cmd', 'return']}
+              aria-keyshortcuts={COMMAND_ENTER_ARIA_KEYSHORTCUT}
               tone="accent"
             />
           </DialogShellFooter>

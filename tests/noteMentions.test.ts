@@ -20,6 +20,10 @@ describe('note mention helpers', () => {
     )
   })
 
+  it('preserves nested paths in canonical note-link hrefs', () => {
+    expect(noteMentionHref('f1/master.md')).toBe('note-mention://f1%2Fmaster')
+  })
+
   it('rewrites canonical note links and exact-path wikilinks', () => {
     const markdown = [
       `See [Project Beta](${noteMentionHref('notes/beta')})`,

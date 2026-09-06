@@ -7,13 +7,13 @@ import {
   LayoutGrid,
   Trash2,
   Plus,
-  Link2,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
   FolderOpen,
   ChevronUp,
   Star,
+  StarOutline,
   FileText,
   PenTool,
   Folder,
@@ -40,7 +40,9 @@ import {
   NativeMenuItemDescriptor,
   RendererVaultApi,
   TaskPriority,
+  TaskRecurrenceDraft,
   TaskReminder,
+  TaskScheduleOverride,
   CalendarTaskType,
   HistoryAffectedAreas,
   VaultOpenResult,
@@ -50,10 +52,13 @@ import {
   ResourceInput,
   ResourceUpdateInput,
   GoogleDriveFileCandidate,
-  WorkspaceFeatureFlags
+  WorkspaceFeatureFlags,
+  WorkspaceView,
+  WorkspaceViewSource
 } from '../../shared/types'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../shared/excalidrawFile'
 import { normalizeProjectIcon } from '../../shared/projectIcons'
+import { createWorkspaceView } from '../../shared/workspaceViews'
 import { notebookPathFromResource } from '../../shared/resourceDomain'
 import { normalizeCalendarEndDate } from '../../shared/calendarTaskDates'
 import { validateTaskDependencies } from '../../shared/projectPlanning'
@@ -62,22 +67,25 @@ import { normalizeTaskTags } from '../../shared/taskTags'
 import {
   appendTextToNoteMarkdown,
   getNoteDisplayName,
+  isNotePath,
+  parseStoredNoteDocument,
   serializeStoredNoteDocument,
   stripNoteExtension,
   withNoteExtension
 } from '../../shared/noteDocument'
 import { splitNoteContent } from '../../shared/noteContent'
+import { mergeMarkdownThreeWay } from '../../shared/markdownMerge'
 import { normalizeTag } from '../../shared/noteTags'
 import {
   createNoteMentionResolver,
-  extractMentionTargetsFromMarkdown,
-  normalizeMentionTarget
+  extractMentionTargetsFromMarkdown
 } from '../../shared/noteMentions'
 import { CalendarMonthView } from './components/CalendarMonthView'
 import { CalendarWeekView } from './components/CalendarWeekView'
 import { CalendarDayView } from './components/CalendarDayView'
 import { CalendarTaskPanel } from './components/CalendarTaskPanel'
 import { TaskEditDialog } from './components/TaskEditDialog'
+import type { WeeklyTimedCreateSchedule } from './lib/calendarWeekDrag'
 import { TaskPropertiesPanel } from './components/TaskPropertiesPanel'
 import { CalendarTaskFilter } from './components/CalendarTaskFilter'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
@@ -85,6 +93,7 @@ import { NotesTreeView } from './components/NotesTreeView'
 import { NotebookCardBrowser } from './components/NotebookCardBrowser'
 import { NoteShapeIcon } from './components/NoteShapeIcon'
 import { NoteOutlinePanel } from './components/NoteOutlinePanel'
+import { NoteBacklinksPanel } from './components/NoteBacklinksPanel'
 import type { NoteEditorHandle } from './components/Editor'
 import { SonnerBridge } from './components/SonnerBridge'
 import { AppSidebar } from './components/AppSidebar'
@@ -138,7 +147,8 @@ import {
 import { getProjectResourceRows } from './lib/projectResources'
 import { SearchPage } from './pages/SearchPage'
 import { ResourcesPage } from './pages/ResourcesPage'
-import { SettingsPage } from './pages/SettingsPage'
+import { TasksPage } from './pages/TasksPage'
+import { SettingsPage, type SettingsTabId } from './pages/SettingsPage'
 import {
   SchedulingContextMenuItems,
   SchedulingAddAutomationButton,
@@ -163,14 +173,29 @@ import {
   KnowledgeGraphSettingsPanel,
   KnowledgeOrphanVisibilityPanel
 } from './components/KnowledgeWorkspaceRightPanels'
+import { DesignAuditRightPanel } from './components/DesignAuditRightPanel'
 import { DesignAuditPage } from './pages/DesignAuditPage'
 import { TaskPage } from './pages/TaskPage'
 import { MilestonePage } from './pages/MilestonePage'
 import { NoVaultPage } from './pages/NoVaultPage'
 import { CapturePage } from './pages/CapturePage'
+import type { VaultSyncPageActions } from './pages/VaultSyncPage'
+import { WorkspaceViewPage, type WorkspaceViewUpdate } from './pages/WorkspaceViewPage'
+import type {
+  VaultSyncChange,
+  VaultSyncConflict,
+  VaultSyncRepair,
+  VaultSyncSnapshot as VaultSyncPageSnapshot
+} from './lib/vaultSyncPresentation'
+import type {
+  VaultChangeEvent,
+  VaultFileRevision,
+  VaultSyncSnapshot as VaultProtocolSnapshot
+} from '../../shared/vaultProtocol'
 import type { ProjectMenuActionHandlers } from './lib/projectMenu'
 import { getProjectMenuGroups } from './lib/projectMenu'
 import { VaultSwapperDialog } from './components/VaultSwapperDialog'
+import { WorkspaceViewBreadcrumb } from './components/WorkspaceViewBreadcrumb'
 import { useVaultStore } from './state/store'
 import { usePersistentState } from './hooks/usePersistentState'
 import { useWorkspaceShellShortcuts } from './hooks/useWorkspaceShellShortcuts'
@@ -198,13 +223,16 @@ import {
   filterCalendarTasks,
   filterCalendarTasksByTags,
   getCalendarTaskTagOptions,
+  isCalendarTaskOnDate,
   normalizeCalendarTasks,
   type CalendarContentFilter
 } from './lib/calendarTasks'
 import { APP_PAGE_ICONS } from './lib/pageIcons'
+import { DEFAULT_DESIGN_AUDIT_TAB, type DesignAuditTabId } from './lib/designAuditCatalog'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
 import { extractNoteOutlineFromMarkdown } from './lib/noteOutline'
-import { createNoteSaveCoordinator } from './lib/noteSaveCoordinator'
+import { createLatestRefreshCoordinator } from './lib/latestRefreshCoordinator'
+import { createNoteSaveCoordinator, NoteSaveConflictError } from './lib/noteSaveCoordinator'
 import { createProjectSaveCoordinator } from './lib/projectSaveCoordinator'
 import { getNotebookFolderContents } from './lib/notebookFolderContents'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
@@ -233,6 +261,7 @@ const PAGE_LABELS: Record<AppPage, string> = {
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
+  tasks: 'Tasks',
   resources: 'Resources',
   subscriptions: 'Subscriptions',
   calendar: 'Calendar',
@@ -242,11 +271,102 @@ const PAGE_LABELS: Record<AppPage, string> = {
   settings: 'Settings'
 }
 
+function toVaultSyncPageSnapshot(snapshot: VaultProtocolSnapshot): VaultSyncPageSnapshot {
+  const status = snapshot.status
+  const watcherStatus =
+    status.state === 'offline'
+      ? 'offline'
+      : status.state === 'needs-repair' || status.state === 'conflict'
+        ? 'error'
+        : 'watching'
+  const reconcileStatus =
+    status.state === 'reconciling'
+      ? 'running'
+      : status.lastError
+        ? 'failed'
+        : status.lastScanAt
+          ? 'complete'
+          : 'idle'
+  const externalChanges: VaultSyncChange[] = snapshot.events.map((event) => ({
+    id: `${event.transactionId}:${event.sequence}`,
+    path: event.path,
+    domain: event.domain,
+    kind: event.kind === 'repair' ? 'change' : event.kind,
+    observedAt: event.observedAt,
+    source: event.source,
+    previousPath: event.previousPath,
+    transactionId: event.transactionId
+  }))
+  const conflicts: VaultSyncConflict[] = snapshot.conflicts.map((conflict) => ({
+    id: conflict.id,
+    path: conflict.path,
+    domain: conflict.domain,
+    kind:
+      conflict.kind === 'binary'
+        ? 'binary'
+        : conflict.kind === 'delete-update'
+          ? 'delete-update'
+          : conflict.kind === 'add-add'
+            ? 'add-add'
+            : conflict.domain === 'notes'
+              ? 'content'
+              : 'structured',
+    summary: `A ${conflict.kind} conflict is waiting for review.`,
+    createdAt: conflict.detectedAt
+  }))
+  const repairs: VaultSyncRepair[] = snapshot.quarantine.map((record) => ({
+    id: record.id,
+    path: record.path,
+    domain: record.domain,
+    kind: 'quarantine',
+    summary: record.reason,
+    createdAt: record.quarantinedAt
+  }))
+
+  return {
+    vaultPath: status.vaultPath,
+    vaultId: status.vaultId,
+    watcher: {
+      status: watcherStatus,
+      watchedRoots: status.watchedRoots ?? 0,
+      lastEventAt: snapshot.events.at(-1)?.observedAt ?? null,
+      message: status.lastError ?? null
+    },
+    reconcile: {
+      status: reconcileStatus,
+      message: status.lastError ?? null
+    },
+    lastScanAt: status.lastScanAt,
+    lastCommittedSequence: status.lastCommittedSequence,
+    externalChanges,
+    conflicts,
+    repairs,
+    portableScope: {
+      includedCategories: ['notes', 'drawings', 'attachments', 'structured records'],
+      excludedCategories: ['indexes', 'device state', 'secrets', 'recovery payloads']
+    }
+  }
+}
+
+interface NoteConflictState {
+  path: string
+  message: string
+  actualRevision: VaultFileRevision | null
+}
+
 type CalendarViewMode = 'month' | 'week' | 'day'
+
+type CalendarTaskSchedule = {
+  date?: string
+  endDate?: string
+  time?: string
+  endTime?: string
+}
 
 type WorkspacePageTab = {
   id: string
   page: AppPage
+  workspaceViewId: string | null
   projectId: string | null
   projectView: ProjectsWorkspaceView
   calendarDate: string
@@ -261,10 +381,12 @@ type TaskOrigin =
       contentFilter: CalendarContentFilter
       tags: string[]
     }
+  | { source: 'tasks'; workspaceViewId?: string }
   | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
 type TaskOriginRequest =
   | { source: 'calendar' }
+  | { source: 'tasks'; workspaceViewId?: string }
   | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
 const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
@@ -273,12 +395,16 @@ function createWorkspacePageTab(
   id: string,
   page: AppPage,
   context: Partial<
-    Pick<WorkspacePageTab, 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'>
+    Pick<
+      WorkspacePageTab,
+      'workspaceViewId' | 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'
+    >
   > = {}
 ): WorkspacePageTab {
   return {
     id,
     page,
+    workspaceViewId: null,
     projectId: null,
     projectView: 'list',
     calendarDate: toIsoDate(new Date()),
@@ -445,6 +571,7 @@ function App(): ReactElement {
   const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
   const settingsProjects = useVaultStore((state) => state.settings.projects)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
+  const workspaceViews = useVaultStore((state) => state.settings.workspaceViews ?? [])
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const recentNotebookPaths = useVaultStore((state) => state.settings.recentNotebookPaths)
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
@@ -468,6 +595,14 @@ function App(): ReactElement {
   const patchSettings = useVaultStore((state) => state.patchSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
   const [activePage, setActivePage] = useState<AppPage>('notes')
+  const [settingsTabRequest, setSettingsTabRequest] = useState<SettingsTabId>('profile')
+  const [activeDesignAuditTab, setActiveDesignAuditTab] =
+    useState<DesignAuditTabId>(DEFAULT_DESIGN_AUDIT_TAB)
+  const [vaultSyncPageStatus, setVaultSyncPageStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading'
+  )
+  const [vaultSyncSnapshot, setVaultSyncSnapshot] = useState<VaultSyncPageSnapshot | null>(null)
+  const [noteConflict, setNoteConflict] = useState<NoteConflictState | null>(null)
   const [openTaskDialogId, setOpenTaskDialogId] = useState<string | null>(null)
   const [taskDialogOrigin, setTaskDialogOrigin] = useState<TaskOriginRequest | null>(null)
   const [taskDialogIsNewTask, setTaskDialogIsNewTask] = useState(false)
@@ -478,6 +613,7 @@ function App(): ReactElement {
   const taskOriginRef = useRef<TaskOrigin | null>(null)
   const [isTaskDeleteDialogOpen, setIsTaskDeleteDialogOpen] = useState(false)
   const [schedulingReviewCount, setSchedulingReviewCount] = useState(0)
+  const schedulingReviewRequestRef = useRef(0)
   const [schedulingView, setSchedulingView] = useState<SchedulingView>('list')
   useEffect(() => {
     if (activePage !== 'schedules') {
@@ -486,13 +622,19 @@ function App(): ReactElement {
   }, [activePage])
 
   const refreshSchedulingReviewCount = useCallback(async (): Promise<void> => {
-    if (!vaultApi || !vault?.rootPath) {
+    const requestId = ++schedulingReviewRequestRef.current
+    const requestedVaultRoot = vault?.rootPath ?? null
+
+    if (!vaultApi || !requestedVaultRoot) {
       setSchedulingReviewCount(0)
       return
     }
 
     try {
       const jobs = await vaultApi.schedules.listJobs()
+      if (requestId !== schedulingReviewRequestRef.current) {
+        return
+      }
       setSchedulingReviewCount(jobs.filter((job) => job.lastStatus === 'review').length)
     } catch {
       // Keep the last known count when the non-critical indicator cannot refresh.
@@ -518,6 +660,8 @@ function App(): ReactElement {
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState(INITIAL_WORKSPACE_TAB_ID)
   const workspaceTabSequenceRef = useRef(1)
   const activeWorkspaceTabIdRef = useRef(INITIAL_WORKSPACE_TAB_ID)
+  const activeWorkspaceViewIdRef = useRef<string | null>(null)
+  const workspaceViewsWriteVersionRef = useRef(0)
   const workspaceTabSessionsRef = useRef<Record<string, NotebookWorkspaceSession>>({
     [INITIAL_WORKSPACE_TAB_ID]: createEmptyNotebookWorkspaceSession()
   })
@@ -660,6 +804,14 @@ function App(): ReactElement {
   }, [])
   const projects = settingsProjects
   const hasVault = Boolean(vault?.rootPath)
+  const activeWorkspaceViewId = useMemo(
+    () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId)?.workspaceViewId ?? null,
+    [activeWorkspaceTabId, workspaceTabs]
+  )
+  const activeWorkspaceView = useMemo(
+    () => workspaceViews.find((view) => view.id === activeWorkspaceViewId) ?? null,
+    [activeWorkspaceViewId, workspaceViews]
+  )
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const selectedProjectIdRef = useRef<string | null>(null)
   const [projectView, setProjectView] = useState<ProjectsWorkspaceView>('list')
@@ -687,6 +839,7 @@ function App(): ReactElement {
   const favoriteProjectMutationVersionRef = useRef(new Map<string, number>())
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectsWorkspaceFilterMode>('all')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
     []
   )
@@ -698,6 +851,7 @@ function App(): ReactElement {
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
+  const [workspaceViewToDelete, setWorkspaceViewToDelete] = useState<WorkspaceView | null>(null)
   const [storedRightPanelWidth, setStoredRightPanelWidth] =
     usePersistentState<StoredWorkspaceRightPanelWidth>(
       WORKSPACE_RIGHT_PANEL_STORAGE_KEY,
@@ -728,10 +882,12 @@ function App(): ReactElement {
   const currentExcalidrawEditorRef = useRef<ExcalidrawFileEditorHandle | null>(null)
   const currentNoteEditorDirtyRef = useRef(false)
   const persistedNoteFingerprintsRef = useRef<Record<string, string>>({})
+  const persistedNoteRevisionsRef = useRef<Record<string, string | null>>({})
   const pendingNoteSaveRef = useRef<{ relPath: string; content: string } | null>(null)
   const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const noteSaveInFlightRef = useRef<Promise<void> | null>(null)
   const openNoteRequestIdRef = useRef(0)
+  const externalNoteRefreshRequestRef = useRef(0)
   const previousActivePageRef = useRef(activePage)
   const activePageRef = useRef(activePage)
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -740,14 +896,35 @@ function App(): ReactElement {
   const calendarTasksRef = useRef(calendarTasks)
   const hasAttemptedVaultRestoreRef = useRef(false)
   const hasRightPanel =
-    activePage !== 'designAudit' &&
-    activePage !== 'capture' &&
-    activePage !== 'resources' &&
-    activePage !== 'schedulingGuide' &&
-    activePage !== 'settings' &&
-    !(activePage === 'schedules' && schedulingView === 'list') &&
-    !(activePage === 'projects' && (projectView === 'list' || projectView === 'resources'))
-  const shouldSlideWorkspacePanelOut = !hasRightPanel || isRightPanelCollapsed || isFocusMode
+    Boolean(openTaskId) ||
+    (activePage !== 'capture' &&
+      activePage !== 'resources' &&
+      activePage !== 'tasks' &&
+      activePage !== 'schedulingGuide' &&
+      activePage !== 'settings' &&
+      !(activePage === 'schedules' && schedulingView === 'list') &&
+      !(activePage === 'projects' && (projectView === 'list' || projectView === 'resources')))
+  const isRightPanelOpen = hasRightPanel && !isRightPanelCollapsed && !isFocusMode
+  const workspacePanelKey = [
+    activeWorkspaceTabId,
+    activePage,
+    openTaskId ?? 'workspace',
+    activePage === 'schedules'
+      ? schedulingView
+      : activePage === 'projects'
+        ? projectView
+        : 'default'
+  ].join(':')
+
+  const toggleRightPanel = useCallback((): void => {
+    if (isFocusMode) {
+      setIsFocusMode(false)
+      setIsRightPanelCollapsed(false)
+      return
+    }
+
+    setIsRightPanelCollapsed((current) => !current)
+  }, [isFocusMode])
 
   const loadCondaEnvironments = useCallback(async (): Promise<void> => {
     if (!vaultApi?.python) {
@@ -796,6 +973,10 @@ function App(): ReactElement {
   useEffect(() => {
     activeWorkspaceTabIdRef.current = activeWorkspaceTabId
   }, [activeWorkspaceTabId])
+
+  useEffect(() => {
+    activeWorkspaceViewIdRef.current = activeWorkspaceViewId
+  }, [activeWorkspaceViewId])
 
   const getWorkspaceTabSession = useCallback(
     (tabId = activeWorkspaceTabIdRef.current): NotebookWorkspaceSession => {
@@ -1396,6 +1577,13 @@ function App(): ReactElement {
         : null,
     [projects, taskOrigin]
   )
+  const taskOriginWorkspaceView = useMemo(
+    () =>
+      taskOrigin?.source === 'tasks' && taskOrigin.workspaceViewId
+        ? (workspaceViews.find((view) => view.id === taskOrigin.workspaceViewId) ?? null)
+        : null,
+    [taskOrigin, workspaceViews]
+  )
   const milestoneDialogProject = useMemo(
     () =>
       selectedProjectId
@@ -1811,20 +1999,30 @@ function App(): ReactElement {
     }
 
     return createNoteSaveCoordinator({
-      writeNote: async ({ relPath, document }) => {
+      writeNote: async ({ relPath, document, baseHash, clientMutationId }) => {
         pushNoteSaveTrace('coordinator:write-start', {
           relPath,
           tagCount: document.tags.length,
           contentPreview: summarizeTraceContent(document.markdown)
         })
-        await vaultApi.files.writeNoteDocument(relPath, document)
+        const result = await vaultApi.files.writeNoteDocumentWithRevision({
+          path: relPath,
+          document,
+          baseHash: baseHash ?? null,
+          clientMutationId: clientMutationId ?? `${Date.now()}-${Math.random()}`
+        })
+        if (result.ok) {
+          persistedNoteRevisionsRef.current[relPath] = result.revision.contentHash
+        }
         pushNoteSaveTrace('coordinator:write-done', {
           relPath,
-          tagCount: document.tags.length
+          tagCount: document.tags.length,
+          ok: result.ok
         })
+        return result
       }
     })
-  }, [vaultApi])
+  }, [pushNoteSaveTrace, vaultApi])
 
   const projectSaveCoordinator = useMemo(() => {
     if (!vaultApi) {
@@ -1857,7 +2055,9 @@ function App(): ReactElement {
       const savePromise = noteSaveCoordinator.enqueue({
         relPath,
         content: session.content,
-        document
+        document,
+        baseHash: persistedNoteRevisionsRef.current[relPath] ?? null,
+        clientMutationId: `${Date.now()}-${Math.random()}`
       })
       noteSaveInFlightRef.current = savePromise
 
@@ -1875,6 +2075,22 @@ function App(): ReactElement {
         if (currentNotePathRef.current === relPath) {
           currentNoteEditorDirtyRef.current = true
         }
+        if (error instanceof NoteSaveConflictError && currentNotePathRef.current === relPath) {
+          setNoteConflict({
+            path: error.result.path.startsWith('notebooks/')
+              ? error.result.path
+              : `notebooks/${error.result.path}`,
+            message: error.result.error.message,
+            actualRevision:
+              error.result.error.code === 'compare-and-swap-conflict'
+                ? error.result.error.actualRevision
+                : null
+          })
+          pushToast(
+            'warning',
+            'This note changed outside Xingularity. Review the disk version before saving again.'
+          )
+        }
         pushNoteSaveTrace('persist:error', {
           relPath,
           error: String(error)
@@ -1889,6 +2105,7 @@ function App(): ReactElement {
     [
       buildStoredNoteDocument,
       noteSaveCoordinator,
+      pushToast,
       syncCurrentNoteDirtyState,
       updateNoteListEntryFromDocument
     ]
@@ -2074,6 +2291,10 @@ function App(): ReactElement {
       activeSession.selectedNoteTreeEntries = nextPath
         ? [{ kind: 'folder', relPath: nextPath }]
         : []
+      if (!nextPath) {
+        activeSession.searchQuery = ''
+        activeSession.searchResults = []
+      }
 
       currentNotePathRef.current = null
       currentExcalidrawPathRef.current = null
@@ -2086,6 +2307,10 @@ function App(): ReactElement {
       resetCurrentNoteEditorSession()
       setBrowseFolderPath(nextPath)
       setSelectedNoteTreeEntries(nextPath ? [{ kind: 'folder', relPath: nextPath }] : [])
+      if (!nextPath) {
+        setSearchQuery('')
+        setSearchResults([])
+      }
     },
     [
       flushCurrentNote,
@@ -2095,7 +2320,9 @@ function App(): ReactElement {
       resetCurrentNoteEditorSession,
       setCurrentExcalidrawPath,
       setCurrentNoteContent,
-      setCurrentNotePath
+      setCurrentNotePath,
+      setSearchQuery,
+      setSearchResults
     ]
   )
 
@@ -2239,7 +2466,7 @@ function App(): ReactElement {
   )
 
   const navigateToPage = useCallback(
-    async (page: AppPage): Promise<void> => {
+    async (page: AppPage, workspaceViewId: string | null = null): Promise<void> => {
       const runNavigation = async (): Promise<void> => {
         if (!hasVault) {
           return
@@ -2247,6 +2474,9 @@ function App(): ReactElement {
 
         const targetPage = normalizePageForPlatform(platform, page)
         const currentPage = activePageRef.current
+        if (targetPage !== 'settings') {
+          setSettingsTabRequest('profile')
+        }
         await taskFlushRef.current?.()
         taskFlushRef.current = null
         setOpenTaskDialogId(null)
@@ -2257,7 +2487,7 @@ function App(): ReactElement {
         setTaskOrigin(null)
         setOpenMilestoneDialogId(null)
         setMilestoneDialogIsNew(false)
-        if (targetPage === currentPage) {
+        if (targetPage === currentPage && workspaceViewId === activeWorkspaceViewIdRef.current) {
           return
         }
 
@@ -2275,6 +2505,7 @@ function App(): ReactElement {
         await captureActiveWorkspaceSession()
 
         activePageRef.current = targetPage
+        activeWorkspaceViewIdRef.current = workspaceViewId
         setActivePage(targetPage)
         if (targetPage === 'projects') {
           selectedProjectIdRef.current = null
@@ -2287,6 +2518,7 @@ function App(): ReactElement {
               ? {
                   ...tab,
                   page: targetPage,
+                  workspaceViewId,
                   ...(targetPage === 'projects'
                     ? {
                         projectId: null,
@@ -2320,6 +2552,14 @@ function App(): ReactElement {
     ]
   )
 
+  const openSettingsTab = useCallback(
+    (tab: SettingsTabId): void => {
+      setSettingsTabRequest(tab)
+      void navigateToPage('settings')
+    },
+    [navigateToPage]
+  )
+
   useEffect(() => {
     if (!vaultApi || !vault) {
       return
@@ -2340,13 +2580,21 @@ function App(): ReactElement {
   }, [])
 
   const activateWorkspaceTab = useCallback(
-    async (tabId: string, pageOverride?: AppPage): Promise<void> => {
+    async (
+      tabId: string,
+      pageOverride?: AppPage,
+      workspaceViewIdOverride?: string | null
+    ): Promise<void> => {
       if (!hasVault || tabId === activeWorkspaceTabIdRef.current) {
         return
       }
 
       const targetTab = workspaceTabs.find((tab) => tab.id === tabId)
       const targetPage = pageOverride ?? targetTab?.page
+      const targetWorkspaceViewId =
+        workspaceViewIdOverride !== undefined
+          ? workspaceViewIdOverride
+          : (targetTab?.workspaceViewId ?? null)
       if (!targetPage || !workspaceTabSessionsRef.current[tabId]) {
         return
       }
@@ -2367,6 +2615,7 @@ function App(): ReactElement {
 
         activeWorkspaceTabIdRef.current = tabId
         activePageRef.current = targetPage
+        activeWorkspaceViewIdRef.current = targetWorkspaceViewId
         if (targetPage === 'projects') {
           const targetProjectView = targetTab?.projectView ?? 'list'
           const targetProjectId =
@@ -2410,6 +2659,175 @@ function App(): ReactElement {
     ]
   )
 
+  const openWorkspaceView = useCallback(
+    (viewId: string): void => {
+      if (!hasVault) {
+        return
+      }
+
+      const view = (useVaultStore.getState().settings.workspaceViews ?? []).find(
+        (candidate) => candidate.id === viewId
+      )
+      if (!view) {
+        return
+      }
+
+      void navigateToPage(view.source, view.id)
+    },
+    [hasVault, navigateToPage]
+  )
+
+  const updateWorkspaceView = useCallback(
+    async (viewId: string, update: WorkspaceViewUpdate): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const currentSettings = useVaultStore.getState().settings
+      const currentViews = currentSettings.workspaceViews ?? []
+      const currentView = currentViews.find((view) => view.id === viewId)
+      if (!currentView) {
+        return
+      }
+
+      const updatedAt = new Date().toISOString()
+      const updatedView: WorkspaceView =
+        currentView.source === 'tasks'
+          ? {
+              ...currentView,
+              ...(update.name !== undefined ? { name: update.name } : {}),
+              ...(update.icon ? { icon: update.icon } : {}),
+              ...(update.config && 'groupBy' in update.config ? { config: update.config } : {}),
+              updatedAt
+            }
+          : {
+              ...currentView,
+              ...(update.name !== undefined ? { name: update.name } : {}),
+              ...(update.icon ? { icon: update.icon } : {}),
+              ...(update.config && 'labelFilters' in update.config
+                ? { config: update.config }
+                : {}),
+              updatedAt
+            }
+      const nextViews = currentViews.map((view) => (view.id === viewId ? updatedView : view))
+      const writeVersion = ++workspaceViewsWriteVersionRef.current
+      setSettings({ ...currentSettings, workspaceViews: nextViews })
+
+      try {
+        const nextSettings = await vaultApi.settings.update(
+          { workspaceViews: nextViews },
+          { history: false }
+        )
+        if (writeVersion === workspaceViewsWriteVersionRef.current) {
+          setSettings(nextSettings)
+        }
+      } catch (error) {
+        if (writeVersion === workspaceViewsWriteVersionRef.current) {
+          try {
+            setSettings(await vaultApi.settings.get())
+          } catch {
+            setSettings(currentSettings)
+          }
+        }
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, setSettings, vaultApi]
+  )
+
+  const handleCreateWorkspaceView = useCallback(
+    async (source: WorkspaceViewSource): Promise<void> => {
+      if (!vaultApi || !hasVault) {
+        return
+      }
+
+      const currentSettings = useVaultStore.getState().settings
+      const currentViews = currentSettings.workspaceViews ?? []
+      const view = createWorkspaceView(
+        `workspace-view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        source,
+        currentViews
+      )
+      const nextViews = [...currentViews, view]
+      const writeVersion = ++workspaceViewsWriteVersionRef.current
+      setSettings({ ...currentSettings, workspaceViews: nextViews })
+
+      try {
+        const nextSettings = await vaultApi.settings.update(
+          { workspaceViews: nextViews },
+          { history: false }
+        )
+        if (writeVersion === workspaceViewsWriteVersionRef.current) {
+          setSettings(nextSettings)
+        }
+        openWorkspaceView(view.id)
+      } catch (error) {
+        if (writeVersion === workspaceViewsWriteVersionRef.current) {
+          try {
+            setSettings(await vaultApi.settings.get())
+          } catch {
+            setSettings(currentSettings)
+          }
+        }
+        pushToast('error', String(error))
+      }
+    },
+    [hasVault, openWorkspaceView, pushToast, setSettings, vaultApi]
+  )
+
+  const requestDeleteWorkspaceView = useCallback((viewId: string): void => {
+    const view = (useVaultStore.getState().settings.workspaceViews ?? []).find(
+      (candidate) => candidate.id === viewId
+    )
+    if (view) {
+      setWorkspaceViewToDelete(view)
+    }
+  }, [])
+
+  const deleteWorkspaceView = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !workspaceViewToDelete) {
+      return
+    }
+
+    const view = workspaceViewToDelete
+    const currentSettings = useVaultStore.getState().settings
+    const currentViews = currentSettings.workspaceViews ?? []
+    const nextViews = currentViews.filter((candidate) => candidate.id !== view.id)
+    const writeVersion = ++workspaceViewsWriteVersionRef.current
+
+    try {
+      const nextSettings = await vaultApi.settings.update(
+        { workspaceViews: nextViews },
+        { history: false }
+      )
+      if (writeVersion !== workspaceViewsWriteVersionRef.current) {
+        return
+      }
+
+      const isActive = activeWorkspaceViewIdRef.current === view.id
+      if (isActive) {
+        await closeTaskPage()
+        activeWorkspaceViewIdRef.current = null
+        activePageRef.current = view.source
+        setActivePage(view.source)
+      }
+      setWorkspaceTabs((tabs) =>
+        tabs.flatMap((tab) => {
+          if (tab.workspaceViewId !== view.id) {
+            return [tab]
+          }
+          return tab.id === activeWorkspaceTabIdRef.current
+            ? [{ ...tab, page: view.source, workspaceViewId: null }]
+            : []
+        })
+      )
+      setSettings(nextSettings)
+      setWorkspaceViewToDelete(null)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }, [closeTaskPage, pushToast, setSettings, vaultApi, workspaceViewToDelete])
+
   const handleCreateWorkspaceTab = useCallback((): void => {
     if (!hasVault) {
       return
@@ -2442,7 +2860,7 @@ function App(): ReactElement {
         return
       }
 
-      void activateWorkspaceTab(tab.id, tab.page)
+      void activateWorkspaceTab(tab.id, tab.page, tab.workspaceViewId)
     },
     [activateWorkspaceTab, workspaceTabs]
   )
@@ -2470,7 +2888,7 @@ function App(): ReactElement {
 
       const nextTab = workspaceTabs.find((tab) => tab.id === nextTabId)
       if (nextTab) {
-        void activateWorkspaceTab(nextTab.id, nextTab.page).then(() => {
+        void activateWorkspaceTab(nextTab.id, nextTab.page, nextTab.workspaceViewId).then(() => {
           delete workspaceTabSessionsRef.current[tabId]
           setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
         })
@@ -2526,6 +2944,7 @@ function App(): ReactElement {
         ) {
           delete getWorkspaceTabSession().noteEditorSessions[currentNotePathRef.current]
           delete persistedNoteFingerprintsRef.current[currentNotePathRef.current]
+          delete persistedNoteRevisionsRef.current[currentNotePathRef.current]
           currentNotePathRef.current = null
           currentNoteContentRef.current = ''
           currentNoteTagsRef.current = []
@@ -2587,9 +3006,7 @@ function App(): ReactElement {
       setCommandPaletteInitialQuery('>')
       setCommandPaletteOpen(true)
     },
-    onToggleRightPanel: () => {
-      setIsRightPanelCollapsed((current) => !current)
-    },
+    onToggleRightPanel: toggleRightPanel,
     onToggleFocusMode: () => {
       setIsFocusMode((current) => !current)
     },
@@ -2888,9 +3305,7 @@ function App(): ReactElement {
 
   const createCalendarTask = async (
     title: string,
-    date?: string,
-    time?: string,
-    endTime?: string,
+    schedule: CalendarTaskSchedule = {},
     projectId?: string,
     milestoneId?: string
   ): Promise<CalendarTask> => {
@@ -2903,9 +3318,7 @@ function App(): ReactElement {
       title: trimmed,
       projectId,
       milestoneId,
-      date,
-      time,
-      endTime
+      ...schedule
     })
     const nextSettings = await vaultApi.settings.get()
     const nextTasks = normalizeCalendarTasks(nextSettings.calendarTasks)
@@ -2924,17 +3337,93 @@ function App(): ReactElement {
     milestoneId?: string
   ): Promise<CalendarTask> => {
     try {
-      return await createCalendarTask(
-        title,
-        undefined,
-        undefined,
-        undefined,
-        projectId,
-        milestoneId
-      )
+      return await createCalendarTask(title, {}, projectId, milestoneId)
     } catch (error) {
       pushToast('error', String(error))
       throw error
+    }
+  }
+
+  const duplicateTask = async (
+    taskId: string,
+    schedule?: TaskScheduleOverride
+  ): Promise<CalendarTask> => {
+    if (!vaultApi) {
+      throw new Error('No vault is open')
+    }
+
+    try {
+      const nextTask = await vaultApi.tasks.duplicate({ taskId, schedule })
+      const nextSettings = await vaultApi.settings.get()
+      const nextTasks = normalizeCalendarTasks(nextSettings.calendarTasks)
+      calendarTasksRef.current = nextTasks
+      setSettings({
+        ...nextSettings,
+        calendarTasks: nextTasks,
+        tasks: nextTasks
+      })
+      pushToast('success', `Duplicated task “${nextTask.title}”`)
+      return nextTask
+    } catch (error) {
+      pushToast('error', String(error))
+      throw error
+    }
+  }
+
+  const duplicateTaskInDialog = async (
+    taskId: string,
+    origin: TaskOriginRequest
+  ): Promise<void> => {
+    try {
+      const nextTask = await duplicateTask(taskId)
+      openTaskDialog(nextTask.id, origin)
+    } catch {
+      // The duplicate operation reports its own persistence error.
+    }
+  }
+
+  const duplicateActiveTask = async (): Promise<void> => {
+    if (!activeTask) return
+
+    try {
+      await taskFlushRef.current?.()
+      const nextTask = await duplicateTask(activeTask.id)
+      openTaskPage(nextTask.id, taskOrigin ?? { source: 'tasks' })
+    } catch {
+      // The duplicate operation reports its own persistence error.
+    }
+  }
+
+  const copyTaskToSchedule = async (
+    taskId: string,
+    schedule: TaskScheduleOverride
+  ): Promise<void> => {
+    try {
+      await duplicateTask(taskId, schedule)
+      const targetDate = schedule.date ?? schedule.endDate
+      if (targetDate) {
+        setSelectedCalendarDate(targetDate)
+      }
+    } catch {
+      // The duplicate operation reports its own persistence error.
+    }
+  }
+
+  const createTaskFromTasksPage = async (): Promise<void> => {
+    if (isCreatingTask) return
+
+    setIsCreatingTask(true)
+    try {
+      const task = await createProjectTask(undefined, 'New Task')
+      openTaskDialog(
+        task.id,
+        { source: 'tasks', workspaceViewId: activeWorkspaceView?.id },
+        { isNewTask: true }
+      )
+    } catch {
+      // The parent reports persistence errors.
+    } finally {
+      setIsCreatingTask(false)
     }
   }
 
@@ -3132,6 +3621,30 @@ function App(): ReactElement {
     }
   }
 
+  const configureTaskRecurrence = async (
+    taskId: string,
+    recurrence: TaskRecurrenceDraft | null
+  ): Promise<void> => {
+    if (!vaultApi) {
+      throw new Error('No vault is open')
+    }
+
+    try {
+      await vaultApi.tasks.configureRecurrence({ taskId, recurrence })
+      const nextSettings = await vaultApi.settings.get()
+      const nextTasks = normalizeCalendarTasks(nextSettings.calendarTasks)
+      calendarTasksRef.current = nextTasks
+      setSettings({
+        ...nextSettings,
+        calendarTasks: nextTasks,
+        tasks: nextTasks
+      })
+    } catch (error) {
+      pushToast('error', String(error))
+      throw error
+    }
+  }
+
   const addUnscheduledFromHeader = async (): Promise<void> => {
     const trimmed = calendarHeaderNewTask.trim()
     if (!trimmed) return
@@ -3140,16 +3653,13 @@ function App(): ReactElement {
   }
 
   const createTaskForDate = async (date: string): Promise<CalendarTask> => {
-    return createCalendarTask('New Task', date)
+    return createCalendarTask('New Task', { endDate: date })
   }
 
-  const createTaskForWeeklyTime = async (schedule: {
-    date: string
-    endDate: undefined
-    time: string
-    endTime: string
-  }): Promise<CalendarTask> => {
-    return createCalendarTask('New Task', schedule.date, schedule.time, schedule.endTime)
+  const createTaskForWeeklyTime = async (
+    schedule: WeeklyTimedCreateSchedule
+  ): Promise<CalendarTask> => {
+    return createCalendarTask('New Task', schedule)
   }
 
   const removeCalendarTask = async (taskId: string): Promise<void> => {
@@ -3213,8 +3723,9 @@ function App(): ReactElement {
       })
     )
 
-    if (schedule.date) {
-      setSelectedCalendarDate(schedule.date)
+    const targetDate = schedule.date ?? schedule.endDate
+    if (targetDate) {
+      setSelectedCalendarDate(targetDate)
     }
   }
 
@@ -3241,12 +3752,14 @@ function App(): ReactElement {
           return { ...task, date: undefined, endDate: undefined }
         }
 
-        if (!task.date && task.endDate) {
-          return { ...task, date: undefined, endDate: newDate }
-        }
-
         if (!task.date) {
-          return { ...task, date: newDate, endDate: undefined }
+          return {
+            ...task,
+            date: undefined,
+            endDate: newDate,
+            time: undefined,
+            endTime: undefined
+          }
         }
 
         const existingEndDate = task.endDate && task.endDate >= task.date ? task.endDate : task.date
@@ -3269,11 +3782,14 @@ function App(): ReactElement {
   const resizeCalendarTaskStart = async (taskId: string, newStartDate: string): Promise<void> => {
     await updateCalendarTasks((tasks) =>
       tasks.map((task) => {
-        if (task.id !== taskId || !task.date) {
+        if (task.id !== taskId || (!task.date && !task.endDate)) {
           return task
         }
 
-        const currentEnd = task.endDate && task.endDate >= task.date ? task.endDate : task.date
+        const currentEnd =
+          task.endDate && (!task.date || task.endDate >= task.date)
+            ? task.endDate
+            : (task.date ?? newStartDate)
         const clampedStart = newStartDate > currentEnd ? currentEnd : newStartDate
 
         return {
@@ -3288,8 +3804,12 @@ function App(): ReactElement {
   const resizeCalendarTaskEnd = async (taskId: string, newEndDate: string): Promise<void> => {
     await updateCalendarTasks((tasks) =>
       tasks.map((task) => {
-        if (task.id !== taskId || !task.date) {
+        if (task.id !== taskId) {
           return task
+        }
+
+        if (!task.date) {
+          return task.endDate ? { ...task, endDate: newEndDate } : task
         }
 
         const clampedEnd = newEndDate < task.date ? task.date : newEndDate
@@ -3334,6 +3854,72 @@ function App(): ReactElement {
 
     setIsVaultSwapperOpen(true)
   }, [platform.capabilities.supportsVaultPicker, pushToast, vaultApi])
+
+  const openVaultRootInFinder = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault?.rootPath) {
+      pushToast('error', 'Open a vault before opening its folder')
+      return
+    }
+
+    try {
+      await vaultApi.desktop.openPath(vault.rootPath)
+    } catch (error) {
+      pushToast('error', `Could not open the vault folder: ${String(error)}`)
+    }
+  }, [pushToast, vault?.rootPath, vaultApi])
+
+  const openVaultRootInTerminal = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault?.rootPath) {
+      pushToast('error', 'Open a vault before opening its terminal')
+      return
+    }
+
+    try {
+      await vaultApi.desktop.openTerminal()
+    } catch (error) {
+      pushToast('error', `Could not open a vault terminal: ${String(error)}`)
+    }
+  }, [pushToast, vault?.rootPath, vaultApi])
+
+  const reconcileVaultSync = useCallback(async (): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    await vaultApi.vault.reconcile()
+    const nextSnapshot = await vaultApi.vault.getSyncSnapshot()
+    setVaultSyncSnapshot(toVaultSyncPageSnapshot(nextSnapshot))
+    setVaultSyncPageStatus('ready')
+  }, [vaultApi])
+
+  const reconcileVaultFromCommandPalette = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault?.rootPath) {
+      pushToast('error', 'Open a vault before reconciling it')
+      return
+    }
+
+    try {
+      await reconcileVaultSync()
+      openSettingsTab('sync')
+      pushToast('success', 'Vault reconciled')
+    } catch (error) {
+      pushToast('error', `Could not reconcile the vault: ${String(error)}`)
+    }
+  }, [openSettingsTab, pushToast, reconcileVaultSync, vault?.rootPath, vaultApi])
+
+  const createVaultBackupFromCommandPalette = useCallback(async (): Promise<void> => {
+    if (!vaultApi || !vault?.rootPath) {
+      pushToast('error', 'Open a vault before creating a backup')
+      return
+    }
+
+    try {
+      const backup = await vaultApi.vault.createBackup()
+      pushToast('success', `Portable backup created at ${backup.path}`)
+    } catch (error) {
+      pushToast('error', `Could not create a vault backup: ${String(error)}`)
+    }
+  }, [pushToast, vault?.rootPath, vaultApi])
 
   const applyOpenNoteSession = useCallback(
     (relPath: string, session: NoteEditorSessionSnapshot): void => {
@@ -3418,10 +4004,13 @@ function App(): ReactElement {
           return
         }
 
-        const document = await vaultApi.files.readNoteDocument(relPath)
+        const readResult = await vaultApi.files.readNoteDocumentWithRevision(relPath)
         if (requestId !== openNoteRequestIdRef.current) {
           return
         }
+        const document = readResult.document
+        persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
+        noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
         const content = splitNoteContent(document.markdown).body
         pushNoteSaveTrace('open-note:read-disk', {
           relPath,
@@ -3445,6 +4034,7 @@ function App(): ReactElement {
       applyOpenNoteSession,
       getWorkspaceTabSession,
       stageCurrentNoteForBackgroundSave,
+      noteSaveCoordinator,
       vaultApi,
       pushToast,
       persistLastOpenedNotePath,
@@ -3598,20 +4188,6 @@ function App(): ReactElement {
     return run
   }, [])
 
-  const loadNoteTree = useCallback(async (): Promise<void> => {
-    if (!vaultApi || !vault) {
-      setNoteTree([])
-      return
-    }
-
-    try {
-      const nextTree = await enqueueNotebookRefresh(() => vaultApi.files.listTree())
-      setNoteTree(nextTree)
-    } catch (error) {
-      pushToast('error', String(error))
-    }
-  }, [enqueueNotebookRefresh, pushToast, setNoteTree, vault, vaultApi])
-
   const refreshSavedVaultCount = useCallback(
     async (options?: { notifyOnError?: boolean }): Promise<void> => {
       if (!vaultApi) {
@@ -3637,6 +4213,7 @@ function App(): ReactElement {
     }
     workspaceTabSequenceRef.current = 1
     activeWorkspaceTabIdRef.current = INITIAL_WORKSPACE_TAB_ID
+    activeWorkspaceViewIdRef.current = null
     activePageRef.current = 'notes'
     setWorkspaceTabs([createWorkspacePageTab(INITIAL_WORKSPACE_TAB_ID, 'notes')])
     setActiveWorkspaceTabId(INITIAL_WORKSPACE_TAB_ID)
@@ -3648,6 +4225,7 @@ function App(): ReactElement {
     currentNoteEditorDirtyRef.current = false
     pendingNoteSaveRef.current = null
     persistedNoteFingerprintsRef.current = {}
+    persistedNoteRevisionsRef.current = {}
     openNoteRequestIdRef.current += 1
     if (noteSaveTimerRef.current) {
       window.clearTimeout(noteSaveTimerRef.current)
@@ -3778,11 +4356,8 @@ function App(): ReactElement {
     if (!vaultApi || !vault) {
       setNoteTree([])
       setSelectedNoteTreeEntries([])
-      return
     }
-
-    void loadNoteTree()
-  }, [loadNoteTree, notes, projects, vault, vaultApi])
+  }, [setNoteTree, setSelectedNoteTreeEntries, vault, vaultApi])
 
   useEffect(() => {
     const session = getWorkspaceTabSession()
@@ -3922,6 +4497,7 @@ function App(): ReactElement {
         session.noteEditorSessions = {}
       })
       persistedNoteFingerprintsRef.current = {}
+      persistedNoteRevisionsRef.current = {}
       await refreshNotesAndTree()
 
       if (openPath) {
@@ -3966,6 +4542,7 @@ function App(): ReactElement {
         session.noteEditorSessions = {}
       })
       persistedNoteFingerprintsRef.current = {}
+      persistedNoteRevisionsRef.current = {}
       await refreshNotesAndTree()
 
       if (openPath) {
@@ -4010,6 +4587,7 @@ function App(): ReactElement {
         session.noteEditorSessions = {}
       })
       persistedNoteFingerprintsRef.current = {}
+      persistedNoteRevisionsRef.current = {}
       await refreshNotesAndTree()
 
       if (openPath) {
@@ -4436,6 +5014,9 @@ function App(): ReactElement {
       delete getWorkspaceTabSession().noteEditorSessions[oldPath]
       persistedNoteFingerprintsRef.current[newPath] = serializeStoredNoteDocument(document)
       delete persistedNoteFingerprintsRef.current[oldPath]
+      persistedNoteRevisionsRef.current[newPath] =
+        persistedNoteRevisionsRef.current[oldPath] ?? null
+      delete persistedNoteRevisionsRef.current[oldPath]
       currentNotePathRef.current = newPath
       currentNoteContentRef.current = content
       currentNoteTagsRef.current = tags
@@ -4475,6 +5056,7 @@ function App(): ReactElement {
       replaceNotes(nextNotes)
       delete getWorkspaceTabSession().noteEditorSessions[relPath]
       delete persistedNoteFingerprintsRef.current[relPath]
+      delete persistedNoteRevisionsRef.current[relPath]
       if (favoriteNotePaths.includes(relPath)) {
         void persistFavoriteNotePaths(
           favoriteNotePaths.filter((path) => path !== relPath),
@@ -5288,30 +5870,6 @@ function App(): ReactElement {
     [vaultApi]
   )
 
-  const createNoteAtExactPathWithFallback = useCallback(
-    async (relPath: string): Promise<string> => {
-      if (!vaultApi) {
-        throw new Error('Vault API unavailable')
-      }
-
-      const normalizedPath = withNoteExtension(relPath.trim().replace(/^\/+/, ''))
-      if (!normalizedPath) {
-        throw new Error('Note path is required')
-      }
-
-      try {
-        return await vaultApi.files.createNoteAtPath(normalizedPath)
-      } catch (error) {
-        if (!String(error).includes('EEXIST')) {
-          throw error
-        }
-
-        return normalizedPath
-      }
-    },
-    [vaultApi]
-  )
-
   const createFolderWithFallback = useCallback(
     async (parentDir: string): Promise<string> => {
       if (!vaultApi) {
@@ -5337,55 +5895,80 @@ function App(): ReactElement {
     [vaultApi]
   )
 
+  const notebookRefreshCoordinator = useMemo(
+    () =>
+      createLatestRefreshCoordinator(
+        () => {
+          const api = vaultApi
+          if (!api) {
+            return Promise.reject(new Error('Vault API unavailable'))
+          }
+
+          return enqueueNotebookRefresh(() =>
+            Promise.all([api.files.listNotes(), api.files.listTree()]).then(
+              ([nextNotes, nextTree]) => ({ nextNotes, nextTree })
+            )
+          )
+        },
+        ({ nextNotes, nextTree }) => {
+          replaceNotes(nextNotes)
+          setNoteTree(nextTree)
+          if (
+            currentNotePathRef.current &&
+            !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
+          ) {
+            delete getWorkspaceTabSession().noteEditorSessions[currentNotePathRef.current]
+            delete persistedNoteFingerprintsRef.current[currentNotePathRef.current]
+            delete persistedNoteRevisionsRef.current[currentNotePathRef.current]
+            currentNotePathRef.current = null
+            currentNoteContentRef.current = ''
+            currentNoteTagsRef.current = []
+            setCurrentNotePath(null)
+            resetCurrentNoteEditorSession()
+            setCurrentNoteTagsState([])
+            setCurrentNoteContent('')
+            void persistLastOpenedNotePath(null, { history: false })
+          }
+          if (
+            currentExcalidrawPathRef.current &&
+            !treeContainsPath(nextTree, currentExcalidrawPathRef.current)
+          ) {
+            currentExcalidrawPathRef.current = null
+            setCurrentExcalidrawPath(null)
+          }
+        }
+      ),
+    [
+      enqueueNotebookRefresh,
+      getWorkspaceTabSession,
+      persistLastOpenedNotePath,
+      replaceNotes,
+      resetCurrentNoteEditorSession,
+      setCurrentExcalidrawPath,
+      setCurrentNoteContent,
+      setCurrentNotePath,
+      setNoteTree,
+      vaultApi
+    ]
+  )
+
   const refreshNotesAndTree = useCallback(async (): Promise<NoteTreeNode[]> => {
     if (!vaultApi) {
       return []
     }
 
-    return enqueueNotebookRefresh(async () => {
-      const [nextNotes, nextTree] = await Promise.all([
-        vaultApi.files.listNotes(),
-        vaultApi.files.listTree()
-      ])
+    const { nextTree } = await notebookRefreshCoordinator()
+    return nextTree
+  }, [notebookRefreshCoordinator, vaultApi])
 
-      replaceNotes(nextNotes)
-      setNoteTree(nextTree)
-      if (
-        currentNotePathRef.current &&
-        !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
-      ) {
-        delete getWorkspaceTabSession().noteEditorSessions[currentNotePathRef.current]
-        delete persistedNoteFingerprintsRef.current[currentNotePathRef.current]
-        currentNotePathRef.current = null
-        currentNoteContentRef.current = ''
-        currentNoteTagsRef.current = []
-        setCurrentNotePath(null)
-        resetCurrentNoteEditorSession()
-        setCurrentNoteTagsState([])
-        setCurrentNoteContent('')
-        void persistLastOpenedNotePath(null, { history: false })
-      }
-      if (
-        currentExcalidrawPathRef.current &&
-        !treeContainsPath(nextTree, currentExcalidrawPathRef.current)
-      ) {
-        currentExcalidrawPathRef.current = null
-        setCurrentExcalidrawPath(null)
-      }
-      return nextTree
-    })
-  }, [
-    enqueueNotebookRefresh,
-    getWorkspaceTabSession,
-    persistLastOpenedNotePath,
-    replaceNotes,
-    resetCurrentNoteEditorSession,
-    setCurrentExcalidrawPath,
-    setCurrentNoteContent,
-    setCurrentNotePath,
-    setNoteTree,
-    vaultApi
-  ])
+  const refreshNotesOnly = useCallback(async (): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    const nextNotes = await enqueueNotebookRefresh(() => vaultApi.files.listNotes())
+    replaceNotes(nextNotes)
+  }, [enqueueNotebookRefresh, replaceNotes, vaultApi])
 
   useEffect(() => {
     if (!vaultApi || !vault || typeof vaultApi.files.onTreeChanged !== 'function') {
@@ -5411,6 +5994,209 @@ function App(): ReactElement {
 
     return unsubscribe
   }, [pushToast, refreshNotesAndTree, vault, vaultApi])
+
+  useEffect(() => {
+    if (!vaultApi || !vault?.rootPath || typeof vaultApi.files.onVaultChanged !== 'function') {
+      return
+    }
+
+    const unsubscribe = vaultApi.files.onVaultChanged((event: VaultChangeEvent) => {
+      if (
+        (event.source !== 'external' && event.source !== 'reconcile') ||
+        event.domain !== 'notes' ||
+        !event.path.startsWith('notebooks/')
+      ) {
+        return
+      }
+
+      const relPath = event.path.slice('notebooks/'.length)
+      if (!isNotePath(relPath)) {
+        return
+      }
+
+      if (currentNotePathRef.current !== relPath) {
+        if (event.kind === 'change') {
+          void refreshNotesOnly().catch((error: unknown) => {
+            pushToast('error', String(error))
+          })
+        }
+        return
+      }
+
+      const requestId = ++externalNoteRefreshRequestRef.current
+      const hasDraft =
+        currentNoteEditorDirtyRef.current ||
+        pendingNoteSaveRef.current?.relPath === relPath ||
+        Boolean(noteSaveInFlightRef.current)
+
+      if (event.kind === 'delete') {
+        if (hasDraft) {
+          setNoteConflict({
+            path: event.path,
+            message: 'The open note was deleted outside Xingularity.',
+            actualRevision: null
+          })
+          return
+        }
+
+        void refreshNotesAndTree().catch((error: unknown) => {
+          pushToast('error', String(error))
+        })
+        return
+      }
+
+      void vaultApi.files
+        .readNoteDocumentWithRevision(relPath)
+        .then((readResult) => {
+          if (
+            requestId !== externalNoteRefreshRequestRef.current ||
+            currentNotePathRef.current !== relPath
+          ) {
+            return
+          }
+
+          if (
+            currentNoteEditorDirtyRef.current ||
+            pendingNoteSaveRef.current?.relPath === relPath ||
+            Boolean(noteSaveInFlightRef.current)
+          ) {
+            setNoteConflict({
+              path: event.path,
+              message: 'The open note changed outside Xingularity.',
+              actualRevision: readResult.revision
+            })
+            return
+          }
+
+          const nextSession = {
+            content: splitNoteContent(readResult.document.markdown).body,
+            tags: [...readResult.document.tags]
+          }
+          getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
+          persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(
+            readResult.document
+          )
+          persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
+          noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
+          updateNoteListEntryFromDocument(relPath, readResult.document)
+          applyOpenNoteSession(relPath, nextSession)
+        })
+        .catch((error: unknown) => {
+          if (requestId !== externalNoteRefreshRequestRef.current) {
+            return
+          }
+          if (String(error).includes('ENOENT')) {
+            if (hasDraft) {
+              setNoteConflict({
+                path: event.path,
+                message: 'The open note was deleted outside Xingularity.',
+                actualRevision: null
+              })
+              return
+            }
+            void refreshNotesAndTree().catch((refreshError: unknown) => {
+              pushToast('error', String(refreshError))
+            })
+            return
+          }
+          pushToast('error', String(error))
+        })
+    })
+
+    return unsubscribe
+  }, [
+    applyOpenNoteSession,
+    getWorkspaceTabSession,
+    noteSaveCoordinator,
+    pushToast,
+    refreshNotesOnly,
+    refreshNotesAndTree,
+    updateNoteListEntryFromDocument,
+    vault?.rootPath,
+    vaultApi
+  ])
+
+  useEffect(() => {
+    if (!vaultApi || !vault?.rootPath || typeof vaultApi.files.onVaultChanged !== 'function') {
+      return
+    }
+
+    const unsubscribe = vaultApi.files.onVaultChanged((event: VaultChangeEvent) => {
+      if (event.source !== 'external' && event.source !== 'reconcile') {
+        return
+      }
+
+      if (event.domain === 'settings' || event.domain === 'projects' || event.domain === 'tasks') {
+        void vaultApi.settings
+          .get()
+          .then((nextSettings) => {
+            calendarTasksRef.current = nextSettings.calendarTasks
+            setSettings(nextSettings)
+          })
+          .catch((error: unknown) => pushToast('error', String(error)))
+      }
+
+      if (event.domain === 'fleeting') {
+        void vaultApi.fleeting
+          .list()
+          .then((nextNotes) => setFleetingNotes(nextNotes))
+          .catch((error: unknown) => pushToast('error', String(error)))
+      }
+
+      if (event.domain === 'resources') {
+        void vaultApi.resources
+          .list()
+          .then((nextSnapshot) => setResourceSnapshot(nextSnapshot))
+          .catch((error: unknown) => pushToast('error', String(error)))
+      }
+
+      if (event.domain === 'schedules') {
+        void refreshSchedulingReviewCount()
+      }
+    })
+
+    return unsubscribe
+  }, [pushToast, refreshSchedulingReviewCount, setSettings, vault?.rootPath, vaultApi])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!vaultApi || !vault?.rootPath || typeof vaultApi.vault.getSyncSnapshot !== 'function') {
+      setVaultSyncSnapshot(null)
+      setVaultSyncPageStatus('loading')
+      return
+    }
+
+    setVaultSyncPageStatus('loading')
+    const loadSnapshot = async (): Promise<void> => {
+      try {
+        const nextSnapshot = await vaultApi.vault.getSyncSnapshot()
+        if (cancelled) {
+          return
+        }
+        setVaultSyncSnapshot(toVaultSyncPageSnapshot(nextSnapshot))
+        setVaultSyncPageStatus('ready')
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+        setVaultSyncPageStatus('error')
+        pushToast('error', String(error))
+      }
+    }
+
+    void loadSnapshot()
+    const unsubscribe =
+      typeof vaultApi.files.onVaultChanged === 'function'
+        ? vaultApi.files.onVaultChanged(() => {
+            void loadSnapshot()
+          })
+        : undefined
+
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [pushToast, vault?.rootPath, vaultApi])
 
   const refreshAutomationWorkspace = useCallback(async (): Promise<void> => {
     if (!vaultApi) {
@@ -5598,7 +6384,7 @@ function App(): ReactElement {
     ]
   )
 
-  const openOrCreateNoteMention = useCallback(
+  const openNoteMention = useCallback(
     async (rawTarget: string): Promise<void> => {
       if (!vaultApi) {
         pushToast('error', 'Note links are only available inside the Electron app')
@@ -5611,54 +6397,34 @@ function App(): ReactElement {
         return
       }
 
-      const target = stripNoteExtension(rawTarget.trim()).replace(/^\/+/, '').replace(/\/+$/, '')
+      const target = rawTarget.trim()
       if (!target) {
         return
       }
 
-      const normalizedTarget = normalizeMentionTarget(target)
-      const exactMatch = notes.find(
-        (note) => normalizeMentionTarget(note.relPath) === normalizedTarget
-      )
-      const byNameMatches = notes.filter(
-        (note) => normalizeMentionTarget(note.name) === normalizedTarget
-      )
-      const targetDir = target.includes('/')
-        ? target.split('/').slice(0, -1).join('/')
-        : currentNotePath
-          ? currentNotePath.split('/').slice(0, -1).join('/')
-          : ''
-      const preferredPath = target.includes('/')
-        ? target
-        : targetDir
-          ? `${targetDir}/${target}`
-          : target
-
       try {
-        const matchedRelPath =
-          exactMatch?.relPath ?? (byNameMatches.length === 1 ? byNameMatches[0].relPath : null)
-        const relPath = matchedRelPath ?? (await createNoteAtExactPathWithFallback(preferredPath))
+        let relPath = createNoteMentionResolver(notesRef.current)(target)
+        if (!relPath) {
+          await refreshNotesAndTree()
+          relPath = createNoteMentionResolver(notesRef.current)(target)
+        }
 
-        await refreshNotesAndTree()
+        if (!relPath) {
+          pushToast('error', `Could not resolve note link: ${target}`)
+          return
+        }
+
         setSearchQuery('')
         setSearchResults([])
         await navigateToPage('notes')
         setSelectedNoteTreeEntries([{ kind: 'note', relPath }])
         await openNote(relPath)
-
-        if (!matchedRelPath) {
-          setNoteTitleEditTarget({ relPath, token: Date.now() })
-          pushToast('success', 'Note created')
-        }
       } catch (error) {
         pushToast('error', String(error))
       }
     },
     [
-      createNoteAtExactPathWithFallback,
-      currentNotePath,
       navigateToPage,
-      notes,
       openNote,
       pushToast,
       refreshNotesAndTree,
@@ -5745,6 +6511,9 @@ function App(): ReactElement {
           if (remappedPath && remappedPath !== path) {
             persistedNoteFingerprintsRef.current[remappedPath] = fingerprint
             delete persistedNoteFingerprintsRef.current[path]
+            persistedNoteRevisionsRef.current[remappedPath] =
+              persistedNoteRevisionsRef.current[path] ?? null
+            delete persistedNoteRevisionsRef.current[path]
           }
         })
 
@@ -5896,6 +6665,7 @@ function App(): ReactElement {
           )
           if (shouldDeleteFingerprint) {
             delete persistedNoteFingerprintsRef.current[path]
+            delete persistedNoteRevisionsRef.current[path]
           }
         })
 
@@ -5981,6 +6751,9 @@ function App(): ReactElement {
           if (remappedPath && remappedPath !== path) {
             persistedNoteFingerprintsRef.current[remappedPath] = fingerprint
             delete persistedNoteFingerprintsRef.current[path]
+            persistedNoteRevisionsRef.current[remappedPath] =
+              persistedNoteRevisionsRef.current[path] ?? null
+            delete persistedNoteRevisionsRef.current[path]
           }
         })
       }
@@ -6449,10 +7222,9 @@ function App(): ReactElement {
         ? PAGE_LABELS[activePage]
         : 'Vault'
   const HeaderPageIcon = hasVault ? APP_PAGE_ICONS[activePage] : FolderOpen
+  const headerPageIcon = <HeaderPageIcon size={14} strokeWidth={1.8} aria-hidden="true" />
   const headerPageLabelContent = (
-    <BreadcrumbIconLabel icon={<HeaderPageIcon size={14} strokeWidth={1.8} aria-hidden="true" />}>
-      {headerPageLabel}
-    </BreadcrumbIconLabel>
+    <BreadcrumbIconLabel icon={headerPageIcon}>{headerPageLabel}</BreadcrumbIconLabel>
   )
   const getWorkspaceTabPresentation = (
     tab: WorkspacePageTab
@@ -6464,6 +7236,16 @@ function App(): ReactElement {
       return {
         label: 'Vault',
         icon: <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+      }
+    }
+
+    const workspaceView = tab.workspaceViewId
+      ? workspaceViews.find((view) => view.id === tab.workspaceViewId)
+      : null
+    if (workspaceView) {
+      return {
+        label: workspaceView.name,
+        icon: <NoteShapeIcon icon={workspaceView.icon} size={18} />
       }
     }
 
@@ -6541,9 +7323,26 @@ function App(): ReactElement {
   }
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
+      if (page === 'notes') {
+        void navigateToPage('notes').then(() => handleNotebookBreadcrumbFolderClick(null))
+        return
+      }
+
+      if (page === 'projects') {
+        void navigateToPage('projects').then(() => {
+          openAllProjects()
+        })
+        return
+      }
+
+      if (page === 'settings') {
+        openSettingsTab('profile')
+        return
+      }
+
       void navigateToPage(page)
     },
-    [navigateToPage]
+    [handleNotebookBreadcrumbFolderClick, navigateToPage, openAllProjects, openSettingsTab]
   )
   const handleOpenSearchPalette = useCallback((): void => {
     if (!hasVault) {
@@ -6699,38 +7498,6 @@ function App(): ReactElement {
       variant="dropdown"
       groups={[
         {
-          id: 'navigation',
-          items: [
-            {
-              id: 'backlinks',
-              label: 'Backlinks',
-              icon: <Link2 aria-hidden="true" />,
-              testId: 'workspace-page-context-menu-item:backlinks',
-              submenuClassName: 'w-72',
-              submenu:
-                currentNoteBacklinks.length > 0
-                  ? currentNoteBacklinks.map((note) => ({
-                      id: `backlink:${note.relPath}`,
-                      label: (
-                        <>
-                          <span className="max-w-full truncate font-medium">
-                            {getNoteDisplayName(note.relPath)}
-                          </span>
-                          <span className="max-w-full truncate text-xs text-muted-foreground">
-                            {stripNoteExtension(note.relPath)}
-                          </span>
-                        </>
-                      ),
-                      className: 'flex flex-col items-start gap-0.5',
-                      onSelect: () => {
-                        void openNote(note.relPath)
-                      }
-                    }))
-                  : [{ id: 'empty', label: 'No backlinks yet', disabled: true }]
-            }
-          ]
-        },
-        {
           id: 'content',
           items: [
             {
@@ -6756,12 +7523,11 @@ function App(): ReactElement {
           items: [
             {
               id: 'favorite-note',
-              label: currentNoteIsFavorite ? 'Remove from favorites' : 'Add to favorites',
-              icon: (
-                <Star
-                  className={currentNoteIsFavorite ? 'fill-current' : undefined}
-                  aria-hidden="true"
-                />
+              label: currentNoteIsFavorite ? 'Remove favorite' : 'Add favorite',
+              icon: currentNoteIsFavorite ? (
+                <Star aria-hidden="true" />
+              ) : (
+                <StarOutline aria-hidden="true" />
               ),
               testId: 'workspace-page-context-menu-item:favorite-note',
               onSelect: toggleCurrentNoteFavorite
@@ -6848,6 +7614,116 @@ function App(): ReactElement {
   const pageContextMenu = pageContextMenuItems ? (
     <WorkspacePageContextMenu>{pageContextMenuItems}</WorkspacePageContextMenu>
   ) : null
+  const reloadNoteConflictFromDisk = useCallback(async (): Promise<void> => {
+    if (!noteConflict || !vaultApi) {
+      return
+    }
+
+    const relPath = noteConflict.path.replace(/^notebooks\//, '')
+    const readResult = await vaultApi.files.readNoteDocumentWithRevision(relPath)
+    const nextSession = {
+      content: splitNoteContent(readResult.document.markdown).body,
+      tags: [...readResult.document.tags]
+    }
+    getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
+    persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(readResult.document)
+    persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
+    noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
+    applyOpenNoteSession(relPath, nextSession)
+    setNoteConflict(null)
+  }, [applyOpenNoteSession, getWorkspaceTabSession, noteConflict, noteSaveCoordinator, vaultApi])
+  const mergeNoteConflictFromDisk = useCallback(async (): Promise<void> => {
+    if (!noteConflict || !vaultApi) {
+      return
+    }
+
+    const relPath = noteConflict.path.replace(/^notebooks\//, '')
+    const baseSerialized = persistedNoteFingerprintsRef.current[relPath]
+    if (!baseSerialized) {
+      pushToast(
+        'warning',
+        'The original note version is unavailable, so this conflict cannot be merged.'
+      )
+      return
+    }
+
+    const session = getWorkspaceTabSession().noteEditorSessions[relPath] ?? {
+      content: currentNoteContentRef.current,
+      tags: [...currentNoteTagsRef.current]
+    }
+    const baseDocument = parseStoredNoteDocument(baseSerialized)
+    const externalRead = await vaultApi.files.readNoteDocumentWithRevision(relPath)
+    const mergeResult = mergeMarkdownThreeWay(
+      splitNoteContent(baseDocument.markdown).body,
+      session.content,
+      splitNoteContent(externalRead.document.markdown).body
+    )
+
+    if (mergeResult.status === 'conflict') {
+      pushToast(
+        'warning',
+        'The note has overlapping edits. Keep one version or resolve it manually.'
+      )
+      return
+    }
+
+    const nextSession = {
+      content: mergeResult.content,
+      tags: [...session.tags]
+    }
+    getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
+    persistedNoteRevisionsRef.current[relPath] = externalRead.revision.contentHash
+    noteSaveCoordinator?.setBaseRevision(relPath, externalRead.revision.contentHash)
+    updateNoteListEntryFromDocument(relPath, {
+      markdown: mergeResult.content,
+      tags: nextSession.tags
+    })
+    applyOpenNoteSession(relPath, nextSession)
+    setNoteConflict(null)
+    pushToast('success', 'Non-overlapping note edits were merged. Save to commit the result.')
+  }, [
+    applyOpenNoteSession,
+    getWorkspaceTabSession,
+    noteConflict,
+    noteSaveCoordinator,
+    pushToast,
+    updateNoteListEntryFromDocument,
+    vaultApi
+  ])
+  const vaultSyncActions: VaultSyncPageActions = {
+    onReconcile: reconcileVaultSync,
+    onValidate: reconcileVaultSync,
+    onOpenFinder: async () => {
+      if (vaultApi && vault?.rootPath) {
+        await vaultApi.desktop.openPath(vault.rootPath)
+      }
+    },
+    onOpenTerminal: async () => {
+      if (vaultApi) {
+        await vaultApi.desktop.openTerminal()
+      }
+    },
+    onCreateBackup: async () => {
+      if (!vaultApi) {
+        return
+      }
+
+      const backup = await vaultApi.vault.createBackup()
+      pushToast('success', `Portable backup created at ${backup.path}`)
+    },
+    onReviewConflict: async (conflict) => {
+      const notePath = conflict.path.replace(/^notebooks\//, '')
+      if (notePath.endsWith('.md')) {
+        await navigateToPage('notes')
+        await openNote(notePath)
+      } else {
+        pushToast('info', `Review ${conflict.path} in the vault folder.`)
+      }
+    },
+    onRepairItem: async (repair) => {
+      pushToast('warning', `Repair required for ${repair.path}`)
+    }
+  }
   const calendarCurrentPeriodLabel =
     !activeTask && activePage === 'calendar'
       ? formatCalendarTabPeriodTitle(selectedCalendarDate, calendarViewMode)
@@ -6875,6 +7751,14 @@ function App(): ReactElement {
             schedulingReviewCount={schedulingReviewCount}
             isLocked={!hasVault}
             availablePages={availablePages}
+            workspaceViews={workspaceViews}
+            activeWorkspaceViewId={activeWorkspaceViewId}
+            onOpenWorkspaceView={openWorkspaceView}
+            onCreateWorkspaceView={(source) => {
+              void handleCreateWorkspaceView(source)
+            }}
+            onDeleteWorkspaceView={requestDeleteWorkspaceView}
+            resourceViewsEnabled={featureFlags.resources !== false}
             className={paletteSurfaceClass}
             collapsible={isFocusMode ? 'offcanvas' : 'min'}
             macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
@@ -6884,10 +7768,11 @@ function App(): ReactElement {
             <div className="flex h-full min-w-0 flex-col gap-2">
               <WorkspaceContextProvider
                 hasPanel={hasRightPanel}
-                panelCollapsed={isRightPanelCollapsed}
-                onTogglePanel={() => setIsRightPanelCollapsed((current) => !current)}
+                panelOpen={isRightPanelOpen}
+                onTogglePanel={toggleRightPanel}
               >
                 <WorkspaceTabManager
+                  macosTrafficLightInset={isFocusMode && platform.api?.ui.platform === 'darwin'}
                   tabs={workspaceTabs.map((tab, index) => {
                     const presentation = getWorkspaceTabPresentation(tab)
                     return {
@@ -6932,6 +7817,19 @@ function App(): ReactElement {
                                             strokeWidth={1.8}
                                             aria-hidden="true"
                                           />
+                                        ) : taskOrigin?.source === 'tasks' ? (
+                                          taskOriginWorkspaceView ? (
+                                            <NoteShapeIcon
+                                              icon={taskOriginWorkspaceView.icon}
+                                              size={16}
+                                            />
+                                          ) : (
+                                            <APP_PAGE_ICONS.tasks
+                                              size={14}
+                                              strokeWidth={1.8}
+                                              aria-hidden="true"
+                                            />
+                                          )
                                         ) : (
                                           <APP_PAGE_ICONS.calendar
                                             size={14}
@@ -6941,7 +7839,11 @@ function App(): ReactElement {
                                         )
                                       }
                                     >
-                                      {taskOrigin?.source === 'projects' ? 'Projects' : 'Calendar'}
+                                      {taskOrigin?.source === 'projects'
+                                        ? 'Projects'
+                                        : taskOrigin?.source === 'tasks'
+                                          ? (taskOriginWorkspaceView?.name ?? 'Tasks')
+                                          : 'Calendar'}
                                     </BreadcrumbIconLabel>
                                   </BreadcrumbButton>
                                 </BreadcrumbItem>
@@ -6998,6 +7900,14 @@ function App(): ReactElement {
                                 if (selectedProjectForHeader) {
                                   openProject(selectedProjectForHeader.id)
                                 }
+                              }}
+                            />
+                          ) : activeWorkspaceView ? (
+                            <WorkspaceViewBreadcrumb
+                              key={activeWorkspaceView.id}
+                              view={activeWorkspaceView}
+                              onUpdateView={(update) => {
+                                void updateWorkspaceView(activeWorkspaceView.id, update)
                               }}
                             />
                           ) : (
@@ -7143,15 +8053,7 @@ function App(): ReactElement {
                                     <BreadcrumbSeparator className="text-muted-foreground" />
                                     <BreadcrumbItem>
                                       <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
-                                        <BreadcrumbIconLabel
-                                          icon={
-                                            <HeaderPageIcon
-                                              size={14}
-                                              strokeWidth={1.8}
-                                              aria-hidden="true"
-                                            />
-                                          }
-                                        >
+                                        <BreadcrumbIconLabel icon={headerPageIcon}>
                                           {middleHeaderBreadcrumbItem}
                                         </BreadcrumbIconLabel>
                                       </BreadcrumbPage>
@@ -7164,7 +8066,18 @@ function App(): ReactElement {
                         </div>
                       }
                       primaryRightActions={
-                        !activeTask && activePage === 'resources' ? (
+                        activeTask ? (
+                          <WorkspaceIconButton
+                            icon={<Copy size={18} aria-hidden="true" />}
+                            label="Duplicate task"
+                            data-testid="duplicate-task-button"
+                            aria-label="Duplicate task"
+                            title="Duplicate task"
+                            borderless
+                            disabled={!vaultApi}
+                            onClick={() => void duplicateActiveTask()}
+                          />
+                        ) : activePage === 'resources' ? (
                           <WorkspaceIconButton
                             icon={<Plus size={18} aria-hidden="true" />}
                             label="Add resource"
@@ -7217,6 +8130,18 @@ function App(): ReactElement {
                               onClick={() => void createProjectFromToolbar()}
                             />
                           ) : null
+                        ) : !activeTask && activePage === 'tasks' ? (
+                          <WorkspaceIconButton
+                            icon={<Plus size={18} aria-hidden="true" />}
+                            label="New task"
+                            variant="accent"
+                            data-testid="new-task-button"
+                            aria-label="New task"
+                            title="New task"
+                            borderless
+                            disabled={!vaultApi || isCreatingTask}
+                            onClick={() => void createTaskFromTasksPage()}
+                          />
                         ) : !activeTask && activePage === 'schedules' ? (
                           schedulingView === 'list' ? (
                             <SchedulingAddAutomationButton
@@ -7337,9 +8262,9 @@ function App(): ReactElement {
 
                     <DocumentWorkspaceMain className={paletteSurfaceClass}>
                       <WorkspaceResizableLayout
-                        key={`${activePage}:${hasRightPanel ? 'panel' : 'no-panel'}`}
                         hasPanel={hasRightPanel}
                         panelWidth={rightPanelWidth}
+                        panelKey={workspacePanelKey}
                         panelCollapsed={isRightPanelCollapsed}
                         panelHidden={isFocusMode}
                         onPanelWidthChange={(width) => {
@@ -7433,7 +8358,7 @@ function App(): ReactElement {
                                   onRemoveTag={removeTagFromCurrentNote}
                                   onFindByTag={findByTag}
                                   onOpenNoteLink={(target) => {
-                                    void openOrCreateNoteMention(target)
+                                    void openNoteMention(target)
                                   }}
                                   onRename={renameCurrentNote}
                                   titleEditToken={
@@ -7511,6 +8436,48 @@ function App(): ReactElement {
                                   }
                                 }}
                               />
+                            ) : activeWorkspaceView ? (
+                              <WorkspaceViewPage
+                                key={activeWorkspaceView.id}
+                                view={activeWorkspaceView}
+                                projects={projects}
+                                tasks={calendarTasks}
+                                onOpenTask={(taskId) =>
+                                  openTaskDialog(taskId, {
+                                    source: 'tasks',
+                                    workspaceViewId: activeWorkspaceView.id
+                                  })
+                                }
+                                onDuplicateTask={(taskId) =>
+                                  duplicateTaskInDialog(taskId, {
+                                    source: 'tasks',
+                                    workspaceViewId: activeWorkspaceView.id
+                                  })
+                                }
+                                onUpdateView={(update) => {
+                                  void updateWorkspaceView(activeWorkspaceView.id, update)
+                                }}
+                                resourcePageProps={{
+                                  projects,
+                                  noteTree,
+                                  resources: resourceSnapshot.resources,
+                                  relations: resourceSnapshot.relations,
+                                  addResourceRequest: resourceAddRequest,
+                                  onAddResourceRequestHandled: () => setResourceAddRequest(false),
+                                  onCreateResource: createResource,
+                                  onUpdateResource: updateProjectResource,
+                                  onSetResourceProjectLinks: setResourceProjectLinks,
+                                  onRemoveResource: removeResource,
+                                  onOpenResource: openResource,
+                                  onOpenNotebookResource: (resourceId) => {
+                                    void openNotebookResource(resourceId)
+                                  },
+                                  onLocateResource: locateResource,
+                                  onRevealResource: revealResource,
+                                  onRefreshResource: refreshResource,
+                                  onPreviewResource: previewResource
+                                }}
+                              />
                             ) : activePage === 'resources' ? (
                               <ResourcesPage
                                 projects={projects}
@@ -7531,6 +8498,15 @@ function App(): ReactElement {
                                 onRevealResource={revealResource}
                                 onRefreshResource={refreshResource}
                                 onPreviewResource={previewResource}
+                              />
+                            ) : activePage === 'tasks' ? (
+                              <TasksPage
+                                projects={projects}
+                                tasks={calendarTasks}
+                                onOpenTask={(taskId) => openTaskDialog(taskId, { source: 'tasks' })}
+                                onDuplicateTask={(taskId) =>
+                                  duplicateTaskInDialog(taskId, { source: 'tasks' })
+                                }
                               />
                             ) : activePage === 'projects' ? (
                               <ProjectsWorkspacePage
@@ -7579,7 +8555,7 @@ function App(): ReactElement {
                                 vimModeEnabled={editorVimModeEnabled}
                                 vimKeyMappings={editorVimKeyMappings}
                                 onOpenNoteLink={(target) => {
-                                  void navigateToPage('notes').then(() => openNote(target))
+                                  void openNoteMention(target)
                                 }}
                                 onCreateTask={createProjectTask}
                                 onCreateMilestone={createProjectMilestone}
@@ -7596,6 +8572,12 @@ function App(): ReactElement {
                                 }
                                 onUpdateTask={updateProjectTask}
                                 onDeleteTask={(taskId) => void removeCalendarTask(taskId)}
+                                onDuplicateTask={(taskId) =>
+                                  duplicateTaskInDialog(taskId, {
+                                    source: 'projects',
+                                    projectId: selectedProjectForHeader?.id ?? selectedProjectId
+                                  })
+                                }
                                 onOpenTask={(taskId, options) => {
                                   openTaskDialog(
                                     taskId,
@@ -7638,6 +8620,10 @@ function App(): ReactElement {
                                         onOpenTask={(taskId, options) => {
                                           openTaskDialog(taskId, { source: 'calendar' }, options)
                                         }}
+                                        onDuplicateTask={(taskId) =>
+                                          duplicateTaskInDialog(taskId, { source: 'calendar' })
+                                        }
+                                        onCopyTaskToSchedule={copyTaskToSchedule}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
                                         }}
@@ -7653,12 +8639,7 @@ function App(): ReactElement {
                                       <CalendarDayView
                                         selectedDate={selectedCalendarDate}
                                         tasks={visibleCalendarTasks.filter((task) => {
-                                          if (!task.date) return false
-                                          const endDate = task.endDate ?? task.date
-                                          return (
-                                            task.date <= selectedCalendarDate &&
-                                            endDate >= selectedCalendarDate
-                                          )
+                                          return isCalendarTaskOnDate(task, selectedCalendarDate)
                                         })}
                                         onSelectDate={setSelectedCalendarDate}
                                         onRescheduleTask={(taskId, newDate) => {
@@ -7667,6 +8648,9 @@ function App(): ReactElement {
                                         onOpenTask={(taskId) => {
                                           openTaskDialog(taskId, { source: 'calendar' })
                                         }}
+                                        onDuplicateTask={(taskId) =>
+                                          duplicateTaskInDialog(taskId, { source: 'calendar' })
+                                        }
                                         onDeleteTask={(taskId) => {
                                           void removeCalendarTask(taskId)
                                         }}
@@ -7682,6 +8666,10 @@ function App(): ReactElement {
                                         onOpenTask={(taskId, options) => {
                                           openTaskDialog(taskId, { source: 'calendar' }, options)
                                         }}
+                                        onDuplicateTask={(taskId) =>
+                                          duplicateTaskInDialog(taskId, { source: 'calendar' })
+                                        }
+                                        onCopyTaskToSchedule={copyTaskToSchedule}
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
                                         }}
@@ -7713,9 +8701,23 @@ function App(): ReactElement {
                                 </section>
                               </div>
                             ) : activePage === 'designAudit' ? (
-                              <DesignAuditPage themeVersion={`dark:${fontFamily}`} />
+                              <DesignAuditPage
+                                themeVersion={`dark:${fontFamily}`}
+                                activeTab={activeDesignAuditTab}
+                                onTabChange={setActiveDesignAuditTab}
+                              />
                             ) : activePage === 'settings' ? (
                               <SettingsPage
+                                initialTab={settingsTabRequest}
+                                syncHealth={
+                                  platform.kind === 'desktop' && vaultApi
+                                    ? {
+                                        status: vaultSyncPageStatus,
+                                        snapshot: vaultSyncSnapshot,
+                                        actions: vaultSyncActions
+                                      }
+                                    : undefined
+                                }
                                 profileName={profileName}
                                 mistralApiKeyConfigured={mistralApiKeyConfigured}
                                 editorVimModeEnabled={editorVimModeEnabled}
@@ -7805,20 +8807,7 @@ function App(): ReactElement {
                             />
                           ]
                         ) : (
-                          <DocumentWorkspacePanel
-                            data-panel-state={shouldSlideWorkspacePanelOut ? 'collapsed' : 'open'}
-                            className={`h-full w-full basis-auto ${hasRightPanel ? 'flex' : 'hidden'} overflow-hidden ${
-                              shouldSlideWorkspacePanelOut
-                                ? 'pointer-events-none translate-x-full opacity-0'
-                                : 'translate-x-0 opacity-100'
-                            } ${paletteSurfaceClass}`}
-                            data-panel-resizable={hasRightPanel ? 'true' : undefined}
-                            style={
-                              shouldSlideWorkspacePanelOut
-                                ? { width: '0px', flexBasis: '0px', borderWidth: '0px' }
-                                : undefined
-                            }
-                          >
+                          <DocumentWorkspacePanel className={paletteSurfaceClass}>
                             <div
                               key={`${activeWorkspaceTabId}:${activePage}`}
                               className="flex h-full flex-col"
@@ -7946,6 +8935,12 @@ function App(): ReactElement {
                                     projects={projects}
                                     availableTags={calendarTaskTagValues}
                                     onUpdateTask={updateProjectTask}
+                                    onConfigureRecurrence={configureTaskRecurrence}
+                                  />
+                                ) : activePage === 'designAudit' ? (
+                                  <DesignAuditRightPanel
+                                    activeTab={activeDesignAuditTab}
+                                    onTabChange={setActiveDesignAuditTab}
                                   />
                                 ) : activePage === 'notes' ? (
                                   <WorkspacePanelStack data-testid="notes-panel-stack">
@@ -8023,6 +9018,21 @@ function App(): ReactElement {
                                         />
                                       </CollapsibleWorkspacePanelSection>
                                     ) : null}
+                                    {noteIsOpen && !searchQuery.trim() && !currentExcalidrawPath ? (
+                                      <CollapsibleWorkspacePanelSection
+                                        key={`backlinks:${currentNotePath ?? 'note-backlinks'}`}
+                                        data-testid="note-backlinks-panel"
+                                        heading="Backlinks"
+                                        className="shrink-0 overflow-hidden p-0"
+                                      >
+                                        <NoteBacklinksPanel
+                                          backlinks={currentNoteBacklinks}
+                                          onOpenBacklink={(relPath) => {
+                                            void openNote(relPath)
+                                          }}
+                                        />
+                                      </CollapsibleWorkspacePanelSection>
+                                    ) : null}
                                   </WorkspacePanelStack>
                                 ) : activePage === 'projects' ? (
                                   <ProjectsWorkspaceRightPanel
@@ -8039,6 +9049,7 @@ function App(): ReactElement {
                                 ) : activePage === 'calendar' ? (
                                   <CalendarTaskPanel
                                     tasks={visibleUnscheduledTasks}
+                                    dragPreview={calendarViewMode === 'week' ? 'floating' : 'clone'}
                                     hasActiveFilter={hasActiveCalendarFilter}
                                     projects={projects}
                                     selectedDate={selectedCalendarDate}
@@ -8047,6 +9058,10 @@ function App(): ReactElement {
                                     onOpenTask={(taskId) => {
                                       openTaskDialog(taskId, { source: 'calendar' })
                                     }}
+                                    onDuplicateTask={(taskId) =>
+                                      duplicateTaskInDialog(taskId, { source: 'calendar' })
+                                    }
+                                    onCopyTaskToSchedule={copyTaskToSchedule}
                                     onDelete={(taskId) => {
                                       void removeCalendarTask(taskId)
                                     }}
@@ -8110,7 +9125,6 @@ function App(): ReactElement {
         </SidebarProvider>
       ) : (
         <NoVaultPage
-          lastVaultPath={lastVaultPath}
           platformKind={platform.kind}
           supportsVaultPicker={platform.capabilities.supportsVaultPicker}
           onOpenExistingVault={() => activateVaultFromNoVaultPage('open')}
@@ -8145,6 +9159,10 @@ function App(): ReactElement {
             setTaskDialogIsNewTask(false)
           }}
           onSave={updateProjectTask}
+          onDuplicate={(taskId) =>
+            taskDialogOrigin ? duplicateTaskInDialog(taskId, taskDialogOrigin) : Promise.resolve()
+          }
+          onConfigureRecurrence={configureTaskRecurrence}
           onDelete={(taskId) => {
             setOpenTaskDialogId(null)
             setTaskDialogOrigin(null)
@@ -8236,6 +9254,93 @@ function App(): ReactElement {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog
+        open={Boolean(noteConflict)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNoteConflict(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Note changed outside Xingularity</AlertDialogTitle>
+            <AlertDialogDescription>
+              {noteConflict?.message ?? 'The disk version changed after this note was opened.'} Your
+              draft is still kept in the editor; choose whether to reload the disk version or keep
+              editing locally.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                if (!noteConflict) {
+                  return
+                }
+                const relPath = noteConflict.path.replace(/^notebooks\//, '')
+                const nextBaseHash = noteConflict.actualRevision?.contentHash ?? null
+                persistedNoteRevisionsRef.current[relPath] = nextBaseHash
+                noteSaveCoordinator?.setBaseRevision(relPath, nextBaseHash)
+                syncCurrentNoteDirtyState(relPath)
+                setNoteConflict(null)
+              }}
+            >
+              Keep local draft
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void mergeNoteConflictFromDisk().catch((error) => {
+                  pushToast('error', String(error))
+                })
+              }}
+            >
+              Merge edits
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                void reloadNoteConflictFromDisk().catch((error) => {
+                  pushToast('error', String(error))
+                })
+              }}
+            >
+              Reload disk version
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={Boolean(workspaceViewToDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWorkspaceViewToDelete(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete saved view?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {workspaceViewToDelete
+                ? `“${workspaceViewToDelete.name}” will be removed from this vault. Its table data will remain unchanged.`
+                : 'This saved view will be removed from this vault.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void deleteWorkspaceView()
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="workspace-view-delete-confirm"
+            >
+              Delete view
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <CommandPalette
         open={hasVault && commandPaletteOpen}
         initialQuery={commandPaletteInitialQuery}
@@ -8261,9 +9366,21 @@ function App(): ReactElement {
           void navigateToPage('projects')
         }}
         onOpenPage={(page) => {
+          if (page === 'settings') {
+            openSettingsTab('profile')
+            return
+          }
+
           void navigateToPage(page)
         }}
+        onOpenSyncHealth={
+          platform.kind === 'desktop' && vaultApi ? () => openSettingsTab('sync') : undefined
+        }
         onOpenWarpAtNoteFolder={openCurrentNoteFolderInWarp}
+        onOpenVaultFinder={openVaultRootInFinder}
+        onOpenVaultTerminal={openVaultRootInTerminal}
+        onReconcileVault={reconcileVaultFromCommandPalette}
+        onCreateVaultBackup={createVaultBackupFromCommandPalette}
         onManageVaults={() => {
           setCommandPaletteOpen(false)
           openVaultSwapper()

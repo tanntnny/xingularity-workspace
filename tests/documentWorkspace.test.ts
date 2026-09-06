@@ -61,6 +61,35 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('aria-label="Close right sidebar"')
   })
 
+  it('renders the matching right-panel icon for open and collapsed states', () => {
+    const renderHeader = (panelOpen: boolean): string =>
+      renderToStaticMarkup(
+        createElement(
+          WorkspaceContextProvider,
+          {
+            hasPanel: true,
+            panelOpen,
+            onTogglePanel: () => undefined
+          },
+          createElement(DocumentWorkspaceMainHeader, null)
+        )
+      )
+
+    const openMarkup = renderHeader(true)
+    const collapsedMarkup = renderHeader(false)
+
+    expect(openMarkup).toContain('data-testid="workspace-right-panel-toggle"')
+    expect(openMarkup).toContain('data-panel-toggle-state="open"')
+    expect(openMarkup).toContain('data-testid="workspace-right-panel-close-icon"')
+    expect(openMarkup).not.toContain('data-testid="workspace-right-panel-open-icon"')
+    expect(openMarkup).toContain('aria-label="Close right sidebar"')
+
+    expect(collapsedMarkup).toContain('data-panel-toggle-state="collapsed"')
+    expect(collapsedMarkup).toContain('data-testid="workspace-right-panel-open-icon"')
+    expect(collapsedMarkup).not.toContain('data-testid="workspace-right-panel-close-icon"')
+    expect(collapsedMarkup).toContain('aria-label="Open right sidebar"')
+  })
+
   it('keeps page actions in the primary row and secondary actions in the secondary row', () => {
     const markup = renderToStaticMarkup(
       createElement(
@@ -358,6 +387,24 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('data-testid="workspace-right-panel-content-one"')
     expect(markup).toContain('data-testid="workspace-right-panel-content-two"')
     expect(markup).toContain('data-workspace-scrollport="true"')
+  })
+
+  it('keeps workspace motion on a presence wrapper instead of zeroing panel geometry', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        WorkspaceResizableLayout,
+        { panelWidth: 300, panelKey: 'notes:workspace' },
+        createElement('main', null, 'Main'),
+        createElement('aside', null, 'Panel')
+      )
+    )
+
+    expect(markup).toContain('data-panel-state="entering"')
+    expect(markup).toContain('data-panel-resizable="true"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(markup).toContain('inert=""')
+    expect(markup).not.toContain('width:0px')
+    expect(markup).not.toContain('flex-basis:0px')
   })
 
   it('marks the sidebar rail as a horizontal resize affordance', () => {

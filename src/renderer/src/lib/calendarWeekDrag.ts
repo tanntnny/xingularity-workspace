@@ -13,6 +13,13 @@ export interface WeeklyTimedDropPreview {
   heightMode: WeeklyHeightMode
 }
 
+export interface WeeklyTimedCreateSchedule {
+  date: string
+  endDate: string
+  time: string
+  endTime: string
+}
+
 export function buildWeeklyTimedDropPreview(
   task: Pick<CalendarTask, 'time' | 'endTime' | 'weeklyHeightMode'> | undefined,
   pointerMinutes: number,
@@ -27,28 +34,27 @@ export function buildWeeklyTimedDropPreview(
 }
 
 export function buildWeeklyTimedDropSchedule(
-  task: Pick<CalendarTask, 'time' | 'endTime' | 'weeklyHeightMode'> | undefined,
+  task: Pick<CalendarTask, 'date' | 'time' | 'endTime' | 'weeklyHeightMode'> | undefined,
   date: string,
   pointerMinutes: number,
   pointerOffsetMinutes: number
 ): {
-  date: string
-  endDate: undefined
-  time: string
+  date: string | undefined
+  endDate: string | undefined
+  time: string | undefined
   endTime: string | undefined
-  weeklyHeightMode: WeeklyHeightMode
+  weeklyHeightMode?: WeeklyHeightMode
 } {
-  const nextRange = buildWeeklyTimedDropPreview(task, pointerMinutes, pointerOffsetMinutes)
-
-  if (!task) {
+  if (!task?.date) {
     return {
-      date,
-      endDate: undefined,
-      time: minutesToTime(nextRange.startMinutes),
-      endTime: undefined,
-      weeklyHeightMode: 'duration'
+      date: undefined,
+      endDate: date,
+      time: undefined,
+      endTime: undefined
     }
   }
+
+  const nextRange = buildWeeklyTimedDropPreview(task, pointerMinutes, pointerOffsetMinutes)
 
   return {
     date,
@@ -62,12 +68,7 @@ export function buildWeeklyTimedDropSchedule(
 export function buildWeeklyTimedCreateSchedule(
   date: string,
   pointerMinutes: number
-): {
-  date: string
-  endDate: undefined
-  time: string
-  endTime: string
-} {
+): WeeklyTimedCreateSchedule {
   const range = buildMovedTimedRange({
     pointerMinutes,
     pointerOffsetMinutes: 0,
@@ -76,7 +77,7 @@ export function buildWeeklyTimedCreateSchedule(
 
   return {
     date,
-    endDate: undefined,
+    endDate: date,
     time: minutesToTime(range.startMinutes),
     endTime: minutesToTime(range.endMinutes)
   }
@@ -125,7 +126,7 @@ export function buildWeeklyAllDayDropSchedule(
   time: undefined
   endTime: undefined
 } {
-  if (!task.date && task.endDate) {
+  if (!task.date) {
     return {
       date: undefined,
       endDate: date,

@@ -308,6 +308,10 @@ export const ExcalidrawFileEditor = forwardRef<
 
   const handleSceneChange = useCallback<ExcalidrawOnChange>(
     (elements, appState, files) => {
+      if (pathMutationPendingRef.current) {
+        return
+      }
+
       setActiveToolType(appState.activeTool.type)
       pendingSceneRef.current = {
         notePath,

@@ -45,7 +45,7 @@ describe('NoteOutlinePanel', () => {
     expect(markup).not.toContain('break-words')
   })
 
-  it('renders an empty state when the note has no headings', () => {
+  it('renders no content when the note has no headings', () => {
     const markup = renderToStaticMarkup(
       createElement(NoteOutlinePanel, {
         items: [],
@@ -53,7 +53,8 @@ describe('NoteOutlinePanel', () => {
       })
     )
 
-    expect(markup).toContain('data-testid="note-outline-empty"')
-    expect(markup).toContain('Add a heading to make it available here.')
+    expect(markup).toContain('data-testid="note-outline-list"')
+    expect(markup).not.toContain('note-outline-empty')
+    expect(markup).not.toContain('Add a heading to make it available here.')
   })
 })

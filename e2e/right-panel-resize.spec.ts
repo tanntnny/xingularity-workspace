@@ -90,6 +90,35 @@ async function getWidth(locator: Locator): Promise<number> {
   return Math.round(box.width)
 }
 
+type PanelMotionSample = {
+  state: string
+  left: number
+  width: number
+  transform: string
+  opacity: string
+}
+
+async function getPanelMotionSample(page: Page): Promise<PanelMotionSample | null> {
+  return page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>(
+      '[data-panel-state][data-panel-resizable="true"]'
+    )
+    if (!panel) {
+      return null
+    }
+
+    const styles = getComputedStyle(panel)
+    const box = panel.getBoundingClientRect()
+    return {
+      state: panel.dataset.panelState ?? '',
+      left: box.left,
+      width: box.width,
+      transform: styles.transform,
+      opacity: styles.opacity
+    }
+  })
+}
+
 async function getResizeAffordanceStyles(locator: Locator): Promise<{
   cursor: string
   lineBackgroundImage: string
@@ -121,6 +150,19 @@ async function resizeRightPanelBy(page: Page, delta: number): Promise<void> {
   await page.mouse.down()
   await page.mouse.move(startX - delta, startY, { steps: 8 })
   await page.mouse.up()
+}
+
+async function expectRightPanelToggle(page: Page, open: boolean): Promise<void> {
+  const toggle = page.getByTestId('workspace-right-panel-toggle')
+  const state = open ? 'open' : 'collapsed'
+  const label = open ? 'Close right sidebar' : 'Open right sidebar'
+  const activeIcon = open ? 'workspace-right-panel-close-icon' : 'workspace-right-panel-open-icon'
+  const inactiveIcon = open ? 'workspace-right-panel-open-icon' : 'workspace-right-panel-close-icon'
+
+  await expect(toggle).toHaveAttribute('data-panel-toggle-state', state)
+  await expect(toggle).toHaveAttribute('aria-label', label)
+  await expect(page.getByTestId(activeIcon)).toBeVisible()
+  await expect(page.getByTestId(inactiveIcon)).toHaveCount(0)
 }
 
 test.describe('right workspace panel resizing', () => {
@@ -219,11 +261,33 @@ test.describe('right workspace panel resizing', () => {
       await expect.poll(() => getWidth(panel)).toBeGreaterThanOrEqual(220)
 
       const expandedWidth = await getWidth(panel)
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('open')
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.transform, { timeout: 1_000 })
+        .toMatch(/matrix\(1, 0, 0, 1, 0, 0\)/)
+      const openSample = await getPanelMotionSample(page)
+      expect(openSample?.state).toBe('open')
       await page.getByRole('button', { name: 'Close right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('exiting')
+      await page.waitForTimeout(60)
+      const exitSample = await getPanelMotionSample(page)
+      expect(exitSample?.width ?? 0).toBeGreaterThan(0)
+      expect(exitSample?.transform).not.toBe('none')
+      expect(exitSample?.left ?? 0).toBeGreaterThan((openSample?.left ?? 0) + 4)
       await expect.poll(() => getWidth(panel)).toBe(0)
 
       await page.getByRole('button', { name: 'Open right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toMatch(/entering|open/)
       await expect.poll(() => getWidth(panel)).toBe(expandedWidth)
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('open')
 
       await page.reload()
       await expect(page.getByTestId('sidebar-command-palette')).toBeVisible({ timeout: 20_000 })
@@ -283,59 +347,168 @@ test.describe('right workspace panel resizing', () => {
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
-      const panelPages = [
-        'notes',
-        'knowledge',
-        'subscriptions',
-        'calendar',
-        'schedules',
-        'settings'
-      ] as const
+      const panelPages = ['notes', 'knowledge', 'subscriptions', 'calendar'] as const
 
       for (const pageId of panelPages) {
         await page.getByTestId(`sidebar-page:${pageId}`).click()
-        const closePanelButton = page.getByRole('button', { name: 'Close right sidebar' })
-        const openPanelButton = page.getByRole('button', { name: 'Open right sidebar' })
 
-        await expect(closePanelButton).toBeVisible({ timeout: 20_000 })
+        await expectRightPanelToggle(page, true)
         await expect(
           page.locator('[data-panel-state="open"][data-panel-resizable="true"]').first()
         ).toHaveCSS('transition-property', /transform/)
         await page.keyboard.press('Meta+B')
-        await expect(openPanelButton).toBeVisible()
+        await expectRightPanelToggle(page, false)
         await page.keyboard.press('Meta+B')
-        await expect(closePanelButton).toBeVisible()
+        await expectRightPanelToggle(page, true)
       }
 
+      await page.getByTestId('sidebar-page:schedules').click()
+      await expect(page.getByTestId('scheduling-add-automation')).toBeVisible({ timeout: 20_000 })
+      await page.getByTestId('scheduling-add-automation').click()
+      await expect(page.getByTestId('scheduling-panel-stack')).toBeVisible()
+      await expectRightPanelToggle(page, true)
+      await page.keyboard.press('Meta+B')
+      await expectRightPanelToggle(page, false)
+      await page.keyboard.press('Meta+B')
+      await expectRightPanelToggle(page, true)
+
+      await page.getByTestId('sidebar-page:settings').click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('exiting')
+      await expect
+        .poll(async () => page.locator('[data-panel-state][data-panel-resizable="true"]').count(), {
+          timeout: 1_000
+        })
+        .toBe(0)
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
       const profileInput = page.getByLabel('Profile Name')
       await profileInput.focus()
       await page.keyboard.press('Meta+B')
-      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toBeVisible()
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
 
       await page.getByTestId('sidebar-vault-manager').click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.keyboard.press('Meta+B')
       await page.keyboard.press('Escape')
-      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toBeVisible()
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
 
       await page.getByTestId('sidebar-page:capture').click()
-      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
       await page.keyboard.press('Meta+B')
-      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
 
       await page.getByTestId('sidebar-page:settings').click()
-      await page.getByRole('radio', { name: 'Developer', exact: true }).click()
+      await page.getByRole('tab', { name: 'Developer', exact: true }).click()
       await page.getByTestId('settings-open-design-audit').click()
       await expect(page.getByRole('heading', { name: 'Design Audit' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
+      await expect(page.getByTestId('design-audit-panel')).toBeVisible()
+      await expectRightPanelToggle(page, true)
       await page.keyboard.press('Meta+B')
-      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+      await expectRightPanelToggle(page, false)
+      await page.keyboard.press('Meta+B')
+      await expectRightPanelToggle(page, true)
+
+      await page.keyboard.press('Meta+F')
+      await expect(page.locator('[data-focus-mode="true"]')).toHaveCount(1)
+      await expectRightPanelToggle(page, false)
+      const desktopSidebar = page.locator('[data-side="left"] > div').nth(1)
+      await expect(desktopSidebar).toHaveClass(/motion-sidebar/)
+      await expect
+        .poll(
+          async () =>
+            desktopSidebar.evaluate((element) => getComputedStyle(element).transitionProperty),
+          { timeout: 1_000 }
+        )
+        .toMatch(/transform/)
+      await expect
+        .poll(
+          async () => desktopSidebar.evaluate((element) => element.getBoundingClientRect().left),
+          { timeout: 1_000 }
+        )
+        .toBeLessThan(0)
+      await page.getByTestId('workspace-right-panel-toggle').click()
+      await expect(page.locator('[data-focus-mode="false"]')).toHaveCount(1)
+      await expectRightPanelToggle(page, true)
 
       await page.getByTestId('sidebar-page:projects').click()
-      await expect(page.getByRole('button', { name: 'Close right sidebar' })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: 'Open right sidebar' })).toHaveCount(0)
+      await expect(page.getByTestId('workspace-right-panel-toggle')).toHaveCount(0)
       await expect(page.getByTestId('project-properties-panel')).toHaveCount(0)
       await expect(page.getByTestId('workspace-right-panel-resize')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('slides the visual panel before collapsing its resizable geometry', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('sidebar-page:notes').click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('open')
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.transform, { timeout: 1_000 })
+        .toMatch(/matrix\(1, 0, 0, 1, 0, 0\)/)
+
+      const openSample = await getPanelMotionSample(page)
+      expect(openSample?.width ?? 0).toBeGreaterThan(0)
+
+      await page.getByRole('button', { name: 'Close right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('exiting')
+      await page.waitForTimeout(60)
+
+      const exitSample = await getPanelMotionSample(page)
+      expect(exitSample?.width ?? 0).toBeGreaterThan(0)
+      expect(exitSample?.transform).not.toBe('none')
+      expect(exitSample?.left ?? 0).toBeGreaterThan((openSample?.left ?? 0) + 4)
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('collapsed')
+
+      await page.getByRole('button', { name: 'Open right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toMatch(/entering|open/)
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('open')
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.transform, { timeout: 1_000 })
+        .toMatch(/matrix\(1, 0, 0, 1, 0, 0\)/)
+
+      await page.keyboard.press('Meta+F')
+      await expect(page.locator('[data-focus-mode="true"]')).toHaveCount(1)
+      const sidebar = page.locator('[data-side="left"] > div').nth(1)
+      await expect(sidebar).toHaveClass(/motion-sidebar/)
+      await expect
+        .poll(
+          async () => sidebar.evaluate((element) => getComputedStyle(element).transitionProperty),
+          { timeout: 1_000 }
+        )
+        .toMatch(/transform/)
+      await expect
+        .poll(async () => sidebar.evaluate((element) => element.getBoundingClientRect().left), {
+          timeout: 1_000
+        })
+        .toBeLessThan(0)
+
+      await page.getByTestId('workspace-right-panel-toggle').click()
+      await expect(page.locator('[data-focus-mode="false"]')).toHaveCount(1)
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await page.getByRole('button', { name: 'Close right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('collapsed')
+      await page.getByRole('button', { name: 'Open right sidebar' }).click()
+      await expect
+        .poll(async () => (await getPanelMotionSample(page))?.state, { timeout: 1_000 })
+        .toBe('open')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

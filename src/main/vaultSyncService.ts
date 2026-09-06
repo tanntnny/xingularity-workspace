@@ -10,6 +10,7 @@ export interface VaultSyncFile {
 
 export interface VaultSyncSnapshot {
   files: VaultSyncFile[]
+  vaultId?: string
   schemaVersion?: number
   generatedAt?: string
 }
@@ -56,6 +57,7 @@ export const createSyncSnapshot = createVaultSyncSnapshot
 
 export function snapshotFromManifest(manifest: VaultTransferManifest): VaultSyncSnapshot {
   return {
+    ...(manifest.vaultId ? { vaultId: manifest.vaultId } : {}),
     files: manifest.files
       .filter((file) => isPortableVaultPath(file.path))
       .map(({ path: relPath, checksum }) => ({ path: relPath, checksum }))

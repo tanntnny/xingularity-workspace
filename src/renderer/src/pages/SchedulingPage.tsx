@@ -183,8 +183,12 @@ export function SchedulingWorkspaceProvider({
   const trustActionRef = useRef<(() => Promise<void>) | null>(null)
   const isNewDraftRef = useRef(false)
   const jobsRef = useRef(jobs)
+  const vaultRootRef = useRef<string | null | undefined>(vaultRoot)
+  const jobsLoadRequestRef = useRef(0)
+  const runsLoadRequestRef = useRef(0)
 
   jobsRef.current = jobs
+  vaultRootRef.current = vaultRoot
 
   useEffect(() => {
     if (!enabled) {
@@ -195,7 +199,10 @@ export function SchedulingWorkspaceProvider({
   }, [enabled, vaultRoot])
 
   const loadJobs = useCallback(async (): Promise<void> => {
-    if (!vaultApi) {
+    const requestId = ++jobsLoadRequestRef.current
+    const requestedVaultRoot = vaultRoot
+
+    if (!vaultApi || !vaultRoot) {
       setJobs([])
       setSelectedJobId(null)
       setIsLoading(false)
@@ -203,6 +210,10 @@ export function SchedulingWorkspaceProvider({
     }
 
     const nextJobs = await vaultApi.schedules.listJobs()
+    if (requestId !== jobsLoadRequestRef.current || vaultRootRef.current !== requestedVaultRoot) {
+      return
+    }
+
     setJobs(nextJobs)
     setSelectedJobId((current) => {
       if (isNewDraftRef.current) {
@@ -216,17 +227,24 @@ export function SchedulingWorkspaceProvider({
       return nextJobs[0]?.id ?? null
     })
     setIsLoading(false)
-  }, [vaultApi])
+  }, [vaultApi, vaultRoot])
 
   const loadRuns = useCallback(
     async (jobId: string): Promise<void> => {
-      if (!vaultApi) {
+      const requestId = ++runsLoadRequestRef.current
+      const requestedVaultRoot = vaultRoot
+
+      if (!vaultApi || !vaultRoot) {
         setRuns([])
         setSelectedRunId(null)
         return
       }
 
       const nextRuns = await vaultApi.schedules.listRuns(jobId)
+      if (requestId !== runsLoadRequestRef.current || vaultRootRef.current !== requestedVaultRoot) {
+        return
+      }
+
       setRuns(nextRuns)
       setSelectedRunId((current) => {
         if (current && nextRuns.some((run) => run.id === current)) {
@@ -236,7 +254,7 @@ export function SchedulingWorkspaceProvider({
         return nextRuns[0]?.id ?? null
       })
     },
-    [vaultApi]
+    [vaultApi, vaultRoot]
   )
 
   const loadSecrets = useCallback(async (): Promise<void> => {
@@ -252,6 +270,19 @@ export function SchedulingWorkspaceProvider({
       pushToast('error', `Could not load schedule secrets: ${String(error)}`)
     }
   }, [pushToast, vaultApi])
+
+  useEffect(() => {
+    jobsLoadRequestRef.current += 1
+    runsLoadRequestRef.current += 1
+    isNewDraftRef.current = true
+    setJobs([])
+    setSelectedJobId(null)
+    setDraft(createNewDraft())
+    setIsNewDraft(true)
+    setIsDirty(false)
+    setRuns([])
+    setSelectedRunId(null)
+  }, [vaultRoot])
 
   useEffect(() => {
     if (!enabled) {

@@ -60,4 +60,27 @@ describe('motion primitives', () => {
     expect(markup).toContain('motion-collapsible-content')
     expect(markup).toContain('motion-state-chevron')
   })
+
+  it('uses the shared sidebar motion primitive for offcanvas state', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        { open: false },
+        createElement(AppSidebar, {
+          activePage: 'notes',
+          onChange: () => undefined,
+          onOpenSearchPalette: () => undefined,
+          onOpenVaultManager: () => undefined,
+          notesCount: 0,
+          projectsCount: 0,
+          calendarUndoneCount: 0,
+          collapsible: 'offcanvas'
+        })
+      )
+    )
+
+    expect(markup).toContain('motion-sidebar-gap')
+    expect(markup).toContain('motion-sidebar')
+    expect(markup).toContain('group-data-[collapsible=offcanvas]:-translate-x-full')
+  })
 })

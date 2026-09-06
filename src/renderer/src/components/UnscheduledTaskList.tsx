@@ -8,6 +8,7 @@ import {
   TaskReminder,
   TaskStatus
 } from '../../../shared/types'
+import type { TaskScheduleOverride } from '../../../shared/types'
 import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
@@ -15,8 +16,12 @@ import { TaskContextMenu } from './TaskContextMenu'
 import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { WorkspaceIconButton } from './ui/document-workspace'
+import { TooltipButton } from './ui/tooltip'
 import {
   clearCalendarTaskDragSession,
+  getCalendarTaskDragSession,
+  parseCalendarTaskDragPayload,
   setCalendarTaskDragSession,
   setCalendarTaskUnscheduledDragOver,
   subscribeCalendarTaskUnscheduledDragOver
@@ -27,12 +32,15 @@ import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 export interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
+  dragPreview?: 'clone' | 'floating'
   hasActiveFilter?: boolean
   projects?: Project[]
   selectedDate: string
   newTaskValue: string
   onNewTaskValueChange: (value: string) => void
   onOpenTask?: (taskId: string) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
+  onCopyTaskToSchedule?: (taskId: string, schedule: TaskScheduleOverride) => void | Promise<void>
   onDelete: (taskId: string) => void
   onUpdatePriority: (taskId: string, priority: TaskPriority) => void
   onUpdateTaskType: (taskId: string, taskType: CalendarTaskType) => void
@@ -47,12 +55,15 @@ export interface UnscheduledTaskListProps {
 
 export function UnscheduledTaskList({
   tasks,
+  dragPreview = 'clone',
   hasActiveFilter = false,
   projects = [],
   selectedDate,
   newTaskValue,
   onNewTaskValueChange,
   onOpenTask,
+  onDuplicateTask,
+  onCopyTaskToSchedule,
   onDelete,
   onUpdatePriority,
   onUpdateTaskType,
@@ -87,7 +98,7 @@ export function UnscheduledTaskList({
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.dropEffect = getCalendarTaskDragSession()?.mode === 'copy' ? 'copy' : 'move'
     setCalendarTaskUnscheduledDragOver(true)
   }
 
@@ -100,10 +111,18 @@ export function UnscheduledTaskList({
   const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
     setCalendarTaskUnscheduledDragOver(false)
-    const payload = e.dataTransfer.getData('text/plain')
-    const taskId = payload.startsWith('move:') ? payload.slice(5) : payload
-    if (taskId && onUnscheduleTask) {
-      onUnscheduleTask(taskId)
+    const parsed =
+      getCalendarTaskDragSession() ??
+      parseCalendarTaskDragPayload(e.dataTransfer.getData('text/plain'))
+    if (!parsed) return
+
+    if (parsed.mode === 'copy') {
+      void onCopyTaskToSchedule?.(parsed.taskId, {})
+      return
+    }
+
+    if (onUnscheduleTask) {
+      onUnscheduleTask(parsed.taskId)
     }
   }
 
@@ -138,15 +157,15 @@ export function UnscheduledTaskList({
             }}
             className="border border-input bg-card text-foreground h-8 min-w-0 flex-1 rounded-md border border-border px-2.5 text-sm text-foreground outline-none hover:border-primary focus:border-primary transition"
           />
-          <button
-            type="button"
-            onClick={onInsertTask}
-            aria-label="Insert task"
-            title="Insert task"
-            className="border border-input bg-card text-foreground inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Plus size={13} aria-hidden="true" />
-          </button>
+          <TooltipButton label="Insert task">
+            <WorkspaceIconButton
+              onClick={onInsertTask}
+              aria-label="Insert task"
+              title="Insert task"
+              borderless
+              icon={<Plus size={13} aria-hidden="true" />}
+            />
+          </TooltipButton>
         </div>
       </div>
 
@@ -171,6 +190,8 @@ export function UnscheduledTaskList({
                   key={task.id}
                   task={task}
                   selectedDate={selectedDate}
+                  onDuplicateTask={onDuplicateTask}
+                  showCopyGestureHint
                   onDelete={onDelete}
                   onUpdateStatus={(taskId, status) => {
                     if (onUpdateStatus) {
@@ -191,6 +212,7 @@ export function UnscheduledTaskList({
                 >
                   <DragSource
                     as="article"
+                    preview={dragPreview}
                     previewVariant="content"
                     previewSizing="fit-content"
                     ref={revealProps.ref}
@@ -202,12 +224,22 @@ export function UnscheduledTaskList({
                     style={revealProps.style}
                     onDragStart={(e: DragEvent<HTMLElement>) => {
                       setHoveredTaskCard(null)
-                      e.dataTransfer.setData('text/plain', `move:${task.id}`)
-                      e.dataTransfer.effectAllowed = 'move'
+                      const mode = e.altKey ? 'copy' : 'move'
+                      e.dataTransfer.setData('text/plain', `${mode}:${task.id}`)
+                      e.dataTransfer.effectAllowed = 'copyMove'
                       setCalendarTaskDragSession({
                         taskId: task.id,
-                        pointerOffsetMinutes: 0
+                        pointerOffsetMinutes: 0,
+                        mode
                       })
+                    }}
+                    onDragOperationChange={(mode) => {
+                      const session = getCalendarTaskDragSession()
+                      if (!session || session.taskId !== task.id || session.mode === mode) {
+                        return
+                      }
+
+                      setCalendarTaskDragSession({ ...session, mode })
                     }}
                     onDragEnd={() => {
                       clearCalendarTaskDragSession()

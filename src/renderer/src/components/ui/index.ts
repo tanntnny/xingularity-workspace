@@ -14,8 +14,8 @@ export { Field } from './field'
 export { Switch } from './switch'
 export type { SwitchProps } from './switch'
 
-export { Badge, badgeVariants } from './badge'
-export type { BadgeProps } from './badge'
+export { Badge, badgeVariants, SelectionCounter } from './badge'
+export type { BadgeProps, SelectionCounterProps } from './badge'
 export { StatusChip } from './status-chip'
 export type {
   StatusChipItem,
@@ -35,6 +35,7 @@ export type {
   SelectionPopoverProps,
   SingleSelectionPopoverProps
 } from './selection-popover'
+export { SelectionCheckbox } from './selection-checkbox'
 export { ResponsivePicker } from './responsive-picker'
 export { useResponsivePickerOpen } from './responsive-picker-context'
 export type { ResponsivePickerProps } from './responsive-picker'
@@ -160,6 +161,8 @@ export type {
 } from './action-menu'
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'
+export { ProjectIconSvg } from './project-icon'
+export type { ProjectIconSvgProps } from './project-icon'
 
 export { Calendar } from './calendar'
 export type { CalendarProps } from './calendar'
@@ -211,12 +214,13 @@ export {
   TableCaption
 } from './table'
 export { TableRowList } from './table-row-list'
-export type { TableRowListColumn, TableRowListProps } from './table-row-list'
+export type { TableRowListColumn, TableRowListGroup, TableRowListProps } from './table-row-list'
 export type { TableSortDirection, TableSortState, TableSortValue } from '../../lib/tableSort'
 
 export { Toaster } from './sonner'
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip'
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, TooltipButton } from './tooltip'
+export type { TooltipButtonProps } from './tooltip'
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
 export { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
 export { DragSource } from './drag-source'

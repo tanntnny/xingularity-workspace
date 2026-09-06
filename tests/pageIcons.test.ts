@@ -9,12 +9,13 @@ const expectedIconClasses: Record<AppPage, string> = {
   knowledge: 'chart-dots-3',
   notes: 'files',
   projects: 'box',
+  tasks: 'list-check-filled',
   resources: 'table',
   subscriptions: 'brand-mastercard',
   calendar: 'calendar-event',
   schedules: 'bolt',
   schedulingGuide: 'book-filled',
-  designAudit: 'palette-filled',
+  designAudit: 'shield-filled',
   settings: 'settings-filled'
 }
 

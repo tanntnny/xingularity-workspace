@@ -28,6 +28,7 @@ export interface StructuredWatchRoot {
   name: string
   path: string
   extensions?: readonly string[]
+  pathFilter?: (relativePath: string) => boolean
   parse?: (raw: string, context: StructuredParseContext) => unknown | Promise<unknown>
   validate?:
     | ((
@@ -68,6 +69,7 @@ export interface StructuredConflict {
   base?: StructuredFileVersion
   local: StructuredFileVersion
   disk: StructuredFileVersion | null
+  localContent?: string
 }
 
 export interface StructuredConflictEvent {
@@ -108,11 +110,22 @@ export interface StructuredFileWatcherOptions {
   onError?: (error: StructuredWatcherError) => unknown | Promise<unknown>
 }
 
+export interface StructuredRescanOptions {
+  emitChanges?: boolean
+}
+
 interface LocalState {
   version: StructuredFileVersion
   base?: StructuredFileVersion
   content?: string
   value?: unknown
+  rawContentHash: string
+  baseRawContentHash?: string
+}
+
+interface KnownDiskState {
+  version: StructuredFileVersion
+  rawContentHash: string
 }
 
 interface PendingEvent {
@@ -137,7 +150,7 @@ function normalizeExtensions(extensions: readonly string[]): string[] {
   return Array.from(
     new Set(
       extensions
-        .map((extension) => extension.trim().toLocaleLowerCase())
+        .map((extension) => extension.trim().toLowerCase())
         .filter((extension) => extension.startsWith('.') && extension.length > 1)
     )
   )
@@ -211,6 +224,11 @@ export function hashStructuredContent(contentOrValue: string | unknown): string 
     }
   }
   return sha256(stableSerialize(contentOrValue))
+}
+
+function hashRawStructuredContent(content: string | Uint8Array): string {
+  const bytes = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content)
+  return sha256(bytes.toString('base64'))
 }
 
 export function createStructuredFileVersion(
@@ -341,7 +359,19 @@ function safeQuarantineName(root: string, relativePath: string): string {
   return `${rootPart}__${pathPart}`
 }
 
-async function listFiles(rootPath: string, extensions: readonly string[]): Promise<string[]> {
+function comparePaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+async function listFiles(
+  rootPath: string,
+  extensions: readonly string[],
+  shouldIgnore?: (absolutePath: string) => boolean
+): Promise<string[]> {
+  if (shouldIgnore?.(rootPath)) {
+    return []
+  }
+
   const files: string[] = []
   let entries: import('node:fs').Dirent[]
   try {
@@ -353,18 +383,23 @@ async function listFiles(rootPath: string, extensions: readonly string[]): Promi
     throw error
   }
 
+  entries.sort((left, right) => comparePaths(left.name, right.name))
   for (const entry of entries) {
     const absolutePath = path.join(rootPath, entry.name)
     if (entry.isDirectory()) {
-      files.push(...(await listFiles(absolutePath, extensions)))
+      files.push(...(await listFiles(absolutePath, extensions, shouldIgnore)))
       continue
     }
-    if (entry.isFile() && extensions.includes(path.extname(entry.name).toLocaleLowerCase())) {
+    if (
+      entry.isFile() &&
+      !shouldIgnore?.(absolutePath) &&
+      extensions.includes(path.extname(entry.name).toLowerCase())
+    ) {
       files.push(absolutePath)
     }
   }
 
-  return files
+  return files.sort(comparePaths)
 }
 
 export class StructuredFileWatcher {
@@ -378,14 +413,23 @@ export class StructuredFileWatcher {
   private readonly pending = new Map<string, PendingEvent>()
   private readonly timers = new Map<string, NodeJS.Timeout>()
   private readonly processing = new Set<Promise<void>>()
+  private processingTail: Promise<void> = Promise.resolve()
   private readonly localStates = new Map<string, LocalState>()
-  private readonly knownDiskVersions = new Map<string, StructuredFileVersion>()
+  private readonly knownDiskStates = new Map<string, KnownDiskState>()
+  private readonly knownMissingPaths = new Set<string>()
+  private readonly expectedLocalDeletes = new Set<string>()
   private readonly conflicts = new Map<
     string,
-    { conflict: StructuredConflict; change: StructuredFileChange; local: LocalState }
+    {
+      conflict: StructuredConflict
+      change: StructuredFileChange
+      local: LocalState
+      diskRawContentHash?: string
+    }
   >()
   private readonly quarantined = new Map<string, StructuredQuarantineRecord>()
   private readonly quarantinedSourcePaths = new Set<string>()
+  private suppressExternalChanges = false
 
   constructor(options: StructuredFileWatcherOptions) {
     if (options.roots.length === 0) {
@@ -414,6 +458,11 @@ export class StructuredFileWatcher {
       return
     }
 
+    let resolveReady: () => void = () => undefined
+    this.readyPromise = new Promise<void>((resolve) => {
+      resolveReady = resolve
+    })
+
     const rootPaths = this.roots.map((root) => root.path)
     const watchOptions: Record<string, unknown> = {
       ignoreInitial: true,
@@ -441,9 +490,7 @@ export class StructuredFileWatcher {
     this.watcher.on('error', (error) => {
       void this.reportError({ error })
     })
-    this.readyPromise = new Promise<void>((resolve) => {
-      this.watcher?.once('ready', () => resolve())
-    })
+    this.watcher.once('ready', resolveReady)
   }
 
   async waitForReady(): Promise<void> {
@@ -456,46 +503,79 @@ export class StructuredFileWatcher {
     }
     this.timers.clear()
     this.pending.clear()
+    this.expectedLocalDeletes.clear()
     await Promise.all(Array.from(this.processing))
     await this.watcher?.close()
     this.watcher = null
     this.readyPromise = null
   }
 
-  async rescan(rootName?: string): Promise<void> {
-    const roots = rootName ? this.roots.filter((root) => root.name === rootName) : this.roots
-    for (const root of roots) {
-      const files = await listFiles(root.path, root.extensions ?? DEFAULT_EXTENSIONS)
-      const currentPaths = new Set(files.map((filePath) => path.resolve(filePath)))
-      for (const absolutePath of files) {
-        this.enqueue(absolutePath, 'change')
-      }
-      for (const knownPath of this.knownDiskVersions.keys()) {
-        if (
-          isPathInside(root.path, knownPath) &&
-          this.isSupportedFile(root, knownPath) &&
-          !currentPaths.has(path.resolve(knownPath))
-        ) {
-          this.enqueue(knownPath, 'unlink')
+  async rescan(rootName?: string, options: StructuredRescanOptions = {}): Promise<void> {
+    const previousSuppressExternalChanges = this.suppressExternalChanges
+    this.suppressExternalChanges = options.emitChanges === false
+    const roots = (rootName ? this.roots.filter((root) => root.name === rootName) : this.roots)
+      .slice()
+      .sort((left, right) => {
+        const pathOrder = comparePaths(left.path, right.path)
+        return pathOrder || comparePaths(left.name, right.name)
+      })
+
+    const knownPaths = Array.from(
+      new Set([...this.knownDiskStates.keys(), ...this.localStates.keys()])
+    ).sort(comparePaths)
+
+    try {
+      for (const root of roots) {
+        const files = (
+          await listFiles(root.path, root.extensions ?? DEFAULT_EXTENSIONS, (candidate) =>
+            this.shouldIgnorePath(candidate)
+          )
+        ).filter(
+          (filePath) =>
+            this.findRoot(filePath) === root && this.isSupportedFile(root, path.resolve(filePath))
+        )
+        const currentPaths = new Set(files.map((filePath) => path.resolve(filePath)))
+        for (const absolutePath of files) {
+          this.enqueue(absolutePath, 'change')
+        }
+
+        for (const knownPath of knownPaths) {
+          if (
+            this.findRoot(knownPath) === root &&
+            this.isSupportedFile(root, knownPath) &&
+            !currentPaths.has(path.resolve(knownPath))
+          ) {
+            this.enqueue(knownPath, 'unlink')
+          }
         }
       }
+      await this.flushPending()
+    } finally {
+      this.suppressExternalChanges = previousSuppressExternalChanges
     }
-    await this.flushPending()
   }
 
   async flushPending(): Promise<void> {
-    const pending = Array.from(this.pending.values())
-    for (const item of pending) {
-      const timer = this.timers.get(item.absolutePath)
-      if (timer) {
-        clearTimeout(timer)
+    while (this.pending.size > 0 || this.processing.size > 0) {
+      const pending = Array.from(this.pending.values()).sort((left, right) =>
+        comparePaths(left.absolutePath, right.absolutePath)
+      )
+      for (const item of pending) {
+        const timer = this.timers.get(item.absolutePath)
+        if (timer) {
+          clearTimeout(timer)
+        }
+        this.timers.delete(item.absolutePath)
+        this.pending.delete(item.absolutePath)
       }
-      this.timers.delete(item.absolutePath)
-      this.pending.delete(item.absolutePath)
-    }
 
-    await Promise.all(pending.map((item) => this.processWithErrorHandling(item)))
-    await Promise.all(Array.from(this.processing))
+      const scheduled = pending.map((item) => this.scheduleProcess(item))
+      await Promise.all(scheduled)
+
+      if (this.pending.size === 0 && this.processing.size > 0) {
+        await Promise.all(Array.from(this.processing))
+      }
+    }
   }
 
   markLocalWrite(
@@ -505,9 +585,14 @@ export class StructuredFileWatcher {
   ): StructuredFileVersion {
     const absolutePath = this.resolveTrackedPath(filePath)
     const normalized = snapshotFromInput(snapshot)
+    const knownBase = base ? this.knownDiskStates.get(absolutePath) : undefined
     const local: LocalState = {
       ...normalized,
-      ...(base ? { base } : {})
+      rawContentHash: hashRawStructuredContent(normalized.content ?? ''),
+      ...(base ? { base } : {}),
+      ...(base && knownBase?.version.contentHash === base.contentHash
+        ? { baseRawContentHash: knownBase.rawContentHash }
+        : {})
     }
     this.localStates.set(absolutePath, local)
     return local.version
@@ -531,6 +616,12 @@ export class StructuredFileWatcher {
 
   clearLocalWrite(filePath: string): void {
     this.localStates.delete(this.resolveTrackedPath(filePath))
+  }
+
+  markLocalDelete(filePath: string): void {
+    const absolutePath = this.resolveTrackedPath(filePath)
+    this.expectedLocalDeletes.add(absolutePath)
+    this.localStates.delete(absolutePath)
   }
 
   getConflicts(): StructuredConflict[] {
@@ -562,23 +653,32 @@ export class StructuredFileWatcher {
     if (resolution === 'keep-disk') {
       this.localStates.delete(entry.change.absolutePath)
       this.conflicts.delete(entry.conflict.id)
-      this.knownDiskVersions.delete(entry.change.absolutePath)
       if (entry.change.version) {
-        this.knownDiskVersions.set(entry.change.absolutePath, entry.change.version)
+        this.setKnownDiskState(
+          entry.change.absolutePath,
+          entry.change.version,
+          entry.diskRawContentHash ?? hashRawStructuredContent(entry.change.content ?? '')
+        )
+      } else {
+        this.clearKnownDiskState(entry.change.absolutePath)
       }
       await this.emitChange({ ...entry.change, type: 'reconciled-change' })
       return
     }
 
     const snapshot = resolution === 'merge' ? snapshotFromInput(merged) : entry.local
-    if (!snapshot || !snapshot.content) {
+    if (!snapshot || snapshot.content === undefined) {
       throw new Error('A local or merged snapshot is required to resolve this conflict')
     }
 
     await this.writeResolved(entry.change.absolutePath, snapshot.content)
     this.localStates.delete(entry.change.absolutePath)
     this.conflicts.delete(entry.conflict.id)
-    this.knownDiskVersions.set(entry.change.absolutePath, snapshot.version)
+    this.setKnownDiskState(
+      entry.change.absolutePath,
+      snapshot.version,
+      hashRawStructuredContent(snapshot.content)
+    )
     await this.emitChange({
       ...entry.change,
       type: 'reconciled-change',
@@ -618,10 +718,13 @@ export class StructuredFileWatcher {
     this.timers.set(absolutePath, timer)
   }
 
-  private scheduleProcess(item: PendingEvent): void {
-    const task = this.processWithErrorHandling(item)
-    this.processing.add(task)
-    void task.finally(() => this.processing.delete(task))
+  private scheduleProcess(item: PendingEvent): Promise<void> {
+    const task = this.processingTail.then(() => this.processWithErrorHandling(item))
+    const safeTask = task.catch(() => undefined)
+    this.processingTail = safeTask
+    this.processing.add(safeTask)
+    void safeTask.then(() => this.processing.delete(safeTask))
+    return safeTask
   }
 
   private async processWithErrorHandling(item: PendingEvent): Promise<void> {
@@ -640,7 +743,13 @@ export class StructuredFileWatcher {
     const relativePath = path.relative(root.path, item.absolutePath).replace(/\\/g, '/')
 
     if (item.event === 'unlink') {
-      if (this.quarantinedSourcePaths.delete(item.absolutePath)) {
+      if (this.quarantinedSourcePaths.has(item.absolutePath)) {
+        return
+      }
+
+      if (this.expectedLocalDeletes.delete(item.absolutePath)) {
+        this.clearKnownDiskState(item.absolutePath)
+        this.removeConflictsForPath(item.absolutePath)
         return
       }
 
@@ -655,17 +764,24 @@ export class StructuredFileWatcher {
         version: null
       }
       if (local) {
+        this.clearKnownDiskState(item.absolutePath)
         await this.raiseConflict(root, change, local, null)
         return
       }
-      this.knownDiskVersions.delete(item.absolutePath)
-      await this.emitChange(change)
+
+      if (this.knownMissingPaths.has(item.absolutePath)) {
+        return
+      }
+      this.clearKnownDiskState(item.absolutePath)
+      if (!this.suppressExternalChanges) {
+        await this.emitChange(change)
+      }
       return
     }
 
-    let content: string
+    let rawContent: Buffer
     try {
-      content = await fs.readFile(item.absolutePath, 'utf-8')
+      rawContent = await fs.readFile(item.absolutePath)
     } catch (error) {
       if (isMissingPathError(error)) {
         await this.process({ ...item, event: 'unlink' })
@@ -673,6 +789,9 @@ export class StructuredFileWatcher {
       }
       throw error
     }
+    const content = rawContent.toString('utf-8')
+    const rawContentHash = hashRawStructuredContent(rawContent)
+    this.quarantinedSourcePaths.delete(item.absolutePath)
 
     const context: StructuredParseContext = {
       root,
@@ -693,7 +812,7 @@ export class StructuredFileWatcher {
         }
       }
     } catch (error) {
-      await this.quarantine(item.absolutePath, root, relativePath, error)
+      await this.quarantine(item.absolutePath, root, relativePath, error, rawContentHash)
       return
     }
 
@@ -710,40 +829,54 @@ export class StructuredFileWatcher {
       version
     }
     const local = this.localStates.get(item.absolutePath)
+    const known = this.knownDiskStates.get(item.absolutePath)
     if (local) {
-      if (local.version.contentHash === version.contentHash) {
+      if (local.rawContentHash === rawContentHash) {
         this.localStates.delete(item.absolutePath)
-        this.knownDiskVersions.set(item.absolutePath, version)
+        this.removeConflictsForPath(item.absolutePath)
+        this.setKnownDiskState(item.absolutePath, version, rawContentHash)
         return
       }
-      if (local.base?.contentHash === version.contentHash) {
+
+      if (local.baseRawContentHash === rawContentHash) {
+        this.setKnownDiskState(item.absolutePath, version, rawContentHash)
         return
       }
-      await this.raiseConflict(root, change, local, version)
+
+      if (known?.rawContentHash === rawContentHash) {
+        return
+      }
+      this.setKnownDiskState(item.absolutePath, version, rawContentHash)
+      await this.raiseConflict(root, change, local, version, rawContentHash)
       return
     }
 
-    const known = this.knownDiskVersions.get(item.absolutePath)
-    if (known?.contentHash === version.contentHash) {
+    if (known?.rawContentHash === rawContentHash) {
       return
     }
 
-    this.knownDiskVersions.set(item.absolutePath, version)
-    await this.emitChange(change)
+    this.setKnownDiskState(item.absolutePath, version, rawContentHash)
+    if (!this.suppressExternalChanges) {
+      await this.emitChange(change)
+    }
   }
 
   private async raiseConflict(
     root: StructuredWatchRoot,
     change: StructuredFileChange,
     local: LocalState,
-    disk: StructuredFileVersion | null
+    disk: StructuredFileVersion | null,
+    diskRawContentHash?: string
   ): Promise<void> {
     const conflictId = sha256(
       [
         change.absolutePath,
         local.base?.contentHash ?? '',
+        local.baseRawContentHash ?? '',
         local.version.contentHash,
-        disk?.contentHash ?? ''
+        local.rawContentHash,
+        disk?.contentHash ?? '',
+        diskRawContentHash ?? ''
       ].join('|')
     )
     const conflict: StructuredConflict = {
@@ -755,10 +888,16 @@ export class StructuredFileWatcher {
       detectedAt: this.now().toISOString(),
       ...(local.base ? { base: local.base } : {}),
       local: local.version,
-      disk
+      disk,
+      ...(local.content !== undefined ? { localContent: local.content } : {})
     }
     const existing = this.conflicts.get(conflict.id)
-    this.conflicts.set(conflict.id, { conflict, change, local })
+    this.conflicts.set(conflict.id, {
+      conflict: existing?.conflict ?? conflict,
+      change,
+      local,
+      ...(diskRawContentHash ? { diskRawContentHash } : {})
+    })
     if (!existing) {
       await this.invoke(this.options.onConflict, { conflict, change })
     }
@@ -768,14 +907,15 @@ export class StructuredFileWatcher {
     absolutePath: string,
     root: StructuredWatchRoot,
     relativePath: string,
-    error: unknown
+    error: unknown,
+    rawContentHash: string
   ): Promise<void> {
     const quarantinedAt = this.now().toISOString()
     const targetDirectory = path.join(this.quarantineRoot, root.name)
     await fs.mkdir(targetDirectory, { recursive: true })
     const targetPath = path.join(
       targetDirectory,
-      `${safeQuarantineName(root.name, relativePath)}.${Date.now()}-${randomUUID()}.invalid.json`
+      `${safeQuarantineName(root.name, relativePath)}.${rawContentHash}.invalid.json`
     )
 
     try {
@@ -784,11 +924,19 @@ export class StructuredFileWatcher {
       if (isMissingPathError(renameError)) {
         return
       }
-      await fs.copyFile(absolutePath, targetPath)
-      await fs.unlink(absolutePath)
+      try {
+        await fs.copyFile(absolutePath, targetPath)
+        await fs.unlink(absolutePath)
+      } catch (copyError) {
+        if (isMissingPathError(copyError)) {
+          return
+        }
+        throw copyError
+      }
     }
 
     this.quarantinedSourcePaths.add(absolutePath)
+    this.clearKnownDiskState(absolutePath)
     const record: StructuredQuarantineRecord = {
       root: root.name,
       rootPath: root.path,
@@ -805,6 +953,28 @@ export class StructuredFileWatcher {
     }
   }
 
+  private setKnownDiskState(
+    absolutePath: string,
+    version: StructuredFileVersion,
+    rawContentHash: string
+  ): void {
+    this.knownDiskStates.set(absolutePath, { version, rawContentHash })
+    this.knownMissingPaths.delete(absolutePath)
+  }
+
+  private clearKnownDiskState(absolutePath: string): void {
+    this.knownDiskStates.delete(absolutePath)
+    this.knownMissingPaths.add(absolutePath)
+  }
+
+  private removeConflictsForPath(absolutePath: string): void {
+    for (const [conflictId, entry] of this.conflicts) {
+      if (entry.change.absolutePath === absolutePath) {
+        this.conflicts.delete(conflictId)
+      }
+    }
+  }
+
   private findRoot(absolutePath: string): StructuredWatchRoot | undefined {
     return this.roots
       .filter((root) => isPathInside(root.path, absolutePath))
@@ -813,16 +983,25 @@ export class StructuredFileWatcher {
 
   private resolveTrackedPath(filePath: string): string {
     const candidate = path.resolve(filePath)
-    if (this.findRoot(candidate)) {
+    const candidateRoot = this.findRoot(candidate)
+    if (candidateRoot && this.isSupportedFile(candidateRoot, candidate)) {
       return candidate
     }
     if (path.isAbsolute(filePath)) {
-      throw new Error(`Path is outside all structured roots: ${filePath}`)
+      throw new Error(
+        candidateRoot
+          ? `Path is not a supported structured file: ${filePath}`
+          : `Path is outside all structured roots: ${filePath}`
+      )
     }
     const firstRoot = this.roots[0]
     const relativeCandidate = path.resolve(firstRoot.path, filePath)
-    if (!this.findRoot(relativeCandidate)) {
+    const relativeRoot = this.findRoot(relativeCandidate)
+    if (!relativeRoot) {
       throw new Error(`Path is outside all structured roots: ${filePath}`)
+    }
+    if (!this.isSupportedFile(relativeRoot, relativeCandidate)) {
+      throw new Error(`Path is not a supported structured file: ${filePath}`)
     }
     return relativeCandidate
   }
@@ -832,7 +1011,11 @@ export class StructuredFileWatcher {
       return false
     }
     const extensions = root.extensions ?? DEFAULT_EXTENSIONS
-    return extensions.includes(path.extname(absolutePath).toLocaleLowerCase())
+    if (!extensions.includes(path.extname(absolutePath).toLowerCase())) {
+      return false
+    }
+    const relativePath = path.relative(root.path, absolutePath).replace(/\\/g, '/')
+    return root.pathFilter ? root.pathFilter(relativePath) : true
   }
 
   private shouldIgnorePath(absolutePathInput: string): boolean {
@@ -843,9 +1026,14 @@ export class StructuredFileWatcher {
     return path.basename(absolutePath).includes('.tmp-')
   }
 
-  private findConflict(
-    conflictIdOrPath: string
-  ): { conflict: StructuredConflict; change: StructuredFileChange; local: LocalState } | undefined {
+  private findConflict(conflictIdOrPath: string):
+    | {
+        conflict: StructuredConflict
+        change: StructuredFileChange
+        local: LocalState
+        diskRawContentHash?: string
+      }
+    | undefined {
     const absolutePath = path.isAbsolute(conflictIdOrPath)
       ? path.resolve(conflictIdOrPath)
       : undefined

@@ -5,6 +5,7 @@ const CORE_MOBILE_PAGES: AppPage[] = [
   'capture',
   'notes',
   'projects',
+  'tasks',
   'resources',
   'calendar',
   'settings'
@@ -17,6 +18,7 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
       'knowledge',
       'notes',
       'projects',
+      'tasks',
       'resources',
       'subscriptions',
       'calendar',

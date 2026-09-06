@@ -130,6 +130,8 @@ Calendar and task features include:
 - optional task time and multi-day ranges
 - task priority and task type metadata
 - reminder support on tasks
+- repeating tasks with custom RRULE rules and a rolling set of future occurrences
+- completed or manually edited occurrences remain independent; disabling a series keeps its materialized tasks
 - unified calendar rendering of tasks with project assignment
 
 ## Weekly Plan

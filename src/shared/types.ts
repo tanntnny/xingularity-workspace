@@ -1,3 +1,12 @@
+import type {
+  VaultChangeEvent,
+  NoteDocumentReadResult,
+  VaultReconcileResult,
+  VaultSyncSnapshot,
+  WriteNoteDocumentRequest,
+  WriteNoteResult
+} from './vaultProtocol'
+
 export type Maybe<T> = T | null
 
 export interface VaultInfo {
@@ -531,6 +540,95 @@ export const CALENDAR_TASK_TYPE_VALUES = [
 
 export type CalendarTaskType = (typeof CALENDAR_TASK_TYPE_VALUES)[number]
 
+export const WORKSPACE_VIEW_SOURCE_VALUES = ['tasks', 'resources'] as const
+export type WorkspaceViewSource = (typeof WORKSPACE_VIEW_SOURCE_VALUES)[number]
+
+export const WORKSPACE_VIEW_TASK_GROUP_BY_VALUES = [
+  'none',
+  'project',
+  'milestone',
+  'type',
+  'status',
+  'priority'
+] as const
+export type WorkspaceViewTaskGroupBy = (typeof WORKSPACE_VIEW_TASK_GROUP_BY_VALUES)[number]
+
+export const WORKSPACE_VIEW_TASK_SCHEDULE_FILTER_VALUES = [
+  'scheduled',
+  'unscheduled',
+  'overdue'
+] as const
+export type WorkspaceViewTaskScheduleFilter =
+  (typeof WORKSPACE_VIEW_TASK_SCHEDULE_FILTER_VALUES)[number]
+
+export const WORKSPACE_VIEW_TASK_SORTABLE_COLUMNS = [
+  'name',
+  'status',
+  'type',
+  'priority',
+  'project',
+  'milestone',
+  'start-date',
+  'end-date',
+  'tags'
+] as const
+
+export const WORKSPACE_VIEW_RESOURCE_SORTABLE_COLUMNS = [
+  'resource',
+  'source',
+  'labels',
+  'projects',
+  'health',
+  'location',
+  'last-checked'
+] as const
+
+export interface WorkspaceViewSortState {
+  columnId: string
+  direction: 'asc' | 'desc'
+}
+
+export interface WorkspaceViewTaskConfig {
+  searchQuery: string
+  statuses: TaskStatus[]
+  taskTypes: CalendarTaskType[]
+  priorities: TaskPriority[]
+  projectIds: string[]
+  milestoneIds: string[]
+  scheduleStates: WorkspaceViewTaskScheduleFilter[]
+  tags: string[]
+  groupBy: WorkspaceViewTaskGroupBy
+  sortState: WorkspaceViewSortState | null
+}
+
+export interface WorkspaceViewResourceConfig {
+  searchQuery: string
+  types: ResourceType[]
+  providers: ResourceProvider[]
+  states: ResourceState[]
+  labelFilters: Record<string, string[]>
+  projectIds: string[]
+  sortState: WorkspaceViewSortState | null
+}
+
+export type WorkspaceView = {
+  id: string
+  name: string
+  icon: ProjectIconStyle
+  source: 'tasks'
+  config: WorkspaceViewTaskConfig
+  createdAt: string
+  updatedAt: string
+} | {
+  id: string
+  name: string
+  icon: ProjectIconStyle
+  source: 'resources'
+  config: WorkspaceViewResourceConfig
+  createdAt: string
+  updatedAt: string
+}
+
 export type WeeklyHeightMode = 'duration' | 'content'
 
 export const CALENDAR_TASK_TYPE_OPTIONS: Array<{ value: CalendarTaskType; label: string }> = [
@@ -553,6 +651,24 @@ export interface TaskReminder {
   type: 'minutes' | 'hours' | 'days'
   value: number
   enabled: boolean
+}
+
+export interface TaskRecurrenceDraft {
+  rrule: string
+  horizon?: number
+  timezone?: string
+}
+
+export interface TaskRecurrence {
+  seriesId: string
+  anchorTaskId: string
+  occurrenceKey: string
+  rrule: string
+  horizon: number
+  timezone: string
+  generated: boolean
+  overridden?: boolean
+  excludedOccurrenceKeys?: string[]
 }
 
 export interface ReminderClickTarget {
@@ -588,6 +704,7 @@ export interface CalendarTask {
   dependencyIds?: string[]
   parentTaskId?: string
   estimateMinutes?: number
+  recurrence?: TaskRecurrence
 }
 
 export interface CreateTaskInput {
@@ -606,6 +723,25 @@ export interface CreateTaskInput {
   dependencyIds?: string[]
   parentTaskId?: string
   estimateMinutes?: number
+  recurrence?: TaskRecurrenceDraft
+}
+
+export interface TaskScheduleOverride {
+  date?: string | null
+  endDate?: string | null
+  time?: string | null
+  endTime?: string | null
+  weeklyHeightMode?: WeeklyHeightMode | null
+}
+
+export interface DuplicateTaskInput {
+  taskId: string
+  schedule?: TaskScheduleOverride
+}
+
+export interface ConfigureTaskRecurrenceInput {
+  taskId: string
+  recurrence: TaskRecurrenceDraft | null
 }
 
 // CalendarTask remains as a compatibility alias while the renderer and persisted data
@@ -988,6 +1124,7 @@ export interface AppSettings {
   // Canonical task projection. calendarTasks is retained for compatibility with
   // existing renderer consumers during the migration.
   tasks?: CalendarTask[]
+  workspaceViews: WorkspaceView[]
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
   gridBoard: GridBoardState
@@ -1010,6 +1147,7 @@ export interface AppSettingsUpdate {
   editorVimKeyMappings?: NoteVimKeyMapping[]
   calendarTasks?: CalendarTask[]
   tasks?: CalendarTask[]
+  workspaceViews?: WorkspaceView[]
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
   gridBoard?: GridBoardState
@@ -1067,6 +1205,8 @@ export interface VaultTransferManifest {
   version: 1
   createdAt: string
   schemaVersion: number
+  /** Stable identity copied from the vault manifest when one is available. */
+  vaultId?: string
   files: Array<{ path: string; size: number; checksum: string }>
   excludes: string[]
 }
@@ -1727,23 +1867,30 @@ export interface RendererVaultApi {
     switchSaved: (rootPath: string) => Promise<VaultOpenResult>
     toggleFavoriteSaved: (rootPath: string) => Promise<SavedVaultState>
     removeSaved: (rootPath: string) => Promise<VaultRemoveResult>
+    getSyncSnapshot: () => Promise<VaultSyncSnapshot>
+    reconcile: () => Promise<VaultReconcileResult>
+    createBackup: () => Promise<VaultBackupResult>
   }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>
     choosePath: (title: string) => Promise<Maybe<string>>
     openExternal: (url: string) => Promise<void>
     openPath: (targetPath: string) => Promise<void>
+    openTerminal: () => Promise<void>
     openWarpAtNotePath: (relPath: string) => Promise<void>
   }
   files: {
     listNotes: () => Promise<NoteListItem[]>
     listTree: () => Promise<NoteTreeNode[]>
     onTreeChanged: (listener: () => void) => () => void
+    onVaultChanged: (listener: (event: VaultChangeEvent) => void) => () => void
     readNote: (relPath: string) => Promise<string>
     readNoteDocument: (relPath: string) => Promise<StoredNoteDocument>
+    readNoteDocumentWithRevision: (relPath: string) => Promise<NoteDocumentReadResult>
     readExcalidrawFileDocument: (relPath: string) => Promise<ExcalidrawFileReadResult>
     writeNote: (relPath: string, content: string) => Promise<void>
     writeNoteDocument: (relPath: string, document: StoredNoteDocument) => Promise<void>
+    writeNoteDocumentWithRevision: (request: WriteNoteDocumentRequest) => Promise<WriteNoteResult>
     writeExcalidrawFileDocument: (
       relPath: string,
       document: StoredExcalidrawFileDocument
@@ -1904,6 +2051,8 @@ export interface RendererVaultApi {
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<CalendarTask>
+    duplicate: (input: DuplicateTaskInput) => Promise<CalendarTask>
+    configureRecurrence: (input: ConfigureTaskRecurrenceInput) => Promise<CalendarTask>
   }
   history: {
     undo: () => Promise<HistoryOperationResult>

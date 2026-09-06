@@ -18,6 +18,7 @@ interface CalendarTaskCardProps {
   showStatusValue?: boolean
   showProject?: boolean
   showTime?: boolean
+  strikeCompleted?: boolean
   heightMode?: 'fill' | 'content'
   onStatusChange?: (taskId: string, status: TaskStatus) => void
   onMouseMove?: MouseEventHandler<HTMLDivElement>
@@ -35,6 +36,7 @@ export const CalendarTaskCard = forwardRef<
     showStatusValue: _showStatusValue,
     showProject = true,
     showTime = true,
+    strikeCompleted = true,
     heightMode = 'fill',
     onStatusChange,
     onMouseMove,
@@ -47,6 +49,9 @@ export const CalendarTaskCard = forwardRef<
   void _compact
   void _showStatusValue
   const status = getTaskStatus(task.status, task.completed)
+  const statusOption = TASK_STATUS_CHIP_OPTIONS.find((option) => option.value === status)
+  const statusLabel = typeof statusOption?.label === 'string' ? statusOption.label : status
+  const timeLabel = formatCalendarTaskTimeLabel(task)
   const isDeadlineOnly = !task.date && Boolean(task.endDate)
   const taskTypeStyle = {
     '--calendar-task-bg': getCalendarTaskBackgroundToken(task.taskType),
@@ -61,29 +66,41 @@ export const CalendarTaskCard = forwardRef<
       data-task-status={status}
       {...rest}
     >
-      <div className="flex h-fit min-h-0 min-w-0 shrink-0 items-center justify-between gap-1.5">
+      <div
+        className={`grid h-fit min-h-0 min-w-0 shrink-0 items-center gap-1.5 ${showTime ? 'grid-cols-2' : 'grid-cols-1'}`}
+      >
         <div
+          data-calendar-task-field="status"
+          className="min-w-0 overflow-hidden"
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <StatusChipSelect
-            className="shrink-0"
+            className="w-full min-w-0 max-w-full"
             label={`Status for ${task.title}`}
             value={status}
             options={TASK_STATUS_CHIP_OPTIONS}
             variant="bare"
+            labelOverflow="clip"
+            title={`Status: ${statusLabel}`}
             onValueChange={(value) => onStatusChange?.(task.id, value as TaskStatus)}
           />
         </div>
         {showTime ? (
-          <span className="pointer-events-none shrink-0 text-[11px] text-muted-foreground">
-            {formatCalendarTaskTimeLabel(task)}
+          <span
+            data-calendar-task-field="time"
+            className="workspace-text-clip pointer-events-none min-w-0 w-full text-right text-[11px] text-muted-foreground"
+            title={timeLabel}
+          >
+            {timeLabel}
           </span>
         ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
         <span
-          className={`pointer-events-none min-w-0 flex-1 truncate text-sm font-bold leading-tight text-foreground ${isTaskDone(task) ? 'line-through' : ''}`}
+          data-calendar-task-field="title"
+          className={`workspace-text-clip pointer-events-none min-w-0 flex-1 text-sm font-bold leading-tight text-foreground ${strikeCompleted && isTaskDone(task) ? 'line-through' : ''}`}
+          title={task.title}
         >
           {task.title}
         </span>
@@ -93,9 +110,12 @@ export const CalendarTaskCard = forwardRef<
           className="mt-1 flex min-h-0 min-w-0 shrink-0 items-center gap-1 overflow-hidden text-sm text-muted-foreground"
           title={project.name}
           data-testid="calendar-task-project"
+          data-calendar-task-field="project"
         >
           <NoteShapeIcon icon={project.icon} size={18} />
-          <span className="min-w-0 truncate">{project.name}</span>
+          <span className="workspace-text-clip min-w-0 flex-1" title={project.name}>
+            {project.name}
+          </span>
         </div>
       ) : null}
     </div>

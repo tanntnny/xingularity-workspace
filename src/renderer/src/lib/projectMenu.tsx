@@ -36,7 +36,7 @@ export function getProjectMenuGroups(
       items: [
         {
           id: 'favorite',
-          label: handlers.isFavorite ? 'Remove from favorites' : 'Add to favorites',
+          label: handlers.isFavorite ? 'Remove favorite' : 'Add favorite',
           icon: handlers.isFavorite ? (
             <Star aria-hidden="true" />
           ) : (

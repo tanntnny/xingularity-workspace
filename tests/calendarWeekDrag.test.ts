@@ -27,6 +27,7 @@ describe('buildWeeklyTimedDropSchedule', () => {
     expect(
       buildWeeklyTimedDropSchedule(
         makeTask({
+          date: '2026-04-14',
           time: '09:00',
           endTime: '09:40'
         }),
@@ -43,23 +44,21 @@ describe('buildWeeklyTimedDropSchedule', () => {
     })
   })
 
-  it('creates a timed schedule for unscheduled drags without inventing an end time', () => {
+  it('creates an end-date-only schedule for unscheduled drags', () => {
     expect(buildWeeklyTimedDropSchedule(undefined, '2026-04-15', 83, 0)).toEqual({
-      date: '2026-04-15',
-      endDate: undefined,
-      time: '01:20',
-      endTime: undefined,
-      weeklyHeightMode: 'duration'
+      date: undefined,
+      endDate: '2026-04-15',
+      time: undefined,
+      endTime: undefined
     })
   })
 
   it('marks tasks without start or end times for content-fit weekly rendering', () => {
     expect(buildWeeklyTimedDropSchedule(makeTask(), '2026-04-15', 605, 0)).toEqual({
-      date: '2026-04-15',
-      endDate: undefined,
-      time: '10:10',
-      endTime: '11:10',
-      weeklyHeightMode: 'content'
+      date: undefined,
+      endDate: '2026-04-15',
+      time: undefined,
+      endTime: undefined
     })
   })
 })
@@ -67,7 +66,11 @@ describe('buildWeeklyTimedDropSchedule', () => {
 describe('buildWeeklyTimedDropPreview', () => {
   it('uses the timed task duration and preserves the grab offset', () => {
     expect(
-      buildWeeklyTimedDropPreview(makeTask({ time: '09:00', endTime: '09:40' }), 605, 17)
+      buildWeeklyTimedDropPreview(
+        makeTask({ date: '2026-04-15', time: '09:00', endTime: '09:40' }),
+        605,
+        17
+      )
     ).toEqual({
       startMinutes: 590,
       endMinutes: 630,
@@ -97,16 +100,16 @@ describe('buildWeeklyTimedCreateSchedule', () => {
   it('creates a one-hour schedule snapped to the clicked weekly-grid time', () => {
     expect(buildWeeklyTimedCreateSchedule('2026-04-15', 605)).toEqual({
       date: '2026-04-15',
-      endDate: undefined,
+      endDate: '2026-04-15',
       time: '10:10',
       endTime: '11:10'
     })
   })
 
-  it('keeps a one-hour schedule within the final valid weekly-grid interval', () => {
+  it('clamps a one-hour schedule into the final valid same-day interval', () => {
     expect(buildWeeklyTimedCreateSchedule('2026-04-15', 1435)).toEqual({
       date: '2026-04-15',
-      endDate: undefined,
+      endDate: '2026-04-15',
       time: '22:50',
       endTime: '23:50'
     })
@@ -114,6 +117,15 @@ describe('buildWeeklyTimedCreateSchedule', () => {
 })
 
 describe('buildWeeklyAllDayDropSchedule', () => {
+  it('converts an unscheduled task into an end-date-only task', () => {
+    expect(buildWeeklyAllDayDropSchedule(makeTask(), '2026-04-20')).toEqual({
+      date: undefined,
+      endDate: '2026-04-20',
+      time: undefined,
+      endTime: undefined
+    })
+  })
+
   it('moves a deadline-only task by changing its end date only', () => {
     expect(
       buildWeeklyAllDayDropSchedule(

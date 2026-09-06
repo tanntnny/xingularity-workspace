@@ -219,6 +219,7 @@ interface ProjectsWorkspacePageProps {
   ) => void
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
 }
 
@@ -273,6 +274,7 @@ export function ProjectsWorkspacePage({
   onUpdateProject,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
   onOpenTask
 }: ProjectsWorkspacePageProps): ReactElement {
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
@@ -506,6 +508,7 @@ export function ProjectsWorkspacePage({
                     onOpenMilestoneDialog(selectedProject.id, milestoneId)
                   }
                   onOpenTask={onOpenTask}
+                  onDuplicateTask={onDuplicateTask}
                   onUpdateTask={onUpdateTask}
                   onDeleteTask={onDeleteTask}
                   onDeleteMilestone={requestDeleteMilestone}
@@ -1330,6 +1333,7 @@ function ProjectMilestones({
   onUpdateMilestone,
   onOpenMilestoneDialog,
   onOpenTask,
+  onDuplicateTask,
   onUpdateTask,
   onDeleteTask,
   onDeleteMilestone,
@@ -1349,6 +1353,7 @@ function ProjectMilestones({
   onUpdateMilestone: (milestoneId: string, title: string) => void
   onOpenMilestoneDialog: (milestoneId: string) => void
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onDeleteMilestone: (milestoneId: string) => boolean
@@ -1639,6 +1644,7 @@ function ProjectMilestones({
               onEdit={() => onOpenMilestoneDialog(milestone.id)}
               onUpdateMilestone={onUpdateMilestone}
               onOpenTask={onOpenTask}
+              onDuplicateTask={onDuplicateTask}
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
               onDeleteMilestone={() => onDeleteMilestone(milestone.id)}
@@ -1688,6 +1694,7 @@ function ProjectMilestoneRow({
   onEdit,
   onUpdateMilestone,
   onOpenTask,
+  onDuplicateTask,
   onUpdateTask,
   onDeleteTask,
   onDeleteMilestone,
@@ -1713,6 +1720,7 @@ function ProjectMilestoneRow({
   onEdit: () => void
   onUpdateMilestone: (milestoneId: string, title: string) => void
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onDeleteMilestone: () => void
@@ -1763,7 +1771,7 @@ function ProjectMilestoneRow({
           onDelete={onDeleteMilestone}
         >
           <div
-            className="group/milestone-header relative rounded-[var(--radius-button)] border border-transparent bg-transparent px-2 py-1"
+            className="group/milestone-header relative rounded-[var(--radius-button)] border border-transparent bg-transparent px-2 py-1 group-hover/milestone-header:bg-muted"
             data-testid={`project-milestone-open:${milestone.id}`}
           >
             <button
@@ -1898,6 +1906,7 @@ function ProjectMilestoneRow({
                     isParentDropActive={isDragOver}
                     onUpdateTask={onUpdateTask}
                     onDeleteTask={onDeleteTask}
+                    onDuplicateTask={onDuplicateTask}
                     onOpenTask={onOpenTask}
                   />
                 ))}
@@ -1918,6 +1927,7 @@ function ProjectTasks({
   isCreatingTask,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
   onOpenTask
 }: {
   tasks: CalendarTask[]
@@ -1925,6 +1935,7 @@ function ProjectTasks({
   isCreatingTask: boolean
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
 }): ReactElement {
   return (
@@ -1941,6 +1952,7 @@ function ProjectTasks({
             task={task}
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
+            onDuplicateTask={onDuplicateTask}
             onOpenTask={onOpenTask}
           />
         ))}
@@ -1965,12 +1977,14 @@ export function TaskDetailRow({
   task,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
   onOpenTask,
   isParentDropActive = false
 }: {
   task: CalendarTask
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
+  onDuplicateTask?: (taskId: string) => void | Promise<void>
   onOpenTask: (taskId: string) => void
   isParentDropActive?: boolean
 }): ReactElement {
@@ -1998,6 +2012,7 @@ export function TaskDetailRow({
   return (
     <TaskContextMenu
       task={task}
+      onDuplicateTask={onDuplicateTask}
       onDelete={onDeleteTask}
       onUpdateStatus={(taskId, nextStatus) =>
         onUpdateTask(taskId, {

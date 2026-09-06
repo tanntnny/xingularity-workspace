@@ -6,6 +6,7 @@ import {
   filterCalendarTasksByTags,
   getCalendarTaskTagOptions,
   getWeeklyAllDaySurfaceHeightPx,
+  isCalendarTaskOnDate,
   layoutWeeklyAllDayItems
 } from '../src/renderer/src/lib/calendarTasks'
 
@@ -46,7 +47,7 @@ describe('calendar task projections', () => {
         id: deadlineTask.id,
         start: deadlineTask.endDate,
         end: undefined,
-        durationEditable: false,
+        durationEditable: true,
         extendedProps: {
           deadlineOnly: true
         }
@@ -64,6 +65,18 @@ describe('calendar task projections', () => {
         }
       ]
     })
+  })
+
+  it('matches deadline-only tasks to their end date in day views', () => {
+    const deadlineTask = {
+      ...task,
+      date: undefined,
+      endDate: '2026-04-08'
+    }
+
+    expect(isCalendarTaskOnDate(deadlineTask, '2026-04-08')).toBe(true)
+    expect(isCalendarTaskOnDate(deadlineTask, '2026-04-07')).toBe(false)
+    expect(isCalendarTaskOnDate(deadlineTask, '2026-04-09')).toBe(false)
   })
 
   it('includes backlog status in calendar event data', () => {

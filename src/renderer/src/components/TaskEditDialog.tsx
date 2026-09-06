@@ -5,6 +5,7 @@ import {
   NoteVimKeyMapping,
   Project,
   TaskPriority,
+  TaskRecurrenceDraft,
   TaskStatus
 } from '../../../shared/types'
 import { Editor, type NoteEditorHandle } from './Editor'
@@ -27,6 +28,9 @@ import { CalendarDateEditPopover } from './ui/calendar-date-edit-popover'
 import { CalendarTimeEditPopover } from './ui/calendar-time-edit-popover'
 import { StatusChipSelect } from './ui/status-chip-select'
 import { WorkspaceCenterEditDialog } from './WorkspaceCenterEditDialog'
+import { Copy } from './ui/icons'
+import { WorkspaceIconButton } from './ui/document-workspace'
+import { TaskRecurrenceEditor } from './TaskRecurrenceEditor'
 
 const TASK_DIALOG_STATUS_CHIP_CLASS_NAME =
   'max-w-full justify-start rounded-[var(--radius-button-pill)]'
@@ -42,6 +46,11 @@ export interface TaskEditDialogProps {
   onClose: () => void
   onSave: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
   onDelete: (taskId: string) => void
+  onDuplicate?: (taskId: string) => void | Promise<void>
+  onConfigureRecurrence?: (
+    taskId: string,
+    recurrence: TaskRecurrenceDraft | null
+  ) => void | Promise<void>
   onOpenFullPage: () => void | Promise<void>
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
@@ -56,6 +65,8 @@ export function TaskEditDialog({
   onClose,
   onSave,
   onDelete,
+  onDuplicate,
+  onConfigureRecurrence,
   onOpenFullPage,
   vimModeEnabled,
   vimKeyMappings
@@ -75,6 +86,7 @@ export function TaskEditDialog({
   const titleInputRef = useRef<HTMLInputElement | null>(null)
   const descriptionRef = useRef(task.description ?? '')
   const closeHandledRef = useRef(false)
+  const duplicateInFlightRef = useRef(false)
   const selectedProject = projects.find((project) => project.id === projectId)
   const dialogTitle = titleDraft.trim() || (isNewTask ? 'New task' : task.title)
   const milestoneOptions = getMilestoneChipOptions(selectedProject, tasks)
@@ -193,6 +205,24 @@ export function TaskEditDialog({
     onClose()
   }
 
+  const handleDuplicate = async (): Promise<void> => {
+    if (isNewTask || !onDuplicate || closeHandledRef.current || duplicateInFlightRef.current) {
+      return
+    }
+
+    duplicateInFlightRef.current = true
+    try {
+      await flushDescription()
+      const patch = buildPatch()
+      if (Object.keys(patch).length > 0) {
+        await onSave(task.id, patch)
+      }
+      await onDuplicate(task.id)
+    } finally {
+      duplicateInFlightRef.current = false
+    }
+  }
+
   return (
     <WorkspaceCenterEditDialog
       context="Edit Task"
@@ -211,6 +241,27 @@ export function TaskEditDialog({
       onTitleChange={setTitleDraft}
       onClose={handleClose}
       onOpenFullPage={handleOpenFullPage}
+      headerLeadingAction={
+        onConfigureRecurrence ? (
+          <TaskRecurrenceEditor
+            task={task}
+            iconOnly
+            onChange={(recurrence) => onConfigureRecurrence(task.id, recurrence)}
+          />
+        ) : undefined
+      }
+      duplicateAction={
+        !isNewTask && onDuplicate ? (
+          <WorkspaceIconButton
+            onClick={() => void handleDuplicate()}
+            aria-label="Duplicate task"
+            title="Duplicate task"
+            icon={<Copy />}
+            borderless
+            data-testid="duplicate-task-dialog-button"
+          />
+        ) : undefined
+      }
       onDelete={handleDelete}
       onSave={handleClose}
       closeLabel="Close task editor"
