@@ -626,7 +626,7 @@ export function CommandPalette({
                           <Icon className="h-4 w-4" />
                         )}
                       </div>
-                      <span>{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       {item.shortcutKeys ? <CommandShortcut keys={item.shortcutKeys} /> : null}
                     </CommandItem>
                   )
@@ -818,14 +818,25 @@ export function CommandPalette({
                 <FileText className="h-4 w-4" />
               )}
             </div>
-            <div className="mb-2 text-sm font-semibold text-foreground">{hoveredResult.title}</div>
-            <div className="mb-3 text-xs text-muted-foreground">{hoveredResult.subtitle}</div>
+            <div
+              className="mb-2 min-w-0 truncate text-sm font-semibold text-foreground"
+              title={hoveredResult.title}
+            >
+              {hoveredResult.title}
+            </div>
+            <div
+              className="mb-3 min-w-0 truncate text-xs text-muted-foreground"
+              title={hoveredResult.subtitle}
+            >
+              {hoveredResult.subtitle}
+            </div>
             {hoveredResult.tags && hoveredResult.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {hoveredResult.tags.slice(0, 5).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
+                    className="max-w-full truncate rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
+                    title={tag}
                   >
                     {tag}
                   </span>

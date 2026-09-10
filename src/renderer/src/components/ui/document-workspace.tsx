@@ -90,7 +90,7 @@ const WorkspaceIconButton = React.forwardRef<
         size={hasContent ? 'sm' : 'icon'}
         data-active={active ? 'true' : 'false'}
         className={cn(
-          'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
+          'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)] [&>span:first-of-type]:min-w-0 [&>span:first-of-type]:truncate',
           isPlainAppearance
             ? 'border-0'
             : bordered || (!hasContent && !borderless)

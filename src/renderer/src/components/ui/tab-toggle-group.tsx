@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils'
 import { getButtonTooltipLabel, TooltipButton } from './tooltip'
 
 const tabToggleGroupItemVariants = cva(
-  'ui-control inline-flex h-[var(--control-height)] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[var(--radius-button)] border border-input bg-panel px-[var(--control-padding-x)] font-medium text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none',
+  'ui-control inline-flex h-[var(--control-height)] min-w-0 max-w-full shrink-0 items-center justify-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-[var(--radius-button)] border border-input bg-panel px-[var(--control-padding-x)] font-medium text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&>span:first-of-type]:min-w-0 [&>span:first-of-type]:flex-1 [&>span:first-of-type]:truncate',
   {
     variants: {
       state: {

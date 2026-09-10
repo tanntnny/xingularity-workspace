@@ -125,7 +125,7 @@ export function FileTree({
               key={folder.name}
               type="button"
             >
-              <span>{folder.name}</span>
+              <span className="min-w-0 flex-1 truncate">{folder.name}</span>
               <Badge variant="outline">{folder.count}</Badge>
             </Button>
           ))

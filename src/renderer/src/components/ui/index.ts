@@ -215,6 +215,8 @@ export {
 } from './table'
 export { TableRowList } from './table-row-list'
 export type { TableRowListColumn, TableRowListGroup, TableRowListProps } from './table-row-list'
+export { WorkspaceTextFade } from './workspace-text-fade'
+export type { WorkspaceTextFadeProps } from './workspace-text-fade'
 export type { TableSortDirection, TableSortState, TableSortValue } from '../../lib/tableSort'
 
 export { Toaster } from './sonner'

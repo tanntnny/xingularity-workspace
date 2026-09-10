@@ -32,6 +32,8 @@ import {
   NoteTreeNode,
   Project,
   ProjectIconStyle,
+  ProjectMeetingOutcome,
+  ProjectMeetingType,
   ProjectMilestone,
   UpdateProjectMilestoneInput,
   ProjectPropertiesPatch,
@@ -256,6 +258,14 @@ import {
   remapRecentNotebookPaths,
   removeRecentNotebookPaths
 } from '../../shared/recentNotebookFiles'
+import {
+  getRecentPageTargetId,
+  normalizeRecentPageTargets,
+  rememberRecentPageTarget,
+  remapRecentPageTargets,
+  removeRecentPageTargets,
+  type RecentPageTarget
+} from '../../shared/recentPages'
 const PAGE_LABELS: Record<AppPage, string> = {
   capture: 'Capture',
   knowledge: 'Knowledge',
@@ -574,6 +584,7 @@ function App(): ReactElement {
   const workspaceViews = useVaultStore((state) => state.settings.workspaceViews ?? [])
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const recentNotebookPaths = useVaultStore((state) => state.settings.recentNotebookPaths)
+  const recentPageTargets = useVaultStore((state) => state.settings.recentPageTargets ?? [])
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
@@ -874,6 +885,8 @@ function App(): ReactElement {
   const notesRef = useRef(notes)
   const recentNotebookPathsRef = useRef(recentNotebookPaths)
   const recentNotebookWriteVersionRef = useRef(0)
+  const recentPageTargetsRef = useRef(recentPageTargets)
+  const recentPageWriteVersionRef = useRef(0)
   const currentNotePathRef = useRef(currentNotePath)
   const currentExcalidrawPathRef = useRef(currentExcalidrawPath)
   const currentNoteContentRef = useRef(currentNoteContent)
@@ -1086,6 +1099,10 @@ function App(): ReactElement {
     recentNotebookPathsRef.current = recentNotebookPaths
   }, [recentNotebookPaths])
 
+  useEffect(() => {
+    recentPageTargetsRef.current = recentPageTargets
+  }, [recentPageTargets])
+
   const replaceNotes = useCallback(
     (nextNotes: NoteListItem[]): void => {
       notesRef.current = nextNotes
@@ -1236,6 +1253,54 @@ function App(): ReactElement {
     [persistRecentNotebookPaths]
   )
 
+  const persistRecentPageTargets = useCallback(
+    async (targets: readonly RecentPageTarget[]): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const nextTargets = normalizeRecentPageTargets(targets)
+      const currentTargets = normalizeRecentPageTargets(recentPageTargetsRef.current)
+      if (
+        nextTargets.length === currentTargets.length &&
+        nextTargets.every(
+          (target, index) => getRecentPageTargetId(target) === getRecentPageTargetId(currentTargets[index])
+        )
+      ) {
+        return
+      }
+
+      recentPageTargetsRef.current = nextTargets
+      patchSettings({ recentPageTargets: nextTargets })
+      const writeVersion = ++recentPageWriteVersionRef.current
+
+      try {
+        const nextSettings = await vaultApi.settings.update(
+          { recentPageTargets: nextTargets },
+          { history: false }
+        )
+
+        if (writeVersion === recentPageWriteVersionRef.current) {
+          const persistedTargets = normalizeRecentPageTargets(nextSettings.recentPageTargets)
+          recentPageTargetsRef.current = persistedTargets
+          patchSettings({ recentPageTargets: persistedTargets })
+        }
+      } catch (error) {
+        pushToast('error', String(error))
+      }
+    },
+    [patchSettings, pushToast, vaultApi]
+  )
+
+  const rememberRecentTarget = useCallback(
+    (target: RecentPageTarget): void => {
+      void persistRecentPageTargets(
+        rememberRecentPageTarget(recentPageTargetsRef.current, target)
+      )
+    },
+    [persistRecentPageTargets]
+  )
+
   const persistFavoriteNotePaths = useCallback(
     async (favoritePaths: string[], options?: { history?: boolean }): Promise<void> => {
       if (!vaultApi) {
@@ -1306,16 +1371,27 @@ function App(): ReactElement {
 
   const openProject = useCallback(
     (projectId: string): void => {
+      if (projects.some((project) => project.id === projectId)) {
+        rememberRecentTarget({ kind: 'project', projectId })
+      }
       selectProject(projectId)
       setProjectView('home')
     },
-    [selectProject]
+    [projects, rememberRecentTarget, selectProject]
   )
 
   const openProjectPulse = useCallback(
     (projectId: string): void => {
       selectProject(projectId)
       setProjectView('pulse')
+    },
+    [selectProject]
+  )
+
+  const openProjectMeetings = useCallback(
+    (projectId: string): void => {
+      selectProject(projectId)
+      setProjectView('meetings')
     },
     [selectProject]
   )
@@ -2579,13 +2655,41 @@ function App(): ReactElement {
     return `workspace-tab-${workspaceTabSequenceRef.current}`
   }, [])
 
+  const getRecentTargetForWorkspaceTab = useCallback(
+    (tab: WorkspacePageTab): RecentPageTarget | null => {
+      if (tab.workspaceViewId) {
+        return { kind: 'view', viewId: tab.workspaceViewId }
+      }
+
+      const isActiveTab = tab.id === activeWorkspaceTabIdRef.current
+      const projectId = isActiveTab ? selectedProjectIdRef.current : tab.projectId
+      const currentProjectView = isActiveTab ? projectView : tab.projectView
+      if (tab.page === 'projects' && projectId && currentProjectView === 'home') {
+        return { kind: 'project', projectId }
+      }
+
+      if (tab.page === 'notes') {
+        const session = getWorkspaceTabSession(tab.id)
+        const path = isActiveTab
+          ? (currentNotePathRef.current ?? currentExcalidrawPathRef.current)
+          : (session.currentNotePath ?? session.currentExcalidrawPath)
+        if (path) {
+          return { kind: isExcalidrawPath(path) ? 'drawing' : 'note', path }
+        }
+      }
+
+      return null
+    },
+    [getWorkspaceTabSession, projectView]
+  )
+
   const activateWorkspaceTab = useCallback(
     async (
       tabId: string,
       pageOverride?: AppPage,
       workspaceViewIdOverride?: string | null
     ): Promise<void> => {
-      if (!hasVault || tabId === activeWorkspaceTabIdRef.current) {
+      if (!hasVault) {
         return
       }
 
@@ -2596,6 +2700,21 @@ function App(): ReactElement {
           ? workspaceViewIdOverride
           : (targetTab?.workspaceViewId ?? null)
       if (!targetPage || !workspaceTabSessionsRef.current[tabId]) {
+        return
+      }
+
+      if (targetTab) {
+        const recentTarget = getRecentTargetForWorkspaceTab({
+          ...targetTab,
+          page: targetPage,
+          workspaceViewId: targetWorkspaceViewId
+        })
+        if (recentTarget) {
+          rememberRecentTarget(recentTarget)
+        }
+      }
+
+      if (tabId === activeWorkspaceTabIdRef.current) {
         return
       }
 
@@ -2646,11 +2765,13 @@ function App(): ReactElement {
     [
       captureActiveWorkspaceSession,
       calendarViewMode,
+      getRecentTargetForWorkspaceTab,
       hasVault,
       projects,
       restoreWorkspaceSession,
       stageCurrentNoteForBackgroundSave,
       restoreTaskOrigin,
+      rememberRecentTarget,
       selectProject,
       selectedCalendarDate,
       setCalendarViewMode,
@@ -2672,9 +2793,10 @@ function App(): ReactElement {
         return
       }
 
+      rememberRecentTarget({ kind: 'view', viewId: view.id })
       void navigateToPage(view.source, view.id)
     },
-    [hasVault, navigateToPage]
+    [hasVault, navigateToPage, rememberRecentTarget]
   )
 
   const updateWorkspaceView = useCallback(
@@ -2822,11 +2944,22 @@ function App(): ReactElement {
         })
       )
       setSettings(nextSettings)
+      void persistRecentPageTargets(
+        recentPageTargets.filter((target) => target.kind !== 'view' || target.viewId !== view.id)
+      )
       setWorkspaceViewToDelete(null)
     } catch (error) {
       pushToast('error', String(error))
     }
-  }, [closeTaskPage, pushToast, setSettings, vaultApi, workspaceViewToDelete])
+  }, [
+    closeTaskPage,
+    persistRecentPageTargets,
+    pushToast,
+    recentPageTargets,
+    setSettings,
+    vaultApi,
+    workspaceViewToDelete
+  ])
 
   const handleCreateWorkspaceTab = useCallback((): void => {
     if (!hasVault) {
@@ -3975,6 +4108,7 @@ function App(): ReactElement {
         currentNoteEditorRef.current?.focus()
         void persistLastOpenedNotePath(relPath)
         rememberRecentNotebookFile(relPath)
+        rememberRecentTarget({ kind: 'note', path: relPath })
         return
       }
 
@@ -4001,6 +4135,7 @@ function App(): ReactElement {
           applyOpenNoteSession(relPath, cachedSession)
           void persistLastOpenedNotePath(relPath)
           rememberRecentNotebookFile(relPath)
+          rememberRecentTarget({ kind: 'note', path: relPath })
           return
         }
 
@@ -4026,6 +4161,7 @@ function App(): ReactElement {
         applyOpenNoteSession(relPath, nextSession)
         void persistLastOpenedNotePath(relPath)
         rememberRecentNotebookFile(relPath)
+        rememberRecentTarget({ kind: 'note', path: relPath })
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -4038,7 +4174,8 @@ function App(): ReactElement {
       vaultApi,
       pushToast,
       persistLastOpenedNotePath,
-      rememberRecentNotebookFile
+      rememberRecentNotebookFile,
+      rememberRecentTarget
     ]
   )
 
@@ -4071,6 +4208,7 @@ function App(): ReactElement {
         setCurrentNoteContent('')
         setSelectedNoteTreeEntries([{ kind: 'excalidraw', relPath }])
         rememberRecentNotebookFile(relPath)
+        rememberRecentTarget({ kind: 'drawing', path: relPath })
       } catch (error) {
         pushToast('error', String(error))
       }
@@ -4084,7 +4222,8 @@ function App(): ReactElement {
       setCurrentNoteContent,
       setCurrentNotePath,
       vaultApi,
-      rememberRecentNotebookFile
+      rememberRecentNotebookFile,
+      rememberRecentTarget
     ]
   )
 
@@ -5238,11 +5377,12 @@ function App(): ReactElement {
       const noteLabel = result.noteCount === 1 ? 'note' : 'notes'
       const taskLabel = result.taskCount === 1 ? 'task' : 'tasks'
       const updateLabel = result.updateCount === 1 ? 'update' : 'updates'
+      const meetingLabel = result.meetingCount === 1 ? 'meeting' : 'meetings'
       const externalDocumentLabel =
         result.externalDocumentCount === 1 ? 'Google Doc' : 'Google Docs'
       pushToast(
         'success',
-        `Exported project context to ${result.path} (${result.noteCount} ${noteLabel}, ${result.taskCount} ${taskLabel}, ${result.updateCount} ${updateLabel}, ${result.externalDocumentCount} ${externalDocumentLabel})`
+        `Exported project context to ${result.path} (${result.noteCount} ${noteLabel}, ${result.taskCount} ${taskLabel}, ${result.updateCount} ${updateLabel}, ${result.meetingCount} ${meetingLabel}, ${result.externalDocumentCount} ${externalDocumentLabel})`
       )
       if (result.warnings.length > 0) {
         pushToast('info', `Project context export encountered ${result.warnings.length} warning(s)`)
@@ -5479,6 +5619,65 @@ function App(): ReactElement {
         const updatedProject = await vaultApi.projects.deleteUpdate({ projectId, updateId })
         applyProjectResult(updatedProject)
         pushToast('success', 'Project update deleted')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
+
+  const createProjectMeeting = useCallback(
+    async (
+      projectId: string,
+      input: { markdown: string; type: ProjectMeetingType; outcome: ProjectMeetingOutcome }
+    ): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.createMeeting({ projectId, ...input })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project meeting posted')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
+
+  const updateProjectMeeting = useCallback(
+    async (
+      projectId: string,
+      meetingId: string,
+      input: { markdown: string; type: ProjectMeetingType; outcome: ProjectMeetingOutcome }
+    ): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.updateMeeting({
+          projectId,
+          meetingId,
+          ...input
+        })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project meeting saved')
+      } catch (error) {
+        pushToast('error', String(error))
+        throw error
+      }
+    },
+    [applyProjectResult, pushToast, vaultApi]
+  )
+
+  const deleteProjectMeeting = useCallback(
+    async (projectId: string, meetingId: string): Promise<void> => {
+      if (!vaultApi) return
+
+      try {
+        const updatedProject = await vaultApi.projects.deleteMeeting({ projectId, meetingId })
+        applyProjectResult(updatedProject)
+        pushToast('success', 'Project meeting deleted')
       } catch (error) {
         pushToast('error', String(error))
         throw error
@@ -5725,6 +5924,11 @@ function App(): ReactElement {
         tasks: nextTasks,
         lastOpenedProjectId: result.nextSelectedProjectId
       })
+      void persistRecentPageTargets(
+        recentPageTargets.filter(
+          (target) => target.kind !== 'project' || target.projectId !== result.deletedProjectId
+        )
+      )
       if (selectedProjectIdRef.current === result.deletedProjectId) {
         selectedProjectIdRef.current = result.nextSelectedProjectId
         setSelectedProjectId(result.nextSelectedProjectId)
@@ -6527,6 +6731,9 @@ function App(): ReactElement {
         if (nextRecentPaths.some((path, index) => path !== recentNotebookPaths[index])) {
           void persistRecentNotebookPaths(nextRecentPaths)
         }
+        void persistRecentPageTargets(
+          remapRecentPageTargets(recentPageTargets, relPath, nextRelPath)
+        )
         setSelectedNoteTreeEntries([{ kind, relPath: nextRelPath }])
         const activeSession = getWorkspaceTabSession()
         const nextCurrentNotePath = activeSession.currentNotePath
@@ -6570,9 +6777,11 @@ function App(): ReactElement {
       noteTree,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentPageTargets,
       persistRecentNotebookPaths,
       pushToast,
       recentNotebookPaths,
+      recentPageTargets,
       refreshNotesAndTree,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
@@ -6652,6 +6861,7 @@ function App(): ReactElement {
         ) {
           void persistRecentNotebookPaths(nextRecentPaths)
         }
+        void persistRecentPageTargets(removeRecentPageTargets(recentPageTargets, removedSessionPaths))
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
           removeNotebookWorkspaceSessionPaths(session, removedSessionPaths)
         })
@@ -6704,9 +6914,11 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentPageTargets,
       persistRecentNotebookPaths,
       pushToast,
       recentNotebookPaths,
+      recentPageTargets,
       refreshNotesAndTree,
       resetCurrentNoteEditorSession,
       setCurrentExcalidrawPath,
@@ -6790,6 +7002,12 @@ function App(): ReactElement {
       ) {
         void persistRecentNotebookPaths(nextRecentPaths)
       }
+      const nextRecentPageTargets = moveOperations.reduce(
+        (targets, operation) =>
+          remapRecentPageTargets(targets, operation.relPath, operation.toRelPath),
+        recentPageTargets
+      )
+      void persistRecentPageTargets(nextRecentPageTargets)
       setSelectedNoteTreeEntries(
         moveOperations.map((operation) => ({
           kind: operation.kind,
@@ -6828,9 +7046,11 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       persistFavoriteNotePaths,
       persistLastOpenedNotePath,
+      persistRecentPageTargets,
       persistRecentNotebookPaths,
       refreshNotesAndTree,
       recentNotebookPaths,
+      recentPageTargets,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
       vaultApi
@@ -7299,7 +7519,12 @@ function App(): ReactElement {
 
       return project
         ? {
-            label: tab.projectView === 'pulse' ? `${project.name} · Activity` : project.name,
+            label:
+              tab.projectView === 'pulse'
+                ? `${project.name} · Activity`
+                : tab.projectView === 'meetings'
+                  ? `${project.name} · Meeting`
+                  : project.name,
             icon: <NoteShapeIcon icon={project.icon} size={18} />
           }
         : {
@@ -7321,6 +7546,71 @@ function App(): ReactElement {
       icon: <PageIcon size={16} strokeWidth={1.8} aria-hidden="true" />
     }
   }
+  const presentedWorkspaceTabs = workspaceTabs.map((tab, index) => {
+    const presentation = getWorkspaceTabPresentation(tab)
+    return {
+      id: tab.id,
+      label: presentation.label,
+      icon: presentation.icon,
+      shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
+    }
+  })
+  const presentedRecentPages = recentPageTargets.flatMap((target) => {
+    if (target.kind === 'note' || target.kind === 'drawing') {
+      if (!treeContainsPath(noteTree, target.path)) {
+        return []
+      }
+
+      return [
+        {
+          id: getRecentPageTargetId(target),
+          label: getNoteDisplayName(target.path),
+          icon:
+            target.kind === 'drawing' ? (
+              <PenTool size={16} strokeWidth={1.8} aria-hidden="true" />
+            ) : (
+              <FileText size={16} strokeWidth={1.8} aria-hidden="true" />
+            )
+        }
+      ]
+    }
+
+    if (target.kind === 'project') {
+      const project = projects.find((candidate) => candidate.id === target.projectId)
+      return project
+        ? [
+            {
+              id: getRecentPageTargetId(target),
+              label: project.name,
+              icon: <NoteShapeIcon icon={project.icon} size={18} />
+            }
+          ]
+        : []
+    }
+
+    const view = workspaceViews.find((candidate) => candidate.id === target.viewId)
+    return view
+      ? [
+          {
+            id: getRecentPageTargetId(target),
+            label: view.name,
+            icon: <NoteShapeIcon icon={view.icon} size={18} />
+          }
+        ]
+      : []
+  })
+  const activeRecentTarget: RecentPageTarget | null = activeWorkspaceViewId
+    ? { kind: 'view', viewId: activeWorkspaceViewId }
+    : activePage === 'notes' && (currentNotePath || currentExcalidrawPath)
+      ? currentExcalidrawPath
+        ? { kind: 'drawing', path: currentExcalidrawPath }
+        : { kind: 'note', path: currentNotePath as string }
+      : activePage === 'projects' && projectView === 'home' && selectedProjectId
+        ? { kind: 'project', projectId: selectedProjectId }
+        : null
+  const activeRecentPageId = activeRecentTarget
+    ? getRecentPageTargetId(activeRecentTarget)
+    : null
   const handleSidebarPageChange = useCallback(
     (page: AppPage): void => {
       if (page === 'notes') {
@@ -7343,6 +7633,43 @@ function App(): ReactElement {
       void navigateToPage(page)
     },
     [handleNotebookBreadcrumbFolderClick, navigateToPage, openAllProjects, openSettingsTab]
+  )
+  const handleOpenRecentPage = useCallback(
+    (targetId: string): void => {
+      const target = recentPageTargets.find(
+        (candidate) => getRecentPageTargetId(candidate) === targetId
+      )
+      if (!target) {
+        return
+      }
+
+      if (target.kind === 'note' || target.kind === 'drawing') {
+        if (!treeContainsPath(noteTree, target.path)) {
+          return
+        }
+        void navigateToPage('notes').then(() => openNotebookPath(target.path))
+        return
+      }
+
+      if (target.kind === 'project') {
+        if (!projects.some((project) => project.id === target.projectId)) {
+          return
+        }
+        void navigateToPage('projects').then(() => openProject(target.projectId))
+        return
+      }
+
+      openWorkspaceView(target.viewId)
+    },
+    [
+      navigateToPage,
+      noteTree,
+      openNotebookPath,
+      openProject,
+      openWorkspaceView,
+      projects,
+      recentPageTargets
+    ]
   )
   const handleOpenSearchPalette = useCallback((): void => {
     if (!hasVault) {
@@ -7759,6 +8086,9 @@ function App(): ReactElement {
             }}
             onDeleteWorkspaceView={requestDeleteWorkspaceView}
             resourceViewsEnabled={featureFlags.resources !== false}
+            recentPages={presentedRecentPages}
+            activeRecentPageId={activeRecentPageId}
+            onOpenRecentPage={handleOpenRecentPage}
             className={paletteSurfaceClass}
             collapsible={isFocusMode ? 'offcanvas' : 'min'}
             macosTrafficLightInset={platform.api?.ui.platform === 'darwin'}
@@ -7773,15 +8103,7 @@ function App(): ReactElement {
               >
                 <WorkspaceTabManager
                   macosTrafficLightInset={isFocusMode && platform.api?.ui.platform === 'darwin'}
-                  tabs={workspaceTabs.map((tab, index) => {
-                    const presentation = getWorkspaceTabPresentation(tab)
-                    return {
-                      id: tab.id,
-                      label: presentation.label,
-                      icon: presentation.icon,
-                      shortcut: index < 9 ? ['cmd', String(index + 1)] : undefined
-                    }
-                  })}
+                  tabs={presentedWorkspaceTabs}
                   activeTabId={activeWorkspaceTabId}
                   onSelectTab={handleSelectWorkspaceTab}
                   onCloseTab={handleCloseWorkspaceTab}
@@ -8162,6 +8484,8 @@ function App(): ReactElement {
                                 if (selectedProjectForHeader) {
                                   if (nextView === 'pulse') {
                                     openProjectPulse(selectedProjectForHeader.id)
+                                  } else if (nextView === 'meetings') {
+                                    openProjectMeetings(selectedProjectForHeader.id)
                                   } else if (nextView === 'resources') {
                                     openProjectResources(selectedProjectForHeader.id)
                                   } else {
@@ -8530,6 +8854,9 @@ function App(): ReactElement {
                                 onCreateProjectUpdate={createProjectUpdate}
                                 onUpdateProjectUpdate={updateProjectUpdate}
                                 onDeleteProjectUpdate={deleteProjectUpdate}
+                                onCreateProjectMeeting={createProjectMeeting}
+                                onUpdateProjectMeeting={updateProjectMeeting}
+                                onDeleteProjectMeeting={deleteProjectMeeting}
                                 noteTree={noteTree}
                                 resources={resourceSnapshot.resources}
                                 relations={resourceSnapshot.relations}

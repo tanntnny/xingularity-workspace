@@ -43,6 +43,7 @@ import {
   TableRow
 } from '../ui/table'
 import { TableRowList } from '../ui/table-row-list'
+import { WorkspaceTextFade } from '../ui/workspace-text-fade'
 import { WorkspaceListRail, WorkspaceListRailItem } from '../ui/workspace-list-rail'
 import type {
   StatusChipItem,
@@ -178,7 +179,11 @@ const ROW_LIST_COLUMNS: readonly TableRowListColumn<DisplayTableRow>[] = [
     headerClassName: 'min-w-44',
     cellClassName: 'min-w-44',
     sortValue: (row) => row.name,
-    renderCell: (row) => <span className="font-medium text-foreground">{row.name}</span>
+    renderCell: (row) => (
+      <WorkspaceTextFade className="min-w-0 font-medium text-foreground" title={row.name}>
+        {row.name}
+      </WorkspaceTextFade>
+    )
   },
   {
     id: 'description',
@@ -187,9 +192,9 @@ const ROW_LIST_COLUMNS: readonly TableRowListColumn<DisplayTableRow>[] = [
     cellClassName: 'min-w-72 max-w-[34rem]',
     sortValue: (row) => row.description,
     renderCell: (row) => (
-      <span className="block min-w-0 truncate text-muted-foreground" title={row.description}>
+      <WorkspaceTextFade className="min-w-0 text-muted-foreground" title={row.description}>
         {row.description}
-      </span>
+      </WorkspaceTextFade>
     )
   },
   {
@@ -707,7 +712,9 @@ function DesignAuditTablesNavigation(): React.ReactElement {
                   <TableBody>
                     {sortedTableRows.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell className="font-medium text-foreground">{row.name}</TableCell>
+                        <TableCell className="max-w-64 font-medium text-foreground">
+                          <WorkspaceTextFade title={row.name}>{row.name}</WorkspaceTextFade>
+                        </TableCell>
                         <TableCell>{row.category}</TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {row.updated}
@@ -761,11 +768,13 @@ function DesignAuditTablesNavigation(): React.ReactElement {
                   <TableBody>
                     {LONG_TABLE_ROWS.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell className="min-w-64 font-medium text-foreground">
-                          {row.name}
+                        <TableCell className="min-w-64 max-w-72 font-medium text-foreground">
+                          <WorkspaceTextFade title={row.name}>{row.name}</WorkspaceTextFade>
                         </TableCell>
                         <TableCell className="min-w-[34rem] text-muted-foreground">
-                          {row.description}
+                          <WorkspaceTextFade title={row.description}>
+                            {row.description}
+                          </WorkspaceTextFade>
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           {row.updated}

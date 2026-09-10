@@ -66,7 +66,7 @@ export interface SingleSelectionPopoverProps
 export type SelectionPopoverProps = MultipleSelectionPopoverProps | SingleSelectionPopoverProps
 
 const selectionOptionClassName =
-  'group min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-popover-hover hover:text-foreground focus:bg-popover-hover focus:text-foreground data-[selected=true]:bg-popover-hover data-[selected=true]:text-foreground data-[checked=true]:bg-popover-hover data-[checked=true]:text-foreground'
+  'min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-popover-hover hover:text-foreground focus:bg-popover-hover focus:text-foreground data-[selected=true]:bg-popover-hover data-[selected=true]:text-foreground data-[checked=true]:bg-popover-hover data-[checked=true]:text-foreground'
 
 function isMultipleSelection(props: SelectionPopoverProps): props is MultipleSelectionPopoverProps {
   return props.selectionMode !== 'single'

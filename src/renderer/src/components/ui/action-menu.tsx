@@ -16,6 +16,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger
 } from './dropdown-menu'
+import { cn } from '../../lib/utils'
 
 export type ActionMenuVariant = 'context' | 'dropdown'
 
@@ -44,6 +45,12 @@ export interface ActionMenuGroup {
 export interface ActionMenuItemsProps {
   groups: readonly ActionMenuGroup[]
   variant: ActionMenuVariant
+}
+
+function ActionMenuLabel({ children }: { children: ReactNode }): ReactElement {
+  const isTextLabel = typeof children === 'string' || typeof children === 'number'
+
+  return <span className={cn('min-w-0 flex-1', isTextLabel && 'truncate')}>{children}</span>
 }
 
 export function ActionMenuItems({ groups, variant }: ActionMenuItemsProps): ReactElement {
@@ -86,7 +93,7 @@ function ActionMenuItem({
         onSelect={item.onSelect}
       >
         {item.icon}
-        {item.label}
+        <ActionMenuLabel>{item.label}</ActionMenuLabel>
         {item.trailing}
         {item.shortcut ? <ContextMenuShortcut>{item.shortcut}</ContextMenuShortcut> : null}
       </ContextMenuItem>
@@ -102,7 +109,7 @@ function ActionMenuItem({
       onSelect={item.onSelect}
     >
       {item.icon}
-      {item.label}
+      <ActionMenuLabel>{item.label}</ActionMenuLabel>
       {item.trailing}
       {item.shortcut ? <DropdownMenuShortcut>{item.shortcut}</DropdownMenuShortcut> : null}
     </DropdownMenuItem>
@@ -128,7 +135,7 @@ function ActionMenuSubmenu({
           className={className}
         >
           {item.icon}
-          {item.label}
+          <ActionMenuLabel>{item.label}</ActionMenuLabel>
         </ContextMenuSubTrigger>
         <ContextMenuSubContent className={item.submenuClassName}>
           <ActionMenuItems
@@ -149,7 +156,7 @@ function ActionMenuSubmenu({
         className={className}
       >
         {item.icon}
-        {item.label}
+        <ActionMenuLabel>{item.label}</ActionMenuLabel>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className={item.submenuClassName}>
         <ActionMenuItems

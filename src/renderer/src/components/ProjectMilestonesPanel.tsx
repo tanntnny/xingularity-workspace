@@ -12,6 +12,7 @@ import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
 import { StatusChip } from './ui/status-chip'
 import { ProgressRing } from './ui/progress-ring'
 import { WorkspaceIconButton } from './ui/document-workspace'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { CalendarCheck, CalendarOff, Milestone, Plus } from './ui/icons'
 import { MilestoneCompletenessIcon } from './MilestoneCompletenessIcon'
 
@@ -78,12 +79,12 @@ export function ProjectMilestonesPanel({
               size={17}
               dataTestId={`project-milestone-panel-icon:${milestone.id}`}
             />
-            <span
-              className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+            <WorkspaceTextFade
+              className="min-w-0 flex-1 text-sm font-medium text-foreground"
               title={milestone.title}
             >
               {milestone.title}
-            </span>
+            </WorkspaceTextFade>
           </div>
         )
       }

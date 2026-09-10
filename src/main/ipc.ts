@@ -16,6 +16,7 @@ import {
 } from '../shared/types'
 import { RESOURCE_PROVIDERS, RESOURCE_STATES, RESOURCE_TYPES } from '../shared/resourceDomain'
 import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
+import { MAX_RECENT_PAGE_TARGETS } from '../shared/recentPages'
 import { isVaultRelativePath } from '../shared/projectFolders'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
@@ -541,6 +542,23 @@ const projectUpdateDeleteInputSchema = z.object({
   projectId: z.string().min(1).max(120),
   updateId: z.string().min(1).max(120)
 })
+const projectMeetingCreateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  markdown: z.string().max(2_000_000),
+  type: z.enum(['stand-up', 'planning', 'review', 'client', 'one-on-one', 'other']),
+  outcome: z.enum(['decisions-made', 'follow-up-needed', 'informational', 'blocked'])
+})
+const projectMeetingUpdateInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  meetingId: z.string().min(1).max(120),
+  markdown: z.string().max(2_000_000),
+  type: z.enum(['stand-up', 'planning', 'review', 'client', 'one-on-one', 'other']),
+  outcome: z.enum(['decisions-made', 'follow-up-needed', 'informational', 'blocked'])
+})
+const projectMeetingDeleteInputSchema = z.object({
+  projectId: z.string().min(1).max(120),
+  meetingId: z.string().min(1).max(120)
+})
 
 const nativeMenuItemSchema: z.ZodType<{
   id?: string
@@ -621,6 +639,13 @@ const noteVimKeyMappingSchema = z.object({
   action: z.enum(NOTE_VIM_MAPPING_ACTION_VALUES)
 })
 
+const recentPageTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('note'), path: z.string().min(1).max(512) }),
+  z.object({ kind: z.literal('drawing'), path: z.string().min(1).max(512) }),
+  z.object({ kind: z.literal('project'), projectId: z.string().min(1).max(120) }),
+  z.object({ kind: z.literal('view'), viewId: z.string().min(1).max(120) })
+])
+
 const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
@@ -642,6 +667,7 @@ const settingsUpdateSchema = z.object({
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
+  recentPageTargets: z.array(recentPageTargetSchema).max(MAX_RECENT_PAGE_TARGETS).optional(),
   favoriteNotePaths: z.array(z.string().min(1).max(512)).max(1000).optional(),
   pythonCondaEnvironmentPath: z.string().trim().min(1).max(1024).nullable().optional(),
   pythonCondaExecutablePath: z.string().trim().min(1).max(1024).nullable().optional(),
@@ -1192,6 +1218,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.deleteProjectUpdate, async (_event, input: unknown) => {
     return runtime.deleteProjectUpdate(projectUpdateDeleteInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.createProjectMeeting, async (_event, input: unknown) => {
+    return runtime.createProjectMeeting(projectMeetingCreateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.updateProjectMeeting, async (_event, input: unknown) => {
+    return runtime.updateProjectMeeting(projectMeetingUpdateInputSchema.parse(input))
+  })
+
+  handleIpc(IPC_CHANNELS.deleteProjectMeeting, async (_event, input: unknown) => {
+    return runtime.deleteProjectMeeting(projectMeetingDeleteInputSchema.parse(input))
   })
 
   handleIpc(IPC_CHANNELS.createTask, async (_event, input: unknown) => {

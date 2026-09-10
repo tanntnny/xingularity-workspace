@@ -13,11 +13,8 @@ describe('SelectionCheckbox', () => {
 
     expect(uncheckedMarkup).toContain('rounded-sm')
     expect(uncheckedMarkup).toContain('border-primary')
-    expect(uncheckedMarkup).toContain('hover:bg-muted')
-    expect(uncheckedMarkup).toContain('group-hover:bg-muted')
     expect(uncheckedMarkup).not.toContain('rounded-[var(--radius-control)]')
     expect(checkedMarkup).toContain('border-primary')
     expect(checkedMarkup).toContain('bg-primary')
-    expect(checkedMarkup).toContain('hover:bg-primary')
   })
 })

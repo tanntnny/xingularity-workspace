@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from './icons'
 import { cn } from '../../lib/utils'
 import type { TableSortDirection } from '../../lib/tableSort'
 import { getButtonTooltipLabel, TooltipButton } from './tooltip'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
@@ -113,7 +114,7 @@ const SortableTableHead = React.forwardRef<HTMLTableCellElement, SortableTableHe
             className="flex w-full items-center gap-1.5 rounded-[var(--radius-control)] px-1 text-left transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={onToggleSort}
           >
-            <span className="min-w-0 flex-1">{children}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1">{children}</WorkspaceTextFade>
             <SortIndicator isActive={isActive} direction={sortDirection} />
           </button>
         </TooltipButton>

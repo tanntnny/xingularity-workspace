@@ -27,16 +27,22 @@ export function SearchResults({ results, onOpen }: SearchResultsProps): ReactEle
         <Button
           key={`${result.id}-${result.relPath}`}
           variant="outline"
-          className="h-auto w-full justify-start p-2.5 text-left whitespace-normal"
+          className="h-auto w-full min-w-0 flex-col items-start justify-start gap-0 p-2.5 text-left whitespace-normal"
           onClick={() => onOpen(result)}
         >
-          <span className="mb-0.5 block text-base font-semibold">{result.title}</span>
-          <span className="block text-xs text-muted-foreground">
+          <span className="mb-0.5 block min-w-0 max-w-full truncate text-base font-semibold">
+            {result.title}
+          </span>
+          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
             {result.provider ?? result.entityType} · {result.state ?? 'available'}
           </span>
-          <span className="block text-xs text-muted-foreground">{result.relPath}</span>
-          <span className="block text-xs text-muted-foreground">{result.snippet}</span>
-          <span className="block text-xs text-muted-foreground">
+          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
+            {result.relPath}
+          </span>
+          <span className="block min-w-0 max-w-full line-clamp-2 text-xs text-muted-foreground">
+            {result.snippet}
+          </span>
+          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
             {result.tags.map((tag) => `#${tag}`).join(' ')}
           </span>
         </Button>

@@ -6,6 +6,7 @@ import type {
   WriteNoteDocumentRequest,
   WriteNoteResult
 } from './vaultProtocol'
+import type { RecentPageTarget } from './recentPages'
 
 export type Maybe<T> = T | null
 
@@ -116,6 +117,7 @@ export interface ProjectContextMarkdownExportResult {
   noteCount: number
   taskCount: number
   updateCount: number
+  meetingCount: number
   externalDocumentCount: number
   warnings: string[]
 }
@@ -884,6 +886,30 @@ export interface ProjectUpdate {
   updatedAt: string
 }
 
+export type ProjectMeetingType =
+  | 'stand-up'
+  | 'planning'
+  | 'review'
+  | 'client'
+  | 'one-on-one'
+  | 'other'
+
+export type ProjectMeetingOutcome =
+  | 'decisions-made'
+  | 'follow-up-needed'
+  | 'informational'
+  | 'blocked'
+
+export interface ProjectMeeting {
+  id: string
+  projectId: string
+  markdown: string
+  type: ProjectMeetingType
+  outcome: ProjectMeetingOutcome
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -906,6 +932,7 @@ export interface Project {
   taskDependencies?: ProjectTaskDependency[]
   timeBudgetMinutes?: number
   updates?: ProjectUpdate[]
+  meetings?: ProjectMeeting[]
   icon: ProjectIconStyle
 }
 
@@ -996,6 +1023,26 @@ export interface UpdateProjectUpdateInput {
 export interface DeleteProjectUpdateInput {
   projectId: string
   updateId: string
+}
+
+export interface CreateProjectMeetingInput {
+  projectId: string
+  markdown: string
+  type: ProjectMeetingType
+  outcome: ProjectMeetingOutcome
+}
+
+export interface UpdateProjectMeetingInput {
+  projectId: string
+  meetingId: string
+  markdown: string
+  type: ProjectMeetingType
+  outcome: ProjectMeetingOutcome
+}
+
+export interface DeleteProjectMeetingInput {
+  projectId: string
+  meetingId: string
 }
 
 export type GridBoardItemKind = 'note' | 'project' | 'text'
@@ -1105,6 +1152,7 @@ export interface AppSettings {
   lastVaultPath: Maybe<string>
   lastOpenedNotePath: Maybe<string>
   recentNotebookPaths: string[]
+  recentPageTargets?: RecentPageTarget[]
   lastOpenedProjectId: Maybe<string>
   favoriteNotePaths: string[]
   favoriteProjectIds: string[]
@@ -1153,6 +1201,7 @@ export interface AppSettingsUpdate {
   gridBoard?: GridBoardState
   lastOpenedNotePath?: Maybe<string>
   recentNotebookPaths?: string[]
+  recentPageTargets?: RecentPageTarget[]
   lastOpenedProjectId?: Maybe<string>
   favoriteNotePaths?: string[]
   favoriteProjectIds?: string[]
@@ -2048,6 +2097,9 @@ export interface RendererVaultApi {
     createUpdate: (input: CreateProjectUpdateInput) => Promise<Project>
     updateUpdate: (input: UpdateProjectUpdateInput) => Promise<Project>
     deleteUpdate: (input: DeleteProjectUpdateInput) => Promise<Project>
+    createMeeting: (input: CreateProjectMeetingInput) => Promise<Project>
+    updateMeeting: (input: UpdateProjectMeetingInput) => Promise<Project>
+    deleteMeeting: (input: DeleteProjectMeetingInput) => Promise<Project>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<CalendarTask>

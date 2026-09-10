@@ -287,7 +287,7 @@ export function TagPickerContent({
                           ? `${testId}-option:${option.value}`
                           : undefined
                     }
-                    className="group min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[checked=true]:bg-muted data-[checked=true]:text-foreground"
+                    className="min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[checked=true]:bg-muted data-[checked=true]:text-foreground"
                   >
                     <SelectionCheckbox checked={selected} />
                     <span

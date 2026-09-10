@@ -13,10 +13,8 @@ export function SelectionCheckbox({ checked, className }: SelectionCheckboxProps
     <span
       aria-hidden="true"
       className={cn(
-        'flex size-4 shrink-0 items-center justify-center rounded-sm border border-primary transition-colors',
-        checked
-          ? 'bg-primary text-primary-foreground hover:bg-primary group-hover:bg-primary'
-          : 'bg-transparent text-primary hover:bg-muted group-hover:bg-muted',
+        'flex size-4 shrink-0 items-center justify-center rounded-sm border border-primary text-primary',
+        checked && 'bg-primary text-primary-foreground',
         className
       )}
     >

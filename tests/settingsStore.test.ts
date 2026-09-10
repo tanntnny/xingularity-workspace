@@ -13,6 +13,7 @@ import { SettingsStore } from '../src/main/settingsStore'
 import { ProjectStore } from '../src/main/projectStore'
 import { TaskStore } from '../src/main/taskStore'
 import type { Project } from '../src/shared/types'
+import type { RecentPageTarget } from '../src/shared/recentPages'
 import { createWorkspaceView } from '../src/shared/workspaceViews'
 
 const tempRoots: string[] = []
@@ -30,6 +31,46 @@ afterEach(async () => {
 })
 
 describe('SettingsStore', () => {
+  it('round-trips target-level recent pages in the vault core settings file', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const recentPageTargets: RecentPageTarget[] = [
+      { kind: 'project', projectId: 'project-1' },
+      { kind: 'note', path: 'notes/alpha.md' },
+      { kind: 'drawing', path: 'drawings/board.excalidraw' },
+      { kind: 'view', viewId: 'view-tasks' }
+    ]
+
+    const updated = await store.updateVault(root, { recentPageTargets })
+
+    expect(updated.recentPageTargets).toEqual(recentPageTargets)
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({ recentPageTargets })
+    )
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"recentPageTargets"'
+    )
+  })
+
+  it('seeds target-level recents from legacy notebook history', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    await fs.writeFile(
+      path.join(root, 'settings.json'),
+      JSON.stringify({ recentNotebookPaths: ['notes/alpha.md', 'drawings/board.excalidraw'] }),
+      'utf-8'
+    )
+
+    const settings = await new SettingsStore().readVault(root)
+
+    expect(settings.recentPageTargets).toEqual([
+      { kind: 'note', path: 'notes/alpha.md' },
+      { kind: 'drawing', path: 'drawings/board.excalidraw' }
+    ])
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"recentPageTargets"'
+    )
+  })
+
   it('round-trips workspace views in the vault core settings file', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const store = new SettingsStore()
@@ -167,6 +208,7 @@ describe('SettingsStore', () => {
         updatedAt: '2026-05-01T00:00:00.000Z'
       }
     ])
+    expect(settings.projects[0].meetings).toEqual([])
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0].taskType).toBe('follow-up')
     expect(settings.calendarTasks[0].status).toBe('pending')

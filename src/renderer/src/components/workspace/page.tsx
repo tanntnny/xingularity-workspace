@@ -31,9 +31,9 @@ const WorkspacePageHeader = React.forwardRef<HTMLElement, WorkspacePageHeaderPro
     >
       <div className="min-w-0">
         {eyebrow ? <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p> : null}
-        <h1 className="mt-2 inline-flex items-center gap-3 text-3xl font-semibold tracking-tight text-foreground">
+        <h1 className="mt-2 inline-flex min-w-0 max-w-full items-center gap-3 text-3xl font-semibold tracking-tight text-foreground">
           {icon}
-          <span>{heading}</span>
+          <span className="min-w-0 truncate">{heading}</span>
         </h1>
         {description ? (
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{description}</p>
@@ -83,7 +83,9 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
             <header className="flex flex-col gap-4 border-b border-panel-border pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 {heading ? (
-                  <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
+                  <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
+                    {heading}
+                  </h1>
                 ) : null}
                 {description ? (
                   <p className="mt-1 text-sm text-muted-foreground">{description}</p>

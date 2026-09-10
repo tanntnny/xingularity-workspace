@@ -15,6 +15,7 @@ import { DocumentWorkspaceFooterStatus } from '../components/ui/document-workspa
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagEditor } from '../components/TagEditor'
+import { WorkspaceReadingWidth } from '../components/workspace'
 import { cn } from '../lib/utils'
 import type { NoteVimMode } from '../lib/noteVimMode'
 
@@ -157,14 +158,16 @@ function ScrollAwareNoteTitleArea({
         }
       }}
       className={cn(
-        'sticky top-0 z-20 bg-workspace px-8 py-5 transition-[box-shadow,opacity,transform] duration-200 ease-out motion-reduce:transition-none',
+        'sticky top-0 z-20 bg-workspace transition-[box-shadow,opacity,transform] duration-200 ease-out motion-reduce:transition-none',
         hasScrolled && !isTitleHidden ? 'shadow-sm' : undefined,
         isTitleHidden
           ? 'pointer-events-none -translate-y-full opacity-0'
           : 'translate-y-0 opacity-100'
       )}
     >
-      {children}
+      <div data-testid="note-title-content" className="py-5">
+        {children}
+      </div>
     </header>
   )
 }
@@ -209,60 +212,63 @@ export function EditorPage({
   }
 
   return (
-    <div className="note-editor-surface flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div className="h-full min-h-0 overflow-hidden">
-          <div
-            ref={noteScrollRef}
-            className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1"
-          >
-            <ScrollAwareNoteTitleArea
-              key={notePath}
-              notePath={notePath}
-              scrollRef={noteScrollRef}
-              titleRef={noteTitleRef}
+    <WorkspaceReadingWidth data-testid="note-editor-page-content" className="h-full min-h-0">
+      <div className="note-editor-surface flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
+            <div
+              ref={noteScrollRef}
+              className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1"
             >
-              <div className="flex flex-col gap-3">
-                <div className="flex min-w-0 items-center">
-                  <InlineEditableText
-                    value={currentName}
-                    onCommit={onRename}
-                    editToken={titleEditToken}
-                    displayAs="h1"
-                    displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-3xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
-                    inputClassName="m-0 h-auto min-w-0 flex-1 origin-left text-3xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out focus-visible:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
-                    inputVariant="ghost"
-                    title="Click to rename"
-                  />
+              <ScrollAwareNoteTitleArea
+                key={notePath}
+                notePath={notePath}
+                scrollRef={noteScrollRef}
+                titleRef={noteTitleRef}
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex min-w-0 items-center">
+                    <InlineEditableText
+                      value={currentName}
+                      onCommit={onRename}
+                      editToken={titleEditToken}
+                      displayAs="h1"
+                      displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-3xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
+                      inputClassName="m-0 h-auto min-w-0 flex-1 origin-left text-3xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out focus-visible:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
+                      inputVariant="ghost"
+                      title="Click to rename"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
+                    <TagEditor
+                      value={tags}
+                      availableTags={availableTags}
+                      onChange={handleTagChange}
+                      onFind={onFindByTag}
+                      label="Note tags"
+                      testId="note-tags-editor"
+                      className="min-w-0"
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
-                  <TagEditor
-                    value={tags}
-                    availableTags={availableTags}
-                    onChange={handleTagChange}
-                    onFind={onFindByTag}
-                    label="Note tags"
-                    testId="note-tags-editor"
-                    className="min-w-0"
-                  />
-                </div>
+              </ScrollAwareNoteTitleArea>
+              <div data-testid="note-editor-content" className="h-full pb-8 pt-5">
+                <Editor
+                  ref={editorRef}
+                  initialContent={initialContent}
+                  density="compact"
+                  onDirty={onDirty}
+                  onSnapshotChange={onSnapshotChange}
+                  onDropFile={onDropFile}
+                  onPasteImage={onPasteImage}
+                  notes={notes}
+                  currentNotePath={notePath}
+                  onOpenNoteLink={onOpenNoteLink}
+                  vimModeEnabled={vimModeEnabled}
+                  vimKeyMappings={vimKeyMappings}
+                  onVimModeChange={setVimMode}
+                />
               </div>
-            </ScrollAwareNoteTitleArea>
-            <div className="h-full px-8 pb-8 pt-5">
-              <Editor
-                ref={editorRef}
-                initialContent={initialContent}
-                onDirty={onDirty}
-                onSnapshotChange={onSnapshotChange}
-                onDropFile={onDropFile}
-                onPasteImage={onPasteImage}
-                notes={notes}
-                currentNotePath={notePath}
-                onOpenNoteLink={onOpenNoteLink}
-                vimModeEnabled={vimModeEnabled}
-                vimKeyMappings={vimKeyMappings}
-                onVimModeChange={setVimMode}
-              />
             </div>
           </div>
         </div>
@@ -272,6 +278,6 @@ export function EditorPage({
           <span data-testid="note-vim-mode-badge">{VIM_MODE_BADGE_LABELS[vimMode]}</span>
         </DocumentWorkspaceFooterStatus>
       ) : null}
-    </div>
+    </WorkspaceReadingWidth>
   )
 }

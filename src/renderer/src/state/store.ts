@@ -51,6 +51,7 @@ export const useVaultStore = create<VaultState>((set) => ({
     lastVaultPath: null,
     lastOpenedNotePath: null,
     recentNotebookPaths: [],
+    recentPageTargets: [],
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],

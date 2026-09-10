@@ -255,7 +255,7 @@ function ResourceFilterGroup({
             data-checked={selected ? 'true' : 'false'}
             data-testid={`resource-filter-${testIdPrefix}:${option.value}`}
             className={cn(
-              'group min-h-9 cursor-pointer rounded-sm px-2 text-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground',
+              'min-h-9 cursor-pointer rounded-sm px-2 text-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground',
               selected && 'bg-muted'
             )}
           >

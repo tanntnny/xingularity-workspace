@@ -19,6 +19,7 @@ import { Button } from './ui/button'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import { StatusChip } from './ui/status-chip'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import type { TableSortState } from '../lib/tableSort'
 
 export const TASK_TABLE_SORTABLE_COLUMNS = [
@@ -64,13 +65,15 @@ export function TaskTable({
             event.stopPropagation()
             onOpenTask(row.task.id)
           }}
-          className="h-auto max-w-full justify-start truncate rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+          className="h-auto max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
           aria-label={`Open task: ${row.task.title}`}
           title={row.task.title}
         >
-          <span className={isTaskDone(row.task) ? 'truncate line-through' : 'truncate'}>
+          <WorkspaceTextFade
+            className={isTaskDone(row.task) ? 'min-w-0 flex-1 line-through' : 'min-w-0 flex-1'}
+          >
             {row.task.title}
-          </span>
+          </WorkspaceTextFade>
         </Button>
       )
     },
@@ -142,7 +145,7 @@ export function TaskTable({
           title={row.projectLabel}
         >
           {row.project ? <NoteShapeIcon icon={row.project.icon} size={18} /> : null}
-          <span className="min-w-0 truncate">{row.projectLabel}</span>
+          <WorkspaceTextFade className="min-w-0 flex-1">{row.projectLabel}</WorkspaceTextFade>
         </span>
       )
     },
@@ -152,9 +155,12 @@ export function TaskTable({
       cellClassName: 'min-w-40 max-w-[20rem]',
       sortValue: (row) => row.milestoneLabel,
       renderCell: (row) => (
-        <span className="block truncate text-sm text-muted-foreground" title={row.milestoneLabel}>
+        <WorkspaceTextFade
+          className="min-w-0 text-sm text-muted-foreground"
+          title={row.milestoneLabel}
+        >
           {row.milestoneLabel}
-        </span>
+        </WorkspaceTextFade>
       )
     },
     {

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -37,6 +38,7 @@ import { createResourceLabelDrafts, type ResourceLabelDraft } from '../lib/resou
 import { ResourceLabelsEditor } from './ResourceLabelsEditor'
 import { ResourceLabelChip } from './ResourceLabelChip'
 import { ResourceProjectsEditor } from './ResourceProjectsEditor'
+import { NoteShapeIcon } from './NoteShapeIcon'
 import {
   getProjectResourceRows,
   isExternalHttpUrl,
@@ -78,11 +80,13 @@ import {
 } from './ui/action-menu'
 import { EmptyState } from './ui/empty-state'
 import { Input } from './ui/input'
+import { Badge } from './ui/badge'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import { ColumnFolderPicker, type ColumnFolderPickerNode } from './ui/column-folder-picker'
 import { StatusChip } from './ui/status-chip'
 import { StatusChipToggleGroup, StatusChipToggleItem } from './ui/status-chip-toggle'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 import type { TableSortState } from '../lib/tableSort'
 import {
@@ -116,9 +120,9 @@ const GOOGLE_DOC_MIME_TYPE = 'application/vnd.google-apps.document'
 
 const GLOBAL_RESOURCE_SORTABLE_COLUMNS = [
   'resource',
+  'projects',
   'source',
   'labels',
-  'projects',
   'health',
   'location',
   'last-checked'
@@ -515,6 +519,14 @@ export function ProjectResourcesTable({
         : undefined
   })
 
+  const getLinkedProjects = (resource: ResourceRef): Project[] => {
+    const projectIds = new Set(getResourceProjectIds(resource, projects, relations))
+
+    return projects
+      .filter((candidate) => projectIds.has(candidate.id))
+      .sort((left, right) => left.name.localeCompare(right.name))
+  }
+
   const columns: readonly TableRowListColumn<ProjectResourceRow>[] = [
     {
       id: 'resource',
@@ -529,24 +541,67 @@ export function ProjectResourcesTable({
             event.stopPropagation()
             openResource(row)
           }}
-          className="h-auto max-w-full justify-start truncate rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+          className="h-auto max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
           aria-label={`Open ${row.resource.title}`}
           title={resourceLocationLabel(row.resource)}
         >
           <span className="flex min-w-0 items-center gap-2.5">
             <ResourceBrandIcon resource={row.resource} />
-            <span className="min-w-0 truncate">{row.resource.title}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1">{row.resource.title}</WorkspaceTextFade>
           </span>
         </Button>
       )
     },
+    ...(scope === 'global'
+      ? [
+          {
+            id: 'projects',
+            header: 'Projects',
+            cellClassName: 'min-w-40 max-w-[20rem]',
+            sortValue: ({ resource }: ProjectResourceRow) => {
+              const projectNames = getLinkedProjects(resource).map((project) => project.name)
+              return projectNames.length > 0 ? projectNames.join(', ') : null
+            },
+            renderCell: ({ resource }: ProjectResourceRow) => {
+              const linkedProjects = getLinkedProjects(resource)
+              if (linkedProjects.length === 0) {
+                return <span className="text-sm text-muted-foreground">—</span>
+              }
+
+              const projectNames = linkedProjects.map((project) => project.name).join(', ')
+
+              return (
+                <WorkspaceTextFade
+                  className="max-w-full text-sm text-muted-foreground"
+                  title={projectNames}
+                >
+                  {linkedProjects.map((linkedProject, index) => (
+                    <Fragment key={linkedProject.id}>
+                      {index > 0 ? ', ' : null}
+                      <span className="inline-flex shrink-0 items-center gap-1.5">
+                        <NoteShapeIcon icon={linkedProject.icon} size={16} />
+                        <span>{linkedProject.name}</span>
+                      </span>
+                    </Fragment>
+                  ))}
+                </WorkspaceTextFade>
+              )
+            }
+          } satisfies TableRowListColumn<ProjectResourceRow>
+        ]
+      : []),
     {
       id: 'source',
       header: 'Source',
       cellClassName: 'whitespace-nowrap',
       sortValue: ({ resource }) => resourceProductLabel(resource),
       renderCell: ({ resource }) => (
-        <span className="text-sm text-muted-foreground">{resourceProductLabel(resource)}</span>
+        <WorkspaceTextFade
+          className="max-w-full text-sm text-muted-foreground"
+          title={resourceProductLabel(resource)}
+        >
+          {resourceProductLabel(resource)}
+        </WorkspaceTextFade>
       )
     },
     {
@@ -561,37 +616,6 @@ export function ProjectResourcesTable({
       },
       renderCell: ({ resource }) => <ResourceLabelsCell resource={resource} />
     },
-    ...(scope === 'global'
-      ? [
-          {
-            id: 'projects',
-            header: 'Projects',
-            cellClassName: 'min-w-40 max-w-[20rem]',
-            sortValue: ({ resource }: ProjectResourceRow) => {
-              const projectIds = getResourceProjectIds(resource, projects, relations)
-              const projectNames = projects
-                .filter((candidate) => projectIds.includes(candidate.id))
-                .map((candidate) => candidate.name)
-                .sort((left, right) => left.localeCompare(right))
-              return projectNames.length > 0 ? projectNames.join(', ') : null
-            },
-            renderCell: ({ resource }: ProjectResourceRow) => {
-              const projectIds = getResourceProjectIds(resource, projects, relations)
-              const projectNames = projects
-                .filter((candidate) => projectIds.includes(candidate.id))
-                .map((candidate) => candidate.name)
-              return (
-                <span
-                  className="block truncate text-sm text-muted-foreground"
-                  title={projectNames.join(', ') || 'Unassigned'}
-                >
-                  {projectNames.length > 0 ? projectNames.join(', ') : 'Unassigned'}
-                </span>
-              )
-            }
-          } satisfies TableRowListColumn<ProjectResourceRow>
-        ]
-      : []),
     {
       id: 'health',
       header: 'Health',
@@ -618,12 +642,12 @@ export function ProjectResourcesTable({
       cellClassName: 'min-w-56 max-w-[28rem]',
       sortValue: ({ resource }) => resourceLocationLabel(resource),
       renderCell: ({ resource }) => (
-        <span
-          className="block truncate text-sm text-muted-foreground"
+        <WorkspaceTextFade
+          className="text-sm text-muted-foreground"
           title={resourceLocationLabel(resource)}
         >
           {resourceLocationLabel(resource)}
-        </span>
+        </WorkspaceTextFade>
       )
     },
     {
@@ -718,7 +742,9 @@ export function ProjectResourcesTable({
         {preview ? (
           <div className="border-t border-border/60 bg-muted/20 px-4 py-3" aria-live="polite">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold">Preview · {preview.resource.title}</p>
+              <p className="min-w-0 truncate text-xs font-semibold" title={preview.resource.title}>
+                Preview · {preview.resource.title}
+              </p>
               <WorkspaceIconButton
                 label="Close preview"
                 aria-label="Close preview"
@@ -1041,18 +1067,24 @@ function ResourceLabelsCell({ resource }: { resource: ResourceRef }): ReactEleme
     return <span className="text-sm text-muted-foreground">—</span>
   }
 
+  const visibleLabel = labels[0]
+  const remainingCount = labels.length - 1
+
   return (
     <div
-      className="flex max-w-full flex-wrap gap-1"
+      className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden"
       title={labels.map(formatResourceLabel).join(', ')}
     >
-      {labels.map((label) => (
-        <ResourceLabelChip
-          key={`${label.key}:${label.value}`}
-          label={label}
-          className="max-w-full text-xs"
-        />
-      ))}
+      <ResourceLabelChip label={visibleLabel} className="max-w-full text-xs" />
+      {remainingCount > 0 ? (
+        <Badge
+          variant="neutral"
+          className="h-6 shrink-0 px-1.5 text-[11px]"
+          aria-label={`${remainingCount} more resource label${remainingCount === 1 ? '' : 's'}`}
+        >
+          +{remainingCount}
+        </Badge>
+      ) : null}
     </div>
   )
 }

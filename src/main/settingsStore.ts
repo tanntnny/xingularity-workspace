@@ -5,6 +5,7 @@ import path from 'node:path'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import { normalizeWorkspaceViews } from '../shared/workspaceViews'
 import { normalizeTaskTags } from '../shared/taskTags'
+import { isExcalidrawPath } from '../shared/excalidrawFile'
 import { isTaskDone } from '../shared/taskStatus'
 import {
   AppSettings,
@@ -14,6 +15,7 @@ import {
   NOTE_VIM_MAPPING_MODE_VALUES,
   NoteVimKeyMapping,
   Project,
+  ProjectMeeting,
   ProjectMilestone,
   ProjectUpdate,
   WorkspaceFeatureFlags
@@ -29,6 +31,7 @@ import {
 import { ProjectStore } from './projectStore'
 import { TaskStore } from './taskStore'
 import { normalizeRecentNotebookPaths } from '../shared/recentNotebookFiles'
+import { normalizeRecentPageTargets, type RecentPageTarget } from '../shared/recentPages'
 import { migrateProjectResources, normalizeResourceRef } from '../shared/resourceDomain'
 
 interface GlobalSettings {
@@ -144,12 +147,32 @@ function hasLegacyAppearanceSettings(value: unknown): boolean {
   )
 }
 
+function seedRecentPageTargets(value: unknown): RecentPageTarget[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return normalizeRecentPageTargets(
+    value.flatMap((item) => {
+      if (typeof item !== 'string') {
+        return []
+      }
+
+      const path = item.trim()
+      return path
+        ? [{ kind: isExcalidrawPath(path) ? ('drawing' as const) : ('note' as const), path }]
+        : []
+    })
+  )
+}
+
 export function createDefaultAppSettings(): AppSettings {
   return {
     isSidebarCollapsed: false,
     lastVaultPath: null,
     lastOpenedNotePath: null,
     recentNotebookPaths: [],
+    recentPageTargets: [],
     lastOpenedProjectId: null,
     favoriteNotePaths: [],
     favoriteProjectIds: [],
@@ -194,6 +217,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   const sanitizedParsed = { ...(parsed as Partial<AppSettings> & Record<string, unknown>) }
   delete sanitizedParsed.performanceModeEnabled
   delete sanitizedParsed.workspaceVibrancyEnabled
+  delete sanitizedParsed.recentPageIds
 
   if (sanitizedParsed.profile && typeof sanitizedParsed.profile === 'object') {
     const sanitizedProfile = { ...(sanitizedParsed.profile as Record<string, unknown>) }
@@ -215,6 +239,11 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     parsed.featureFlags && typeof parsed.featureFlags === 'object'
       ? (parsed.featureFlags as Partial<WorkspaceFeatureFlags>)
       : {}
+
+  const recentPageTargets =
+    parsed.recentPageTargets === undefined
+      ? seedRecentPageTargets(parsed.recentNotebookPaths)
+      : normalizeRecentPageTargets(parsed.recentPageTargets)
 
   return {
     ...defaults,
@@ -316,6 +345,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath,
     lastOpenedNotePath: parsed.lastOpenedNotePath ?? defaults.lastOpenedNotePath,
     recentNotebookPaths: normalizeRecentNotebookPaths(parsed.recentNotebookPaths),
+    recentPageTargets,
     lastOpenedProjectId: parsed.lastOpenedProjectId ?? defaults.lastOpenedProjectId,
     favoriteNotePaths: Array.isArray(parsed.favoriteNotePaths)
       ? parsed.favoriteNotePaths.filter((item): item is string => typeof item === 'string')
@@ -367,6 +397,7 @@ function normalizeProject(input: unknown): Project[] {
       : undefined,
     milestones: normalizeProjectMilestones(candidate.milestones),
     updates: normalizeProjectUpdates(candidate.updates, candidate.id),
+    meetings: normalizeProjectMeetings(candidate.meetings, candidate.id),
     updatedAt:
       typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
         ? candidate.updatedAt
@@ -416,6 +447,58 @@ function normalizeProjectUpdates(value: unknown, projectId: string): ProjectUpda
           candidate.status === 'at-risk' || candidate.status === 'off-track'
             ? candidate.status
             : 'on-track',
+        createdAt:
+          typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
+            ? candidate.createdAt
+            : now,
+        updatedAt:
+          typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+            ? candidate.updatedAt
+            : now
+      }
+    ]
+  })
+}
+
+function normalizeProjectMeetings(value: unknown, projectId: string): ProjectMeeting[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) {
+      return []
+    }
+
+    const candidate = item as Partial<ProjectMeeting>
+    const id = typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id : null
+    const markdown = typeof candidate.markdown === 'string' ? candidate.markdown : null
+    if (!id || markdown === null || seen.has(id)) {
+      return []
+    }
+
+    const now = new Date().toISOString()
+    seen.add(id)
+    return [
+      {
+        id,
+        projectId,
+        markdown,
+        type:
+          candidate.type === 'stand-up' ||
+          candidate.type === 'planning' ||
+          candidate.type === 'review' ||
+          candidate.type === 'client' ||
+          candidate.type === 'one-on-one'
+            ? candidate.type
+            : 'other',
+        outcome:
+          candidate.outcome === 'decisions-made' ||
+          candidate.outcome === 'follow-up-needed' ||
+          candidate.outcome === 'blocked'
+            ? candidate.outcome
+            : 'informational',
         createdAt:
           typeof candidate.createdAt === 'string' && candidate.createdAt.trim()
             ? candidate.createdAt
@@ -679,6 +762,10 @@ function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolea
     return true
   }
 
+  if (Array.isArray(settings.recentPageTargets) && settings.recentPageTargets.length > 0) {
+    return true
+  }
+
   if (typeof settings.lastOpenedProjectId === 'string' && settings.lastOpenedProjectId.trim()) {
     return true
   }
@@ -870,7 +957,10 @@ export class SettingsStore {
         resolvedCore !== coreParsed ||
         Boolean(resolvedCore?.projects) ||
         Boolean(resolvedCore?.projectIcons) ||
-        Boolean(resolvedCore?.calendarTasks)
+        Boolean(resolvedCore?.calendarTasks) ||
+        (!Object.hasOwn(resolvedCore ?? {}, 'recentPageTargets') &&
+          Array.isArray(resolvedCore?.recentNotebookPaths) &&
+          resolvedCore.recentNotebookPaths.length > 0)
 
       const normalized = normalizeSettings({
         ...(resolvedCore ?? {}),
@@ -986,6 +1076,7 @@ export class SettingsStore {
       lastVaultPath: settings.lastVaultPath,
       lastOpenedNotePath: settings.lastOpenedNotePath,
       recentNotebookPaths: settings.recentNotebookPaths,
+      recentPageTargets: settings.recentPageTargets,
       lastOpenedProjectId: settings.lastOpenedProjectId,
       favoriteNotePaths: settings.favoriteNotePaths,
       favoriteProjectIds: settings.favoriteProjectIds,

@@ -75,9 +75,9 @@
     --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
     --drop-zone-active-border: var(--ring);
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
-    --scrollbar-size: 5px;
-    --scrollbar-thumb: #b8b8b8;
-    --scrollbar-thumb-hover: #8a8a8a;
+    --scrollbar-size: 3px;
+    --scrollbar-thumb: #d0d0d0;
+    --scrollbar-thumb-hover: #b8b8b8;
     --radius: 0.75rem;
     --radius-surface: var(--radius);
     --radius-shell: calc(var(--radius) + 2px);
@@ -172,6 +172,16 @@
     --status-chip-calendar-task-type-errand-icon: var(--calendar-task-errand-border);
     --status-chip-calendar-task-type-follow-up-icon: var(--calendar-task-follow-up-border);
     --status-chip-calendar-task-type-other-icon: var(--calendar-task-other-border);
+    --status-chip-meeting-type-stand-up-icon: var(--info);
+    --status-chip-meeting-type-planning-icon: var(--calendar-task-meeting-border);
+    --status-chip-meeting-type-review-icon: var(--calendar-task-review-border);
+    --status-chip-meeting-type-client-icon: var(--chart-default);
+    --status-chip-meeting-type-one-on-one-icon: var(--tag-3-border);
+    --status-chip-meeting-type-other-icon: var(--muted-foreground);
+    --status-chip-meeting-outcome-decisions-made-icon: var(--success);
+    --status-chip-meeting-outcome-follow-up-needed-icon: var(--warning);
+    --status-chip-meeting-outcome-informational-icon: var(--info);
+    --status-chip-meeting-outcome-blocked-icon: var(--destructive);
     --status-chip-tag-0-icon: var(--tag-0-border);
     --status-chip-tag-1-icon: var(--tag-1-border);
     --status-chip-tag-2-icon: var(--tag-2-border);
@@ -306,8 +316,8 @@
     --input: #404040;
     --ring: #a3a3a3;
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
-    --scrollbar-thumb: #454545;
-    --scrollbar-thumb-hover: #6b6b6b;
+    --scrollbar-thumb: #303030;
+    --scrollbar-thumb-hover: #484848;
     --sidebar-background: #080808;
     --sidebar-foreground: #eeeeee;
     --sidebar-primary: #e5e5e5;
@@ -384,6 +394,16 @@
     --status-chip-calendar-task-type-errand-icon: var(--calendar-task-errand-border);
     --status-chip-calendar-task-type-follow-up-icon: var(--calendar-task-follow-up-border);
     --status-chip-calendar-task-type-other-icon: var(--calendar-task-other-border);
+    --status-chip-meeting-type-stand-up-icon: var(--info);
+    --status-chip-meeting-type-planning-icon: var(--calendar-task-meeting-border);
+    --status-chip-meeting-type-review-icon: var(--calendar-task-review-border);
+    --status-chip-meeting-type-client-icon: var(--chart-default);
+    --status-chip-meeting-type-one-on-one-icon: var(--tag-3-border);
+    --status-chip-meeting-type-other-icon: var(--muted-foreground);
+    --status-chip-meeting-outcome-decisions-made-icon: var(--success);
+    --status-chip-meeting-outcome-follow-up-needed-icon: var(--warning);
+    --status-chip-meeting-outcome-informational-icon: var(--info);
+    --status-chip-meeting-outcome-blocked-icon: var(--destructive);
     --status-chip-tag-0-icon: var(--tag-0-border);
     --status-chip-tag-1-icon: var(--tag-1-border);
     --status-chip-tag-2-icon: var(--tag-2-border);
@@ -466,10 +486,15 @@
 
   *::-webkit-scrollbar-thumb {
     border-radius: 9999px;
+    background: transparent;
+    transition: background-color 160ms ease;
+  }
+
+  *.scrollbar-visible::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
   }
 
-  *::-webkit-scrollbar-thumb:hover {
+  *.scrollbar-visible::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
   }
 
@@ -480,6 +505,10 @@
   @supports not selector(::-webkit-scrollbar) {
     * {
       scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    *.scrollbar-visible {
       scrollbar-color: var(--scrollbar-thumb) transparent;
     }
   }
@@ -1979,8 +2008,24 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%);
-  mask-image: linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%);
+  --workspace-text-fade-width: 2rem;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-text-fade-width))),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-text-fade-width))),
+    transparent 100%
+  );
+}
+
+.workspace-text-fade[data-overflowing='false'] {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .workspace-text-clip {

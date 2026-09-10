@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow
 } from './table'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export interface TableRowListColumn<T> {
   id: string
@@ -158,9 +159,9 @@ export function TableRowList<T>({
                 className="border-0 bg-transparent"
               >
                 <TableCell colSpan={columns.length} className="px-4 pb-1 pt-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                    <span className="min-w-0 truncate">{group.label}</span>
-                    <span className="rounded-[var(--radius-control)] bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                  <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
+                    <WorkspaceTextFade className="min-w-0 flex-1">{group.label}</WorkspaceTextFade>
+                    <span className="shrink-0 rounded-[var(--radius-control)] bg-muted px-1.5 py-0.5 text-[11px] font-medium">
                       {group.items.length}
                     </span>
                   </div>

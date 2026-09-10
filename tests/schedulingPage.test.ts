@@ -137,8 +137,8 @@ describe('Scheduling page UI', () => {
     expect(markup).toContain('rounded-l-xl')
     expect(markup).toContain('rounded-r-xl')
     expect(markup).not.toContain('hover:underline')
-    expect(markup).toContain('>Daily planning</button>')
-    expect(markup).toContain('>Daily at 09:00</td>')
+    expect(markup).toContain('>Daily planning</span>')
+    expect(markup).toContain('>Daily at 09:00</span></td>')
     expect(markup).not.toContain('CollapsibleWorkspacePanelSection')
   })
 

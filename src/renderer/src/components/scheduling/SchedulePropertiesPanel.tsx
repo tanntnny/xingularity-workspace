@@ -114,7 +114,9 @@ function SchedulePropertyRow({
       className="grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] items-start gap-2 px-3 py-2"
       data-testid={testId}
     >
-      <span className="pt-1 text-sm font-medium text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate pt-1 text-sm font-medium text-muted-foreground">
+        {label}
+      </span>
       <div className="min-w-0 max-w-full overflow-x-auto text-xs" data-testid={`${testId}-value`}>
         <div className="flex w-max min-w-full flex-nowrap items-start justify-start gap-1">
           {children}
@@ -171,7 +173,7 @@ function PermissionPopover({
           aria-label="Configure permissions"
           data-testid="scheduling-permissions-trigger"
         >
-          <span>{getPermissionSummary(permissions)}</span>
+          <span className="min-w-0 truncate">{getPermissionSummary(permissions)}</span>
           <ChevronDown aria-hidden="true" />
         </Button>
       </PopoverTrigger>
@@ -202,7 +204,9 @@ function PermissionPopover({
                     data-testid={`scheduling-permission:${option.value}`}
                   />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{option.label}</span>
+                    <span className="block min-w-0 truncate text-sm font-medium">
+                      {option.label}
+                    </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
                       {option.description}
                     </span>

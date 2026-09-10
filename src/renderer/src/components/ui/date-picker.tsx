@@ -26,13 +26,13 @@ export function DatePicker({
         <Button
           variant="outline"
           className={cn(
-            'w-full justify-start text-left font-normal',
+            'w-full min-w-0 justify-start overflow-hidden text-left font-normal',
             !date && 'text-muted-foreground',
             className
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, 'PPP') : <span>{placeholder}</span>}
+          <span className="min-w-0 truncate">{date ? format(date, 'PPP') : placeholder}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
@@ -82,7 +82,7 @@ export function DatePickerISO({
           variant="outline"
           size="sm"
           className={cn(
-            'justify-start text-left font-normal',
+            'min-w-0 justify-start overflow-hidden text-left font-normal',
             'rounded-[var(--radius-button-pill)]',
             !date && 'text-muted-foreground',
             className
@@ -90,7 +90,9 @@ export function DatePickerISO({
           aria-label={ariaLabel}
         >
           {showIcon ? <CalendarIcon className="mr-2 h-3.5 w-3.5" /> : null}
-          {date ? format(date, displayFormat) : <span>{placeholder}</span>}
+          <span className="min-w-0 truncate">
+            {date ? format(date, displayFormat) : placeholder}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

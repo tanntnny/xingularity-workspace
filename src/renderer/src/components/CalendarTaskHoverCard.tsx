@@ -40,7 +40,9 @@ export function CalendarTaskHoverCard({
           <CalendarTaskPropertyRow label="Project">
             <span className="flex min-w-0 items-center gap-1.5" title={project.name}>
               <NoteShapeIcon icon={project.icon} size={16} />
-              <span className="min-w-0 truncate">{project.name}</span>
+              <span className="min-w-0 truncate" title={project.name}>
+                {project.name}
+              </span>
             </span>
           </CalendarTaskPropertyRow>
         ) : task.projectId ? (
@@ -75,7 +77,12 @@ function CalendarTaskPropertyRow({
   return (
     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-3 text-xs">
       <dt className="font-medium text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 text-foreground">{children}</dd>
+      <dd
+        className="min-w-0 truncate text-foreground"
+        title={typeof children === 'string' ? children : undefined}
+      >
+        {children}
+      </dd>
     </div>
   )
 }

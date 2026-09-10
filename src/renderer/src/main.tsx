@@ -19,6 +19,37 @@ function AppRoot() {
   }, [])
 
   useEffect(() => {
+    const timers = new Map<Element, number>()
+
+    const handleScroll = (event: Event): void => {
+      const target = event.target instanceof Element ? event.target : document.scrollingElement
+      if (!target) return
+
+      target.classList.add('scrollbar-visible')
+
+      const existingTimer = timers.get(target)
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer)
+      }
+
+      const timer = window.setTimeout(() => {
+        target.classList.remove('scrollbar-visible')
+        timers.delete(target)
+      }, 700)
+
+      timers.set(target, timer)
+    }
+
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+
+    return () => {
+      document.removeEventListener('scroll', handleScroll, true)
+      timers.forEach((timer) => window.clearTimeout(timer))
+      timers.clear()
+    }
+  }, [])
+
+  useEffect(() => {
     const removeWindowError = (event: ErrorEvent): void => {
       if (isNonFatalRendererErrorMessage(event.message)) {
         event.preventDefault()

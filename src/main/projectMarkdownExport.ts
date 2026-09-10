@@ -4,6 +4,7 @@ import {
   CALENDAR_TASK_TYPE_OPTIONS,
   formatCalendarTaskType,
   TASK_STATUS_OPTIONS,
+  type ProjectMeeting,
   type CalendarTask,
   type Project,
   type ProjectUpdate
@@ -16,6 +17,7 @@ export interface ProjectMarkdownExportInput {
   notebookPath: string
   tasks: readonly CalendarTask[]
   updates: readonly ProjectUpdate[]
+  meetings?: readonly ProjectMeeting[]
   notes: readonly FolderMarkdownNote[]
   externalDocuments?: readonly ProjectMarkdownExternalDocument[]
   exportedAt: string
@@ -45,6 +47,8 @@ export function buildProjectMarkdown(input: ProjectMarkdownExportInput): string 
     ...buildTaskSection(input.tasks),
     '',
     ...buildUpdateSection(input.updates),
+    '',
+    ...buildMeetingSection(input.meetings ?? []),
     '',
     ...buildNoteSection(input.notes),
     '',
@@ -141,6 +145,31 @@ function buildUpdateSection(updates: readonly ProjectUpdate[]): string[] {
   return lines
 }
 
+function buildMeetingSection(meetings: readonly ProjectMeeting[]): string[] {
+  if (meetings.length === 0) {
+    return ['## Meetings', '', '_No meetings found._']
+  }
+
+  const sortedMeetings = [...meetings].sort((left, right) => {
+    const dateOrder = compareDates(right.createdAt, left.createdAt)
+    return dateOrder || right.id.localeCompare(left.id)
+  })
+  const lines = ['## Meetings', '']
+
+  sortedMeetings.forEach((meeting, index) => {
+    lines.push(
+      `### ${meeting.createdAt} · ${formatMeetingType(meeting.type)} · ${formatMeetingOutcome(meeting.outcome)}`,
+      '',
+      meeting.markdown.trim() || '_No meeting content._'
+    )
+    if (index < sortedMeetings.length - 1) {
+      lines.push('')
+    }
+  })
+
+  return lines
+}
+
 function buildNoteSection(notes: readonly FolderMarkdownNote[]): string[] {
   if (notes.length === 0) {
     return ['## Linked Notes', '', '_No linked notes found._']
@@ -217,6 +246,14 @@ function formatTaskStatus(value: CalendarTask['status']): string {
 }
 
 function formatUpdateStatus(value: ProjectUpdate['status']): string {
+  return formatLabel(value)
+}
+
+function formatMeetingType(value: ProjectMeeting['type']): string {
+  return formatLabel(value)
+}
+
+function formatMeetingOutcome(value: ProjectMeeting['outcome']): string {
   return formatLabel(value)
 }
 

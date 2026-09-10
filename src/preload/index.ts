@@ -255,7 +255,10 @@ const api: RendererVaultApi = {
     deleteMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectMilestone, input),
     createUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.createProjectUpdate, input),
     updateUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateProjectUpdate, input),
-    deleteUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectUpdate, input)
+    deleteUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectUpdate, input),
+    createMeeting: (input) => ipcRenderer.invoke(IPC_CHANNELS.createProjectMeeting, input),
+    updateMeeting: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateProjectMeeting, input),
+    deleteMeeting: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteProjectMeeting, input)
   },
   tasks: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.createTask, input),

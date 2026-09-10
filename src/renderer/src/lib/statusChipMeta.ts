@@ -4,6 +4,8 @@ import type {
   CalendarTask,
   CalendarTaskType,
   Project,
+  ProjectMeetingOutcome,
+  ProjectMeetingType,
   ProjectState,
   ProjectUpdateStatus,
   ResourceState,
@@ -29,7 +31,10 @@ import {
   AntennaBars5,
   Archive,
   ArchiveOutline,
+  Briefcase,
+  CalendarCheck,
   CheckCircle2,
+  CircleCheck,
   ChartLine,
   CircleDashed,
   CircleDotted,
@@ -45,6 +50,9 @@ import {
   Hexagon,
   Inbox,
   Loader2,
+  ListTodo,
+  MessageSquare,
+  NotebookPen,
   Play,
   ShieldOutline,
   Star,
@@ -342,6 +350,87 @@ export const PROJECT_UPDATE_CHIP_OPTIONS: readonly StatusChipOption[] = [
   { value: 'on-track', ...PROJECT_UPDATE_CHIP_ITEMS['on-track'] },
   { value: 'at-risk', ...PROJECT_UPDATE_CHIP_ITEMS['at-risk'] },
   { value: 'off-track', ...PROJECT_UPDATE_CHIP_ITEMS['off-track'] }
+]
+
+const PROJECT_MEETING_TYPE_ICONS: Record<ProjectMeetingType, ReactElement> = {
+  'stand-up': icon(CalendarCheck),
+  planning: icon(NotebookPen),
+  review: icon(CircleCheck),
+  client: icon(Briefcase),
+  'one-on-one': icon(MessageSquare),
+  other: icon(Circle)
+}
+
+export const PROJECT_MEETING_TYPE_CHIP_ITEMS: Record<ProjectMeetingType, StatusChipItem> = {
+  'stand-up': {
+    label: 'Stand-up',
+    icon: PROJECT_MEETING_TYPE_ICONS['stand-up'],
+    iconColorToken: token('meeting-type', 'stand-up')
+  },
+  planning: {
+    label: 'Planning',
+    icon: PROJECT_MEETING_TYPE_ICONS.planning,
+    iconColorToken: token('meeting-type', 'planning')
+  },
+  review: {
+    label: 'Review',
+    icon: PROJECT_MEETING_TYPE_ICONS.review,
+    iconColorToken: token('meeting-type', 'review')
+  },
+  client: {
+    label: 'Client',
+    icon: PROJECT_MEETING_TYPE_ICONS.client,
+    iconColorToken: token('meeting-type', 'client')
+  },
+  'one-on-one': {
+    label: '1:1',
+    icon: PROJECT_MEETING_TYPE_ICONS['one-on-one'],
+    iconColorToken: token('meeting-type', 'one-on-one')
+  },
+  other: {
+    label: 'Other',
+    icon: PROJECT_MEETING_TYPE_ICONS.other,
+    iconColorToken: token('meeting-type', 'other')
+  }
+}
+
+export const PROJECT_MEETING_TYPE_CHIP_OPTIONS: readonly StatusChipOption[] = [
+  { value: 'stand-up', ...PROJECT_MEETING_TYPE_CHIP_ITEMS['stand-up'] },
+  { value: 'planning', ...PROJECT_MEETING_TYPE_CHIP_ITEMS.planning },
+  { value: 'review', ...PROJECT_MEETING_TYPE_CHIP_ITEMS.review },
+  { value: 'client', ...PROJECT_MEETING_TYPE_CHIP_ITEMS.client },
+  { value: 'one-on-one', ...PROJECT_MEETING_TYPE_CHIP_ITEMS['one-on-one'] },
+  { value: 'other', ...PROJECT_MEETING_TYPE_CHIP_ITEMS.other }
+]
+
+export const PROJECT_MEETING_OUTCOME_CHIP_ITEMS: Record<ProjectMeetingOutcome, StatusChipItem> = {
+  'decisions-made': {
+    label: 'Decisions made',
+    icon: icon(CheckCircle2),
+    iconColorToken: token('meeting-outcome', 'decisions-made')
+  },
+  'follow-up-needed': {
+    label: 'Follow-up needed',
+    icon: icon(ListTodo),
+    iconColorToken: token('meeting-outcome', 'follow-up-needed')
+  },
+  informational: {
+    label: 'Informational',
+    icon: icon(CircleDotted),
+    iconColorToken: token('meeting-outcome', 'informational')
+  },
+  blocked: {
+    label: 'Blocked',
+    icon: icon(XCircle),
+    iconColorToken: token('meeting-outcome', 'blocked')
+  }
+}
+
+export const PROJECT_MEETING_OUTCOME_CHIP_OPTIONS: readonly StatusChipOption[] = [
+  { value: 'decisions-made', ...PROJECT_MEETING_OUTCOME_CHIP_ITEMS['decisions-made'] },
+  { value: 'follow-up-needed', ...PROJECT_MEETING_OUTCOME_CHIP_ITEMS['follow-up-needed'] },
+  { value: 'informational', ...PROJECT_MEETING_OUTCOME_CHIP_ITEMS.informational },
+  { value: 'blocked', ...PROJECT_MEETING_OUTCOME_CHIP_ITEMS.blocked }
 ]
 
 type FleetingNoteTriageState = 'inbox' | 'in-progress' | 'converted' | 'archived'

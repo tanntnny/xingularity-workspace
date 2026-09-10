@@ -23,7 +23,7 @@ export function FloatingHoverCard({
   return createPortal(
     <div
       className={cn(
-        'pointer-events-none fixed z-50 rounded-md border bg-popover p-3 text-popover-foreground shadow-md',
+        'pointer-events-none fixed z-50 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border bg-popover p-3 text-popover-foreground shadow-md',
         className
       )}
       style={{

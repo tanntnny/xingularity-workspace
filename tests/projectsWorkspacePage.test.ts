@@ -13,6 +13,7 @@ import type {
   CalendarTask,
   NoteTreeNode,
   Project,
+  ProjectMeeting,
   ProjectMilestone,
   ResourceRef
 } from '../src/shared/types'
@@ -60,7 +61,7 @@ const notebookTree: NoteTreeNode[] = [
 ]
 
 function renderProjectsPage(
-  view: 'list' | 'home' | 'resources' = 'list',
+  view: 'list' | 'home' | 'meetings' | 'resources' = 'list',
   projectToRender: Project = project,
   resources: ResourceRef[] = [],
   googleDriveEnabled = false,
@@ -86,6 +87,9 @@ function renderProjectsPage(
       onCreateProjectUpdate: async () => undefined,
       onUpdateProjectUpdate: async () => undefined,
       onDeleteProjectUpdate: async () => undefined,
+      onCreateProjectMeeting: async () => undefined,
+      onUpdateProjectMeeting: async () => undefined,
+      onDeleteProjectMeeting: async () => undefined,
       noteTree: notebookTree,
       resources,
       relations: [],
@@ -537,15 +541,39 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('data-testid="project-view-tabs"')
     expect(markup).toContain('data-testid="project-view-tab:home"')
     expect(markup).toContain('data-testid="project-view-tab:pulse"')
+    expect(markup).toContain('data-testid="project-view-tab:meetings"')
     expect(markup).toContain('data-testid="project-view-tab:resources"')
     expect(markup).toContain('aria-controls="project-view-panel"')
     expect(markup).toContain('>Overview</button>')
     expect(markup).toContain('>Activity</button>')
+    expect(markup).toContain('>Meeting</button>')
     expect(markup).toContain('>Resources</button>')
     expect(markup).not.toContain('Project Home')
     expect(markup).not.toContain('>Pulse</button>')
     expect(markup).not.toContain('data-testid="project-view-tab-icon:home"')
     expect(markup).not.toContain('data-testid="project-view-tab-icon:pulse"')
+  })
+
+  it('renders the project meeting page with meeting metadata controls', () => {
+    const meeting: ProjectMeeting = {
+      id: 'meeting-1',
+      projectId: project.id,
+      markdown: 'Decided to ship the launch next week.',
+      type: 'planning',
+      outcome: 'decisions-made',
+      createdAt: '2026-08-20T11:00:00.000Z',
+      updatedAt: '2026-08-20T11:00:00.000Z'
+    }
+    const markup = renderProjectsPage('meetings', { ...project, meetings: [meeting] })
+
+    expect(markup).toContain('data-testid="project-meeting-page"')
+    expect(markup).toContain('data-testid="project-meeting-composer"')
+    expect(markup).toContain('data-testid="project-meeting-type-select"')
+    expect(markup).toContain('data-testid="project-meeting-outcome-select"')
+    expect(markup).toContain('data-testid="project-meeting-feed"')
+    expect(markup).toContain('data-testid="project-meeting-card:meeting-1"')
+    expect(markup).toContain('>Planning</span>')
+    expect(markup).toContain('>Decisions made</span>')
   })
 
   it('renders project descriptions as an inline Markdown editor', () => {

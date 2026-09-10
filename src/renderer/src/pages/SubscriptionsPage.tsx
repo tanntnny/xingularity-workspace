@@ -53,6 +53,7 @@ import { Textarea } from '../components/ui/textarea'
 import { EmptyState } from '../components/ui/empty-state'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { StatusChip } from '../components/ui/status-chip'
+import { WorkspaceTextFade } from '../components/ui/workspace-text-fade'
 import { TagEditor } from '../components/TagEditor'
 import {
   getTagChipItem,
@@ -750,9 +751,16 @@ function TreemapCard({
         <FloatingHoverCard x={hoverCard.x} y={hoverCard.y} className="w-72">
           {hoverCard.kind === 'record' ? (
             <>
-              <div className="mb-1.5 text-sm font-semibold text-foreground">{hoverCard.name}</div>
+              <div
+                className="mb-1.5 truncate text-sm font-semibold text-foreground"
+                title={hoverCard.name}
+              >
+                {hoverCard.name}
+              </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{hoverCard.category}</span>
+                <span className="min-w-0 truncate" title={hoverCard.category}>
+                  {hoverCard.category}
+                </span>
                 <StatusChip item={SUBSCRIPTION_STATUS_CHIP_ITEMS[hoverCard.status]} />
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
@@ -1138,14 +1146,26 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                             onClick={() => setSelectedId(record.id)}
                           >
                             <TableCell>
-                              <div className="font-medium text-foreground">{record.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {record.provider ?? 'No provider'}
+                              <div
+                                className="max-w-[16rem] font-medium text-foreground"
+                                title={record.name}
+                              >
+                                <WorkspaceTextFade>{record.name}</WorkspaceTextFade>
+                              </div>
+                              <div className="max-w-[16rem] text-xs text-muted-foreground">
+                                <WorkspaceTextFade title={record.provider ?? 'No provider'}>
+                                  {record.provider ?? 'No provider'}
+                                </WorkspaceTextFade>
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">
-                                <span>{record.category}</span>
+                                <WorkspaceTextFade
+                                  className="max-w-[12rem]"
+                                  title={record.category}
+                                >
+                                  {record.category}
+                                </WorkspaceTextFade>
                                 {(record.tags ?? []).length ? (
                                   <div className="flex flex-wrap gap-1">
                                     {(record.tags ?? []).slice(0, 3).map((tag) => (

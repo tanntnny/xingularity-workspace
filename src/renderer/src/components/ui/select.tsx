@@ -142,7 +142,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'ui-control flex w-full cursor-default select-none items-center rounded-[var(--radius-control)] pl-1.5 pr-7 text-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'ui-control flex min-w-0 w-full max-w-full cursor-default select-none items-center overflow-hidden rounded-[var(--radius-control)] pl-1.5 pr-7 text-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
@@ -152,7 +152,9 @@ const SelectItem = React.forwardRef<
         <Check className="size-[var(--control-icon-size)]" />
       </SelectPrimitive.ItemIndicator>
     </span>
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemText className="min-w-0 flex-1 truncate">
+      {children}
+    </SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName

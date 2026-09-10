@@ -106,6 +106,7 @@ import {
   ReminderClickTarget,
   CreateProjectInput,
   CreateProjectMilestoneInput,
+  CreateProjectMeetingInput,
   CreateProjectUpdateInput,
   CreateTaskInput,
   DuplicateTaskInput,
@@ -118,6 +119,7 @@ import {
   NoteImagePathMigrationResult,
   NoteImportResult,
   Project,
+  ProjectMeeting,
   ProjectMilestone,
   ReorderProjectMilestonesInput,
   ProjectUpdate,
@@ -126,8 +128,10 @@ import {
   SearchResult,
   StoredNoteDocument,
   UpdateProjectMilestoneInput,
+  UpdateProjectMeetingInput,
   UpdateProjectInput,
   UpdateProjectUpdateInput,
+  DeleteProjectMeetingInput,
   DeleteProjectUpdateInput,
   VaultRemoveResult,
   VaultOpenResult,
@@ -1035,6 +1039,7 @@ export class VaultRuntime {
     const project = resolveProjectById(settings.projects, projectId)
     const tasks = settings.calendarTasks.filter((task) => task.projectId === project.id)
     const updates = (project.updates ?? []).filter((update) => update.projectId === project.id)
+    const meetings = (project.meetings ?? []).filter((meeting) => meeting.projectId === project.id)
     const notebookPath = getProjectNotebookPath(project)
     let notes: Array<{ relPath: string; markdown: string }> = []
     const warnings: string[] = []
@@ -1063,6 +1068,7 @@ export class VaultRuntime {
       notebookPath,
       tasks,
       updates,
+      meetings,
       notes,
       externalDocuments: externalDocuments.documents,
       exportedAt: new Date().toISOString()
@@ -1081,6 +1087,7 @@ export class VaultRuntime {
         noteCount: notes.length,
         taskCount: tasks.length,
         updateCount: updates.length,
+        meetingCount: meetings.length,
         externalDocumentCount: externalDocuments.documents.length,
         warnings
       }
@@ -1092,6 +1099,7 @@ export class VaultRuntime {
       noteCount: notes.length,
       taskCount: tasks.length,
       updateCount: updates.length,
+      meetingCount: meetings.length,
       externalDocumentCount: externalDocuments.documents.length,
       warnings
     }
@@ -2616,6 +2624,104 @@ export class VaultRuntime {
         }
       },
       { label: 'Delete project update' }
+    )
+  }
+
+  async createProjectMeeting(input: CreateProjectMeetingInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        if (!input.markdown.trim()) {
+          throw new Error('Project meeting content is required before posting')
+        }
+        const now = new Date()
+        const meeting: ProjectMeeting = {
+          id: `meeting-${randomUUID()}`,
+          projectId: project.id,
+          markdown: input.markdown,
+          type: input.type,
+          outcome: input.outcome,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString()
+        }
+        const updatedProject: Project = {
+          ...project,
+          meetings: [...(project.meetings ?? []), meeting],
+          updatedAt: now.toISOString()
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Create project meeting' }
+    )
+  }
+
+  async updateProjectMeeting(input: UpdateProjectMeetingInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        const existing = resolveProjectMeeting(project, input.meetingId)
+        if (!input.markdown.trim()) {
+          throw new Error('Project meeting content is required before saving')
+        }
+        const updatedAt = new Date().toISOString()
+        const updatedMeeting: ProjectMeeting = {
+          ...existing,
+          markdown: input.markdown,
+          type: input.type,
+          outcome: input.outcome,
+          updatedAt
+        }
+        const updatedProject: Project = {
+          ...project,
+          meetings: (project.meetings ?? []).map((meeting) =>
+            meeting.id === updatedMeeting.id ? updatedMeeting : meeting
+          ),
+          updatedAt
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Update project meeting' }
+    )
+  }
+
+  async deleteProjectMeeting(input: DeleteProjectMeetingInput): Promise<Project> {
+    return this.mutateSettings(
+      (settings) => {
+        const project = resolveProjectById(settings.projects, input.projectId)
+        resolveProjectMeeting(project, input.meetingId)
+        const updatedAt = new Date().toISOString()
+        const updatedProject: Project = {
+          ...project,
+          meetings: (project.meetings ?? []).filter((meeting) => meeting.id !== input.meetingId),
+          updatedAt
+        }
+
+        return {
+          next: {
+            projects: settings.projects.map((item) =>
+              item.id === updatedProject.id ? updatedProject : item
+            )
+          },
+          result: updatedProject
+        }
+      },
+      { label: 'Delete project meeting' }
     )
   }
 
@@ -4174,6 +4280,14 @@ function resolveProjectUpdate(project: Project, updateId: string): ProjectUpdate
     throw new Error(`Project update not found: ${updateId}`)
   }
   return update
+}
+
+function resolveProjectMeeting(project: Project, meetingId: string): ProjectMeeting {
+  const meeting = project.meetings?.find((item) => item.id === meetingId)
+  if (!meeting) {
+    throw new Error(`Project meeting not found: ${meetingId}`)
+  }
+  return meeting
 }
 
 function assertValidTaskRelationships(tasks: CalendarTask[]): void {

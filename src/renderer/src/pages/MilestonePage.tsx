@@ -111,7 +111,12 @@ export function MilestonePageContent({
             />
           ) : null}
         </ChipGroup>
-        <span className="text-xs text-muted-foreground">{project.name} · Milestone</span>
+        <span
+          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+          title={project.name}
+        >
+          {project.name} · Milestone
+        </span>
       </div>
 
       <section aria-labelledby="milestone-page-tasks-heading" className="space-y-3">

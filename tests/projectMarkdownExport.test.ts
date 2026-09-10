@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildProjectMarkdown } from '../src/main/projectMarkdownExport'
 import type { FolderMarkdownNote } from '../src/main/noteMarkdownExport'
-import type { CalendarTask, ProjectUpdate } from '../src/shared/types'
+import type { CalendarTask, ProjectMeeting, ProjectUpdate } from '../src/shared/types'
 
 const task = (overrides: Partial<CalendarTask>): CalendarTask => ({
   id: 'task-default',
@@ -22,6 +22,17 @@ const update = (overrides: Partial<ProjectUpdate>): ProjectUpdate => ({
   projectId: 'project-1',
   markdown: 'Default update',
   status: 'on-track',
+  createdAt: '2026-08-20T00:00:00.000Z',
+  updatedAt: '2026-08-20T00:00:00.000Z',
+  ...overrides
+})
+
+const meeting = (overrides: Partial<ProjectMeeting>): ProjectMeeting => ({
+  id: 'meeting-default',
+  projectId: 'project-1',
+  markdown: 'Default meeting',
+  type: 'planning',
+  outcome: 'decisions-made',
   createdAt: '2026-08-20T00:00:00.000Z',
   updatedAt: '2026-08-20T00:00:00.000Z',
   ...overrides
@@ -88,6 +99,22 @@ describe('buildProjectMarkdown', () => {
           createdAt: '2026-08-22T09:00:00.000Z'
         })
       ],
+      meetings: [
+        meeting({
+          id: 'meeting-old',
+          markdown: 'Older meeting',
+          type: 'stand-up',
+          outcome: 'informational',
+          createdAt: '2026-08-21T09:00:00.000Z'
+        }),
+        meeting({
+          id: 'meeting-new',
+          markdown: 'Newest meeting',
+          type: 'planning',
+          outcome: 'decisions-made',
+          createdAt: '2026-08-23T09:00:00.000Z'
+        })
+      ],
       notes,
       externalDocuments: [
         {
@@ -145,6 +172,16 @@ describe('buildProjectMarkdown', () => {
         '',
         'Older update',
         '',
+        '## Meetings',
+        '',
+        '### 2026-08-23T09:00:00.000Z · Planning · Decisions made',
+        '',
+        'Newest meeting',
+        '',
+        '### 2026-08-21T09:00:00.000Z · Stand up · Informational',
+        '',
+        'Older meeting',
+        '',
         '## Linked Notes',
         '',
         '### Brief',
@@ -192,6 +229,7 @@ describe('buildProjectMarkdown', () => {
     expect(result).toContain('Summary fallback')
     expect(result).toContain('_No tasks found._')
     expect(result).toContain('_No updates found._')
+    expect(result).toContain('_No meetings found._')
     expect(result).toContain('_No linked notes found._')
     expect(result).toContain('_No linked Google Docs found._')
   })

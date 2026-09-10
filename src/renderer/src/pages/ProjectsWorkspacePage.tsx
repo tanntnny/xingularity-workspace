@@ -17,6 +17,8 @@ import type {
   NoteVimKeyMapping,
   Project,
   ProjectIconStyle,
+  ProjectMeetingOutcome,
+  ProjectMeetingType,
   ProjectMilestone,
   UpdateProjectMilestoneInput,
   ProjectPropertiesPatch,
@@ -49,6 +51,7 @@ import {
 } from '../components/ProjectDescriptionEditor'
 import { TagEditor } from '../components/TagEditor'
 import { ProjectPulsePage } from './ProjectPulsePage'
+import { ProjectMeetingPage } from './ProjectMeetingPage'
 import { getTaskStatus } from '../lib/taskStatus'
 import {
   PROJECT_FAVORITE_CHIP_OPTIONS,
@@ -94,6 +97,7 @@ import {
   DropdownMenuTrigger
 } from '../components/ui/dropdown-menu'
 import { TableRowList, type TableRowListColumn } from '../components/ui/table-row-list'
+import { WorkspaceTextFade } from '../components/ui/workspace-text-fade'
 import {
   filterProjectsForWorkspace,
   PROJECTS_WORKSPACE_FILTER_OPTIONS,
@@ -133,7 +137,7 @@ import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 
 export type { ProjectsWorkspaceFilterMode } from '../lib/projectTaskRows'
 
-export type ProjectsWorkspaceView = 'list' | 'home' | 'pulse' | 'resources'
+export type ProjectsWorkspaceView = 'list' | 'home' | 'pulse' | 'meetings' | 'resources'
 
 type MilestoneDropBoundary = 'top' | 'bottom'
 
@@ -176,6 +180,16 @@ interface ProjectsWorkspacePageProps {
     input: { markdown: string; status: ProjectUpdateStatus }
   ) => Promise<void>
   onDeleteProjectUpdate: (projectId: string, updateId: string) => Promise<void>
+  onCreateProjectMeeting: (
+    projectId: string,
+    input: { markdown: string; type: ProjectMeetingType; outcome: ProjectMeetingOutcome }
+  ) => Promise<void>
+  onUpdateProjectMeeting: (
+    projectId: string,
+    meetingId: string,
+    input: { markdown: string; type: ProjectMeetingType; outcome: ProjectMeetingOutcome }
+  ) => Promise<void>
+  onDeleteProjectMeeting: (projectId: string, meetingId: string) => Promise<void>
   noteTree: NoteTreeNode[]
   resources: ResourceRef[]
   relations: ResourceRelation[]
@@ -242,6 +256,9 @@ export function ProjectsWorkspacePage({
   onCreateProjectUpdate,
   onUpdateProjectUpdate,
   onDeleteProjectUpdate,
+  onCreateProjectMeeting,
+  onUpdateProjectMeeting,
+  onDeleteProjectMeeting,
   noteTree,
   resources,
   relations,
@@ -464,6 +481,25 @@ export function ProjectsWorkspacePage({
               onDeleteUpdate={(updateId) => onDeleteProjectUpdate(selectedProject.id, updateId)}
             />
           </div>
+        ) : view === 'meetings' && selectedProject ? (
+          <div id="project-view-panel" role="tabpanel" aria-labelledby="project-view-tab-meetings">
+            <ProjectMeetingPage
+              project={selectedProject}
+              notes={notes}
+              vimModeEnabled={vimModeEnabled}
+              vimKeyMappings={vimKeyMappings}
+              onOpenNoteLink={onOpenNoteLink}
+              onCreateMeeting={(input) => onCreateProjectMeeting(selectedProject.id, input)}
+              onUpdateMeeting={(meetingId, input) =>
+                onUpdateProjectMeeting(selectedProject.id, meetingId, input)
+              }
+              onDeleteMeeting={(meetingId) => onDeleteProjectMeeting(selectedProject.id, meetingId)}
+              onCreateFollowUpTask={async () => {
+                const task = await onCreateTask(selectedProject.id, 'Follow up from meeting')
+                onOpenTask(task.id, { isNewTask: true })
+              }}
+            />
+          </div>
         ) : (
           <WorkspaceReadingWidth className="py-4">
             {selectedProject ? (
@@ -621,7 +657,14 @@ export function ProjectsWorkspaceSecondaryActions({
       <TabToggleGroup
         value={view}
         onValueChange={(value) => {
-          if (value === 'home' || value === 'pulse' || value === 'resources') onViewChange(value)
+          if (
+            value === 'home' ||
+            value === 'pulse' ||
+            value === 'meetings' ||
+            value === 'resources'
+          ) {
+            onViewChange(value)
+          }
         }}
         aria-label="Project view"
         data-testid="project-view-tabs"
@@ -642,6 +685,14 @@ export function ProjectsWorkspaceSecondaryActions({
           data-testid="project-view-tab:pulse"
         >
           Activity
+        </TabToggleGroupItem>
+        <TabToggleGroupItem
+          value="meetings"
+          id="project-view-tab-meetings"
+          aria-controls="project-view-panel"
+          data-testid="project-view-tab:meetings"
+        >
+          Meeting
         </TabToggleGroupItem>
         <TabToggleGroupItem
           value="resources"
@@ -667,7 +718,14 @@ export function ProjectsWorkspaceBreadcrumb({
   onOpenAllProjects: () => void
   onOpenProjectHome: () => void
 }): ReactElement {
-  const viewLabel = view === 'pulse' ? 'Activity' : view === 'resources' ? 'Resources' : 'Overview'
+  const viewLabel =
+    view === 'pulse'
+      ? 'Activity'
+      : view === 'meetings'
+        ? 'Meeting'
+        : view === 'resources'
+          ? 'Resources'
+          : 'Overview'
 
   return (
     <Breadcrumb>
@@ -821,8 +879,8 @@ function AllProjectsTable({
           >
             <span className="flex w-full min-w-0 items-center gap-2.5">
               <NoteShapeIcon icon={project.icon} size={20} aria-hidden="true" />
-              <span
-                className="workspace-text-fade min-w-0 flex-1"
+              <WorkspaceTextFade
+                className="min-w-0 flex-1"
                 data-testid={`all-project-summary:${project.id}`}
                 title={summaryTitle}
               >
@@ -863,7 +921,7 @@ function AllProjectsTable({
                     </>
                   ) : null}
                 </span>
-              </span>
+              </WorkspaceTextFade>
             </span>
           </Button>
         )

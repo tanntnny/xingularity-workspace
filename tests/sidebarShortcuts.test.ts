@@ -10,6 +10,42 @@ import { WorkspaceTabManager } from '../src/renderer/src/components/ui/document-
 import { createWorkspaceView } from '../src/shared/workspaceViews'
 
 describe('sidebar shortcuts', () => {
+  it('renders recent pages in the Recents section', () => {
+    const sidebarProps = {
+      activePage: 'notes' as const,
+      onChange: () => undefined,
+      onOpenSearchPalette: () => undefined,
+      onOpenVaultManager: () => undefined,
+      notesCount: 0,
+      projectsCount: 0,
+      calendarUndoneCount: 0,
+      recentPages: [
+        { id: 'note:notes/alpha.md', label: 'Alpha', icon: createElement(NotebookPen) },
+        { id: 'project:project-1', label: 'Project One', icon: createElement(NotebookPen) }
+      ],
+      activeRecentPageId: 'project:project-1',
+      onOpenRecentPage: () => undefined
+    }
+    const markup = renderToStaticMarkup(
+      createElement(SidebarProvider, null, createElement(AppSidebar, sidebarProps))
+    )
+
+    expect(markup).toContain('>Recents</span>')
+    expect(markup).toContain('data-testid="sidebar-recent-page:note:notes/alpha.md"')
+    expect(markup).toContain('data-testid="sidebar-recent-page:project:project-1"')
+    expect(markup).toContain('>Alpha</span>')
+    expect(markup).toContain('>Project One</span>')
+    expect(markup.indexOf('>Recents</span>')).toBeLessThan(markup.indexOf('>Inbox</span>'))
+    expect(markup.indexOf('sidebar-recent-page:note:notes/alpha.md')).toBeLessThan(
+      markup.indexOf('sidebar-recent-page:project:project-1')
+    )
+
+    const activeRecentPage = markup.match(
+      /<button[^>]*data-testid="sidebar-recent-page:project:project-1"[^>]*>/
+    )?.[0]
+    expect(activeRecentPage).toContain('data-active="true"')
+  })
+
   it('uses the native sidebar composition and keeps macOS clearance at the app boundary', () => {
     const markup = renderToStaticMarkup(
       createElement(

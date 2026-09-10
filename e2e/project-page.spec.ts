@@ -796,6 +796,9 @@ test.describe('projects workspace', () => {
         projectViewTabs.getByRole('tab', { name: 'Activity', exact: true })
       ).toBeVisible()
       await expect(
+        projectViewTabs.getByRole('tab', { name: 'Meeting', exact: true })
+      ).toBeVisible()
+      await expect(
         projectViewTabs.getByRole('tab', { name: 'Resources', exact: true })
       ).toBeVisible()
       const projectRightPanel = page.getByTestId('workspace-right-panel')
@@ -938,6 +941,100 @@ test.describe('projects workspace', () => {
         page.getByTestId('notebook-breadcrumb:current:Projects/Alpha Project')
       ).toBeVisible()
       await expect(page.getByText('brief', { exact: true })).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('posts, edits, and deletes project meetings without adding them to Activity', async () => {
+    const vaultRoot = await createFixtureVault([createFixtureProject('project-1', 'Alpha Project')])
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openProjectHome(page)
+      const projectViewTabs = page.getByTestId('project-view-tabs')
+      await expect
+        .poll(() => projectViewTabs.getByRole('tab').allTextContents())
+        .toEqual(['Overview', 'Activity', 'Meeting', 'Resources'])
+
+      await page.getByTestId('project-view-tab:meetings').click()
+      const meetingPage = page.getByTestId('project-meeting-page')
+      const meetingComposer = meetingPage.getByTestId('project-meeting-composer')
+      const projectRightPanel = page.getByTestId('workspace-right-panel')
+      await expect(meetingPage).toBeVisible()
+      await expect(meetingPage.getByTestId('project-meeting-empty')).toBeVisible()
+      await expect(projectRightPanel.getByTestId('project-activity-empty')).toBeVisible()
+
+      await meetingComposer.getByTestId('project-meeting-type-select').click()
+      await page.getByRole('option', { name: /^Planning/ }).click()
+      await meetingComposer.getByTestId('project-meeting-outcome-select').click()
+      await page.getByRole('option', { name: /^Follow-up needed/ }).click()
+      await meetingComposer.locator('.ProseMirror').fill('## Decisions\n\nPrepare the launch brief.')
+      await meetingComposer.getByRole('button', { name: 'Post meeting', exact: true }).click()
+
+      await expect
+        .poll(async () => {
+          const settings = await page.evaluate(() => window.vaultApi.settings.get())
+          return settings.projects[0]?.meetings?.[0]
+        })
+        .toMatchObject({
+          type: 'planning',
+          outcome: 'follow-up-needed',
+          markdown: '## Decisions\n\nPrepare the launch brief.'
+        })
+
+      const meetingItem = meetingPage.locator('[data-testid^="project-meeting-feed-item:"]')
+      await expect(meetingItem).toHaveCount(1)
+      await expect(meetingItem).toContainText('Planning')
+      await expect(meetingItem).toContainText('Follow-up needed')
+      await expect(meetingItem).toContainText('Prepare the launch brief.')
+      await expect(projectRightPanel.getByTestId('project-activity-empty')).toBeVisible()
+
+      await meetingItem.getByTestId(/project-meeting-menu:/).click()
+      await expect(
+        page.getByRole('menuitem', { name: 'Create follow-up task', exact: true })
+      ).toBeVisible()
+      await page.getByRole('menuitem', { name: 'Create follow-up task', exact: true }).click()
+      const taskDialog = page.getByTestId('task-center-dialog')
+      await expect(taskDialog).toBeVisible()
+      await taskDialog.getByRole('button', { name: 'Close task editor', exact: true }).click()
+      await expect(taskDialog).toHaveCount(0)
+
+      await meetingItem.getByTestId(/project-meeting-menu:/).click()
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+      await expect(meetingComposer.getByRole('button', { name: 'Meeting type: Planning' })).toBeVisible()
+      await meetingComposer.getByTestId('project-meeting-type-select').click()
+      await page.getByRole('option', { name: /^Review/ }).click()
+      await meetingComposer.getByTestId('project-meeting-outcome-select').click()
+      await page.getByRole('option', { name: /^Decisions made/ }).click()
+      await meetingComposer.locator('.ProseMirror').fill('## Decisions\n\nLaunch brief approved.')
+      await meetingComposer.getByRole('button', { name: 'Save changes', exact: true }).click()
+
+      await expect
+        .poll(async () => {
+          const settings = await page.evaluate(() => window.vaultApi.settings.get())
+          return settings.projects[0]?.meetings?.[0]
+        })
+        .toMatchObject({
+          type: 'review',
+          outcome: 'decisions-made',
+          markdown: '## Decisions\n\nLaunch brief approved.'
+        })
+
+      await meetingItem.getByTestId(/project-meeting-menu:/).click()
+      await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+      const deleteDialog = page.getByRole('alertdialog')
+      await expect(deleteDialog).toBeVisible()
+      await deleteDialog.getByRole('button', { name: 'Delete meeting', exact: true }).click()
+      await expect(meetingItem).toHaveCount(0)
+      await expect(meetingPage.getByTestId('project-meeting-empty')).toBeVisible()
+      await expect
+        .poll(async () => {
+          const settings = await page.evaluate(() => window.vaultApi.settings.get())
+          return settings.projects[0]?.meetings?.length ?? 0
+        })
+        .toBe(0)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

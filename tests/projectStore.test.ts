@@ -42,6 +42,17 @@ describe('ProjectStore', () => {
           updatedAt: '2026-08-20T10:00:00.000Z'
         }
       ],
+      meetings: [
+        {
+          id: 'meeting-1',
+          projectId: 'project-1',
+          markdown: 'Decided to ship the launch next week.',
+          type: 'planning',
+          outcome: 'decisions-made',
+          createdAt: '2026-08-20T11:00:00.000Z',
+          updatedAt: '2026-08-20T11:00:00.000Z'
+        }
+      ],
       milestones: [
         {
           id: 'milestone-1',
@@ -67,6 +78,7 @@ describe('ProjectStore', () => {
     expect(snapshot.projects[0]).not.toHaveProperty('notebookPath')
     expect(snapshot.projects[0]).not.toHaveProperty('resources')
     expect(snapshot.projects[0]?.updates).toEqual(project.updates)
+    expect(snapshot.projects[0]?.meetings).toEqual(project.meetings)
     expect(snapshot.projects[0]?.milestones?.map((milestone) => milestone.id)).toEqual([
       'milestone-1',
       'milestone-2'

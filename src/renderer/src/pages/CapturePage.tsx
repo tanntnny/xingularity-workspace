@@ -297,10 +297,10 @@ export function CapturePage({
                 >
                   <div className="px-3 py-2.5 text-sm font-semibold">
                     <span
-                      className="inline-flex items-center rounded-[var(--radius-button)] border px-2 py-0.5"
+                      className="inline-flex min-w-0 max-w-full items-center rounded-[var(--radius-button)] border px-2 py-0.5"
                       style={getFleetingNoteGroupColorStyles(group)}
                     >
-                      {group.label}
+                      <span className="min-w-0 truncate">{group.label}</span>
                     </span>
                   </div>
                   <div className="flex flex-1 items-center justify-center p-3 text-sm text-muted-foreground">
@@ -358,12 +358,12 @@ function FleetingNoteColumn({
       aria-label={group.label}
     >
       <header className="flex items-center justify-between gap-2 px-3 py-2.5">
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className="min-w-0 text-sm font-semibold text-foreground">
           <span
-            className="inline-flex items-center rounded-[var(--radius-button)] border px-2 py-0.5"
+            className="inline-flex min-w-0 max-w-full items-center rounded-[var(--radius-button)] border px-2 py-0.5"
             style={groupColorStyles}
           >
-            {group.label}
+            <span className="min-w-0 truncate">{group.label}</span>
           </span>
         </h3>
         <Badge variant={group.notes.length > 0 ? 'secondary' : 'outline'}>

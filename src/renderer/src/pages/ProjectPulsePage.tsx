@@ -56,8 +56,9 @@ export function ProjectPulsePage({
 
   return (
     <div className="min-h-full" data-testid="project-pulse-page">
-      <WorkspaceReadingWidth className="mt-3 space-y-3">
+      <WorkspaceReadingWidth className="mt-3 space-y-3 p-2">
         <ProjectUpdateComposer
+          key={`${project.id}-${editingUpdateId ?? 'new'}`}
           update={editingUpdate}
           notes={notes}
           vimModeEnabled={vimModeEnabled}

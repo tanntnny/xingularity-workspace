@@ -32,7 +32,7 @@ const ContextMenuSubTrigger = React.forwardRef<
   <ContextMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[state=open]:!bg-surface-subtle-hover data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
+      'flex min-w-0 max-w-full cursor-pointer select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[state=open]:!bg-surface-subtle-hover data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
       inset && 'pl-8',
       destructive && menuSubtriggerDestructiveClassName,
       className
@@ -52,7 +52,7 @@ const ContextMenuSubContent = React.forwardRef<
   <ContextMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'motion-floating-content z-50 min-w-[8rem] overflow-visible rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md [&_svg]:text-muted-foreground',
+      'motion-floating-content z-50 min-w-[8rem] max-w-[calc(100vw-2rem)] overflow-visible rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md [&_svg]:text-muted-foreground',
       className
     )}
     {...props}
@@ -68,7 +68,7 @@ const ContextMenuContent = React.forwardRef<
     <ContextMenuPrimitive.Content
       ref={ref}
       className={cn(
-        'motion-floating-content z-50 min-w-[8rem] overflow-visible rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
+        'motion-floating-content z-50 min-w-[8rem] max-w-[calc(100vw-2rem)] overflow-visible rounded-md border border-border bg-popover p-1 text-popover-foreground',
         className
       )}
       {...props}
@@ -87,7 +87,7 @@ const ContextMenuItem = React.forwardRef<
   <ContextMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[highlighted]:!bg-surface-subtle-hover data-[highlighted]:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground',
+      'relative flex min-w-0 max-w-full cursor-pointer select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:text-foreground focus:!bg-surface-subtle-hover focus:text-foreground data-[highlighted]:!bg-surface-subtle-hover data-[highlighted]:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground',
       inset && 'pl-8',
       destructive && menuItemDestructiveClassName,
       className

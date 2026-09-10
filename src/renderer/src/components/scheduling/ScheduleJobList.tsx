@@ -14,6 +14,7 @@ import { ActionMenuItems, type ActionMenuGroup } from '../ui/action-menu'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/context-menu'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../ui/dropdown-menu'
 import { WorkspaceIconButton } from '../ui/document-workspace'
+import { WorkspaceTextFade } from '../ui/workspace-text-fade'
 import { usePersistentTableSort } from '../../hooks/usePersistentTableSort'
 
 function formatLastRunDate(value: string | undefined): string {
@@ -147,10 +148,11 @@ export function ScheduleJobList({
             event.stopPropagation()
             onSelect(job.id)
           }}
-          className="h-auto max-w-full justify-start truncate rounded-none px-0 text-left font-medium text-foreground hover:bg-transparent hover:text-foreground"
+          className="h-auto min-w-0 max-w-full justify-start rounded-none px-0 text-left font-medium text-foreground hover:bg-transparent hover:text-foreground"
           aria-label={`Open automation ${job.name}`}
+          title={job.name}
         >
-          {job.name}
+          <WorkspaceTextFade className="min-w-0 flex-1">{job.name}</WorkspaceTextFade>
         </Button>
       )
     },
@@ -167,14 +169,28 @@ export function ScheduleJobList({
       header: 'Schedule',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
       sortValue: (job) => formatTrigger(job.trigger),
-      renderCell: (job) => formatTrigger(job.trigger)
+      renderCell: (job) => {
+        const label = formatTrigger(job.trigger)
+        return (
+          <WorkspaceTextFade className="min-w-0" title={label}>
+            {label}
+          </WorkspaceTextFade>
+        )
+      }
     },
     {
       id: 'runtime',
       header: 'Runtime',
       cellClassName: 'whitespace-nowrap text-muted-foreground',
       sortValue: (job) => (job.runtime === 'javascript' ? 'JavaScript' : 'Python'),
-      renderCell: (job) => (job.runtime === 'javascript' ? 'JavaScript' : 'Python')
+      renderCell: (job) => {
+        const label = job.runtime === 'javascript' ? 'JavaScript' : 'Python'
+        return (
+          <WorkspaceTextFade className="min-w-0" title={label}>
+            {label}
+          </WorkspaceTextFade>
+        )
+      }
     },
     {
       id: 'last-run',
@@ -182,7 +198,14 @@ export function ScheduleJobList({
       cellClassName: 'whitespace-nowrap text-muted-foreground',
       sortValue: (job) => job.lastRunAt,
       sortDefaultDirection: 'desc',
-      renderCell: (job) => formatLastRunDate(job.lastRunAt)
+      renderCell: (job) => {
+        const label = formatLastRunDate(job.lastRunAt)
+        return (
+          <WorkspaceTextFade className="min-w-0" title={label}>
+            {label}
+          </WorkspaceTextFade>
+        )
+      }
     },
     {
       id: 'actions',

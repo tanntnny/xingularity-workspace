@@ -34,7 +34,7 @@ export function NoteBacklinksPanel({
                       <span className="block truncate font-medium">
                         {getNoteDisplayName(note.relPath)}
                       </span>
-                      <span className="workspace-text-fade block max-w-full min-w-0 text-xs text-muted-foreground">
+                      <span className="block max-w-full min-w-0 truncate text-xs text-muted-foreground">
                         {pathLabel}
                       </span>
                     </span>

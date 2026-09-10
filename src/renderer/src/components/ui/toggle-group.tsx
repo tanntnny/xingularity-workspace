@@ -33,7 +33,7 @@ const toggleGroupIndicatorVariants = cva(
 )
 
 const toggleGroupItemVariants = cva(
-  'ui-control relative z-10 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-[var(--radius-button)] px-3 font-medium text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:size-[var(--control-icon-size)]',
+  'ui-control relative z-10 inline-flex min-w-0 max-w-full items-center justify-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-[var(--radius-button)] px-3 font-medium text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:size-[var(--control-icon-size)]',
   {
     variants: {
       variant: {

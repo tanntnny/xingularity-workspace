@@ -5,7 +5,7 @@ import { ChevronRight, MoreHorizontal } from './icons'
 import { cn } from '../../lib/utils'
 
 const breadcrumbEntryClassName =
-  'inline-flex min-h-7 max-w-full items-center rounded-[var(--radius-button)] px-2 py-1'
+  'inline-flex min-h-7 min-w-0 max-w-full items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-[var(--radius-button)] px-2 py-1'
 
 const breadcrumbInteractiveClassName = cn(
   breadcrumbEntryClassName,

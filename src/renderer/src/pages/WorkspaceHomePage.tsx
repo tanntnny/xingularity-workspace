@@ -133,7 +133,8 @@ export function WorkspaceHomePage({
                     key={capture.id}
                     type="button"
                     role="listitem"
-                    className="truncate rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
+                    className="min-w-0 max-w-full truncate rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
+                    title={capture.content}
                     onClick={onOpenCapture}
                   >
                     {capture.content}

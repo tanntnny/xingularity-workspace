@@ -1008,7 +1008,7 @@ function ResponsivePickerSpecimen(): ReactElement {
                         aria-checked={selected}
                         data-checked={selected ? 'true' : 'false'}
                         data-testid={`design-audit-control:responsive-picker:multiple:${option.value}`}
-                        className="group min-h-9 cursor-pointer rounded-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
+                        className="min-h-9 cursor-pointer rounded-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
                       >
                         <SelectionCheckbox checked={selected} />
                         <span className="min-w-0 flex-1 truncate">{option.label}</span>

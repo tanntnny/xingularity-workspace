@@ -61,14 +61,21 @@ describe('ResourcesPage', () => {
     const resource = normalizeResourceInput({
       canonicalUri: 'https://example.com/brief',
       title: 'Brief',
-      labels: [{ key: 'status', value: 'active' }],
+      labels: [
+        { key: 'status', value: 'active' },
+        { key: 'owner', value: 'amy' }
+      ],
       projectIds: [project.id]
+    })
+    const unassignedResource = normalizeResourceInput({
+      canonicalUri: 'https://example.com/unassigned',
+      title: 'Unassigned resource'
     })
     const markup = renderToStaticMarkup(
       createElement(ResourcesPage, {
         projects: [project],
         noteTree: [],
-        resources: [resource],
+        resources: [resource, unassignedResource],
         relations: [],
         onCreateResource: async () => undefined,
         onUpdateResource: async () => undefined,
@@ -83,8 +90,15 @@ describe('ResourcesPage', () => {
     expect(markup).toContain('data-testid="resources-table"')
     expect(markup).toContain('>Labels</span>')
     expect(markup).toContain('>Projects</span>')
+    expect(markup.indexOf('>Name</span>')).toBeLessThan(markup.indexOf('>Projects</span>'))
+    expect(markup.indexOf('>Projects</span>')).toBeLessThan(markup.indexOf('>Source</span>'))
+    expect(markup.indexOf('>Source</span>')).toBeLessThan(markup.indexOf('>Labels</span>'))
     expect(markup).toContain('status=active')
+    expect(markup).toContain('>+1</span>')
+    expect(markup).not.toContain('aria-label="Resource label owner=amy"')
     expect(markup).toContain('Atlas')
+    expect(markup).toContain('data-project-icon-surface="none"')
+    expect(markup).toContain('>—</span>')
     expect(markup).not.toContain('data-testid="resource-filters"')
 
     const searchMarkup = renderToStaticMarkup(

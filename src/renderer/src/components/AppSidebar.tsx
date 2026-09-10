@@ -64,6 +64,9 @@ interface AppSidebarProps {
   onCreateWorkspaceView?: (source: WorkspaceViewSource) => void
   onDeleteWorkspaceView?: (viewId: string) => void
   resourceViewsEnabled?: boolean
+  recentPages?: readonly SidebarRecentPage[]
+  activeRecentPageId?: string | null
+  onOpenRecentPage?: (pageId: string) => void
 }
 
 type SidebarPageItem = {
@@ -73,13 +76,24 @@ type SidebarPageItem = {
   shortcut?: readonly ShortcutKey[]
 }
 
+type SidebarRecentPage = {
+  id: string
+  label: string
+  icon: ReactElement
+}
+
 type SidebarSection = {
-  id: 'inbox' | 'workspace' | 'view' | 'automation' | 'finance'
+  id: 'recents' | 'inbox' | 'workspace' | 'view' | 'automation' | 'finance'
   label: string
   items: readonly SidebarPageItem[]
 }
 
 const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
+  {
+    id: 'recents',
+    label: 'Recents',
+    items: []
+  },
   {
     id: 'inbox',
     label: 'Inbox',
@@ -119,6 +133,7 @@ const FOOTER_PAGES: readonly SidebarPageItem[] = [
 ]
 
 const SIDEBAR_SECTION_DEFAULTS: Record<SidebarSection['id'], boolean> = {
+  recents: true,
   inbox: true,
   workspace: true,
   view: true,
@@ -147,7 +162,10 @@ export function AppSidebar({
   onOpenWorkspaceView,
   onCreateWorkspaceView,
   onDeleteWorkspaceView,
-  resourceViewsEnabled = true
+  resourceViewsEnabled = true,
+  recentPages = [],
+  activeRecentPageId = null,
+  onOpenRecentPage
 }: AppSidebarProps): ReactElement {
   const availablePageSet = useMemo(() => new Set(availablePages), [availablePages])
   const [openSections, setOpenSections] =
@@ -198,7 +216,7 @@ export function AppSidebar({
           data-testid={`sidebar-page:${page.id}`}
         >
           <PageIcon aria-hidden="true" />
-          <span>{page.label}</span>
+          <span className="min-w-0 flex-1 truncate">{page.label}</span>
           {page.shortcut ? (
             <Shortcut
               keys={page.shortcut}
@@ -208,6 +226,29 @@ export function AppSidebar({
           ) : null}
         </SidebarMenuButton>
         {renderBadge(page.id)}
+      </SidebarMenuItem>
+    )
+  }
+
+  const renderRecentPage = (page: SidebarRecentPage): ReactElement => {
+    const disabled = isPageDisabled()
+
+    return (
+      <SidebarMenuItem key={page.id}>
+        <SidebarMenuButton
+          isActive={activeRecentPageId === page.id}
+          labelOverflow="fade"
+          onClick={disabled ? undefined : () => onOpenRecentPage?.(page.id)}
+          disabled={disabled}
+          tooltip={page.label}
+          aria-label={page.label}
+          data-testid={`sidebar-recent-page:${page.id}`}
+        >
+          {page.icon}
+          <span className="workspace-text-fade sidebar-workspace-text-fade block max-w-full min-w-0 flex-1">
+            {page.label}
+          </span>
+        </SidebarMenuButton>
       </SidebarMenuItem>
     )
   }
@@ -378,9 +419,10 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {SIDEBAR_SECTIONS.filter(
-          (section) =>
-            section.id === 'view' || section.items.some((item) => availablePageSet.has(item.id))
+        {SIDEBAR_SECTIONS.filter((section) =>
+          section.id === 'recents'
+            ? recentPages.length > 0
+            : section.id === 'view' || section.items.some((item) => availablePageSet.has(item.id))
         ).map((section) => {
           const isOpen = openSections[section.id]
 
@@ -400,7 +442,7 @@ export function AppSidebar({
               <SidebarGroup className={cn('group/collapsible', section.id === 'view' && 'px-0')}>
                 <SidebarGroupLabel asChild className="cursor-pointer" title={section.label}>
                   <CollapsibleTrigger className="w-full justify-between">
-                    <span>{section.label}</span>
+                    <span className="min-w-0 truncate">{section.label}</span>
                     <ChevronDown
                       aria-hidden="true"
                       className="!size-3 motion-state-chevron ml-auto group-data-[state=open]/collapsible:rotate-180"
@@ -410,11 +452,13 @@ export function AppSidebar({
                 <CollapsibleContent asChild>
                   <SidebarGroupContent className={cn('pl-4', 'group-data-[collapsible=icon]:pl-0')}>
                     <SidebarMenu>
-                      {section.id === 'view'
-                        ? workspaceViews.map(renderWorkspaceView)
-                        : section.items
-                            .filter((item) => availablePageSet.has(item.id))
-                            .map(renderItem)}
+                      {section.id === 'recents'
+                        ? recentPages.map(renderRecentPage)
+                        : section.id === 'view'
+                          ? workspaceViews.map(renderWorkspaceView)
+                          : section.items
+                              .filter((item) => availablePageSet.has(item.id))
+                              .map(renderItem)}
                       {section.id === 'view' ? renderViewCreateAction() : null}
                     </SidebarMenu>
                   </SidebarGroupContent>

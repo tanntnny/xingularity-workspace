@@ -130,6 +130,7 @@ describe('TableRowList', () => {
     expect(markup).toContain('tabler-icon-chevron-up')
     expect(markup).toContain('tabler-icon-chevron-down')
     expect(markup).toContain('relative size-3 shrink-0')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).toContain('-translate-y-1')
     expect(markup).toContain('translate-y-1')
     expect(markup.match(/width="12" height="12"/g)).toHaveLength(3)
@@ -180,6 +181,7 @@ describe('TableRowList', () => {
     expect(markup).toContain('data-testid="table-row-list-group:selected"')
     expect(markup).toContain('>Active</span><span')
     expect(markup).toContain('>Selected</span><span')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).toContain('>1</span>')
     expect(markup).toContain('>2</span>')
     expect(markup.indexOf('data-testid="table-row-list-group:active"')).toBeLessThan(

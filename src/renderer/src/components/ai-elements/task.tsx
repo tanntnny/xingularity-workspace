@@ -52,7 +52,7 @@ export function TaskTrigger({
       ) : (
         <Circle size={16} className="text-muted-foreground" />
       )}
-      <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{title}</span>
       <ChevronDown
         size={15}
         className={cn('text-muted-foreground transition', context.open ? 'rotate-180' : '')}

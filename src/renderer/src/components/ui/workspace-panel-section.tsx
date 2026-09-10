@@ -34,7 +34,7 @@ const WorkspacePanelSectionHeader = React.forwardRef<
   return (
     <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold">{heading}</h2>
+        <h2 className="min-w-0 truncate text-sm font-semibold">{heading}</h2>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}

@@ -178,6 +178,7 @@ function serializeProject(
   | 'resourceRefs'
   | 'milestones'
   | 'updates'
+  | 'meetings'
   | 'updatedAt'
 > {
   return {
@@ -192,6 +193,7 @@ function serializeProject(
     resourceRefs: project.resourceRefs ?? [],
     milestones: project.milestones ?? [],
     updates: project.updates ?? [],
+    meetings: project.meetings ?? [],
     updatedAt: project.updatedAt
   }
 }
