@@ -33,6 +33,8 @@ import { TaskStore } from './taskStore'
 import { normalizeRecentNotebookPaths } from '../shared/recentNotebookFiles'
 import { normalizeRecentPageTargets, type RecentPageTarget } from '../shared/recentPages'
 import { migrateProjectResources, normalizeResourceRef } from '../shared/resourceDomain'
+import { DEFAULT_CODE_FONT_ID, normalizeCodeFontId } from '../shared/fontCatalog'
+import { normalizeFolderColors } from '../shared/folderColors'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -181,6 +183,7 @@ export function createDefaultAppSettings(): AppSettings {
     },
     ai: {},
     fontFamily: 'Inter',
+    codeFontFamily: DEFAULT_CODE_FONT_ID,
     pythonCondaEnvironmentPath: null,
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
@@ -188,6 +191,7 @@ export function createDefaultAppSettings(): AppSettings {
     calendarTasks: [],
     tasks: [],
     workspaceViews: [],
+    folderColors: {},
     projectIcons: {},
     projects: [],
     gridBoard: {
@@ -257,6 +261,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     // Provider credentials are device/vault scoped and live in CredentialStore.
     // Keep the legacy object shape readable for old callers without carrying secrets forward.
     ai: {},
+    codeFontFamily: normalizeCodeFontId(parsed.codeFontFamily),
     featureFlags: {
       ...defaults.featureFlags,
       ...Object.fromEntries(
@@ -281,6 +286,7 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
     calendarTasks: normalizedTaskLinks,
     tasks: normalizedTaskLinks,
     workspaceViews: normalizeWorkspaceViews(parsed.workspaceViews),
+    folderColors: normalizeFolderColors(parsed.folderColors),
     projectIcons: normalizeProjectIcons(parsed.projectIcons),
     projects: normalizedProjects.map((project) => ({
       ...project,
@@ -786,6 +792,10 @@ function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolea
     return true
   }
 
+  if (settings.folderColors && Object.keys(settings.folderColors).length > 0) {
+    return true
+  }
+
   return false
 }
 
@@ -1083,11 +1093,13 @@ export class SettingsStore {
       profile: settings.profile,
       ai: {},
       fontFamily: settings.fontFamily,
+      codeFontFamily: settings.codeFontFamily,
       pythonCondaEnvironmentPath: settings.pythonCondaEnvironmentPath,
       pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
       workspaceViews: settings.workspaceViews,
+      folderColors: settings.folderColors,
       featureFlags: settings.featureFlags,
       gridBoard: settings.gridBoard
     }

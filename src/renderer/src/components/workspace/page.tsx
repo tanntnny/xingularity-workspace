@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFadeContent } from '../ui/workspace-text-fade'
 
 type WorkspacePageProps = React.HTMLAttributes<HTMLDivElement>
 
@@ -33,7 +34,7 @@ const WorkspacePageHeader = React.forwardRef<HTMLElement, WorkspacePageHeaderPro
         {eyebrow ? <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p> : null}
         <h1 className="mt-2 inline-flex min-w-0 max-w-full items-center gap-3 text-3xl font-semibold tracking-tight text-foreground">
           {icon}
-          <span className="min-w-0 truncate">{heading}</span>
+          <WorkspaceTextFadeContent className="min-w-0 flex-1">{heading}</WorkspaceTextFadeContent>
         </h1>
         {description ? (
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{description}</p>
@@ -83,8 +84,8 @@ const WorkspacePageLayout = React.forwardRef<HTMLElement, WorkspacePageLayoutPro
             <header className="flex flex-col gap-4 border-b border-panel-border pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 {heading ? (
-                  <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
-                    {heading}
+                  <h1 className="min-w-0 text-2xl font-semibold tracking-tight">
+                    <WorkspaceTextFadeContent className="min-w-0">{heading}</WorkspaceTextFadeContent>
                   </h1>
                 ) : null}
                 {description ? (

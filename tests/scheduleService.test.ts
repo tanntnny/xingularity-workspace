@@ -27,12 +27,14 @@ function createDefaultSettings(): AppSettings {
     profile: { name: '' },
     ai: { mistralApiKey: '' },
     fontFamily: 'Inter',
+    codeFontFamily: 'jetbrains-mono',
     pythonCondaEnvironmentPath: null,
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
     calendarTasks: [],
     workspaceViews: [],
+    folderColors: {},
     projectIcons: {},
     projects: [],
     gridBoard: {
@@ -170,6 +172,7 @@ describe('ScheduleService action application', () => {
         start: '2026-04-04',
         end: undefined,
         allDay: true,
+        durationEditable: true,
         extendedProps: {
           source: 'task',
           taskId: settings.calendarTasks[0].id,

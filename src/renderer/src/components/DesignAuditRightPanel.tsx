@@ -50,7 +50,6 @@ export function DesignAuditRightPanel({
                   active={activeTab === tab.id}
                   aria-label={`${tab.label}: ${tab.description}`}
                   data-testid={`design-audit-nav-item:${tab.id}`}
-                  labelOverflow="fade"
                   title={tab.label}
                   onClick={() => onTabChange(tab.id)}
                 >

@@ -34,7 +34,8 @@ import {
   SelectionPopover,
   StatusChipSelect,
   Switch,
-  Textarea
+  Textarea,
+  WorkspaceTextFade
 } from '../ui'
 import type { StatusChipOption } from '../ui/status-chip-select'
 
@@ -406,7 +407,7 @@ function TextareaSpecimen(): ReactElement {
           <Textarea
             id="design-audit-textarea-focused"
             defaultValue="The focus treatment is pinned for visual comparison."
-            className="border-foreground ring-4 ring-border"
+            className="border-ring ring-[3px] ring-ring/50"
           />
         </Field>
       </div>
@@ -691,7 +692,9 @@ function SelectionPopoverSpecimen(): ReactElement {
               aria-label="Multiple workspace selection"
               data-testid="design-audit-control:selection-popover:multiple"
             >
-              <span className="min-w-0 truncate text-left">{multipleTriggerLabel}</span>
+              <WorkspaceTextFade className="min-w-0 flex-1 text-left">
+                {multipleTriggerLabel}
+              </WorkspaceTextFade>
               <ChevronDown aria-hidden="true" />
             </Button>
           </SelectionPopover>
@@ -875,7 +878,9 @@ function SelectionPopoverSpecimen(): ReactElement {
               aria-label="Create or select labels"
               data-testid="design-audit-control:selection-popover:create-action"
             >
-              <span className="min-w-0 truncate text-left">{createdTriggerLabel}</span>
+              <WorkspaceTextFade className="min-w-0 flex-1 text-left">
+                {createdTriggerLabel}
+              </WorkspaceTextFade>
               <ChevronDown aria-hidden="true" />
             </Button>
           </SelectionPopover>
@@ -948,7 +953,9 @@ function ResponsivePickerSpecimen(): ReactElement {
                       data-testid={`design-audit-control:responsive-picker:single:${option.value}`}
                       className="min-h-9 cursor-pointer text-foreground hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
                     >
-                      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                      <WorkspaceTextFade className="min-w-0 flex-1">
+                        {option.label}
+                      </WorkspaceTextFade>
                       {singleValue === option.value ? (
                         <CheckCircle2 aria-hidden="true" className="text-primary" />
                       ) : null}
@@ -972,9 +979,9 @@ function ResponsivePickerSpecimen(): ReactElement {
                 aria-label="Open multiple responsive picker"
                 data-testid="design-audit-control:responsive-picker:multiple"
               >
-                <span className="min-w-0 flex-1 truncate">
+                <WorkspaceTextFade className="min-w-0 flex-1">
                   {multipleValues.length > 0 ? 'Workspace views' : 'Select workspace views'}
-                </span>
+                </WorkspaceTextFade>
                 <SelectionCounter count={multipleValues.length} />
                 <ChevronDown aria-hidden="true" />
               </Button>
@@ -1011,7 +1018,9 @@ function ResponsivePickerSpecimen(): ReactElement {
                         className="min-h-9 cursor-pointer rounded-sm text-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
                       >
                         <SelectionCheckbox checked={selected} />
-                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                        <WorkspaceTextFade className="min-w-0 flex-1">
+                          {option.label}
+                        </WorkspaceTextFade>
                       </CommandItem>
                     )
                   })}

@@ -19,6 +19,8 @@ export { StatusChip } from './status-chip'
 export type { StatusChipItem, StatusChipProps, StatusChipVariant } from './status-chip'
 export { StatusChipSelect } from './status-chip-select'
 export type { StatusChipOption, StatusChipSelectProps } from './status-chip-select'
+export { WorkspaceTextClip } from './workspace-text-clip'
+export type { WorkspaceTextClipProps } from './workspace-text-clip'
 export { SelectionPopover } from './selection-popover'
 export type {
   MultipleSelectionPopoverProps,

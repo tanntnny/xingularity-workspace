@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Xingularity — local-first desktop workspace for notes, projects, and automations",
+  "bin": {
+    "xingularity": "./bin/xingularity"
+  },
   "main": "./out/main/index.js",
   "author": "example.com",
   "homepage": "https://electron-vite.org",
@@ -70,6 +73,8 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@excalidraw/excalidraw": "^0.18.0",
     "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/fira-code": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fullcalendar/daygrid": "^6.1.20",
     "@fullcalendar/interaction": "^6.1.20",

@@ -127,7 +127,7 @@ export function TaskPage({
             value={task.title}
             onCommit={handleTitleCommit}
             displayAs="h1"
-            displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-4xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
+            displayClassName="m-0 min-w-0 origin-left cursor-text text-4xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
             inputClassName="m-0 min-w-0 flex-1 origin-left border-0 bg-transparent text-4xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out outline-none"
             title="Click to rename task"
           />

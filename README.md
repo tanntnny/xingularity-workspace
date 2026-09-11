@@ -143,6 +143,13 @@ Legacy vaults are migrated forward on open. Old `notes/` content is copied into 
 - Separate run history view for agent execution records
 - Mistral-backed assistant flow configured from Settings
 
+### Vault CLI And Agent Context
+
+- JSON-only `xingularity vault` commands for status, validation, manifests, portable scans/backups, safe search, note reads, context bundles, and recovery inspection
+- Bounded project, task, calendar, planning, note, resource, subscription, schedule, and agent-run context for workspace-aware agents
+- Desktop Agent Chat access to the same read-only `workspace.context` boundary
+- Shared `$x-workspace` agent guidance is installed at `~/.xcodex/shared/skills/x-workspace`
+
 ## Security Model
 
 - `contextIsolation: true`
@@ -186,6 +193,13 @@ npm run build
 npm run test:run
 ```
 
+### Vault CLI
+
+```bash
+npm run xingularity -- vault context --root /path/to/vault --pretty
+npm run xingularity -- vault search --root /path/to/vault --query "launch review"
+```
+
 ### Packaging
 
 - `npm run build:mac`
@@ -200,3 +214,4 @@ The macOS build uses [`scripts/after-sign.cjs`](/Users/tanny/Documents/Projects/
 - [`docs/app-pages-and-data.md`](/Users/tanny/Documents/Projects/Beacon/Xingularity/docs/app-pages-and-data.md): page and data model reference
 - [`docs/xingularity-user-guidance.md`](/Users/tanny/Documents/Projects/Beacon/Xingularity/docs/xingularity-user-guidance.md): workflow-oriented usage guide
 - [`docs/design-notes.md`](/Users/tanny/Documents/Projects/Beacon/Xingularity/docs/design-notes.md): implementation rationale, mainly for the vault and indexing layer
+- [`docs/xingularity-cli.md`](docs/xingularity-cli.md): CLI commands, context boundaries, and machine-readable output

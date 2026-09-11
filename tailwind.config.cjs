@@ -38,6 +38,10 @@ module.exports = {
           foreground: 'var(--accent-foreground)',
           hover: 'var(--accent-hover)'
         },
+        selection: {
+          DEFAULT: 'var(--selection-background)',
+          foreground: 'var(--selection-foreground)'
+        },
         progress: 'var(--progress)',
         milestone: {
           current: 'var(--milestone-current-icon)',
@@ -54,7 +58,7 @@ module.exports = {
           foreground: 'var(--selection-counter-foreground)'
         },
         destructive: {
-          DEFAULT: 'var(--destructive)',
+          DEFAULT: 'rgb(var(--destructive-rgb) / <alpha-value>)',
           foreground: 'var(--destructive-foreground)'
         },
         success: {
@@ -89,7 +93,7 @@ module.exports = {
         border: 'var(--border)',
         'panel-border': 'var(--panel-border)',
         input: 'var(--input)',
-        ring: 'var(--ring)',
+        ring: 'rgb(var(--ring-rgb) / <alpha-value>)',
         sidebar: {
           DEFAULT: 'var(--sidebar-background)',
           foreground: 'var(--sidebar-foreground)',

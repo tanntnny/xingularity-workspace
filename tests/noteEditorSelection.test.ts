@@ -9,9 +9,11 @@ const stylesheet = readFileSync(
 describe('note editor selection styling', () => {
   it('uses the shared blue selection colors for Milkdown text selection', () => {
     expect(stylesheet).toContain(
-      '--note-editor-selection: color-mix(in srgb, var(--accent) 58%, transparent);'
+      '--selection-background: color-mix(in srgb, var(--accent) 58%, transparent);'
     )
-    expect(stylesheet).toContain('--note-editor-selection-foreground: var(--accent-foreground);')
+    expect(stylesheet).toContain('--selection-foreground: var(--accent-foreground);')
+    expect(stylesheet).toContain('--note-editor-selection: var(--selection-background);')
+    expect(stylesheet).toContain('--note-editor-selection-foreground: var(--selection-foreground);')
     expect(stylesheet).toContain(
       '.note-editor-surface .milkdown .ProseMirror {\n    caret-color: var(--foreground);'
     )

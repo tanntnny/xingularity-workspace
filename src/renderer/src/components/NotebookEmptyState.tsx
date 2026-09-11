@@ -4,6 +4,7 @@ import { FileText, PenTool, Plus } from './ui/icons'
 import { EmptyState } from './ui/empty-state'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 export interface RecentNotebookFile {
   kind: 'note' | 'excalidraw'
@@ -61,12 +62,12 @@ export function NotebookEmptyState({
                         aria-hidden="true"
                       />
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-foreground">
+                        <WorkspaceTextFade className="text-sm font-medium text-foreground">
                           {displayName}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
+                        </WorkspaceTextFade>
+                        <WorkspaceTextFade className="text-xs text-muted-foreground">
                           {file.relPath}
-                        </span>
+                        </WorkspaceTextFade>
                       </span>
                     </Button>
                   </li>

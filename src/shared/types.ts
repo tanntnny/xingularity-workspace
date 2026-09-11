@@ -7,6 +7,7 @@ import type {
   WriteNoteResult
 } from './vaultProtocol'
 import type { RecentPageTarget } from './recentPages'
+import type { FolderColorMap } from './folderColors'
 
 export type Maybe<T> = T | null
 
@@ -1164,6 +1165,7 @@ export interface AppSettings {
     mistralApiKey?: string
   }
   fontFamily: string
+  codeFontFamily: string
   pythonCondaEnvironmentPath: Maybe<string>
   pythonCondaExecutablePath: Maybe<string>
   editorVimModeEnabled: boolean
@@ -1173,6 +1175,7 @@ export interface AppSettings {
   // existing renderer consumers during the migration.
   tasks?: CalendarTask[]
   workspaceViews: WorkspaceView[]
+  folderColors: FolderColorMap
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
   gridBoard: GridBoardState
@@ -1189,6 +1192,7 @@ export interface AppSettingsUpdate {
     mistralApiKey?: string
   }
   fontFamily?: string
+  codeFontFamily?: string
   pythonCondaEnvironmentPath?: Maybe<string>
   pythonCondaExecutablePath?: Maybe<string>
   editorVimModeEnabled?: boolean
@@ -1196,6 +1200,7 @@ export interface AppSettingsUpdate {
   calendarTasks?: CalendarTask[]
   tasks?: CalendarTask[]
   workspaceViews?: WorkspaceView[]
+  folderColors?: FolderColorMap
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
   gridBoard?: GridBoardState
@@ -1562,6 +1567,15 @@ export interface RendererSubscriptionsApi {
 }
 
 export interface RendererAgentToolsApi {
+  workspace: {
+    context: (input: {
+      query?: string
+      project?: string
+      note?: string
+      limit?: number
+      maxChars?: number
+    }) => Promise<unknown>
+  }
   note: {
     search: (input: { query: string }) => Promise<SearchResult[]>
     read: (input: { path: string }) => Promise<{ path: string; content: string }>

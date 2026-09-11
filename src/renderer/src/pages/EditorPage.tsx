@@ -244,7 +244,7 @@ export function EditorPage({
                       onCommit={onRename}
                       editToken={titleEditToken}
                       displayAs="h1"
-                      displayClassName="m-0 min-w-0 origin-left cursor-text truncate text-3xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
+                      displayClassName="m-0 min-w-0 origin-left cursor-text text-3xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
                       inputClassName="m-0 h-auto min-w-0 flex-1 origin-left text-3xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out focus-visible:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
                       inputVariant="ghost"
                       title="Click to rename"
@@ -266,6 +266,7 @@ export function EditorPage({
               <div data-testid="note-editor-content" className="h-full pb-8 pt-5">
                 <Editor
                   ref={editorRef}
+                  className="note-page-editor"
                   initialContent={initialContent}
                   density="compact"
                   onDirty={onDirty}

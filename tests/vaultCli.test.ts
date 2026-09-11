@@ -188,6 +188,22 @@ describe('vault CLI', () => {
     })
   })
 
+  it('keeps context data readable while returning validation status for an invalid manifest', async () => {
+    const root = await makeRoot()
+    await fs.mkdir(path.join(root, '.xingularity'), { recursive: true })
+    await fs.writeFile(path.join(root, VAULT_MANIFEST_RELATIVE_PATH), '{"invalid":true}', 'utf8')
+
+    const response = await runVaultCli(['vault', 'context', '--root', root, '--no-diagnostics'])
+
+    expect(response).toMatchObject({
+      ok: false,
+      command: 'vault context',
+      exitCode: VAULT_CLI_EXIT_CODES.validation,
+      error: { code: 'context-health-check-failed' },
+      data: { vault: { manifest: { present: true, valid: false } } }
+    })
+  })
+
   it('returns usage JSON instead of throwing for an invalid command prefix', async () => {
     const response = await runVaultCli(['status'])
 
@@ -196,6 +212,121 @@ describe('vault CLI', () => {
       command: 'vault',
       exitCode: VAULT_CLI_EXIT_CODES.usage,
       error: { code: 'invalid-command' }
+    })
+  })
+
+  it('reads bounded workspace context, search results, notes, and recovery status', async () => {
+    const root = await makeRoot()
+    await fs.mkdir(path.join(root, 'notebooks'), { recursive: true })
+    await fs.mkdir(path.join(root, 'projects'), { recursive: true })
+    await fs.mkdir(path.join(root, 'tasks'), { recursive: true })
+    await fs.mkdir(path.join(root, '.xingularity'), { recursive: true })
+    await fs.writeFile(
+      path.join(root, VAULT_MANIFEST_RELATIVE_PATH),
+      `${JSON.stringify(createVaultManifest({ vaultId: 'context-cli-test' }))}\n`,
+      'utf8'
+    )
+    await fs.writeFile(
+      path.join(root, 'notebooks', 'launch.md'),
+      '# Launch plan\n\nPrepare the launch review.\n',
+      'utf8'
+    )
+    await fs.writeFile(
+      path.join(root, 'projects', 'atlas.json'),
+      JSON.stringify({
+        id: 'project-atlas',
+        name: 'Atlas',
+        description: 'Launch workspace',
+        state: 'active',
+        updatedAt: '2026-09-10T00:00:00.000Z'
+      }),
+      'utf8'
+    )
+    await fs.writeFile(
+      path.join(root, 'tasks', 'task-1.json'),
+      JSON.stringify({
+        id: 'task-1',
+        title: 'Prepare launch review',
+        projectId: 'project-atlas',
+        status: 'pending',
+        completed: false,
+        createdAt: '2026-09-10T00:00:00.000Z'
+      }),
+      'utf8'
+    )
+
+    expect(
+      parseVaultCliArgs(
+        [
+          'vault',
+          'context',
+          '--root',
+          root,
+          '--query',
+          'launch',
+          '--limit',
+          '5',
+          '--max-chars',
+          '4000'
+        ],
+        { cwd: root }
+      )
+    ).toMatchObject({
+      command: 'context',
+      rootPath: root,
+      query: 'launch',
+      limit: 5,
+      maxChars: 4000
+    })
+
+    const context = await runVaultCli([
+      'vault',
+      'context',
+      '--root',
+      root,
+      '--no-diagnostics',
+      '--max-chars',
+      '4000'
+    ])
+    expect(context).toMatchObject({
+      ok: true,
+      command: 'vault context',
+      data: {
+        vault: { manifest: { manifest: { vaultId: 'context-cli-test' } } },
+        notes: [{ path: 'notebooks/launch.md' }],
+        projects: [{ id: 'project-atlas' }],
+        tasks: [{ id: 'task-1' }]
+      }
+    })
+
+    const search = await runVaultCli(['vault', 'search', 'launch', '--root', root])
+    expect(search).toMatchObject({
+      ok: true,
+      command: 'vault search',
+      data: { resultCount: expect.any(Number) }
+    })
+    expect(JSON.stringify(search)).toContain('"kind":"note"')
+
+    const read = await runVaultCli([
+      'vault',
+      'read',
+      'launch.md',
+      '--root',
+      root,
+      '--max-chars',
+      '4000'
+    ])
+    expect(read).toMatchObject({
+      ok: true,
+      command: 'vault read',
+      data: { path: 'notebooks/launch.md', title: 'Launch plan' }
+    })
+
+    const conflicts = await runVaultCli(['vault', 'conflicts', '--root', root])
+    expect(conflicts).toMatchObject({
+      ok: true,
+      command: 'vault conflicts',
+      data: { conflictCount: 0, quarantineCount: 0 }
     })
   })
 })

@@ -1,19 +1,11 @@
 import { KeyboardEvent, ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  FileDown,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Pencil,
-  PenTool,
-  Plus,
-  Trash2
-} from './ui/icons'
+import { FileDown, FileText, Pencil, PenTool, Plus, Trash2 } from './ui/icons'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import type { NoteTreeNode } from '../../../shared/types'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import { normalizeNoteTreeSelection, type NoteTreeSelection } from '../lib/noteTreeSelection'
 import { getNotebookFolderContents } from '../lib/notebookFolderContents'
+import { createFolderColorMenuItem } from '../lib/folderColorMenu'
 import { cn } from '../lib/utils'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
@@ -22,6 +14,14 @@ import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
 import { Button } from './ui/button'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
+import { NotebookFolderIcon } from './ui/notebook-folder-icon'
+import {
+  clearActiveNoteTreeDrag,
+  readNoteTreeDragEntries,
+  setActiveNoteTreeDrag,
+  writeNoteTreeDragData
+} from '../lib/noteTreeDrag'
 
 interface NotebookCardBrowserProps {
   tree: NoteTreeNode[]
@@ -38,6 +38,8 @@ interface NotebookCardBrowserProps {
   onRenamePath: (relPath: string, nextName: string, kind: NoteTreeNode['kind']) => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
+  folderColors: FolderColorMap
+  onFolderColorChange: (folderPath: string, color: string | null) => void
 }
 
 export function NotebookCardBrowser({
@@ -54,7 +56,9 @@ export function NotebookCardBrowser({
   onExportFolderMarkdown,
   onRenamePath,
   onDeleteEntries,
-  onMoveEntries
+  onMoveEntries,
+  folderColors,
+  onFolderColorChange
 }: NotebookCardBrowserProps): ReactElement {
   const folderContents = useMemo(
     () => getNotebookFolderContents(tree, folderPath),
@@ -86,20 +90,21 @@ export function NotebookCardBrowser({
 
   return (
     <section
-      className="flex min-h-0 flex-col overflow-hidden"
+      className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-testid="notebook-card-browser"
       onKeyDownCapture={handleCardKeyDown}
     >
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={!canCreateInCurrentFolder}>
           <div
-            className="flex min-h-0 flex-col overflow-hidden text-card-foreground"
+            className="flex h-full min-h-0 flex-1 flex-col overflow-hidden text-card-foreground"
             data-testid="notebook-card-content"
           >
-            <div className="overflow-y-auto">
+            <div className="h-full min-h-0 flex-1 overflow-y-auto">
               {folderContents.children.length === 0 ? (
                 <EmptyFolderState
                   parentDir={currentFolderPath}
+                  folderColor={folderPath ? folderColors[folderPath] : undefined}
                   onCreateNote={onCreateNote}
                   onCreateExcalidraw={onCreateExcalidraw}
                   onCreateFolder={onCreateFolder}
@@ -122,6 +127,8 @@ export function NotebookCardBrowser({
                       onRenamePath={onRenamePath}
                       onDeleteEntries={onDeleteEntries}
                       onMoveEntries={onMoveEntries}
+                      folderColor={node.kind === 'folder' ? folderColors[node.relPath] : undefined}
+                      onFolderColorChange={onFolderColorChange}
                     />
                   ))}
                 </div>
@@ -144,6 +151,7 @@ export function NotebookCardBrowser({
 
 interface EmptyFolderStateProps {
   parentDir: string
+  folderColor?: string
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -151,6 +159,7 @@ interface EmptyFolderStateProps {
 
 function EmptyFolderState({
   parentDir,
+  folderColor,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder
@@ -159,7 +168,7 @@ function EmptyFolderState({
     <EmptyState
       data-testid="notebook-card-empty-state"
       className="border-0 bg-transparent"
-      icon={FolderOpen}
+      icon={<NotebookFolderIcon variant="open" color={folderColor} size={20} />}
       title="This folder is empty"
       description="Create a notebook, drawing, or folder to get started."
     >
@@ -188,7 +197,7 @@ function EmptyFolderState({
           className="gap-2"
           onClick={() => onCreateFolder(parentDir)}
         >
-          <Folder size={16} aria-hidden="true" />
+          <NotebookFolderIcon variant="closed" size={16} />
           New folder
         </Button>
       </div>
@@ -210,6 +219,8 @@ interface NotebookCardProps {
   onRenamePath: (relPath: string, nextName: string, kind: NoteTreeNode['kind']) => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
+  folderColor?: string
+  onFolderColorChange: (folderPath: string, color: string | null) => void
 }
 
 function NotebookCard({
@@ -225,7 +236,9 @@ function NotebookCard({
   onExportFolderMarkdown,
   onRenamePath,
   onDeleteEntries,
-  onMoveEntries
+  onMoveEntries,
+  folderColor,
+  onFolderColorChange
 }: NotebookCardProps): ReactElement {
   const [isEditing, setIsEditing] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -377,7 +390,7 @@ function NotebookCard({
             {
               id: 'create-folder',
               label: 'New folder',
-              icon: <FolderPlus aria-hidden="true" />,
+              icon: <NotebookFolderIcon variant="closed" size={16} />,
               onSelect: () => onCreateFolder(parentDir)
             }
           ]
@@ -409,7 +422,12 @@ function NotebookCard({
                     onSelect: () => onExportFolderMarkdown(node.relPath)
                   }
                 ]
-              }
+              },
+              createFolderColorMenuItem({
+                testIdPrefix: `notebook-card-folder-color:${node.relPath}`,
+                selectedColor: folderColor,
+                onChange: (color) => onFolderColorChange(node.relPath, color)
+              })
             ]
           : []
     },
@@ -473,7 +491,8 @@ function NotebookCard({
           onDrop={(event) => {
             event.preventDefault()
             setIsDragOver(false)
-            const entries = readDraggedEntries(event.dataTransfer) ?? getDragEntries()
+            const entries = readNoteTreeDragEntries(event.dataTransfer) ?? getDragEntries()
+            clearActiveNoteTreeDrag()
             if (canDropEntries(entries)) {
               void onMoveEntries(entries, node.relPath)
             }
@@ -488,16 +507,17 @@ function NotebookCard({
             className="flex min-h-28 w-36 max-w-full min-w-0 flex-col overflow-hidden rounded-xl"
             onDragStart={(event) => {
               const entries = getDragEntries()
-              const serializedEntries = JSON.stringify(entries)
-              event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData('application/x-xingularity-note-tree', serializedEntries)
-              event.dataTransfer.setData('text/plain', serializedEntries)
+              setActiveNoteTreeDrag(entries, 'card')
+              writeNoteTreeDragData(event.dataTransfer, entries)
             }}
-            onDragEnd={() => setIsDragOver(false)}
+            onDragEnd={() => {
+              setIsDragOver(false)
+              clearActiveNoteTreeDrag()
+            }}
           >
             {isEditing ? (
               <div className="flex min-h-24 flex-1 flex-col items-center gap-1.5 rounded-xl p-1.5 text-center">
-                <NotebookCardIcon node={node} isSelected={isSelected} />
+                <NotebookCardIcon node={node} isSelected={isSelected} folderColor={folderColor} />
                 <span className="min-w-0 max-w-full">
                   <input
                     ref={renameInputRef}
@@ -522,9 +542,9 @@ function NotebookCard({
                     }}
                     onBlur={commitRename}
                   />
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  <WorkspaceTextFade className="mt-0.5 text-xs text-muted-foreground">
                     {getNotebookCardSubtitle(node)}
-                  </span>
+                  </WorkspaceTextFade>
                 </span>
               </div>
             ) : (
@@ -535,19 +555,20 @@ function NotebookCard({
                 aria-pressed={isSelected}
                 onClick={selectEntry}
               >
-                <NotebookCardIcon node={node} isSelected={isSelected} />
+                <NotebookCardIcon node={node} isSelected={isSelected} folderColor={folderColor} />
                 <span className="min-w-0 max-w-full">
-                  <span
+                  <WorkspaceTextFade
+                    lines={2}
                     className={cn(
-                      'block truncate text-sm font-semibold',
+                      'text-sm font-semibold',
                       isSelected ? 'text-primary' : 'text-foreground'
                     )}
                   >
                     {displayName}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  </WorkspaceTextFade>
+                  <WorkspaceTextFade className="mt-0.5 text-xs text-muted-foreground">
                     {getNotebookCardSubtitle(node)}
-                  </span>
+                  </WorkspaceTextFade>
                 </span>
               </button>
             )}
@@ -604,7 +625,7 @@ function NotebookCreateContextMenuItems({
             {
               id: 'create-folder',
               label: 'New folder',
-              icon: <FolderPlus aria-hidden="true" />,
+              icon: <NotebookFolderIcon variant="closed" size={16} />,
               onSelect: () => onCreateFolder(parentDir)
             }
           ]
@@ -616,10 +637,12 @@ function NotebookCreateContextMenuItems({
 
 function NotebookCardIcon({
   node,
-  isSelected
+  isSelected,
+  folderColor
 }: {
   node: NoteTreeNode
   isSelected: boolean
+  folderColor?: string
 }): ReactElement {
   return (
     <span
@@ -631,7 +654,7 @@ function NotebookCardIcon({
       aria-hidden="true"
     >
       {node.kind === 'folder' ? (
-        <Folder size={48} strokeWidth={1.8} />
+        <NotebookFolderIcon variant="closed" color={folderColor} size={48} />
       ) : node.kind === 'excalidraw' ? (
         <PenTool size={48} strokeWidth={1.8} />
       ) : (
@@ -659,37 +682,6 @@ function getParentPath(relPath: string): string | null {
   }
 
   return relPath.slice(0, relPath.lastIndexOf('/')) || null
-}
-
-function readDraggedEntries(dataTransfer: DataTransfer): NoteTreeSelection | null {
-  const raw = dataTransfer.getData('application/x-xingularity-note-tree')
-  if (!raw) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) {
-      return null
-    }
-
-    const entries = parsed.filter(isNoteTreeSelectionEntry)
-    return entries.length > 0 ? normalizeNoteTreeSelection(entries) : null
-  } catch {
-    return null
-  }
-}
-
-function isNoteTreeSelectionEntry(value: unknown): value is NoteTreeSelection[number] {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  const candidate = value as { kind?: unknown; relPath?: unknown }
-  return (
-    (candidate.kind === 'note' || candidate.kind === 'excalidraw' || candidate.kind === 'folder') &&
-    typeof candidate.relPath === 'string'
-  )
 }
 
 function isTextInput(target: EventTarget | null): boolean {

@@ -12,6 +12,7 @@ import { EmptyState } from '../components/ui/empty-state'
 import { Milestone, Plus, X } from '../components/ui/icons'
 import { ProgressRing } from '../components/ui/progress-ring'
 import { Button } from '../components/ui/button'
+import { WorkspaceTextFade } from '../components/ui/workspace-text-fade'
 import { MilestoneCompletenessIcon } from '../components/MilestoneCompletenessIcon'
 import { WorkspaceCenterEditDialog } from '../components/WorkspaceCenterEditDialog'
 import { TaskDetailRow } from './ProjectsWorkspacePage'
@@ -64,9 +65,9 @@ export function MilestonePageContent({
         className="flex min-w-0 items-center gap-2 rounded-[var(--radius-button)] border border-border bg-surface-subtle px-3 py-2"
       >
         <MilestoneCompletenessIcon status={status} size={18} />
-        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+        <WorkspaceTextFade className="min-w-0 flex-1 text-sm text-muted-foreground">
           {progress.completed}/{progress.total} tasks complete
-        </span>
+        </WorkspaceTextFade>
         <span
           className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
           aria-label={`Milestone progress: ${completionPercent}%`}
@@ -112,10 +113,10 @@ export function MilestonePageContent({
           ) : null}
         </ChipGroup>
         <span
-          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+          className="min-w-0 flex-1 text-xs text-muted-foreground"
           title={project.name}
         >
-          {project.name} · Milestone
+          <WorkspaceTextFade className="min-w-0">{project.name} · Milestone</WorkspaceTextFade>
         </span>
       </div>
 

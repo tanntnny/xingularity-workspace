@@ -22,7 +22,7 @@ describe('SelectionPopover', () => {
     expect(selectionPopoverSource).toContain(
       'min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5'
     )
-    expect(selectionPopoverSource).toContain('hover:bg-popover-hover')
+    expect(selectionPopoverSource).toContain('hover:!bg-surface-subtle-hover')
   })
 
   it('treats the create option like a navigable selection row', () => {

@@ -78,6 +78,71 @@ test('opens an Excalidraw file with a visible canvas', async () => {
     const canvas = page.locator('.excalidraw')
     await expect(canvas).toBeVisible({ timeout: 20_000 })
     await expect.poll(async () => (await canvas.boundingBox())?.height ?? 0).toBeGreaterThan(0)
+
+    await page.waitForTimeout(1_200)
+    await page.evaluate(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="note-tree-row:debug.excalidraw"]'
+      )
+      const panel = document.querySelector<HTMLElement>('[data-testid="note-file-tree-panel"]')
+      if (!row || !panel) {
+        throw new Error('Expected the Excalidraw tree row and panel to exist')
+      }
+
+      let replacementCount = 0
+      const observer = new MutationObserver(() => {
+        const currentRow = document.querySelector<HTMLElement>(
+          '[data-testid="note-tree-row:debug.excalidraw"]'
+        )
+        if (currentRow !== row) {
+          replacementCount += 1
+        }
+      })
+      observer.observe(panel, { childList: true, subtree: true })
+
+      const target = window as Window & {
+        __excalidrawTreeHoverProbe?: {
+          read: () => { replacementCount: number; rowStillMounted: boolean }
+          disconnect: () => void
+        }
+      }
+      target.__excalidrawTreeHoverProbe = {
+        read: () => ({
+          replacementCount,
+          rowStillMounted:
+            document.querySelector<HTMLElement>(
+              '[data-testid="note-tree-row:debug.excalidraw"]'
+            ) === row
+        }),
+        disconnect: () => observer.disconnect()
+      }
+    })
+
+    const hoverBox = await drawingRow.boundingBox()
+    if (!hoverBox) {
+      throw new Error('Expected the Excalidraw tree row to have a bounding box')
+    }
+    await page.mouse.move(hoverBox.x + hoverBox.width / 2, hoverBox.y + hoverBox.height / 2)
+    await expect(drawingRow).toHaveCSS('background-color', 'rgb(34, 34, 34)')
+    await page.waitForTimeout(2_200)
+
+    const hoverProbe = await page.evaluate(() => {
+      const target = window as Window & {
+        __excalidrawTreeHoverProbe?: {
+          read: () => { replacementCount: number; rowStillMounted: boolean }
+          disconnect: () => void
+        }
+      }
+      const probe = target.__excalidrawTreeHoverProbe
+      if (!probe) {
+        throw new Error('Expected the Excalidraw tree hover probe to be installed')
+      }
+      const result = probe.read()
+      probe.disconnect()
+      delete target.__excalidrawTreeHoverProbe
+      return result
+    })
+    expect(hoverProbe).toEqual({ replacementCount: 0, rowStillMounted: true })
   } finally {
     await electronApp.close()
     await fs.rm(vaultRoot, { recursive: true, force: true })

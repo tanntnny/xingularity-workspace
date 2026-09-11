@@ -10,10 +10,12 @@ import {
   BreadcrumbSeparator
 } from './breadcrumb'
 import { Button } from './button'
-import { ChevronDown, ChevronRight, Folder, FolderOpen, Search } from './icons'
+import { ChevronDown, ChevronRight, Search } from './icons'
 import { Input } from './input'
+import { NotebookFolderIcon } from './notebook-folder-icon'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export interface ColumnFolderPickerNode {
   value: string
@@ -23,6 +25,7 @@ export interface ColumnFolderPickerNode {
   children?: readonly ColumnFolderPickerNode[]
   disabled?: boolean
   status?: React.ReactNode
+  color?: string
 }
 
 export interface ColumnFolderPickerProps {
@@ -193,9 +196,9 @@ export function ColumnFolderPicker({
       aria-haspopup="dialog"
       className="h-10 w-full justify-between px-3 text-left"
     >
-      <span className={cn('min-w-0 truncate', value ? 'text-foreground' : 'text-muted-foreground')}>
+      <WorkspaceTextFade className={cn(value ? 'text-foreground' : 'text-muted-foreground')}>
         {value ? value : (placeholder ?? `Select ${label.toLocaleLowerCase()}`)}
-      </span>
+      </WorkspaceTextFade>
       <ChevronDown className="shrink-0 opacity-60" aria-hidden="true" />
     </Button>
   )
@@ -234,7 +237,9 @@ export function ColumnFolderPicker({
               <BreadcrumbItem className="min-w-0">
                 {activePath.length === 0 ? (
                   <BreadcrumbPage>
-                    <BreadcrumbIconLabel icon={<Folder size={14} />}>Notebooks</BreadcrumbIconLabel>
+                    <BreadcrumbIconLabel icon={<NotebookFolderIcon variant="open" size={14} />}>
+                      Notebooks
+                    </BreadcrumbIconLabel>
                   </BreadcrumbPage>
                 ) : (
                   <BreadcrumbButton
@@ -242,7 +247,9 @@ export function ColumnFolderPicker({
                     data-testid={testId ? `${testId}-breadcrumb:root` : undefined}
                     onClick={() => setActivePath([])}
                   >
-                    <BreadcrumbIconLabel icon={<Folder size={14} />}>Notebooks</BreadcrumbIconLabel>
+                    <BreadcrumbIconLabel icon={<NotebookFolderIcon variant="open" size={14} />}>
+                      Notebooks
+                    </BreadcrumbIconLabel>
                   </BreadcrumbButton>
                 )}
               </BreadcrumbItem>
@@ -257,7 +264,15 @@ export function ColumnFolderPicker({
                     <BreadcrumbItem className="min-w-0">
                       {isCurrent ? (
                         <BreadcrumbPage>
-                          <BreadcrumbIconLabel icon={<FolderOpen size={14} />}>
+                          <BreadcrumbIconLabel
+                            icon={
+                              <NotebookFolderIcon
+                                variant="open"
+                                color={column.folder.color}
+                                size={14}
+                              />
+                            }
+                          >
                             {column.folder.label}
                           </BreadcrumbIconLabel>
                         </BreadcrumbPage>
@@ -271,7 +286,15 @@ export function ColumnFolderPicker({
                           }
                           onClick={() => setActivePath(path)}
                         >
-                          <BreadcrumbIconLabel icon={<Folder size={14} />}>
+                          <BreadcrumbIconLabel
+                            icon={
+                              <NotebookFolderIcon
+                                variant="closed"
+                                color={column.folder.color}
+                                size={14}
+                              />
+                            }
+                          >
                             {column.folder.label}
                           </BreadcrumbIconLabel>
                         </BreadcrumbButton>
@@ -321,12 +344,19 @@ export function ColumnFolderPicker({
                       }
                       onClick={() => selectSearchResult(result)}
                     >
-                      <FolderOpen className="size-4 shrink-0" aria-hidden="true" />
+                      <NotebookFolderIcon
+                        variant="closed"
+                        color={result.node.color}
+                        size={16}
+                        className="shrink-0"
+                      />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{result.node.label}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
+                        <WorkspaceTextFade className="font-medium">
+                          {result.node.label}
+                        </WorkspaceTextFade>
+                        <WorkspaceTextFade className="text-xs text-muted-foreground">
                           {result.pathLabel}
-                        </span>
+                        </WorkspaceTextFade>
                       </span>
                       {result.node.status}
                     </button>
@@ -395,12 +425,15 @@ export function ColumnFolderPicker({
                             }
                             onClick={() => selectNode(node, nodePath)}
                           >
-                            {hasChildren ? (
-                              <FolderOpen className="size-4 shrink-0" aria-hidden="true" />
-                            ) : (
-                              <Folder className="size-4 shrink-0" aria-hidden="true" />
-                            )}
-                            <span className="min-w-0 flex-1 truncate">{node.label}</span>
+                            <NotebookFolderIcon
+                              variant={hasChildren ? 'open' : 'closed'}
+                              color={node.color}
+                              size={16}
+                              className="shrink-0"
+                            />
+                            <WorkspaceTextFade className="min-w-0 flex-1">
+                              {node.label}
+                            </WorkspaceTextFade>
                             {node.status}
                             {hasChildren ? (
                               <ChevronRight

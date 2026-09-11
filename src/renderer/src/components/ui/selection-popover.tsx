@@ -6,6 +6,7 @@ import { ChevronDown, Plus } from './icons'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from './command'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from './popover'
 import { SelectionCheckbox } from './selection-checkbox'
+import { WorkspaceTextFade, WorkspaceTextFadeContent } from './workspace-text-fade'
 
 export interface SelectionPopoverOption {
   value: string
@@ -66,7 +67,7 @@ export interface SingleSelectionPopoverProps
 export type SelectionPopoverProps = MultipleSelectionPopoverProps | SingleSelectionPopoverProps
 
 const selectionOptionClassName =
-  'min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:bg-popover-hover hover:text-foreground focus:bg-popover-hover focus:text-foreground data-[selected=true]:bg-popover-hover data-[selected=true]:text-foreground data-[checked=true]:bg-popover-hover data-[checked=true]:text-foreground'
+  'min-h-9 cursor-pointer gap-2 rounded-sm px-2.5 py-1.5 text-foreground transition-colors hover:!bg-surface-subtle-hover hover:!text-foreground focus:!bg-surface-subtle-hover focus:!text-foreground data-[selected=true]:!bg-surface-subtle-hover data-[selected=true]:!text-foreground data-[checked=true]:!bg-surface-subtle-hover data-[checked=true]:!text-foreground'
 
 function isMultipleSelection(props: SelectionPopoverProps): props is MultipleSelectionPopoverProps {
   return props.selectionMode !== 'single'
@@ -248,7 +249,9 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
               triggerProps?.className
             )}
           >
-            <span className="min-w-0 truncate text-left">{triggerLabel}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1 text-left">
+              {triggerLabel}
+            </WorkspaceTextFade>
             <ChevronDown className="size-[var(--control-icon-size)] shrink-0 opacity-60" />
           </Button>
         )
@@ -354,14 +357,15 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
                       className={selectionOptionClassName}
                     >
                       {multiple ? <SelectionCheckbox checked={selected} /> : null}
-                      <span
-                        className={cn(
-                          'min-w-0 flex-1 text-left',
-                          option.wrapLabel ? 'whitespace-normal break-words' : 'truncate'
-                        )}
-                      >
-                        {option.label}
-                      </span>
+                      {option.wrapLabel ? (
+                        <span className="min-w-0 flex-1 whitespace-normal break-words text-left">
+                          {option.label}
+                        </span>
+                      ) : (
+                        <WorkspaceTextFadeContent className="min-w-0 flex-1 text-left">
+                          {option.label}
+                        </WorkspaceTextFadeContent>
+                      )}
                       {option.action ? (
                         <Button
                           type="button"
@@ -395,9 +399,9 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
                   className={selectionOptionClassName}
                 >
                   <Plus size={16} aria-hidden="true" className="text-muted-foreground" />
-                  <span className="min-w-0 flex-1 text-left truncate">
+                  <WorkspaceTextFade className="min-w-0 flex-1 text-left">
                     {createLabel(createValue ?? '')}
-                  </span>
+                  </WorkspaceTextFade>
                 </CommandItem>
               </CommandGroup>
             ) : (

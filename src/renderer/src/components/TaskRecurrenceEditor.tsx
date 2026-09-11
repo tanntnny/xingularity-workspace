@@ -13,6 +13,7 @@ import {
 } from './ui/dialog'
 import { Repeat, X } from './ui/icons'
 import { WorkspaceIconButton } from './ui/document-workspace'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 const DEFAULT_RRULE = 'FREQ=WEEKLY;BYDAY=MO'
 const DEFAULT_HORIZON = 6
@@ -105,7 +106,7 @@ export function TaskRecurrenceEditor({
           data-testid="task-recurrence-trigger"
         >
           <Repeat size={14} aria-hidden="true" />
-          <span className="truncate">{summary}</span>
+          <WorkspaceTextFade className="min-w-0 flex-1">{summary}</WorkspaceTextFade>
         </Button>
       )}
       <Dialog open={open} onOpenChange={setOpen}>

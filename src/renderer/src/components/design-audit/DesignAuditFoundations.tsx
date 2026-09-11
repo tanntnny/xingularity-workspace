@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactElement, useEffect, useState } from 'react'
 
 import { Badge, Clock, Palette, Separator, SlidersHorizontal, Sparkles } from '../ui'
+import { WorkspaceTextFade } from '../ui/workspace-text-fade'
 import {
   DESIGN_AUDIT_TOKEN_GROUPS,
   type DesignAuditToken,
@@ -245,8 +246,10 @@ function SemanticUsage({ groupId }: { groupId: FoundationTokenGroupId }): ReactE
       <div className="mt-5 grid gap-5 md:grid-cols-3">
         {SEMANTIC_USAGE_NOTES[groupId].map((note) => (
           <div key={note.title} className="border-l border-border pl-3">
-            <h3 className="truncate text-sm font-semibold text-foreground" title={note.title}>
-              {note.title}
+            <h3 className="min-w-0" title={note.title}>
+              <WorkspaceTextFade className="text-sm font-semibold text-foreground">
+                {note.title}
+              </WorkspaceTextFade>
             </h3>
             <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{note.description}</p>
           </div>
@@ -292,11 +295,10 @@ function TokenSpecimen({ token, value }: { token: DesignAuditToken; value: strin
         <TokenPreview token={token} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3
-              className="min-w-0 truncate text-sm font-semibold text-foreground"
-              title={token.label}
-            >
-              {token.label}
+            <h3 className="min-w-0" title={token.label}>
+              <WorkspaceTextFade className="text-sm font-semibold text-foreground">
+                {token.label}
+              </WorkspaceTextFade>
             </h3>
             <Badge variant="outline" className="px-1.5 py-0 text-[10px] uppercase tracking-wide">
               {token.kind}

@@ -100,11 +100,11 @@ describe('StatusChipSelect', () => {
       })
     )
 
-    expect(markup).toContain('status-chip-label-fade')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).not.toContain('truncate')
   })
 
-  it('passes hard clipping through to the selected chip and options', () => {
+  it('passes label clipping through to the selected chip and options', () => {
     const markup = renderToStaticMarkup(
       createElement(StatusChipSelect, {
         label: 'Task status',
@@ -115,8 +115,22 @@ describe('StatusChipSelect', () => {
       })
     )
 
-    expect(markup).toContain('status-chip-label-clip')
-    expect(markup).not.toContain('status-chip-label-fade')
+    expect(markup).toContain('workspace-text-clip')
+    expect(markup).not.toContain('workspace-text-fade')
+  })
+
+  it('defaults to fading selected labels and options', () => {
+    const markup = renderToStaticMarkup(
+      createElement(StatusChipSelect, {
+        label: 'Task status',
+        value: 'completed',
+        options,
+        onValueChange: () => undefined
+      })
+    )
+
+    expect(markup).toContain('workspace-text-fade')
+    expect(markup).not.toContain('status-chip-label-clip')
     expect(markup).not.toContain('truncate')
   })
 
@@ -131,8 +145,8 @@ describe('StatusChipSelect', () => {
       })
     )
 
-    expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*">Completed<\/span>/)
-    expect(markup).not.toMatch(/<span class="[^"]*text-foreground[^"]*">Completed<\/span>/)
+    expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*"[^>]*>Completed<\/span>/)
+    expect(markup).not.toMatch(/<span class="[^"]*text-foreground[^"]*"[^>]*>Completed<\/span>/)
   })
 
   it('mutes placeholder labels on the trigger', () => {
@@ -146,7 +160,7 @@ describe('StatusChipSelect', () => {
     )
 
     expect(markup).toMatch(
-      /<span class="[^"]*w-full text-left text-sm[^"]*text-muted-foreground[^"]*">No project<\/span>/
+      /<span class="[^"]*w-full text-left text-sm[^"]*text-muted-foreground[^"]*"[^>]*>No project<\/span>/
     )
     expect(markup).toContain('aria-haspopup="dialog"')
   })

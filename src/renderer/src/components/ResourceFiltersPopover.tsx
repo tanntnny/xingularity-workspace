@@ -21,6 +21,7 @@ import { Filter, X } from './ui/icons'
 import { ResponsivePicker } from './ui/responsive-picker'
 import { SelectionCheckbox } from './ui/selection-checkbox'
 import { WorkspaceIconButton } from './ui/document-workspace'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 export interface ResourceFiltersPopoverProps {
   options: ResourceFilterOptions
@@ -143,7 +144,7 @@ export function ResourceFiltersPopover({
                 key={filter.id}
                 className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-[var(--radius-button-pill)] border border-border bg-surface-subtle px-2 py-1 text-xs text-foreground"
               >
-                <span className="min-w-0 truncate">{filter.label}</span>
+                <WorkspaceTextFade className="min-w-0 flex-1">{filter.label}</WorkspaceTextFade>
                 <Button
                   type="button"
                   variant="ghost"
@@ -260,7 +261,7 @@ function ResourceFilterGroup({
             )}
           >
             <SelectionCheckbox checked={selected} />
-            <span className="min-w-0 flex-1 truncate">{option.label}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1">{option.label}</WorkspaceTextFade>
             {selected ? (
               <Badge variant="neutral" className="h-5 px-1.5 text-[11px]">
                 On

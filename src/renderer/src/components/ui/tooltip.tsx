@@ -42,7 +42,7 @@ export function getButtonTooltipLabel(
 
 export interface TooltipButtonProps {
   label: string
-  children: React.ReactElement
+  children?: React.ReactElement
   disabled?: boolean
   wrapperClassName?: string
   preserveChildAttributes?: boolean
@@ -54,7 +54,11 @@ const TooltipButton = ({
   disabled = false,
   wrapperClassName,
   preserveChildAttributes = false
-}: TooltipButtonProps): React.ReactElement => {
+}: TooltipButtonProps): React.ReactElement | null => {
+  if (!children) {
+    return null
+  }
+
   if (!label.trim()) {
     return children
   }

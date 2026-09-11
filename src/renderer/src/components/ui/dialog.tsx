@@ -5,6 +5,7 @@ import { ChevronRight, X } from './icons'
 import { cn } from '../../lib/utils'
 import { Button } from './button'
 import { WorkspaceIconButton } from './document-workspace'
+import { WorkspaceTextFade } from './workspace-text-fade'
 import { Shortcut, type ShortcutKey } from './kbd'
 
 const Dialog = DialogPrimitive.Root
@@ -97,7 +98,7 @@ const DialogShellHeader = ({
     <DialogTitle className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold">
       <span className="shrink-0 text-muted-foreground">{context}</span>
       <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate text-foreground">{title}</span>
+      <WorkspaceTextFade className="min-w-0 flex-1 text-foreground">{title}</WorkspaceTextFade>
     </DialogTitle>
     <div className="flex shrink-0 items-center gap-1">
       {actions}

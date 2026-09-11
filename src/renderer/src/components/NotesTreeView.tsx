@@ -4,26 +4,26 @@ import {
   ReactElement,
   RefObject,
   MouseEvent,
+  memo,
   useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  useSyncExternalStore
 } from 'react'
 import {
   ChevronRight,
   FileDown,
   FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
   Link,
   MoreHorizontal,
   PenTool,
   Pencil,
   Trash2
 } from './ui/icons'
+import { NotebookFolderIcon } from './ui/notebook-folder-icon'
 import {
   Tree,
   TreeApi,
@@ -34,6 +34,7 @@ import {
 } from 'react-arborist'
 import { createPortal } from 'react-dom'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../../shared/excalidrawFile'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import type { NativeMenuItemDescriptor, NoteTreeNode } from '../../../shared/types'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import { ActionMenuItems, type ActionMenuGroup } from './ui/action-menu'
@@ -41,6 +42,7 @@ import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
 import { Button, rowActionButtonClassName } from './ui/button'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu'
 import {
   canUseNativeMenus,
@@ -53,7 +55,24 @@ import {
   normalizeNoteTreeSelection,
   type NoteTreeSelection
 } from '../lib/noteTreeSelection'
+import {
+  clearActiveNoteTreeDrag,
+  readNoteTreeDragEntries,
+  setActiveNoteTreeDrag,
+  writeNoteTreeDragData
+} from '../lib/noteTreeDrag'
+import {
+  clearNoteTreeDropTarget,
+  isNoteTreeDropTarget,
+  setNoteTreeDropTarget,
+  subscribeNoteTreeDropTarget
+} from '../lib/noteTreeDropTargetStore'
 import { cn } from '../lib/utils'
+import {
+  buildFolderColorNativeMenuItems,
+  createFolderColorMenuItem,
+  parseFolderColorAction
+} from '../lib/folderColorMenu'
 
 const TREE_ICON_CLASS = 'h-4 w-4 shrink-0'
 const TREE_CHEVRON_CLASS = 'h-3.5 w-3.5 shrink-0'
@@ -101,6 +120,37 @@ interface NotesTreeViewProps {
   onRenamePath: (relPath: string, nextName: string, kind: 'note' | 'excalidraw' | 'folder') => void
   onDeleteEntries: (entries: NoteTreeSelection) => void
   onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
+  folderColors: FolderColorMap
+  onFolderColorChange: (folderPath: string, color: string | null) => void
+}
+
+interface TreeNodeRenderState {
+  data: NoteTreeNode
+  level: number
+  isOpen: boolean
+  isSelected: boolean
+  isFocused: boolean
+  isDragging: boolean
+  willReceiveDrop: boolean
+}
+
+type TreeNodeProps = NodeRendererProps<NoteTreeNode> & {
+  renderState: TreeNodeRenderState
+  isEditing: boolean
+  onCreateNote: (parentDir: string) => void
+  onCreateExcalidraw: (parentDir: string) => void
+  onCreateFolder: (parentDir: string) => void
+  onExportFolderPdf: (folderPath: string) => void
+  onExportFolderMarkdown: (folderPath: string) => void
+  finishEditing: () => void
+  onRenamePath: (relPath: string, nextName: string, kind: 'note' | 'excalidraw' | 'folder') => void
+  requestEditing: (id: string) => void
+  onDeleteEntries: (entries: NoteTreeSelection) => void
+  onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
+  folderColor?: string
+  onFolderColorChange: (folderPath: string, color: string | null) => void
+  useNativeMenus: boolean
+  treeRef: RefObject<TreeApi<NoteTreeNode> | null>
 }
 
 export function NotesTreeView({
@@ -121,13 +171,14 @@ export function NotesTreeView({
   onExportFolderMarkdown,
   onRenamePath,
   onDeleteEntries,
-  onMoveEntries
+  onMoveEntries,
+  folderColors,
+  onFolderColorChange
 }: NotesTreeViewProps): ReactElement {
   const treeRef = useRef<TreeApi<NoteTreeNode> | null>(null)
   const lastSyncedSelectionKeyRef = useRef<string>('')
   const [treeHeight, setTreeHeight] = useState(TREE_MIN_HEIGHT)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [nativeDropTargetId, setNativeDropTargetId] = useState<string | null>(null)
   const editingRequestFrameRef = useRef<number | null>(null)
   const treeHeightFrameRef = useRef<number | null>(null)
   const autoScrollFrameRef = useRef<number | null>(null)
@@ -177,6 +228,11 @@ export function NotesTreeView({
       setEditingId(id)
     })
   }, [])
+
+  const finishEditing = useCallback((): void => {
+    cancelEditingRequest()
+    setEditingId(null)
+  }, [cancelEditingRequest])
 
   useEffect(() => cancelEditingRequest, [cancelEditingRequest])
 
@@ -358,11 +414,21 @@ export function NotesTreeView({
       delta = Math.min(TREE_AUTO_SCROLL_MAX_STEP, Math.max(4, distance * 0.35))
     }
 
-    if (delta !== 0) {
-      scrollport.scrollTo({
-        top: scrollport.scrollTop + delta
-      })
+    if (delta === 0) {
+      autoScrollFrameRef.current = null
+      return
     }
+
+    const nextScrollTop = Math.max(
+      0,
+      Math.min(scrollport.scrollHeight - scrollport.clientHeight, scrollport.scrollTop + delta)
+    )
+    if (nextScrollTop === scrollport.scrollTop) {
+      autoScrollFrameRef.current = null
+      return
+    }
+
+    scrollport.scrollTo({ top: nextScrollTop })
 
     autoScrollFrameRef.current = window.requestAnimationFrame(() => stepAutoScrollRef.current())
   }, [])
@@ -384,7 +450,8 @@ export function NotesTreeView({
   useEffect(() => {
     const clearTreeDrag = (): void => {
       stopAutoScroll()
-      setNativeDropTargetId(null)
+      clearNoteTreeDropTarget()
+      clearActiveNoteTreeDrag()
     }
 
     window.addEventListener('drop', clearTreeDrag)
@@ -394,6 +461,7 @@ export function NotesTreeView({
       window.removeEventListener('drop', clearTreeDrag)
       window.removeEventListener('dragend', clearTreeDrag)
       stopAutoScroll()
+      clearNoteTreeDropTarget()
     }
   }, [stopAutoScroll])
 
@@ -431,13 +499,18 @@ export function NotesTreeView({
           >
             <div className="flex items-center gap-2 text-sm text-foreground">
               {previewEntry.kind === 'folder' ? (
-                <Folder className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} />
+                <NotebookFolderIcon
+                  variant="closed"
+                  color={folderColors[previewEntry.relPath]}
+                  size={16}
+                  className="h-4 w-4"
+                />
               ) : previewEntry.kind === 'excalidraw' ? (
                 <PenTool className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
               ) : (
                 <FileText className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
               )}
-              <span className="truncate font-medium">{label}</span>
+              <WorkspaceTextFade className="font-medium">{label}</WorkspaceTextFade>
             </div>
             {props.dragIds.length > 1 ? (
               <div className="mt-1 text-xs text-muted-foreground">{props.dragIds.length} items</div>
@@ -447,7 +520,7 @@ export function NotesTreeView({
         document.body
       )
     },
-    [tree]
+    [folderColors, tree]
   )
 
   const getDeleteShortcutEntries = (): NoteTreeSelection => {
@@ -555,35 +628,39 @@ export function NotesTreeView({
 
   const renderTreeNode = useCallback(
     (props: NodeRendererProps<NoteTreeNode>): ReactElement => (
-      <TreeNode
+      <MemoizedTreeNode
         {...props}
+        renderState={{
+          data: props.node.data,
+          level: props.node.level,
+          isOpen: props.node.isOpen,
+          isSelected: props.node.isSelected,
+          isFocused: props.node.isFocused,
+          isDragging: props.node.isDragging,
+          willReceiveDrop: props.node.willReceiveDrop
+        }}
         isEditing={editingId === props.node.id}
         onCreateNote={onCreateNote}
         onCreateExcalidraw={onCreateExcalidraw}
         onCreateFolder={onCreateFolder}
         onExportFolderPdf={onExportFolderPdf}
         onExportFolderMarkdown={onExportFolderMarkdown}
-        onCancelEditing={() => {
-          cancelEditingRequest()
-          setEditingId(null)
-        }}
-        onCommitRename={(value) => {
-          cancelEditingRequest()
-          setEditingId(null)
-          onRenamePath(props.node.data.relPath, value, props.node.data.kind)
-        }}
-        onStartEditing={() => requestEditing(props.node.id)}
+        finishEditing={finishEditing}
+        onRenamePath={onRenamePath}
+        requestEditing={requestEditing}
         onDeleteEntries={onDeleteEntries}
         onMoveEntries={onMoveEntries}
-        nativeDropTargetId={nativeDropTargetId}
-        onNativeDropTargetChange={setNativeDropTargetId}
+        folderColor={
+          props.node.data.kind === 'folder' ? folderColors[props.node.data.relPath] : undefined
+        }
+        onFolderColorChange={onFolderColorChange}
         useNativeMenus={useNativeMenus}
         treeRef={treeRef}
       />
     ),
     [
-      cancelEditingRequest,
       editingId,
+      finishEditing,
       onCreateExcalidraw,
       onCreateFolder,
       onCreateNote,
@@ -592,9 +669,10 @@ export function NotesTreeView({
       onExportFolderPdf,
       onMoveEntries,
       onRenamePath,
-      nativeDropTargetId,
+      onFolderColorChange,
       requestEditing,
-      useNativeMenus
+      useNativeMenus,
+      folderColors
     ]
   )
 
@@ -603,7 +681,7 @@ export function NotesTreeView({
       <EmptyState
         data-testid="notes-tree-empty-state"
         className="h-full border-0 bg-transparent px-3 py-6"
-        icon={FolderOpen}
+        icon={<NotebookFolderIcon variant="open" size={20} />}
         title="No notebooks or folders yet"
         description="Create a notebook or folder to get started."
       />
@@ -684,48 +762,45 @@ function TreeNode({
   tree,
   style,
   dragHandle,
+  renderState,
   isEditing,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
   onExportFolderPdf,
   onExportFolderMarkdown,
-  onCancelEditing,
-  onCommitRename,
-  onStartEditing,
+  finishEditing,
+  onRenamePath,
+  requestEditing,
   onDeleteEntries,
   onMoveEntries,
-  nativeDropTargetId,
-  onNativeDropTargetChange,
+  folderColor,
+  onFolderColorChange,
   useNativeMenus,
   treeRef
-}: NodeRendererProps<NoteTreeNode> & {
-  isEditing: boolean
-  onCreateNote: (parentDir: string) => void
-  onCreateExcalidraw: (parentDir: string) => void
-  onCreateFolder: (parentDir: string) => void
-  onExportFolderPdf: (folderPath: string) => void
-  onExportFolderMarkdown: (folderPath: string) => void
-  onCancelEditing: () => void
-  onCommitRename: (value: string) => void
-  onStartEditing: () => void
-  onDeleteEntries: (entries: NoteTreeSelection) => void
-  onMoveEntries: (entries: NoteTreeSelection, targetFolderPath: string) => Promise<void>
-  nativeDropTargetId: string | null
-  onNativeDropTargetChange: (id: string | null) => void
-  useNativeMenus: boolean
-  treeRef: RefObject<TreeApi<NoteTreeNode> | null>
-}): ReactElement {
+}: TreeNodeProps): ReactElement {
+  const { data: nodeData, level, isOpen, isSelected, willReceiveDrop } = renderState
   const parentDir =
-    node.data.kind === 'folder'
-      ? node.data.relPath
-      : node.data.relPath.includes('/')
-        ? node.data.relPath.slice(0, node.data.relPath.lastIndexOf('/'))
+    nodeData.kind === 'folder'
+      ? nodeData.relPath
+      : nodeData.relPath.includes('/')
+        ? nodeData.relPath.slice(0, nodeData.relPath.lastIndexOf('/'))
         : ''
-  const isFolder = node.data.kind === 'folder'
-  const isProtected = Boolean(node.data.isProtected)
-  const canCreateChildren = !isProtected || node.data.protectionKind === 'project-folder'
-  const isDropTarget = isFolder && nativeDropTargetId === node.id
+  const isFolder = nodeData.kind === 'folder'
+  const isProtected = Boolean(nodeData.isProtected)
+  const canCreateChildren = !isProtected || nodeData.protectionKind === 'project-folder'
+  const subscribeToDropTarget = useCallback(
+    (listener: () => void) => subscribeNoteTreeDropTarget(node.id, listener),
+    [node.id]
+  )
+  const getDropTargetSnapshot = useCallback(() => isNoteTreeDropTarget(node.id), [node.id])
+  const isNativeDropTarget = useSyncExternalStore(
+    subscribeToDropTarget,
+    getDropTargetSnapshot,
+    () => false
+  )
+  const isTreeDropTarget = isFolder && willReceiveDrop && tree.canDrop()
+  const isDropTarget = isTreeDropTarget || (isFolder && isNativeDropTarget)
   const renameFocusHandoffRef = useRef(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const rowStyle = style as CSSProperties
@@ -744,8 +819,24 @@ function TreeNode({
     [dragHandle, isProtected]
   )
 
+  const handleCancelEditing = useCallback((): void => {
+    finishEditing()
+  }, [finishEditing])
+
+  const handleCommitRename = useCallback(
+    (value: string): void => {
+      finishEditing()
+      onRenamePath(nodeData.relPath, value, nodeData.kind)
+    },
+    [finishEditing, nodeData.kind, nodeData.relPath, onRenamePath]
+  )
+
+  const handleStartEditing = useCallback((): void => {
+    requestEditing(node.id)
+  }, [node.id, requestEditing])
+
   useEffect(() => {
-    if (!isDropTarget || !isFolder || node.isOpen) {
+    if (!isDropTarget || !isFolder || isOpen) {
       return
     }
 
@@ -760,7 +851,7 @@ function TreeNode({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [isDropTarget, isFolder, node.id, node.isOpen, treeRef])
+  }, [isDropTarget, isFolder, isOpen, node.id, treeRef])
 
   useEffect(() => {
     if (isEditing) {
@@ -770,14 +861,14 @@ function TreeNode({
 
   const getDeleteActionEntries = (): NoteTreeSelection => {
     const selectedNodes = treeRef.current?.selectedNodes ?? []
-    if (node.isSelected && selectedNodes.length > 1) {
+    if (isSelected && selectedNodes.length > 1) {
       return selectedNodes.map((selectedNode) => ({
         kind: selectedNode.data.kind,
         relPath: selectedNode.data.relPath
       }))
     }
 
-    return [{ kind: node.data.kind, relPath: node.data.relPath }]
+    return [{ kind: nodeData.kind, relPath: nodeData.relPath }]
   }
 
   const handleRenameRequest = (): void => {
@@ -785,7 +876,7 @@ function TreeNode({
       return
     }
     renameFocusHandoffRef.current = true
-    onStartEditing()
+    handleStartEditing()
   }
 
   const handleMenuAction = (actionId: string): void => {
@@ -796,6 +887,16 @@ function TreeNode({
       onCreateNote(parentDir)
       return
     }
+
+    const selectedFolderColor = parseFolderColorAction(actionId)
+    if (selectedFolderColor !== undefined) {
+      if (!isFolder || isProtected) {
+        return
+      }
+      onFolderColorChange(nodeData.relPath, selectedFolderColor)
+      return
+    }
+
     if (actionId === 'create-excalidraw') {
       if (!canCreateChildren) {
         return
@@ -814,14 +915,14 @@ function TreeNode({
       if (!isFolder || isProtected) {
         return
       }
-      onExportFolderPdf(node.data.relPath)
+      onExportFolderPdf(nodeData.relPath)
       return
     }
     if (actionId === 'export-folder-markdown') {
       if (!isFolder || isProtected) {
         return
       }
-      onExportFolderMarkdown(node.data.relPath)
+      onExportFolderMarkdown(nodeData.relPath)
       return
     }
     if (actionId === 'rename') {
@@ -856,8 +957,8 @@ function TreeNode({
             {
               id: 'create-folder',
               label: 'New folder',
-              icon: <FolderPlus aria-hidden="true" />,
-              testId: `note-tree-create-folder:${node.data.relPath}`,
+              icon: <NotebookFolderIcon variant="closed" size={16} />,
+              testId: `note-tree-create-folder:${nodeData.relPath}`,
               onSelect: () => handleMenuAction('create-folder')
             }
           ]
@@ -872,27 +973,32 @@ function TreeNode({
                 id: 'export-folder',
                 label: 'Export nested notes',
                 icon: <FileDown aria-hidden="true" />,
-                contextTestId: `note-tree-export-folder-context:${node.data.relPath}`,
-                dropdownTestId: `note-tree-export-folder-dropdown:${node.data.relPath}`,
+                contextTestId: `note-tree-export-folder-context:${nodeData.relPath}`,
+                dropdownTestId: `note-tree-export-folder-dropdown:${nodeData.relPath}`,
                 submenu: [
                   {
                     id: 'export-folder-pdf',
                     label: 'as PDF',
                     icon: <FileDown aria-hidden="true" />,
-                    contextTestId: `note-tree-export-folder-pdf-context:${node.data.relPath}`,
-                    dropdownTestId: `note-tree-export-folder-pdf-dropdown:${node.data.relPath}`,
+                    contextTestId: `note-tree-export-folder-pdf-context:${nodeData.relPath}`,
+                    dropdownTestId: `note-tree-export-folder-pdf-dropdown:${nodeData.relPath}`,
                     onSelect: () => handleMenuAction('export-folder-pdf')
                   },
                   {
                     id: 'export-folder-markdown',
                     label: 'as Markdown',
                     icon: <FileText aria-hidden="true" />,
-                    contextTestId: `note-tree-export-folder-markdown-context:${node.data.relPath}`,
-                    dropdownTestId: `note-tree-export-folder-markdown-dropdown:${node.data.relPath}`,
+                    contextTestId: `note-tree-export-folder-markdown-context:${nodeData.relPath}`,
+                    dropdownTestId: `note-tree-export-folder-markdown-dropdown:${nodeData.relPath}`,
                     onSelect: () => handleMenuAction('export-folder-markdown')
                   }
                 ]
-              }
+              },
+              createFolderColorMenuItem({
+                testIdPrefix: `note-tree-folder-color:${nodeData.relPath}`,
+                selectedColor: folderColor,
+                onChange: (color) => onFolderColorChange(nodeData.relPath, color)
+              })
             ]
           : []
     },
@@ -904,7 +1010,7 @@ function TreeNode({
               id: 'rename',
               label: 'Rename',
               icon: <Pencil aria-hidden="true" />,
-              testId: `note-tree-rename:${node.data.relPath}`,
+              testId: `note-tree-rename:${nodeData.relPath}`,
               onSelect: () => handleMenuAction('rename')
             }
           ]
@@ -931,7 +1037,7 @@ function TreeNode({
   ): Promise<void> => {
     event.preventDefault()
     const actionId = await showNativeMenu(
-      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder),
+      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder, folderColor),
       getMouseMenuPosition(event)
     )
     if (actionId) {
@@ -945,7 +1051,7 @@ function TreeNode({
     event.preventDefault()
     event.stopPropagation()
     const actionId = await showNativeMenu(
-      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder),
+      buildNotesTreeMenuItems(isProtected, canCreateChildren, isFolder, folderColor),
       getElementMenuPosition(event.currentTarget)
     )
     if (actionId) {
@@ -962,17 +1068,15 @@ function TreeNode({
   }
 
   const handleNativeDragStart = (event: React.DragEvent<HTMLDivElement>): void => {
-    const selectedNodes = node.isSelected ? tree.selectedNodes : []
+    const selectedNodes = isSelected ? tree.selectedNodes : []
     const dragEntries = normalizeNoteTreeSelection(
       (selectedNodes.length > 0 ? selectedNodes : [node]).map((dragNode) => ({
         kind: dragNode.data.kind,
         relPath: dragNode.data.relPath
       }))
     )
-    const serializedEntries = JSON.stringify(dragEntries)
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData(NOTE_TREE_DRAG_DATA_TYPE, serializedEntries)
-    event.dataTransfer.setData('text/plain', serializedEntries)
+    setActiveNoteTreeDrag(dragEntries, 'tree')
+    writeNoteTreeDragData(event.dataTransfer, dragEntries)
   }
 
   const handleNativeDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
@@ -980,45 +1084,46 @@ function TreeNode({
       return
     }
 
-    const dragEntries = readDraggedEntries(event.dataTransfer)
-    if (!dragEntries || !canDropEntriesIntoFolder(dragEntries, node.data.relPath)) {
-      if (nativeDropTargetId === node.id) {
-        onNativeDropTargetChange(null)
+    const dragEntries = readNoteTreeDragEntries(event.dataTransfer)
+    if (!dragEntries || !canDropEntriesIntoFolder(dragEntries, nodeData.relPath)) {
+      if (isNoteTreeDropTarget(node.id)) {
+        clearNoteTreeDropTarget()
       }
       return
     }
 
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
-    onNativeDropTargetChange(node.id)
+    setNoteTreeDropTarget(node.id)
   }
 
   const handleNativeDragLeave = (event: React.DragEvent<HTMLDivElement>): void => {
     if (
-      nativeDropTargetId === node.id &&
+      isNoteTreeDropTarget(node.id) &&
       !event.currentTarget.contains(event.relatedTarget as Node | null)
     ) {
-      onNativeDropTargetChange(null)
+      clearNoteTreeDropTarget()
     }
   }
 
   const handleNativeDrop = (event: React.DragEvent<HTMLDivElement>): void => {
-    if (nativeDropTargetId === node.id) {
-      onNativeDropTargetChange(null)
+    if (isNoteTreeDropTarget(node.id)) {
+      clearNoteTreeDropTarget()
     }
     if (!isFolder) {
       return
     }
 
-    const dragEntries = readDraggedEntries(event.dataTransfer)
-    if (!dragEntries || !canDropEntriesIntoFolder(dragEntries, node.data.relPath)) {
+    const dragEntries = readNoteTreeDragEntries(event.dataTransfer)
+    if (!dragEntries || !canDropEntriesIntoFolder(dragEntries, nodeData.relPath)) {
       return
     }
 
     event.preventDefault()
     event.stopPropagation()
     node.open()
-    void onMoveEntries(dragEntries, node.data.relPath)
+    clearActiveNoteTreeDrag()
+    void onMoveEntries(dragEntries, nodeData.relPath)
   }
 
   const treeNodeRow = (
@@ -1031,11 +1136,11 @@ function TreeNode({
         'group relative flex h-full w-full min-w-0 cursor-grab items-center rounded-md text-sm transition-[background-color,color,box-shadow] duration-150 ease-out active:cursor-grabbing',
         isDropTarget
           ? 'text-foreground'
-          : node.isSelected
+          : isSelected
             ? 'bg-muted text-foreground'
             : 'text-foreground hover:bg-muted'
       )}
-      data-testid={`note-tree-row:${node.data.relPath}`}
+      data-testid={`note-tree-row:${nodeData.relPath}`}
       ref={handleRowDragRef}
       onClick={handleRowClick}
       onDragStart={handleNativeDragStart}
@@ -1043,20 +1148,21 @@ function TreeNode({
       onDragLeave={handleNativeDragLeave}
       onDrop={handleNativeDrop}
       onDragEnd={() => {
-        if (nativeDropTargetId === node.id) {
-          onNativeDropTargetChange(null)
+        clearActiveNoteTreeDrag()
+        if (isNoteTreeDropTarget(node.id)) {
+          clearNoteTreeDropTarget()
         }
       }}
       onContextMenu={
         useNativeMenus && !isEditing ? (event) => void handleNativeContextMenu(event) : undefined
       }
     >
-      {node.level > 0 ? (
+      {level > 0 ? (
         <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
-          {Array.from({ length: node.level }, (_, guideIndex) => (
+          {Array.from({ length: level }, (_, guideIndex) => (
             <span
               key={guideIndex}
-              data-testid={`note-tree-indent-guide:${node.data.relPath}:${guideIndex}`}
+              data-testid={`note-tree-indent-guide:${nodeData.relPath}:${guideIndex}`}
               className="absolute inset-y-0 w-[var(--border-width)] bg-border opacity-80"
               style={{
                 left: rowIndent - TREE_INDENT / 2 - guideIndex * TREE_INDENT
@@ -1066,7 +1172,12 @@ function TreeNode({
         </div>
       ) : null}
       <div
-        className="relative z-10 flex h-full w-full min-w-0 items-center gap-2 px-2"
+        className={cn(
+          'relative z-10 flex h-full w-full min-w-0 items-center gap-2 px-2',
+          !isEditing &&
+            !isProtected &&
+            'transition-[padding-right] duration-150 ease-out group-hover:pr-9 group-focus-within:pr-9 motion-reduce:transition-none'
+        )}
         style={{ paddingLeft: rowIndent }}
       >
         <button
@@ -1076,7 +1187,7 @@ function TreeNode({
             'flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-control)] transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             isFolder ? 'opacity-100' : 'opacity-0'
           )}
-          aria-expanded={isFolder ? node.isOpen : undefined}
+          aria-expanded={isFolder ? isOpen : undefined}
           onClick={(event) => {
             event.stopPropagation()
             if (isFolder) {
@@ -1090,34 +1201,35 @@ function TreeNode({
               className={cn(
                 TREE_CHEVRON_CLASS,
                 'motion-state-chevron',
-                node.isOpen && 'rotate-90',
+                isOpen && 'rotate-90',
                 isDropTarget && 'text-primary'
               )}
             />
           ) : null}
         </button>
         {isFolder ? (
-          node.isOpen ? (
-            <FolderOpen className={cn(TREE_ICON_CLASS, 'text-primary')} strokeWidth={1.9} />
-          ) : (
-            <Folder className={cn(TREE_ICON_CLASS, 'text-primary')} strokeWidth={1.9} />
-          )
+          <NotebookFolderIcon
+            variant={isOpen ? 'open' : 'closed'}
+            color={folderColor}
+            size={16}
+            className={TREE_ICON_CLASS}
+          />
         ) : (
-          renderTreeFileIcon(node.data.kind)
+          renderTreeFileIcon(nodeData.kind)
         )}
         {isEditing ? (
-          <TreeNodeInput node={node} onCancel={onCancelEditing} onCommit={onCommitRename} />
+          <TreeNodeInput node={node} onCancel={handleCancelEditing} onCommit={handleCommitRename} />
         ) : (
-          <span className="block min-w-0 flex-1 truncate">
+          <WorkspaceTextFade className="min-w-0 flex-1" observeMutations={false}>
             {renderTreeNodeLabel(
-              isFolder ? node.data.name : stripNotebookFileExtension(node.data.name)
+              isFolder ? nodeData.name : stripNotebookFileExtension(nodeData.name)
             )}
-          </span>
+          </WorkspaceTextFade>
         )}
-        {node.data.kind === 'folder' && node.data.isLinked ? (
+        {nodeData.kind === 'folder' && nodeData.isLinked ? (
           <span
             className="inline-flex shrink-0 text-muted-foreground"
-            data-testid={`note-tree-linked-folder:${node.data.relPath}`}
+            data-testid={`note-tree-linked-folder:${nodeData.relPath}`}
             title="Linked folder"
           >
             <Link className="h-3.5 w-3.5" aria-hidden="true" strokeWidth={1.9} />
@@ -1130,14 +1242,14 @@ function TreeNode({
               type="button"
               variant="rowAction"
               size="icon"
-              data-testid={`note-tree-menu:${node.data.relPath}`}
-              className="ml-auto h-5 w-5 shrink-0 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+              data-testid={`note-tree-menu:${nodeData.relPath}`}
+              className="pointer-events-none absolute right-2 top-1/2 z-20 h-5 w-5 shrink-0 -translate-y-1/2 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-reduce:transition-none"
               onPointerDown={(event) => {
                 event.stopPropagation()
               }}
               onClick={(event) => void handleNativeMenuButtonClick(event)}
-              title={`Open ${getTreeNodeKindLabel(node.data.kind)} menu`}
-              aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
+              title={`Open ${getTreeNodeKindLabel(nodeData.kind)} menu`}
+              aria-label={`Open ${getTreeNodeKindLabel(nodeData.kind)} menu for ${stripNotebookFileExtension(nodeData.name)}`}
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
@@ -1148,16 +1260,16 @@ function TreeNode({
                   type="button"
                   variant="rowAction"
                   size="icon"
-                  data-testid={`note-tree-menu:${node.data.relPath}`}
-                  className="ml-auto h-5 w-5 shrink-0 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+                  data-testid={`note-tree-menu:${nodeData.relPath}`}
+                  className="pointer-events-none absolute right-2 top-1/2 z-20 h-5 w-5 shrink-0 -translate-y-1/2 rounded-md opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-reduce:transition-none"
                   onPointerDown={(event) => {
                     event.stopPropagation()
                   }}
                   onClick={(event) => {
                     event.stopPropagation()
                   }}
-                  title={`Open ${getTreeNodeKindLabel(node.data.kind)} menu`}
-                  aria-label={`Open ${getTreeNodeKindLabel(node.data.kind)} menu for ${stripNotebookFileExtension(node.data.name)}`}
+                  title={`Open ${getTreeNodeKindLabel(nodeData.kind)} menu`}
+                  aria-label={`Open ${getTreeNodeKindLabel(nodeData.kind)} menu for ${stripNotebookFileExtension(nodeData.name)}`}
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -1196,6 +1308,55 @@ function TreeNode({
         <ActionMenuItems variant="context" groups={menuGroups} />
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+const MemoizedTreeNode = memo(TreeNode, areTreeNodePropsEqual)
+
+function areTreeNodePropsEqual(previous: TreeNodeProps, next: TreeNodeProps): boolean {
+  const previousStyle = previous.style as CSSProperties
+  const nextStyle = next.style as CSSProperties
+
+  return (
+    previous.node.id === next.node.id &&
+    previous.tree === next.tree &&
+    areTreeNodeStylesEqual(previousStyle, nextStyle) &&
+    previous.dragHandle === next.dragHandle &&
+    previous.renderState.data === next.renderState.data &&
+    previous.renderState.level === next.renderState.level &&
+    previous.renderState.isOpen === next.renderState.isOpen &&
+    previous.renderState.isSelected === next.renderState.isSelected &&
+    previous.renderState.isFocused === next.renderState.isFocused &&
+    previous.renderState.isDragging === next.renderState.isDragging &&
+    previous.renderState.willReceiveDrop === next.renderState.willReceiveDrop &&
+    previous.isEditing === next.isEditing &&
+    previous.onCreateNote === next.onCreateNote &&
+    previous.onCreateExcalidraw === next.onCreateExcalidraw &&
+    previous.onCreateFolder === next.onCreateFolder &&
+    previous.onExportFolderPdf === next.onExportFolderPdf &&
+    previous.onExportFolderMarkdown === next.onExportFolderMarkdown &&
+    previous.finishEditing === next.finishEditing &&
+    previous.onRenamePath === next.onRenamePath &&
+    previous.requestEditing === next.requestEditing &&
+    previous.onDeleteEntries === next.onDeleteEntries &&
+    previous.onMoveEntries === next.onMoveEntries &&
+    previous.folderColor === next.folderColor &&
+    previous.onFolderColorChange === next.onFolderColorChange &&
+    previous.useNativeMenus === next.useNativeMenus &&
+    previous.treeRef === next.treeRef
+  )
+}
+
+function areTreeNodeStylesEqual(previous: CSSProperties, next: CSSProperties): boolean {
+  return (
+    previous.position === next.position &&
+    previous.top === next.top &&
+    previous.left === next.left &&
+    previous.right === next.right &&
+    previous.bottom === next.bottom &&
+    previous.width === next.width &&
+    previous.height === next.height &&
+    previous.paddingLeft === next.paddingLeft
   )
 }
 
@@ -1346,39 +1507,6 @@ function resolveFolderPathFromId(id: string | null): string {
   return id.startsWith('folder:') ? id.slice('folder:'.length) : ''
 }
 
-const NOTE_TREE_DRAG_DATA_TYPE = 'application/x-xingularity-note-tree'
-
-function readDraggedEntries(dataTransfer: DataTransfer): NoteTreeSelection | null {
-  const raw = dataTransfer.getData(NOTE_TREE_DRAG_DATA_TYPE)
-  if (!raw) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) {
-      return null
-    }
-
-    const entries = parsed.filter(isNoteTreeSelectionEntry)
-    return entries.length > 0 ? normalizeNoteTreeSelection(entries) : null
-  } catch {
-    return null
-  }
-}
-
-function isNoteTreeSelectionEntry(value: unknown): value is NoteTreeSelection[number] {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  const candidate = value as { kind?: unknown; relPath?: unknown }
-  return (
-    (candidate.kind === 'note' || candidate.kind === 'excalidraw' || candidate.kind === 'folder') &&
-    typeof candidate.relPath === 'string'
-  )
-}
-
 function canDropEntriesIntoFolder(entries: NoteTreeSelection, targetFolderPath: string): boolean {
   return entries.every(
     (entry) =>
@@ -1423,7 +1551,8 @@ function areNoteTreeSelectionsEqual(left: NoteTreeSelection, right: NoteTreeSele
 function buildNotesTreeMenuItems(
   isProtected: boolean,
   canCreateChildren: boolean,
-  isFolder: boolean
+  isFolder: boolean,
+  folderColor?: string
 ): NativeMenuItemDescriptor[] {
   const items: NativeMenuItemDescriptor[] = []
 
@@ -1447,6 +1576,7 @@ function buildNotesTreeMenuItems(
         { id: 'export-folder-markdown', label: 'as Markdown…' }
       ]
     })
+    items.push(...buildFolderColorNativeMenuItems(folderColor))
   }
 
   if (!isProtected) {

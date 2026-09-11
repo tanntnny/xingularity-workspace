@@ -3,9 +3,10 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import type { UiTone } from '../../lib/uiTone'
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFadeContent } from './workspace-text-fade'
 
 const badgeVariants = cva(
-  'ui-compact-control inline-flex min-w-0 max-w-full items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-[var(--radius-control)] border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  'ui-compact-control inline-flex min-w-0 max-w-full items-center overflow-hidden whitespace-nowrap rounded-[var(--radius-control)] border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
   {
     variants: {
       variant: {
@@ -44,6 +45,7 @@ function Badge({
   variant,
   style,
   tone,
+  children,
   ...props
 }: BadgeProps & { tone?: UiTone }): React.ReactElement {
   const toneClassName = {
@@ -58,11 +60,9 @@ function Badge({
   } satisfies Record<UiTone, string>
 
   return (
-    <span
-      className={cn(badgeVariants({ variant }), tone && toneClassName[tone], className)}
-      style={style}
-      {...props}
-    />
+    <span className={cn(badgeVariants({ variant }), tone && toneClassName[tone], className)} style={style} {...props}>
+      <WorkspaceTextFadeContent className="min-w-0">{children}</WorkspaceTextFadeContent>
+    </span>
   )
 }
 

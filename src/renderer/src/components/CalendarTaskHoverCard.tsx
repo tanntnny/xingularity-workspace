@@ -6,6 +6,7 @@ import { StatusChip } from './ui/status-chip'
 import { getCalendarTaskTypeChipItem, getTaskStatusChipItem } from '../lib/statusChipMeta'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { TaskTagSummary } from './TaskTagSummary'
+import { WorkspaceTextFade, WorkspaceTextFadeContent } from './ui/workspace-text-fade'
 
 interface CalendarTaskHoverCardProps {
   task: CalendarTask
@@ -26,9 +27,9 @@ export function CalendarTaskHoverCard({
       y={y}
       className="w-72 rounded-lg border-border bg-card p-4 text-card-foreground shadow-sm"
     >
-      <div className="mb-2 truncate text-base font-bold text-foreground" title={task.title}>
+      <WorkspaceTextFade className="mb-2 text-base font-bold text-foreground" title={task.title}>
         {task.title}
-      </div>
+      </WorkspaceTextFade>
       <dl className="space-y-1.5">
         <CalendarTaskPropertyRow label="Status">
           <StatusChip item={getTaskStatusChipItem(task.status, task.completed)} />
@@ -40,9 +41,9 @@ export function CalendarTaskHoverCard({
           <CalendarTaskPropertyRow label="Project">
             <span className="flex min-w-0 items-center gap-1.5" title={project.name}>
               <NoteShapeIcon icon={project.icon} size={16} />
-              <span className="min-w-0 truncate" title={project.name}>
+              <WorkspaceTextFade className="min-w-0 flex-1" title={project.name}>
                 {project.name}
-              </span>
+              </WorkspaceTextFade>
             </span>
           </CalendarTaskPropertyRow>
         ) : task.projectId ? (
@@ -78,10 +79,10 @@ function CalendarTaskPropertyRow({
     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-3 text-xs">
       <dt className="font-medium text-muted-foreground">{label}</dt>
       <dd
-        className="min-w-0 truncate text-foreground"
+        className="min-w-0 text-foreground"
         title={typeof children === 'string' ? children : undefined}
       >
-        {children}
+        <WorkspaceTextFadeContent className="min-w-0">{children}</WorkspaceTextFadeContent>
       </dd>
     </div>
   )

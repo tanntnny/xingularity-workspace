@@ -4,7 +4,7 @@ import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { getTaskStatus } from '../lib/taskStatus'
 import { TaskContextMenu } from './TaskContextMenu'
-import { ChevronLeft, ChevronRight, WorkspaceIconButton } from './ui'
+import { ChevronLeft, ChevronRight, WorkspaceIconButton, WorkspaceTextFade } from './ui'
 
 interface CalendarDayViewProps {
   selectedDate: string
@@ -154,9 +154,9 @@ export function CalendarDayView({
                   onClick={() => onOpenTask?.(task.id)}
                   className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
                 >
-                  <span className="truncate text-base font-semibold text-foreground">
+                  <WorkspaceTextFade className="text-base font-semibold text-foreground">
                     {task.title}
-                  </span>
+                  </WorkspaceTextFade>
                 </button>
               )
             )}
@@ -215,9 +215,9 @@ export function CalendarDayView({
                         onClick={() => onOpenTask?.(task.id)}
                         className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
                       >
-                        <span className="truncate text-base font-semibold text-foreground">
+                        <WorkspaceTextFade className="text-base font-semibold text-foreground">
                           {task.title}
-                        </span>
+                        </WorkspaceTextFade>
                         <span className="text-xs text-muted-foreground">
                           {formatCalendarTaskTimeLabel(task)}
                         </span>

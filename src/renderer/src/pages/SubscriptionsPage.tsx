@@ -732,15 +732,15 @@ function TreemapCard({
           {hoverCard.kind === 'record' ? (
             <>
               <div
-                className="mb-1.5 truncate text-sm font-semibold text-foreground"
+                className="mb-1.5 text-sm font-semibold text-foreground"
                 title={hoverCard.name}
               >
-                {hoverCard.name}
+                <WorkspaceTextFade>{hoverCard.name}</WorkspaceTextFade>
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="min-w-0 truncate" title={hoverCard.category}>
+                <WorkspaceTextFade className="min-w-0 flex-1" title={hoverCard.category}>
                   {hoverCard.category}
-                </span>
+                </WorkspaceTextFade>
                 <StatusChip item={SUBSCRIPTION_STATUS_CHIP_ITEMS[hoverCard.status]} />
               </div>
               <div className="mt-2 text-xs text-muted-foreground">

@@ -6,18 +6,21 @@ import {
   scanVaultFiles
 } from '../main/vaultDiagnostics'
 import {
+  buildVaultContext,
+  readVaultManifestReport,
+  readVaultNote,
+  searchVaultContext,
+  type VaultManifestReport
+} from '../main/vaultContext'
+import {
   buildPortableManifest,
   checksumPortableManifest,
   createVaultBackup
 } from '../main/vaultTransferService'
-import {
-  checksumVaultManifest,
-  VAULT_MANIFEST_RELATIVE_PATH,
-  validateVaultManifest,
-  type VaultManifest
-} from '../main/vaultManifest'
+import { VAULT_MANIFEST_RELATIVE_PATH } from '../main/vaultManifest'
 import { getVaultDomainDefinitions } from '../main/vaultDomainCatalog'
 import { VaultChangeCoordinator } from '../main/vaultChangeCoordinator'
+import { VaultRecoveryStore } from '../main/vaultRecoveryStore'
 import { isPortableScopePath } from '../main/vaultPortablePolicy'
 import type { VaultDiagnosticsReport } from '../shared/types'
 
@@ -31,7 +34,16 @@ export const VAULT_CLI_EXIT_CODES = Object.freeze({
 } as const)
 
 export type VaultCliExitCode = (typeof VAULT_CLI_EXIT_CODES)[keyof typeof VAULT_CLI_EXIT_CODES]
-export type VaultCliSubcommand = 'status' | 'validate' | 'manifest' | 'scan' | 'backup'
+export type VaultCliSubcommand =
+  | 'status'
+  | 'validate'
+  | 'manifest'
+  | 'scan'
+  | 'backup'
+  | 'context'
+  | 'search'
+  | 'read'
+  | 'conflicts'
 
 export interface ParsedVaultCliArgs {
   command: VaultCliSubcommand | 'help'
@@ -41,6 +53,13 @@ export interface ParsedVaultCliArgs {
   portable: boolean
   preview: boolean
   destinationPath?: string
+  query?: string
+  project?: string
+  notePath?: string
+  filePath?: string
+  limit?: number
+  maxChars?: number
+  includeDiagnostics?: boolean
 }
 
 export interface VaultCliResponse {
@@ -68,14 +87,7 @@ interface VaultCliCommandResult {
   }
 }
 
-interface StableManifestReport {
-  path: typeof VAULT_MANIFEST_RELATIVE_PATH
-  present: boolean
-  valid: boolean
-  checksum: string | null
-  manifest: VaultManifest | null
-  errors: string[]
-}
+type StableManifestReport = VaultManifestReport
 
 class VaultCliError extends Error {
   readonly exitCode: VaultCliExitCode
@@ -110,7 +122,7 @@ export function parseVaultCliArgs(
   if (tokens.shift() !== VAULT_CLI_COMMAND) {
     throw new VaultCliError(
       'invalid-command',
-      'Expected the command prefix: xingularity vault <status|validate|manifest|scan|backup>',
+      'Expected the command prefix: xingularity vault <status|validate|manifest|scan|backup|context|search|read|conflicts>',
       VAULT_CLI_EXIT_CODES.usage
     )
   }
@@ -121,6 +133,13 @@ export function parseVaultCliArgs(
   let portable = false
   let preview = false
   let destinationInput: string | undefined
+  let queryInput: string | undefined
+  let projectInput: string | undefined
+  let noteInput: string | undefined
+  let fileInput: string | undefined
+  let limitInput: number | undefined
+  let maxCharsInput: number | undefined
+  let includeDiagnostics = true
   let help = false
 
   while (tokens.length > 0) {
@@ -145,18 +164,23 @@ export function parseVaultCliArgs(
       continue
     }
     if (token === '--destination') {
-      const value = tokens.shift()
-      if (!value || value.startsWith('-')) {
-        throw new VaultCliError(
-          'missing-destination',
-          'The --destination option requires a path value',
-          VAULT_CLI_EXIT_CODES.usage
-        )
-      }
+      const value = takeOptionValue(tokens, '--destination')
       if (destinationInput !== undefined) {
         throw new VaultCliError(
           'duplicate-destination',
           'The --destination option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      destinationInput = value
+      continue
+    }
+    if (token === '--output') {
+      const value = takeOptionValue(tokens, '--output')
+      if (destinationInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-destination',
+          'The --destination/--output option may only be provided once',
           VAULT_CLI_EXIT_CODES.usage
         )
       }
@@ -182,15 +206,27 @@ export function parseVaultCliArgs(
       destinationInput = value
       continue
     }
-    if (token === '--root') {
-      const value = tokens.shift()
-      if (!value || value.startsWith('-')) {
+    if (token.startsWith('--output=')) {
+      const value = token.slice('--output='.length)
+      if (!value) {
         throw new VaultCliError(
-          'missing-root',
-          'The --root option requires a path value',
+          'missing-destination',
+          'The --destination/--output option requires a path value',
           VAULT_CLI_EXIT_CODES.usage
         )
       }
+      if (destinationInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-destination',
+          'The --destination/--output option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      destinationInput = value
+      continue
+    }
+    if (token === '--root') {
+      const value = takeOptionValue(tokens, '--root')
       if (rootInput !== undefined) {
         throw new VaultCliError(
           'duplicate-root',
@@ -220,6 +256,157 @@ export function parseVaultCliArgs(
       rootInput = value
       continue
     }
+    if (token === '--query') {
+      const value = takeOptionValue(tokens, '--query')
+      if (queryInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-query',
+          'The --query option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      queryInput = value
+      continue
+    }
+    if (token.startsWith('--query=')) {
+      const value = token.slice('--query='.length)
+      if (!value) {
+        throw new VaultCliError(
+          'missing-query',
+          'The --query option requires a value',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      if (queryInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-query',
+          'The --query option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      queryInput = value
+      continue
+    }
+    if (token === '--project') {
+      const value = takeOptionValue(tokens, '--project')
+      if (projectInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-project',
+          'The --project option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      projectInput = value
+      continue
+    }
+    if (token.startsWith('--project=')) {
+      const value = token.slice('--project='.length)
+      if (!value) {
+        throw new VaultCliError(
+          'missing-project',
+          'The --project option requires a value',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      if (projectInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-project',
+          'The --project option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      projectInput = value
+      continue
+    }
+    if (token === '--note') {
+      const value = takeOptionValue(tokens, '--note')
+      if (noteInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-note',
+          'The --note option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      noteInput = value
+      continue
+    }
+    if (token.startsWith('--note=')) {
+      const value = token.slice('--note='.length)
+      if (!value) {
+        throw new VaultCliError(
+          'missing-note',
+          'The --note option requires a path value',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      if (noteInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-note',
+          'The --note option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      noteInput = value
+      continue
+    }
+    if (token === '--path') {
+      const value = takeOptionValue(tokens, '--path')
+      if (fileInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-path',
+          'The --path option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      fileInput = value
+      continue
+    }
+    if (token.startsWith('--path=')) {
+      const value = token.slice('--path='.length)
+      if (!value) {
+        throw new VaultCliError(
+          'missing-path',
+          'The --path option requires a path value',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      if (fileInput !== undefined) {
+        throw new VaultCliError(
+          'duplicate-path',
+          'The --path option may only be provided once',
+          VAULT_CLI_EXIT_CODES.usage
+        )
+      }
+      fileInput = value
+      continue
+    }
+    if (token === '--limit') {
+      const value = takeOptionValue(tokens, '--limit')
+      limitInput = parseIntegerOption(value, '--limit', 1, 100)
+      continue
+    }
+    if (token.startsWith('--limit=')) {
+      limitInput = parseIntegerOption(token.slice('--limit='.length), '--limit', 1, 100)
+      continue
+    }
+    if (token === '--max-chars') {
+      const value = takeOptionValue(tokens, '--max-chars')
+      maxCharsInput = parseIntegerOption(value, '--max-chars', 1_000, 200_000)
+      continue
+    }
+    if (token.startsWith('--max-chars=')) {
+      maxCharsInput = parseIntegerOption(
+        token.slice('--max-chars='.length),
+        '--max-chars',
+        1_000,
+        200_000
+      )
+      continue
+    }
+    if (token === '--no-diagnostics') {
+      includeDiagnostics = false
+      continue
+    }
     if (token.startsWith('-')) {
       throw new VaultCliError(
         'unknown-option',
@@ -228,6 +415,32 @@ export function parseVaultCliArgs(
       )
     }
     if (command !== undefined) {
+      if (command === 'search' || command === 'context') {
+        if (queryInput !== undefined) {
+          throw new VaultCliError(
+            'duplicate-query',
+            `Unexpected vault CLI argument: ${token}`,
+            VAULT_CLI_EXIT_CODES.usage
+          )
+        }
+        queryInput = token
+        continue
+      }
+      if (command === 'read') {
+        if (fileInput !== undefined) {
+          throw new VaultCliError(
+            'duplicate-path',
+            `Unexpected vault CLI argument: ${token}`,
+            VAULT_CLI_EXIT_CODES.usage
+          )
+        }
+        fileInput = token
+        continue
+      }
+      if (rootInput === undefined && isVaultRootPositionalCommand(command)) {
+        rootInput = token
+        continue
+      }
       throw new VaultCliError(
         'unexpected-argument',
         `Unexpected vault CLI argument: ${token}`,
@@ -251,7 +464,7 @@ export function parseVaultCliArgs(
   if (!command || !isVaultCliSubcommand(command)) {
     throw new VaultCliError(
       'missing-command',
-      'Expected one vault subcommand: status, validate, manifest, scan, or backup',
+      'Expected one vault subcommand: status, validate, manifest, scan, backup, context, search, read, or conflicts',
       VAULT_CLI_EXIT_CODES.usage
     )
   }
@@ -276,6 +489,74 @@ export function parseVaultCliArgs(
       VAULT_CLI_EXIT_CODES.usage
     )
   }
+  if (queryInput !== undefined && command !== 'context' && command !== 'search') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --query option is only supported by the context and search commands',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (projectInput !== undefined && command !== 'context') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --project option is only supported by the context command',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (noteInput !== undefined && command !== 'context') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --note option is only supported by the context command',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (fileInput !== undefined && command !== 'read') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --path option is only supported by the read command',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (limitInput !== undefined && command !== 'context' && command !== 'search') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --limit option is only supported by the context and search commands',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (
+    maxCharsInput !== undefined &&
+    command !== 'context' &&
+    command !== 'search' &&
+    command !== 'read'
+  ) {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --max-chars option is only supported by the context, search, and read commands',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (!includeDiagnostics && command !== 'context') {
+    throw new VaultCliError(
+      'invalid-option',
+      'The --no-diagnostics option is only supported by the context command',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (command === 'search' && !queryInput) {
+    throw new VaultCliError(
+      'missing-query',
+      'The search command requires a query argument or --query value',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  if (command === 'read' && !fileInput) {
+    throw new VaultCliError(
+      'missing-path',
+      'The read command requires a note path argument or --path value',
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
 
   return {
     command,
@@ -284,7 +565,14 @@ export function parseVaultCliArgs(
     pretty,
     portable,
     preview,
-    ...(destinationInput ? { destinationPath: path.resolve(cwd, destinationInput) } : {})
+    ...(destinationInput ? { destinationPath: path.resolve(cwd, destinationInput) } : {}),
+    ...(queryInput ? { query: queryInput } : {}),
+    ...(projectInput ? { project: projectInput } : {}),
+    ...(noteInput ? { notePath: noteInput } : {}),
+    ...(fileInput ? { filePath: fileInput } : {}),
+    ...(limitInput !== undefined ? { limit: limitInput } : {}),
+    ...(maxCharsInput !== undefined ? { maxChars: maxCharsInput } : {}),
+    ...(!includeDiagnostics ? { includeDiagnostics: false } : {})
   }
 }
 
@@ -332,68 +620,7 @@ export function serializeVaultCliResponse(
 }
 
 export async function readStableVaultManifest(rootPath: string): Promise<StableManifestReport> {
-  const root = path.resolve(rootPath)
-  const report: StableManifestReport = {
-    path: VAULT_MANIFEST_RELATIVE_PATH,
-    present: false,
-    valid: false,
-    checksum: null,
-    manifest: null,
-    errors: []
-  }
-  const systemPath = path.join(root, '.xingularity')
-  const manifestPath = path.join(root, VAULT_MANIFEST_RELATIVE_PATH)
-
-  let systemStats
-  try {
-    systemStats = await fs.lstat(systemPath)
-  } catch (error) {
-    if (isMissingPathError(error)) {
-      return report
-    }
-    throw error
-  }
-  if (systemStats.isSymbolicLink() || !systemStats.isDirectory()) {
-    report.present = true
-    report.errors.push('The .xingularity manifest directory must be a regular directory')
-    return report
-  }
-
-  let manifestStats
-  try {
-    manifestStats = await fs.lstat(manifestPath)
-  } catch (error) {
-    if (isMissingPathError(error)) {
-      return report
-    }
-    throw error
-  }
-
-  report.present = true
-  if (manifestStats.isSymbolicLink() || !manifestStats.isFile()) {
-    report.errors.push('The vault manifest must be a regular file')
-    return report
-  }
-
-  const raw = await fs.readFile(manifestPath, 'utf8')
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (error) {
-    report.errors.push(`Vault manifest is not valid JSON: ${describeError(error)}`)
-    return report
-  }
-
-  const validation = validateVaultManifest(parsed)
-  if (!validation.valid || !validation.manifest) {
-    report.errors.push(...validation.errors)
-    return report
-  }
-
-  report.valid = true
-  report.manifest = validation.manifest
-  report.checksum = checksumVaultManifest(validation.manifest)
-  return report
+  return readVaultManifestReport(rootPath)
 }
 
 async function executeVaultCommand(parsed: ParsedVaultCliArgs): Promise<VaultCliCommandResult> {
@@ -410,11 +637,126 @@ async function executeVaultCommand(parsed: ParsedVaultCliArgs): Promise<VaultCli
       return executeScan(parsed.rootPath)
     case 'backup':
       return executeBackup(parsed.rootPath, parsed)
+    case 'context':
+      return executeContext(parsed.rootPath, parsed)
+    case 'search':
+      return executeSearch(parsed.rootPath, parsed)
+    case 'read':
+      return executeRead(parsed.rootPath, parsed)
+    case 'conflicts':
+      return executeConflicts(parsed.rootPath)
     case 'help':
       return {
         exitCode: VAULT_CLI_EXIT_CODES.success,
         data: createHelpData()
       }
+  }
+}
+
+async function executeContext(
+  rootPath: string,
+  parsed: ParsedVaultCliArgs
+): Promise<VaultCliCommandResult> {
+  const context = await buildVaultContext(rootPath, {
+    query: parsed.query,
+    project: parsed.project,
+    note: parsed.notePath,
+    limit: parsed.limit,
+    maxChars: parsed.maxChars,
+    includeDiagnostics: parsed.includeDiagnostics
+  })
+  const hasValidationIssues =
+    (context.vault.manifest.present && !context.vault.manifest.valid) ||
+    context.vault.manifest.errors.length > 0 ||
+    context.health.issueCounts.errors > 0 ||
+    context.recovery.conflicts.length > 0 ||
+    context.recovery.quarantine.length > 0
+  return {
+    exitCode: hasValidationIssues ? VAULT_CLI_EXIT_CODES.validation : VAULT_CLI_EXIT_CODES.success,
+    data: context,
+    ...(hasValidationIssues
+      ? {
+          error: {
+            code: 'context-health-check-failed',
+            message:
+              'Vault context includes validation or recovery issues; inspect health and recovery'
+          }
+        }
+      : {})
+  }
+}
+
+async function executeSearch(
+  rootPath: string,
+  parsed: ParsedVaultCliArgs
+): Promise<VaultCliCommandResult> {
+  const results = await searchVaultContext(rootPath, parsed.query ?? '', {
+    limit: parsed.limit,
+    maxChars: parsed.maxChars
+  })
+  return {
+    exitCode: VAULT_CLI_EXIT_CODES.success,
+    data: {
+      rootPath,
+      query: parsed.query,
+      resultCount: results.length,
+      results
+    }
+  }
+}
+
+async function executeRead(
+  rootPath: string,
+  parsed: ParsedVaultCliArgs
+): Promise<VaultCliCommandResult> {
+  try {
+    const note = await readVaultNote(rootPath, parsed.filePath ?? '', {
+      maxChars: parsed.maxChars
+    })
+    return {
+      exitCode: VAULT_CLI_EXIT_CODES.success,
+      data: note
+    }
+  } catch (error) {
+    throw new VaultCliError('read-failed', describeError(error), VAULT_CLI_EXIT_CODES.validation)
+  }
+}
+
+async function executeConflicts(rootPath: string): Promise<VaultCliCommandResult> {
+  const store = new VaultRecoveryStore(path.join(rootPath, '.xingularity'))
+  const [conflicts, quarantine] = await Promise.all([store.listConflicts(), store.listQuarantine()])
+  const hasRecoveryWork = conflicts.length > 0 || quarantine.length > 0
+  return {
+    exitCode: hasRecoveryWork ? VAULT_CLI_EXIT_CODES.validation : VAULT_CLI_EXIT_CODES.success,
+    data: {
+      rootPath,
+      conflictCount: conflicts.length,
+      quarantineCount: quarantine.length,
+      conflicts: conflicts.map((record) => ({
+        id: record.id,
+        path: record.path,
+        detectedAt: record.detectedAt,
+        ...(record.reason ? { reason: record.reason } : {}),
+        payloadRoles: Object.entries(record.payloads)
+          .filter(([, value]) => value !== null && value !== undefined)
+          .map(([role]) => role)
+      })),
+      quarantine: quarantine.map((record) => ({
+        id: record.id,
+        path: record.path,
+        quarantinedAt: record.quarantinedAt,
+        reason: record.reason,
+        payloadPath: typeof record.payload === 'string' ? record.payload : record.payload.path
+      }))
+    },
+    ...(hasRecoveryWork
+      ? {
+          error: {
+            code: 'unresolved-recovery-work',
+            message: 'Vault has unresolved conflicts or quarantined files'
+          }
+        }
+      : {})
   }
 }
 
@@ -616,7 +958,7 @@ async function executeBackup(
 
 function createHelpData(): Record<string, unknown> {
   return {
-    usage: 'xingularity vault <command> [--root <path>] [--pretty]',
+    usage: 'xingularity vault <command> [--root <path>] [options] [--pretty]',
     output: 'JSON on stdout for both successful and failed commands',
     commands: {
       status:
@@ -625,7 +967,12 @@ function createHelpData(): Record<string, unknown> {
       manifest: 'Read .xingularity/manifest.json without creating or changing it',
       'manifest --portable': 'Preview a verified portable transfer manifest without writing it',
       scan: 'List safe portable files with sizes and SHA-256 checksums',
-      backup: 'Create a verified portable backup; use --preview to avoid writing it'
+      backup: 'Create a verified portable backup; use --preview to avoid writing it',
+      context: 'Read a bounded, safe workspace context bundle for an agent or automation',
+      search:
+        'Search notes, projects, tasks, calendar events, resources, and subscriptions without returning secrets',
+      read: 'Read a bounded Markdown note from notebooks/',
+      conflicts: 'List unresolved conflicts and quarantined files without changing them'
     },
     options: {
       '--root <path>': 'Vault root; defaults to the current working directory',
@@ -633,7 +980,15 @@ function createHelpData(): Record<string, unknown> {
       '--pretty': 'Indent JSON for humans while preserving the same schema',
       '--portable': 'Use the portable transfer boundary with the manifest command',
       '--preview': 'Preview a backup without creating files',
-      '--destination <path>': 'Backup destination; defaults to a generated folder inside the vault',
+      '--destination/--output <path>':
+        'Backup destination; defaults to a generated folder inside the vault',
+      '--query <text>': 'Filter context or search across safe workspace content',
+      '--project <id-or-name>': 'Limit a context bundle to one project',
+      '--note <path>': 'Limit a context bundle to one Markdown note',
+      '--path <path>': 'Markdown note path for the read command',
+      '--limit <number>': 'Maximum records per context collection or search result set',
+      '--max-chars <number>': 'Maximum user-authored context/read characters',
+      '--no-diagnostics': 'Skip the read-only vault diagnostics pass for context',
       '--help': 'Show this JSON help document'
     },
     exitCodes: VAULT_CLI_EXIT_CODES
@@ -718,8 +1073,54 @@ function isVaultCliSubcommand(value: string): value is VaultCliSubcommand {
     value === 'validate' ||
     value === 'manifest' ||
     value === 'scan' ||
-    value === 'backup'
+    value === 'backup' ||
+    value === 'context' ||
+    value === 'search' ||
+    value === 'read' ||
+    value === 'conflicts'
   )
+}
+
+function isVaultRootPositionalCommand(command: VaultCliSubcommand): boolean {
+  return (
+    command === 'status' ||
+    command === 'validate' ||
+    command === 'manifest' ||
+    command === 'scan' ||
+    command === 'backup' ||
+    command === 'conflicts'
+  )
+}
+
+function takeOptionValue(tokens: string[], option: string): string {
+  const value = tokens.shift()
+  if (!value || value.startsWith('-')) {
+    throw new VaultCliError(
+      `missing-${option.replace(/^--/, '').replace(/-([a-z])/g, (_match, letter: string) => letter)}`,
+      `The ${option} option requires a value`,
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  return value
+}
+
+function parseIntegerOption(value: string, option: string, min: number, max: number): number {
+  if (!/^\d+$/.test(value)) {
+    throw new VaultCliError(
+      `invalid-${option.slice(2).replace(/-/g, '-')}`,
+      `The ${option} option must be an integer between ${min} and ${max}`,
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new VaultCliError(
+      `invalid-${option.slice(2).replace(/-/g, '-')}`,
+      `The ${option} option must be an integer between ${min} and ${max}`,
+      VAULT_CLI_EXIT_CODES.usage
+    )
+  }
+  return parsed
 }
 
 function isMissingPathError(error: unknown): boolean {

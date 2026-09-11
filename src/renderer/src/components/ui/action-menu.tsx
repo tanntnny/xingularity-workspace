@@ -17,6 +17,7 @@ import {
   DropdownMenuSubTrigger
 } from './dropdown-menu'
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export type ActionMenuVariant = 'context' | 'dropdown'
 
@@ -50,7 +51,11 @@ export interface ActionMenuItemsProps {
 function ActionMenuLabel({ children }: { children: ReactNode }): ReactElement {
   const isTextLabel = typeof children === 'string' || typeof children === 'number'
 
-  return <span className={cn('min-w-0 flex-1', isTextLabel && 'truncate')}>{children}</span>
+  return isTextLabel ? (
+    <WorkspaceTextFade className="min-w-0 flex-1">{children}</WorkspaceTextFade>
+  ) : (
+    <span className={cn('min-w-0 flex-1')}>{children}</span>
+  )
 }
 
 export function ActionMenuItems({ groups, variant }: ActionMenuItemsProps): ReactElement {

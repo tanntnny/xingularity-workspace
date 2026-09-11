@@ -21,6 +21,11 @@ async function createFixtureVault(): Promise<string> {
     ),
     'utf-8'
   )
+  await fs.writeFile(
+    path.join(rootPath, 'settings.json'),
+    JSON.stringify({ codeFontFamily: 'fira-code' }, null, 2),
+    'utf-8'
+  )
   return rootPath
 }
 
@@ -196,8 +201,14 @@ for (const colorScheme of ['light'] as const) {
       expect(calloutStyles.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
       expect(calloutStyles.borderTopColor).not.toBe('rgba(0, 0, 0, 0)')
 
-      const codeBlock = editorRoot.locator('.ProseMirror pre[data-language]').first()
+      const codeBlock = editorRoot
+        .locator('.ProseMirror .milkdown-code-block[data-language]')
+        .first()
       await expect(codeBlock).toBeVisible({ timeout: 20_000 })
+      await page.evaluate(async () => {
+        await document.fonts.ready
+      })
+      expect(await page.evaluate(() => document.fonts.check("400 16px 'Fira Code'"))).toBe(true)
 
       const styles = await codeBlock.evaluate((element) => {
         const code = element.querySelector('code')
@@ -222,7 +233,7 @@ for (const colorScheme of ['light'] as const) {
         codeBackgroundColor: 'rgba(0, 0, 0, 0)'
       })
       expect(styles.borderTopColor).not.toBe('rgba(0, 0, 0, 0)')
-      expect(styles.codeFontFamily).toContain('JetBrains Mono')
+      expect(styles.codeFontFamily).toContain('Fira Code')
 
       const inlineCode = editorRoot.locator('.ProseMirror p code').first()
       await expect(inlineCode).toBeVisible({ timeout: 20_000 })
@@ -246,7 +257,7 @@ for (const colorScheme of ['light'] as const) {
         borderTopWidth: editorThemeStyles.expectedBorderWidth,
         color: 'rgb(238, 238, 238)'
       })
-      expect(inlineCodeStyles.fontFamily).toContain('JetBrains Mono')
+      expect(inlineCodeStyles.fontFamily).toContain('Fira Code')
 
       const tableBlock = editorRoot.locator('.ProseMirror .milkdown-table-block').first()
       await expect(tableBlock).toHaveCount(1, { timeout: 20_000 })

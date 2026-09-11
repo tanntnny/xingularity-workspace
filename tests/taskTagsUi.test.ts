@@ -19,7 +19,7 @@ const task = {
 }
 
 describe('task tag UI', () => {
-  it('uses the outline tag icon before the tag label', () => {
+  it('uses the outline tag icon before the fading tag label', () => {
     const markup = renderToStaticMarkup(createElement(TagChip, { tag: 'course-test-longer' }))
 
     expect(markup).toContain('stroke-width="2"')
@@ -27,14 +27,13 @@ describe('task tag UI', () => {
       'd="M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3"'
     )
     expect(markup).toContain('course-test-longer')
-    expect(markup).toContain('truncate')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).toContain('rounded-[var(--radius-control)]')
-    expect(markup).not.toContain('workspace-text-fade')
     expect(markup).not.toContain('status-chip-label-fade')
     expect(markup).not.toContain('whitespace-normal')
   })
 
-  it('keeps fading opt-in for popover tag options', () => {
+  it('uses the shared fade treatment for explicit tag overflow', () => {
     const markup = renderToStaticMarkup(
       createElement(TagChip, {
         tag: 'course-test-longer',
@@ -42,7 +41,7 @@ describe('task tag UI', () => {
       })
     )
 
-    expect(markup).toContain('status-chip-label-fade')
+    expect(markup).toContain('workspace-text-fade')
   })
 
   it('renders a static Tags trigger for the editable tag control', () => {

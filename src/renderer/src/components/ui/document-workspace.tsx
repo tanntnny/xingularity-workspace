@@ -12,6 +12,7 @@ import { Shortcut, type ShortcutKey } from './kbd'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable'
 import { Separator } from './separator'
 import { ToggleGroup, ToggleGroupItem } from './toggle-group'
+import { WorkspaceTextFade, WorkspaceTextFadeContent } from './workspace-text-fade'
 
 type WorkspaceTab = {
   id: string
@@ -90,7 +91,7 @@ const WorkspaceIconButton = React.forwardRef<
         size={hasContent ? 'sm' : 'icon'}
         data-active={active ? 'true' : 'false'}
         className={cn(
-          'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)] [&>span:first-of-type]:min-w-0 [&>span:first-of-type]:truncate',
+          'ui-compact-control shrink-0 rounded-[var(--radius-button-pill)] [&>svg]:size-[var(--control-icon-size)]',
           isPlainAppearance
             ? 'border-0'
             : bordered || (!hasContent && !borderless)
@@ -112,7 +113,7 @@ const WorkspaceIconButton = React.forwardRef<
         {...buttonProps}
       >
         {icon}
-        {hasLabel ? <span>{label}</span> : null}
+        {hasLabel ? <WorkspaceTextFade className="min-w-0 flex-1">{label}</WorkspaceTextFade> : null}
         <SelectionCounter count={counter ?? 0} />
       </Button>
     )
@@ -1013,7 +1014,9 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
                 <div className="flex min-w-0 items-center gap-1.5">
                   {pageContextMenu ? <div className="shrink-0">{pageContextMenu}</div> : null}
                   {pageContextMenuTrailing ? (
-                    <div className="min-w-0 truncate">{pageContextMenuTrailing}</div>
+                    <WorkspaceTextFadeContent className="min-w-0">
+                      {pageContextMenuTrailing}
+                    </WorkspaceTextFadeContent>
                   ) : null}
                 </div>
               ) : null}

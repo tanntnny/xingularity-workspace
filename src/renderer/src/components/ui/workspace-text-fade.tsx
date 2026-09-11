@@ -2,10 +2,15 @@ import * as React from 'react'
 
 import { cn } from '../../lib/utils'
 
-export type WorkspaceTextFadeProps = React.HTMLAttributes<HTMLSpanElement>
+export type WorkspaceTextFadeLines = 1 | 2
+
+export interface WorkspaceTextFadeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  lines?: WorkspaceTextFadeLines
+  observeMutations?: boolean
+}
 
 const WorkspaceTextFade = React.forwardRef<HTMLSpanElement, WorkspaceTextFadeProps>(
-  ({ children, className, ...props }, forwardedRef) => {
+  ({ children, className, lines = 1, observeMutations = true, ...props }, forwardedRef) => {
     const textRef = React.useRef<HTMLSpanElement>(null)
     const [isOverflowing, setIsOverflowing] = React.useState(false)
 
@@ -28,27 +33,41 @@ const WorkspaceTextFade = React.forwardRef<HTMLSpanElement, WorkspaceTextFadePro
       }
 
       const updateOverflow = (): void => {
-        const nextIsOverflowing = element.scrollWidth > element.clientWidth
+        const nextIsOverflowing =
+          lines === 2
+            ? element.scrollHeight > element.clientHeight
+            : element.scrollWidth > element.clientWidth
         setIsOverflowing((current) => (current === nextIsOverflowing ? current : nextIsOverflowing))
       }
 
       updateOverflow()
 
-      if (typeof ResizeObserver === 'undefined') {
-        return
+      const resizeObserver =
+        typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateOverflow)
+      resizeObserver?.observe(element)
+
+      const mutationObserver =
+        observeMutations && typeof MutationObserver !== 'undefined'
+          ? new MutationObserver(updateOverflow)
+          : null
+      mutationObserver?.observe(element, {
+        characterData: true,
+        childList: true,
+        subtree: true
+      })
+
+      return () => {
+        resizeObserver?.disconnect()
+        mutationObserver?.disconnect()
       }
-
-      const resizeObserver = new ResizeObserver(updateOverflow)
-      resizeObserver.observe(element)
-
-      return () => resizeObserver.disconnect()
-    }, [children])
+    }, [children, lines, observeMutations])
 
     return (
       <span
         ref={setRefs}
         {...props}
         className={cn('workspace-text-fade', className)}
+        data-lines={lines}
         data-overflowing={isOverflowing ? 'true' : 'false'}
       >
         {children}
@@ -58,4 +77,38 @@ const WorkspaceTextFade = React.forwardRef<HTMLSpanElement, WorkspaceTextFadePro
 )
 WorkspaceTextFade.displayName = 'WorkspaceTextFade'
 
-export { WorkspaceTextFade }
+export interface WorkspaceTextFadeContentProps extends Omit<WorkspaceTextFadeProps, 'children'> {
+  children?: React.ReactNode
+}
+
+function WorkspaceTextFadeContent({
+  children,
+  className,
+  ...props
+}: WorkspaceTextFadeContentProps): React.ReactNode {
+  const hasDirectText = React.Children.toArray(children).some(
+    (child) => typeof child === 'string' || typeof child === 'number'
+  )
+
+  if (!hasDirectText) {
+    return children
+  }
+
+  return (
+    <>
+      {React.Children.map(children, (child, index) =>
+        typeof child === 'string' || typeof child === 'number' ? (
+          <WorkspaceTextFade key={`workspace-text-fade-${index}`} className={className} {...props}>
+            {child}
+          </WorkspaceTextFade>
+        ) : (
+          child
+        )
+      )}
+    </>
+  )
+}
+
+WorkspaceTextFadeContent.displayName = 'WorkspaceTextFadeContent'
+
+export { WorkspaceTextFade, WorkspaceTextFadeContent }

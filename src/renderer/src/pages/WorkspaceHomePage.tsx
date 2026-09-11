@@ -8,7 +8,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  StatusChip
+  StatusChip,
+  WorkspaceTextFade
 } from '../components/ui'
 import { WorkspaceIconButton } from '../components/ui/document-workspace'
 import { EmptyState } from '../components/ui/empty-state'
@@ -91,9 +92,9 @@ export function WorkspaceHomePage({
                     className="flex items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-muted/60"
                     onClick={() => onOpenProject(project.id)}
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    <WorkspaceTextFade className="min-w-0 flex-1 text-sm font-medium">
                       {project.name}
-                    </span>
+                    </WorkspaceTextFade>
                     <span className="text-xs text-muted-foreground">
                       {
                         tasks.filter((task) => task.projectId === project.id && !isTaskDone(task))
@@ -133,11 +134,11 @@ export function WorkspaceHomePage({
                     key={capture.id}
                     type="button"
                     role="listitem"
-                    className="min-w-0 max-w-full truncate rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
+                    className="min-w-0 max-w-full rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
                     title={capture.content}
                     onClick={onOpenCapture}
                   >
-                    {capture.content}
+                    <WorkspaceTextFade className="min-w-0">{capture.content}</WorkspaceTextFade>
                   </button>
                 ))}
               </div>
@@ -174,7 +175,9 @@ export function WorkspaceHomePage({
                     onClick={() => void onOpenResource(resource.id)}
                   >
                     <Link size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{resource.title}</span>
+                    <WorkspaceTextFade className="min-w-0 flex-1 text-sm">
+                      {resource.title}
+                    </WorkspaceTextFade>
                     <StatusChip item={RESOURCE_STATE_CHIP_ITEMS[resource.state]} />
                   </button>
                 ))}
@@ -203,7 +206,9 @@ export function WorkspaceHomePage({
                     className="flex items-center gap-2 rounded-md border border-border/70 px-2 py-2"
                   >
                     <Loader2 size={14} className="text-muted-foreground" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                    <WorkspaceTextFade className="min-w-0 flex-1 text-sm">
+                      {task.title}
+                    </WorkspaceTextFade>
                     <span className="text-xs text-muted-foreground">
                       {task.date ?? 'unscheduled'}
                     </span>

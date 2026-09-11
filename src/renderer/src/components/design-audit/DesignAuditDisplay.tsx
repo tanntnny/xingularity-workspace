@@ -86,7 +86,7 @@ const STATUS_CHIP_SURFACES: readonly StatusChipSurface[] = [
   'hover',
   'hover-pill'
 ]
-const STATUS_CHIP_OVERFLOWS: readonly StatusChipLabelOverflow[] = ['truncate', 'wrap', 'fade']
+const STATUS_CHIP_OVERFLOWS: readonly StatusChipLabelOverflow[] = ['fade', 'wrap']
 
 const STATUS_ITEMS: readonly StatusChipItem[] = [
   {

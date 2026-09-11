@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { Input, type InputVariant } from './ui/input'
 import { TooltipButton } from './ui/tooltip'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { cn } from '../lib/utils'
 
 type DisplayAs = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'div'
@@ -198,7 +199,7 @@ export function InlineEditableText({
     <button
       type="button"
       className={cn(
-        'inline max-w-full appearance-none border-0 bg-transparent p-0 text-left font-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'inline-block max-w-full appearance-none border-0 bg-transparent p-0 text-left font-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         displayClassName ?? defaultDisplayClassName
       )}
       onClick={beginEditing}
@@ -212,7 +213,9 @@ export function InlineEditableText({
       }}
       aria-label={value || placeholder || title}
     >
-      {renderDisplay ? renderDisplay(value) : value || placeholder}
+      <WorkspaceTextFade className="max-w-full">
+        {renderDisplay ? renderDisplay(value) : value || placeholder}
+      </WorkspaceTextFade>
     </button>
   )
   const displayButton = (

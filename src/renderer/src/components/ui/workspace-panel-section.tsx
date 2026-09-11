@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils'
 import { ChevronDown } from './icons'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible'
 import { getButtonTooltipLabel, TooltipButton } from './tooltip'
+import { WorkspaceTextFadeContent } from './workspace-text-fade'
 
 interface WorkspacePanelSectionProps extends React.HTMLAttributes<HTMLElement> {}
 
@@ -34,7 +35,9 @@ const WorkspacePanelSectionHeader = React.forwardRef<
   return (
     <div ref={ref} className={cn('flex items-start justify-between gap-3', className)} {...props}>
       <div className="min-w-0">
-        <h2 className="min-w-0 truncate text-sm font-semibold">{heading}</h2>
+        <h2 className="min-w-0 text-sm font-semibold">
+          <WorkspaceTextFadeContent className="min-w-0">{heading}</WorkspaceTextFadeContent>
+        </h2>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
@@ -89,7 +92,9 @@ const CollapsibleWorkspacePanelSection = React.forwardRef<
                 type="button"
                 className="group flex min-w-0 flex-1 items-center justify-between gap-3 bg-transparent p-0 text-left text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               >
-                <span className="min-w-0 truncate">{heading}</span>
+                <WorkspaceTextFadeContent className="min-w-0 flex-1">
+                  {heading}
+                </WorkspaceTextFadeContent>
                 <ChevronDown
                   aria-hidden="true"
                   className="motion-state-chevron size-[var(--control-icon-size)] shrink-0 text-muted-foreground group-hover:text-foreground group-data-[state=open]:rotate-180"

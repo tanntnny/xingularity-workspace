@@ -18,6 +18,7 @@ import { RESOURCE_PROVIDERS, RESOURCE_STATES, RESOURCE_TYPES } from '../shared/r
 import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
 import { MAX_RECENT_PAGE_TARGETS } from '../shared/recentPages'
 import { isVaultRelativePath } from '../shared/projectFolders'
+import { FOLDER_COLOR_PALETTE } from '../shared/folderColors'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
 import { loadMainWindowApp } from './window'
@@ -646,6 +647,17 @@ const recentPageTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('view'), viewId: z.string().min(1).max(120) })
 ])
 
+const folderColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .refine(
+    (value) => FOLDER_COLOR_PALETTE.some((color) => color.toLowerCase() === value.toLowerCase()),
+    'Folder color must come from the supported palette'
+  )
+const folderColorsSchema = z
+  .record(z.string().trim().min(1).max(512), folderColorSchema)
+  .refine((value) => Object.keys(value).length <= 1000, 'Too many folder colors')
+
 const settingsUpdateSchema = z.object({
   isSidebarCollapsed: z.boolean().optional(),
   profile: z
@@ -659,11 +671,13 @@ const settingsUpdateSchema = z.object({
     })
     .optional(),
   fontFamily: z.string().min(1).max(200).optional(),
+  codeFontFamily: z.string().min(1).max(200).optional(),
   editorVimModeEnabled: z.boolean().optional(),
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
   calendarTasks: z.array(calendarTaskSchema).max(5000).optional(),
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
   workspaceViews: z.array(workspaceViewSchema).max(100).optional(),
+  folderColors: folderColorsSchema.optional(),
   gridBoard: gridBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),

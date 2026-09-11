@@ -163,6 +163,11 @@ export type {
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'
 export { ProjectIconSvg } from './project-icon'
 export type { ProjectIconSvgProps } from './project-icon'
+export { NotebookFolderIcon } from './notebook-folder-icon'
+export type {
+  NotebookFolderIconProps,
+  NotebookFolderIconVariant
+} from './notebook-folder-icon'
 
 export { Calendar } from './calendar'
 export type { CalendarProps } from './calendar'
@@ -215,8 +220,14 @@ export {
 } from './table'
 export { TableRowList } from './table-row-list'
 export type { TableRowListColumn, TableRowListGroup, TableRowListProps } from './table-row-list'
-export { WorkspaceTextFade } from './workspace-text-fade'
-export type { WorkspaceTextFadeProps } from './workspace-text-fade'
+export { WorkspaceTextFade, WorkspaceTextFadeContent } from './workspace-text-fade'
+export type {
+  WorkspaceTextFadeContentProps,
+  WorkspaceTextFadeLines,
+  WorkspaceTextFadeProps
+} from './workspace-text-fade'
+export { WorkspaceTextClip } from './workspace-text-clip'
+export type { WorkspaceTextClipProps } from './workspace-text-clip'
 export type { TableSortDirection, TableSortState, TableSortValue } from '../../lib/tableSort'
 
 export { Toaster } from './sonner'

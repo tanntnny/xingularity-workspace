@@ -50,7 +50,7 @@ export function SchedulingBreadcrumb({
           <>
             <BreadcrumbSeparator className="text-muted-foreground" />
             <BreadcrumbItem>
-              <BreadcrumbPage className="max-w-[260px] truncate text-sm font-semibold text-foreground">
+              <BreadcrumbPage className="max-w-[260px] text-sm font-semibold text-foreground">
                 <BreadcrumbIconLabel icon={<Bolt size={14} aria-hidden="true" />}>
                   {currentLabel}
                 </BreadcrumbIconLabel>

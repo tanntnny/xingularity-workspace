@@ -41,7 +41,7 @@ export function AppErrorPage({ error, onReload }: AppErrorPageProps) {
 
   return (
     <div className="min-h-screen bg-background px-6 py-10 text-foreground">
-      <Card className="mx-auto grid max-w-5xl gap-6 overflow-hidden border-destructive/40 shadow-sm">
+      <Card className="mx-auto grid max-w-5xl gap-6 overflow-hidden shadow-sm">
         <CardHeader className="bg-destructive/10 px-8 py-7">
           <Badge variant="destructive" className="mb-4 w-fit uppercase tracking-wide">
             Fatal Application Error

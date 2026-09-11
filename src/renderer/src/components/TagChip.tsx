@@ -20,7 +20,7 @@ export function TagChip({
   onClick,
   onRemove,
   className,
-  labelOverflow = 'truncate'
+  labelOverflow = 'fade'
 }: TagChipProps): ReactElement {
   const item =
     kind === 'resource'

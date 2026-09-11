@@ -67,6 +67,7 @@ describe('sidebar shortcuts', () => {
 
     expect(markup).toContain('data-sidebar="content"')
     expect(markup).toContain('data-sidebar="group-label"')
+    expect(markup).toContain('text-left text-xs font-bold text-muted-foreground')
     expect(markup).toContain('text-xs font-bold text-muted-foreground')
     expect(markup).toContain('size-4')
     expect(markup).toContain('size-3')
@@ -78,6 +79,12 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain('--sidebar-width:256px')
     expect(markup).toContain('data-testid="sidebar-command-palette"')
     expect(markup).toContain('data-testid="sidebar-vault-manager"')
+    const commandPaletteButton = markup.match(
+      /<button[^>]*data-testid="sidebar-command-palette"[^>]*>[\s\S]*?<\/button>/
+    )?.[0]
+    expect(commandPaletteButton).toContain('workspace-text-fade')
+    expect(commandPaletteButton).toContain('>Command palette</span>')
+    expect(commandPaletteButton).not.toContain('Command palette...')
     expect(markup).toContain('text-muted-foreground')
     expect(markup).toContain('hover:text-sidebar-accent-foreground')
     expect(markup).toContain('data-active="true"')
@@ -91,11 +98,11 @@ describe('sidebar shortcuts', () => {
     expect(markup.match(/tabler-icon-mail/g)).toHaveLength(1)
     expect(markup.match(/tabler-icon-search/g)).toHaveLength(1)
     expect(markup).not.toContain('>Board</span>')
-    const workspaceIndex = markup.indexOf('>Workspace</span>')
-    expect(workspaceIndex).toBeGreaterThanOrEqual(0)
-    const viewIndex = markup.indexOf('>View</span>')
-    expect(viewIndex).toBeGreaterThanOrEqual(0)
     const inboxIndex = markup.indexOf('>Inbox</span>')
+    const workspaceIndex = markup.indexOf('data-sidebar="group-label"', inboxIndex)
+    expect(workspaceIndex).toBeGreaterThanOrEqual(0)
+    const viewIndex = markup.indexOf('data-sidebar="group-label"', workspaceIndex + 1)
+    expect(viewIndex).toBeGreaterThanOrEqual(0)
     expect(inboxIndex).toBeGreaterThanOrEqual(0)
     expect(markup.indexOf('>Capture</span>')).toBeGreaterThan(inboxIndex)
     expect(inboxIndex).toBeLessThan(workspaceIndex)
@@ -138,8 +145,8 @@ describe('sidebar shortcuts', () => {
       'data-sidebar="separator" class="h-[var(--border-width)] w-auto bg-sidebar-border mx-1"'
     )
     expect(markup.indexOf('data-testid="sidebar-vault-manager"')).toBeLessThan(firstSeparatorIndex)
-    expect(firstSeparatorIndex).toBeLessThan(
-      markup.indexOf('data-testid="sidebar-command-palette"')
+    expect(markup.indexOf('data-testid="sidebar-command-palette"')).toBeLessThan(
+      firstSeparatorIndex
     )
     expect(lastSeparatorIndex).toBeLessThan(markup.indexOf('data-testid="sidebar-page:settings"'))
     expect(markup).toContain('sidebar-brand-shimmer')
@@ -204,7 +211,7 @@ describe('sidebar shortcuts', () => {
     expect(markup).toContain(
       `class="workspace-text-fade sidebar-workspace-text-fade block max-w-full min-w-0 flex-1">${view.name}</span>`
     )
-    expect(markup).toContain('text-clip')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).toContain(`data-testid="sidebar-view-actions:${view.id}"`)
     expect(markup).toContain('data-testid="sidebar-create-view"')
     expect(markup.indexOf(`data-testid="sidebar-view:${view.id}"`)).toBeLessThan(

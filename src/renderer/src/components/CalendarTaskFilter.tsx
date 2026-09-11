@@ -7,7 +7,8 @@ import {
   ResponsivePicker,
   ToggleGroup,
   ToggleGroupItem,
-  WorkspaceIconButton
+  WorkspaceIconButton,
+  WorkspaceTextFade
 } from './ui'
 import { TagPickerContent } from './TagPickerPopover'
 
@@ -106,7 +107,7 @@ export function CalendarTaskFilter({
               data-testid={`calendar-content-filter-option:${option.value}`}
             >
               <span className="inline-flex min-w-0 items-center gap-1.5">
-                <span className="truncate">{option.label}</span>
+                <WorkspaceTextFade>{option.label}</WorkspaceTextFade>
                 <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1 text-xs">
                   {option.count}
                 </Badge>

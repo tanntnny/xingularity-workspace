@@ -41,9 +41,9 @@ describe('task page composition', () => {
     expect(markup).not.toContain('A private task description')
   })
 
-  it('splits calendar card metadata evenly and hard cuts long values', () => {
-    const longTitle = 'A very long task title that hard cuts inside the calendar card'
-    const longProjectName = 'A very long project name that hard cuts inside the calendar card'
+  it('splits calendar card metadata evenly and clips long title and status values', () => {
+    const longTitle = 'A very long task title that clips inside the calendar card'
+    const longProjectName = 'A very long project name that fades inside the calendar card'
     const markup = renderToStaticMarkup(
       createElement(CalendarTaskCard, {
         task: { ...task, title: longTitle, time: '09:00', endTime: '17:00' },
@@ -56,10 +56,8 @@ describe('task page composition', () => {
     expect(markup).toContain('data-calendar-task-field="time"')
     expect(markup).toContain('data-calendar-task-field="title"')
     expect(markup).toContain('data-calendar-task-field="project"')
-    expect(markup).toContain('status-chip-label-clip')
     expect(markup).toContain('workspace-text-clip')
-    expect(markup).not.toContain('status-chip-label-fade')
-    expect(markup).not.toContain('workspace-text-fade')
+    expect(markup).toContain('workspace-text-fade')
     expect(markup).toContain(`title="${longTitle}"`)
     expect(markup).toContain(`title="${longProjectName}"`)
     expect(markup).toContain('title="09:00 - 17:00"')
