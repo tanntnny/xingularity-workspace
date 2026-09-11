@@ -39,6 +39,7 @@ describe('ResourcesPage', () => {
       createElement(ResourcesPage, {
         projects: [project],
         noteTree: [],
+        folderColors: {},
         resources: [resource, unrelatedResource],
         relations: [],
         viewState,
@@ -75,6 +76,7 @@ describe('ResourcesPage', () => {
       createElement(ResourcesPage, {
         projects: [project],
         noteTree: [],
+        folderColors: {},
         resources: [resource, unassignedResource],
         relations: [],
         onCreateResource: async () => undefined,
@@ -94,7 +96,8 @@ describe('ResourcesPage', () => {
     expect(markup.indexOf('>Projects</span>')).toBeLessThan(markup.indexOf('>Source</span>'))
     expect(markup.indexOf('>Source</span>')).toBeLessThan(markup.indexOf('>Labels</span>'))
     expect(markup).toContain('status=active')
-    expect(markup).toContain('>+1</span>')
+    expect(markup).toContain('>+</span>')
+    expect(markup).toContain('>1</span>')
     expect(markup).not.toContain('aria-label="Resource label owner=amy"')
     expect(markup).toContain('Atlas')
     expect(markup).toContain('data-project-icon-surface="none"')
@@ -138,6 +141,7 @@ describe('ResourcesPage', () => {
       createElement(ResourcesPage, {
         projects: [],
         noteTree: [],
+        folderColors: {},
         resources: [],
         relations: [],
         onCreateResource: async () => undefined,

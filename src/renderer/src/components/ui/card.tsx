@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFadeContent } from './workspace-text-fade'
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -24,15 +25,17 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 CardHeader.displayName = 'CardHeader'
 
 const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
+  ({ children, className, ...props }, ref) => (
     <h3
       ref={ref}
       className={cn(
-        'min-w-0 max-w-full truncate font-semibold leading-none tracking-tight',
+        'min-w-0 max-w-full font-semibold leading-none tracking-tight',
         className
       )}
       {...props}
-    />
+    >
+      <WorkspaceTextFadeContent className="min-w-0">{children}</WorkspaceTextFadeContent>
+    </h3>
   )
 )
 CardTitle.displayName = 'CardTitle'

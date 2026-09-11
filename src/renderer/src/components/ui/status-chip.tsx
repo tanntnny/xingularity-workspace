@@ -4,6 +4,8 @@ import { cn } from '../../lib/utils'
 import { SelectionCounter } from './badge'
 import { statusChipVariants } from './status-chip-variants'
 import { getButtonTooltipLabel, TooltipButton } from './tooltip'
+import { WorkspaceTextClip } from './workspace-text-clip'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export interface StatusChipItem {
   label: React.ReactNode
@@ -14,7 +16,7 @@ export interface StatusChipItem {
 
 export type StatusChipVariant = 'default' | 'bare'
 export type StatusChipSurface = 'none' | 'pill' | 'attention' | 'hover' | 'hover-pill'
-export type StatusChipLabelOverflow = 'truncate' | 'wrap' | 'fade' | 'clip'
+export type StatusChipLabelOverflow = 'wrap' | 'fade' | 'clip'
 
 type StatusChipSpanProps = {
   as?: 'span'
@@ -44,51 +46,6 @@ type StatusChipButtonProps = {
 
 export type StatusChipProps = StatusChipSpanProps | StatusChipButtonProps
 
-interface StatusChipLabelProps {
-  children: React.ReactNode
-  className: string
-  fade: boolean
-}
-
-function StatusChipLabel({ children, className, fade }: StatusChipLabelProps): React.ReactElement {
-  const labelRef = React.useRef<HTMLSpanElement>(null)
-  const [isOverflowing, setIsOverflowing] = React.useState(false)
-
-  React.useEffect(() => {
-    const element = labelRef.current
-    if (!element || !fade) {
-      setIsOverflowing(false)
-      return
-    }
-
-    const updateOverflow = (): void => {
-      const nextIsOverflowing = element.scrollWidth > element.clientWidth
-      setIsOverflowing((current) => (current === nextIsOverflowing ? current : nextIsOverflowing))
-    }
-
-    updateOverflow()
-
-    if (typeof ResizeObserver === 'undefined') {
-      return
-    }
-
-    const resizeObserver = new ResizeObserver(updateOverflow)
-    resizeObserver.observe(element)
-
-    return () => resizeObserver.disconnect()
-  }, [children, fade])
-
-  return (
-    <span
-      ref={labelRef}
-      className={className}
-      data-overflowing={fade && isOverflowing ? 'true' : undefined}
-    >
-      {children}
-    </span>
-  )
-}
-
 export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
   (
     {
@@ -110,7 +67,7 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
     },
     ref
   ) => {
-    const resolvedLabelOverflow = labelOverflow ?? (wrapLabel ? 'wrap' : 'truncate')
+    const resolvedLabelOverflow = labelOverflow ?? (wrapLabel ? 'wrap' : 'fade')
     const hasCounter = counter !== undefined && counter > 0
     const chipStyle = {
       ...style,
@@ -119,13 +76,7 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
     } as React.CSSProperties
     const labelClassName = cn(
       hasCounter ? 'min-w-0 flex-1 text-left text-sm' : 'w-full text-left text-sm',
-      resolvedLabelOverflow === 'fade'
-        ? 'status-chip-label-fade flex-1'
-        : resolvedLabelOverflow === 'wrap'
-          ? 'whitespace-normal break-words'
-          : resolvedLabelOverflow === 'clip'
-            ? 'status-chip-label-clip flex-1'
-            : 'truncate',
+      resolvedLabelOverflow === 'wrap' ? 'whitespace-normal break-words' : 'flex-1',
       mutedLabel === true
         ? 'text-muted-foreground'
         : mutedLabel === false
@@ -153,9 +104,13 @@ export const StatusChip = React.forwardRef<HTMLElement, StatusChipProps>(
             {item.icon}
           </span>
         ) : null}
-        <StatusChipLabel className={labelClassName} fade={resolvedLabelOverflow === 'fade'}>
-          {item.label}
-        </StatusChipLabel>
+        {resolvedLabelOverflow === 'fade' ? (
+          <WorkspaceTextFade className={labelClassName}>{item.label}</WorkspaceTextFade>
+        ) : resolvedLabelOverflow === 'clip' ? (
+          <WorkspaceTextClip className={labelClassName}>{item.label}</WorkspaceTextClip>
+        ) : (
+          <span className={labelClassName}>{item.label}</span>
+        )}
         <SelectionCounter count={counter ?? 0} />
       </>
     )

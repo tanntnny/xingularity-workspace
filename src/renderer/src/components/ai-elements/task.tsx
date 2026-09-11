@@ -2,6 +2,7 @@ import * as React from 'react'
 import { CheckCircle2, ChevronDown, Circle, LoaderCircle } from '../ui/icons'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
+import { WorkspaceTextFade } from '../ui/workspace-text-fade'
 
 interface TaskContextValue {
   open: boolean
@@ -52,7 +53,9 @@ export function TaskTrigger({
       ) : (
         <Circle size={16} className="text-muted-foreground" />
       )}
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{title}</span>
+      <WorkspaceTextFade className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+        {title}
+      </WorkspaceTextFade>
       <ChevronDown
         size={15}
         className={cn('text-muted-foreground transition', context.open ? 'rotate-180' : '')}

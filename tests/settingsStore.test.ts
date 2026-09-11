@@ -31,6 +31,36 @@ afterEach(async () => {
 })
 
 describe('SettingsStore', () => {
+  it('defaults and round-trips the independent note code font', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({ codeFontFamily: 'jetbrains-mono' })
+    )
+
+    const updated = await store.updateVault(root, { codeFontFamily: 'fira-code' })
+
+    expect(updated.codeFontFamily).toBe('fira-code')
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"codeFontFamily": "fira-code"'
+    )
+  })
+
+  it('round-trips per-folder colors in the vault core settings file', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const folderColors = { Archive: '#38bdf8' }
+
+    const updated = await store.updateVault(root, { folderColors })
+
+    expect(updated.folderColors).toEqual(folderColors)
+    await expect(store.readVault(root)).resolves.toEqual(expect.objectContaining({ folderColors }))
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"folderColors"'
+    )
+  })
+
   it('round-trips target-level recent pages in the vault core settings file', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const store = new SettingsStore()

@@ -306,6 +306,9 @@ const api: RendererVaultApi = {
     getAnalytics: (filters) => ipcRenderer.invoke(SUBSCRIPTION_CHANNELS.getAnalytics, filters)
   },
   agentTools: {
+    workspace: {
+      context: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'workspace.context', input)
+    },
     note: {
       search: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.search', input),
       read: (input) => ipcRenderer.invoke(AGENT_TOOL_CHANNELS.invoke, 'note.read', input),

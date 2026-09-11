@@ -1,4 +1,6 @@
 @import '@fontsource-variable/inter';
+@import '@fontsource/fira-code/400.css';
+@import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/jetbrains-mono/400.css';
 
 @tailwind base;
@@ -30,6 +32,8 @@
     --accent: #74a9df;
     --accent-foreground: #0d2a55;
     --accent-hover: #5d92c9;
+    --selection-background: color-mix(in srgb, var(--accent) 58%, transparent);
+    --selection-foreground: var(--accent-foreground);
     --progress: #2563eb;
     --milestone-current-icon: color-mix(in srgb, var(--warning) 72%, transparent);
     --milestone-complete-icon: color-mix(in srgb, var(--accent) 72%, transparent);
@@ -40,6 +44,7 @@
     --selection-counter-background: #ffffff;
     --selection-counter-foreground: #1a1a1a;
     --destructive: #dc2626;
+    --destructive-rgb: 220 38 38;
     --destructive-foreground: #fafafa;
     --destructive-muted: #fee2e2;
     --destructive-muted-foreground: #991b1b;
@@ -68,11 +73,12 @@
     --note-block-radius: var(--radius);
     --input: #c7c7c7;
     --ring: #666666;
+    --ring-rgb: 102 102 102;
     --drag-preview-bg: var(--card);
     --drag-preview-border: var(--ring);
     --drop-zone-bg: transparent;
     --drop-zone-border: transparent;
-    --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
+    --drop-zone-active-bg: color-mix(in srgb, var(--foreground) 14%, var(--background));
     --drop-zone-active-border: var(--ring);
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
     --scrollbar-size: 3px;
@@ -94,6 +100,7 @@
     --resize-handle-center: #ffffff;
 
     --app-font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+    --code-font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --radius-button: calc(var(--radius) - 2px);
     --radius-button-pill: 9999px;
     --radius-control: 9999px;
@@ -290,6 +297,7 @@
     --selection-counter-background: #ffffff;
     --selection-counter-foreground: #1a1a1a;
     --destructive: #7f1d1d;
+    --destructive-rgb: 127 29 29;
     --destructive-foreground: #fafafa;
     --destructive-muted: #450a0a;
     --destructive-muted-foreground: #fecaca;
@@ -315,6 +323,7 @@
     --note-block-border: #4a4a4a;
     --input: #404040;
     --ring: #a3a3a3;
+    --ring-rgb: 163 163 163;
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
     --scrollbar-thumb: #303030;
     --scrollbar-thumb-hover: #484848;
@@ -1365,12 +1374,12 @@
     --crepe-color-inline-area: var(--muted);
     --crepe-font-default: var(--app-font-family);
     --crepe-font-title: var(--app-font-family);
-    --crepe-font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --crepe-font-code: var(--code-font-family);
     --crepe-shadow-1: 0 1px 3px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
     --crepe-shadow-2: 0 2px 6px var(--overlay-muted), 0 1px 2px var(--overlay-muted);
     --note-editor-ui-selection: color-mix(in srgb, var(--accent) 18%, var(--popover));
-    --note-editor-selection: color-mix(in srgb, var(--accent) 58%, transparent);
-    --note-editor-selection-foreground: var(--accent-foreground);
+    --note-editor-selection: var(--selection-background);
+    --note-editor-selection-foreground: var(--selection-foreground);
     --note-editor-cursor: var(--note-editor-selection);
     --note-editor-cursor-foreground: var(--note-editor-selection-foreground);
     --note-editor-muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--popover));
@@ -1386,6 +1395,10 @@
 
   .motion-editor-surface[data-editor-density='compact'] .milkdown .ProseMirror {
     padding: 0.5rem 0;
+  }
+
+  .note-editor-surface .note-page-editor .milkdown .ProseMirror {
+    padding-bottom: 8rem;
   }
 
   .motion-editor-surface .milkdown .crepe-placeholder::before {
@@ -1439,7 +1452,7 @@
     border-radius: calc(var(--radius) - 2px);
     background: var(--muted) !important;
     color: var(--foreground) !important;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+    font-family: var(--code-font-family) !important;
     font-size: 0.875em;
     line-height: 1.4;
   }
@@ -1701,7 +1714,7 @@
   display: block;
   min-height: 1.5rem;
   color: var(--foreground);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+  font-family: var(--code-font-family) !important;
 }
 
 .note-editor-surface .code-token-comment,
@@ -2009,6 +2022,7 @@
   overflow: hidden;
   white-space: nowrap;
   --workspace-text-fade-width: 2rem;
+  --workspace-text-fade-height: 1lh;
   -webkit-mask-image: linear-gradient(
     to right,
     black 0,
@@ -2019,6 +2033,23 @@
     to right,
     black 0,
     black max(0px, calc(100% - var(--workspace-text-fade-width))),
+    transparent 100%
+  );
+}
+
+.workspace-text-fade[data-lines='2'] {
+  max-height: 2lh;
+  white-space: normal;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-text-fade-height))),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black max(0px, calc(100% - var(--workspace-text-fade-height))),
     transparent 100%
   );
 }
@@ -2114,30 +2145,6 @@
   [data-sidebar='menu-item']:has(> [data-sidebar='menu-action']) > [data-sidebar='menu-button'] {
     transition: none;
   }
-}
-
-.status-chip-label-clip,
-.status-chip-label-fade {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: clip;
-}
-
-.status-chip-label-fade[data-overflowing='true'] {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    black 0,
-    black max(0px, calc(100% - 1rem)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    black 0,
-    black max(0px, calc(100% - 1rem)),
-    transparent 100%
-  );
 }
 
 .workspace-tab-card {

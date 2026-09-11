@@ -32,7 +32,9 @@ describe('StatusChip', () => {
     )
     expect(markup).toContain('text-left')
     expect(markup).toContain('text-sm')
-    expect(markup).toMatch(/<span class="[^"]*w-full text-left text-sm[^"]*">Completed<\/span>/)
+    expect(markup).toMatch(
+      /<span class="[^"]*w-full text-left text-sm[^"]*"[^>]*>Completed<\/span>/
+    )
     expect(markup).toContain('font-semibold')
     expect(markup).toContain('px-[var(--control-padding-x)]')
     expect(markup).toContain('text-foreground')
@@ -155,7 +157,7 @@ describe('StatusChip', () => {
   it('supports muted labels while keeping the regular chip surface', () => {
     const markup = renderToStaticMarkup(createElement(StatusChip, { item, mutedLabel: true }))
 
-    expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*">Completed<\/span>/)
+    expect(markup).toMatch(/<span class="[^"]*text-muted-foreground[^"]*"[^>]*>Completed<\/span>/)
     expect(markup).not.toContain('group/status-chip')
     expect(markup).not.toContain('group-hover/status-chip:text-foreground')
     expect(markup).not.toContain('group-focus-visible/status-chip:text-foreground')
@@ -168,8 +170,10 @@ describe('StatusChip', () => {
       createElement(StatusChip, { item, variant: 'bare', mutedLabel: false })
     )
 
-    expect(markup).toMatch(/<span class="[^"]*text-foreground[^"]*">Completed<\/span>/)
-    expect(markup).not.toMatch(/<span class="[^"]*text-muted-foreground[^"]*">Completed<\/span>/)
+    expect(markup).toMatch(/<span class="[^"]*text-foreground[^"]*"[^>]*>Completed<\/span>/)
+    expect(markup).not.toMatch(
+      /<span class="[^"]*text-muted-foreground[^"]*"[^>]*>Completed<\/span>/
+    )
   })
 
   it('wraps long labels when explicitly enabled', () => {
@@ -197,7 +201,21 @@ describe('StatusChip', () => {
       })
     )
 
-    expect(markup).toContain('status-chip-label-fade')
+    expect(markup).toContain('workspace-text-fade')
+    expect(markup).not.toContain('status-chip-label-fade')
+    expect(markup).toContain('flex-1')
+    expect(markup).not.toContain('whitespace-normal')
+  })
+
+  it('clips long labels in a single row when requested', () => {
+    const markup = renderToStaticMarkup(
+      createElement(StatusChip, {
+        item: { ...item, label: 'course-test-longer' },
+        labelOverflow: 'clip'
+      })
+    )
+
+    expect(markup).toContain('workspace-text-clip')
     expect(markup).not.toContain('workspace-text-fade')
     expect(markup).toContain('flex-1')
     expect(markup).not.toContain('whitespace-normal')

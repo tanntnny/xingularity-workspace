@@ -213,6 +213,14 @@
     mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
   }
 
+  .workspace-text-clip {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: clip;
+  }
+
   .workspace-tab-label-fade {
     -webkit-mask-image: none;
     mask-image: none;
@@ -226,12 +234,7 @@
       black calc(100% - 4rem),
       transparent 100%
     );
-    mask-image: linear-gradient(
-      to right,
-      black 0,
-      black calc(100% - 4rem),
-      transparent 100%
-    );
+    mask-image: linear-gradient(to right, black 0, black calc(100% - 4rem), transparent 100%);
   }
 }
 

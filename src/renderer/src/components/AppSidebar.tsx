@@ -36,7 +36,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator
+  SidebarSeparator,
+  WorkspaceTextFade
 } from './ui'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
@@ -216,7 +217,7 @@ export function AppSidebar({
           data-testid={`sidebar-page:${page.id}`}
         >
           <PageIcon aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">{page.label}</span>
+          <WorkspaceTextFade className="min-w-0 flex-1">{page.label}</WorkspaceTextFade>
           {page.shortcut ? (
             <Shortcut
               keys={page.shortcut}
@@ -361,11 +362,11 @@ export function AppSidebar({
             className="size-9 shrink-0 rounded-lg border border-sidebar-border object-cover shadow-sm"
           />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <h1 className="sidebar-brand-shimmer truncate text-base font-bold leading-none tracking-tight">
-              Xingularity
+            <h1 className="min-w-0 text-base font-bold leading-none tracking-tight">
+              <WorkspaceTextFade className="sidebar-brand-shimmer">Xingularity</WorkspaceTextFade>
             </h1>
-            <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Workspace
+            <p className="mt-1 min-w-0 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <WorkspaceTextFade>Workspace</WorkspaceTextFade>
             </p>
           </div>
         </div>
@@ -383,22 +384,15 @@ export function AppSidebar({
                   data-testid="sidebar-vault-manager"
                 >
                   <VaultIcon aria-hidden="true" />
-                  <span className="min-w-0 truncate">{vaultName ?? 'Select a vault'}</span>
+                  <WorkspaceTextFade className="min-w-0 flex-1">
+                    {vaultName ?? 'Select a vault'}
+                  </WorkspaceTextFade>
                   <ChevronRight
                     aria-hidden="true"
                     className="!size-3 ml-auto group-data-[collapsible=icon]:hidden"
                   />
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator className="mx-1" />
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={onOpenSearchPalette}
@@ -408,7 +402,7 @@ export function AppSidebar({
                   data-testid="sidebar-command-palette"
                 >
                   <Search aria-hidden="true" />
-                  <span className="min-w-0 truncate">Command palette...</span>
+                  <WorkspaceTextFade className="min-w-0 flex-1">Command palette</WorkspaceTextFade>
                   <Shortcut
                     keys={['cmd', 'p']}
                     className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"
@@ -418,6 +412,8 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarSeparator className="mx-1" />
 
         {SIDEBAR_SECTIONS.filter((section) =>
           section.id === 'recents'
@@ -442,7 +438,9 @@ export function AppSidebar({
               <SidebarGroup className={cn('group/collapsible', section.id === 'view' && 'px-0')}>
                 <SidebarGroupLabel asChild className="cursor-pointer" title={section.label}>
                   <CollapsibleTrigger className="w-full justify-between">
-                    <span className="min-w-0 truncate">{section.label}</span>
+                    <WorkspaceTextFade className="min-w-0 flex-1">
+                      {section.label}
+                    </WorkspaceTextFade>
                     <ChevronDown
                       aria-hidden="true"
                       className="!size-3 motion-state-chevron ml-auto group-data-[state=open]/collapsible:rotate-180"

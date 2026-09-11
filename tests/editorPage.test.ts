@@ -30,6 +30,7 @@ describe('note editor page composition', () => {
     expect(markup).toContain('data-testid="note-editor-page-content"')
     expect(markup).toContain('data-testid="note-title-content"')
     expect(markup).toContain('data-testid="note-editor-content"')
+    expect(markup).toContain('note-page-editor')
     expect(markup.match(/max-w-5xl/g) ?? []).toHaveLength(1)
   })
 })

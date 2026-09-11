@@ -16,6 +16,7 @@ import { ResponsivePicker } from './ui/responsive-picker'
 import { useResponsivePickerOpen } from './ui/responsive-picker-context'
 import { SelectionCheckbox } from './ui/selection-checkbox'
 import { StatusChip, type StatusChipSurface } from './ui/status-chip'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { TagChip } from './TagChip'
 
 export interface TagPickerOption {
@@ -199,7 +200,9 @@ export function TagPickerContent({
           data-testid={testId ? `${testId}-create` : undefined}
         >
           <Plus size={16} aria-hidden="true" />
-          <span className="min-w-0 truncate">{createLabel(createValue ?? '')}</span>
+          <WorkspaceTextFade className="min-w-0 flex-1">
+            {createLabel(createValue ?? '')}
+          </WorkspaceTextFade>
         </button>
       )
     }
@@ -293,7 +296,7 @@ export function TagPickerContent({
                     <span
                       className={cn(
                         'min-w-0 flex-1 text-left',
-                        option.label ? 'whitespace-normal break-words' : 'truncate'
+                        option.label ? 'whitespace-normal break-words' : 'min-w-0'
                       )}
                     >
                       {optionLabel}

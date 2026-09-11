@@ -33,6 +33,7 @@ import {
   CommandShortcut
 } from './ui/command'
 import { Pallete, PalleteSearchBar } from './ui/pallete'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { filterCommandPaletteCommands } from '../lib/commandPaletteCommands'
 
 export interface CommandPaletteSearchResult {
@@ -626,7 +627,7 @@ export function CommandPalette({
                           <Icon className="h-4 w-4" />
                         )}
                       </div>
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <WorkspaceTextFade className="min-w-0 flex-1">{item.label}</WorkspaceTextFade>
                       {item.shortcutKeys ? <CommandShortcut keys={item.shortcutKeys} /> : null}
                     </CommandItem>
                   )
@@ -646,18 +647,18 @@ export function CommandPalette({
                         <Plus className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate">
+                        <WorkspaceTextFade>
                           {aiLoading
                             ? 'Completing note with Mistral...'
                             : searchQuery
                               ? `Continue ${aiNoteLabel}`
                               : `Complete ${aiNoteLabel}`}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
+                        </WorkspaceTextFade>
+                        <WorkspaceTextFade className="text-xs text-muted-foreground">
                           {activeNotePath
                             ? searchQuery || 'Describe how AI should continue the note.'
                             : 'Open a note first to send its content to Mistral.'}
-                        </div>
+                        </WorkspaceTextFade>
                       </div>
                       <CommandShortcut keys={[aiLoading ? '...' : 'Enter']} />
                     </CommandItem>
@@ -696,7 +697,7 @@ export function CommandPalette({
                         <div className={paletteItemIconClass}>
                           <Clock className="h-4 w-4" />
                         </div>
-                        <span className="truncate">{note.relPath}</span>
+                        <WorkspaceTextFade>{note.relPath}</WorkspaceTextFade>
                       </CommandItem>
                     )
                   })}
@@ -723,10 +724,10 @@ export function CommandPalette({
                               <FileText className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="truncate">{result.title}</div>
-                              <div className="truncate text-xs text-muted-foreground">
+                              <WorkspaceTextFade>{result.title}</WorkspaceTextFade>
+                              <WorkspaceTextFade className="text-xs text-muted-foreground">
                                 {result.subtitle}
-                              </div>
+                              </WorkspaceTextFade>
                             </div>
                           </CommandItem>
                         )
@@ -749,10 +750,10 @@ export function CommandPalette({
                               <FileText className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="truncate">{stripNoteExtension(note.name)}</div>
-                              <div className="truncate text-xs text-muted-foreground">
+                              <WorkspaceTextFade>{stripNoteExtension(note.name)}</WorkspaceTextFade>
+                              <WorkspaceTextFade className="text-xs text-muted-foreground">
                                 {note.relPath}
-                              </div>
+                              </WorkspaceTextFade>
                             </div>
                           </CommandItem>
                         )
@@ -773,10 +774,10 @@ export function CommandPalette({
                               <APP_PAGE_ICONS.projects className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="truncate">{result.title}</div>
-                              <div className="truncate text-xs text-muted-foreground">
+                              <WorkspaceTextFade>{result.title}</WorkspaceTextFade>
+                              <WorkspaceTextFade className="text-xs text-muted-foreground">
                                 {result.subtitle}
-                              </div>
+                              </WorkspaceTextFade>
                             </div>
                           </CommandItem>
                         )
@@ -799,7 +800,7 @@ export function CommandPalette({
                       <div className={paletteItemIconClass}>
                         <FileText className="h-4 w-4" />
                       </div>
-                      <span className="truncate">{note.relPath}</span>
+                      <WorkspaceTextFade>{note.relPath}</WorkspaceTextFade>
                     </CommandItem>
                   )
                 })}
@@ -819,26 +820,26 @@ export function CommandPalette({
               )}
             </div>
             <div
-              className="mb-2 min-w-0 truncate text-sm font-semibold text-foreground"
+              className="mb-2 min-w-0 text-sm font-semibold text-foreground"
               title={hoveredResult.title}
             >
-              {hoveredResult.title}
+              <WorkspaceTextFade>{hoveredResult.title}</WorkspaceTextFade>
             </div>
             <div
-              className="mb-3 min-w-0 truncate text-xs text-muted-foreground"
+              className="mb-3 min-w-0 text-xs text-muted-foreground"
               title={hoveredResult.subtitle}
             >
-              {hoveredResult.subtitle}
+              <WorkspaceTextFade>{hoveredResult.subtitle}</WorkspaceTextFade>
             </div>
             {hoveredResult.tags && hoveredResult.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {hoveredResult.tags.slice(0, 5).map((tag) => (
                   <span
                     key={tag}
-                    className="max-w-full truncate rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
+                    className="max-w-full rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
                     title={tag}
                   >
-                    {tag}
+                    <WorkspaceTextFade>{tag}</WorkspaceTextFade>
                   </span>
                 ))}
               </div>

@@ -10,6 +10,7 @@ import { CalendarCheck, CalendarOff } from './icons'
 import { Input } from './input'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { StatusChip } from './status-chip'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export type CalendarDateEditTriggerStyle = 'button' | 'status-chip'
 
@@ -142,7 +143,7 @@ export const CalendarDateEditPopover = React.forwardRef<
               aria-expanded={open}
             >
               {triggerIcon}
-              <span className="truncate">{triggerLabel}</span>
+              <WorkspaceTextFade className="min-w-0 flex-1">{triggerLabel}</WorkspaceTextFade>
             </Button>
           )}
         </PopoverTrigger>

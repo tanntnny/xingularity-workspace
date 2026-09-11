@@ -10,6 +10,7 @@ import { Button } from './button'
 import { ClockCheck, ClockOff } from './icons'
 import { Input } from './input'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export interface CalendarTimeEditPopoverProps extends Omit<
   React.ComponentProps<typeof Button>,
@@ -145,7 +146,9 @@ export const CalendarTimeEditPopover = React.forwardRef<
                 <ClockOff aria-hidden="true" />
               )
             ) : null}
-            <span className="truncate">{value ? formatCalendarTimeValue(value) : placeholder}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1">
+              {value ? formatCalendarTimeValue(value) : placeholder}
+            </WorkspaceTextFade>
           </Button>
         </PopoverTrigger>
         <PopoverContent

@@ -44,6 +44,7 @@ describe('WorkspaceViewPage', () => {
         resourcePageProps: {
           projects: [project],
           noteTree: [],
+          folderColors: {},
           resources: [],
           relations: [],
           onCreateResource: async () => undefined,
@@ -80,6 +81,7 @@ describe('WorkspaceViewPage', () => {
         resourcePageProps: {
           projects: [],
           noteTree: [],
+          folderColors: {},
           resources: [resource],
           relations: [],
           onCreateResource: async () => undefined,

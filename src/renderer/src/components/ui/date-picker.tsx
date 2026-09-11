@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils'
 import { Button } from './button'
 import { Calendar } from './calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 interface DatePickerProps {
   date: Date | undefined
@@ -32,7 +33,9 @@ export function DatePicker({
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          <span className="min-w-0 truncate">{date ? format(date, 'PPP') : placeholder}</span>
+          <WorkspaceTextFade className="min-w-0 flex-1">
+            {date ? format(date, 'PPP') : placeholder}
+          </WorkspaceTextFade>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
@@ -90,9 +93,9 @@ export function DatePickerISO({
           aria-label={ariaLabel}
         >
           {showIcon ? <CalendarIcon className="mr-2 h-3.5 w-3.5" /> : null}
-          <span className="min-w-0 truncate">
+          <WorkspaceTextFade className="min-w-0 flex-1">
             {date ? format(date, displayFormat) : placeholder}
-          </span>
+          </WorkspaceTextFade>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

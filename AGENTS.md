@@ -1,5 +1,11 @@
 # Repository Guidelines
 
+## Fast Repository Context
+
+- At the start of every repository task, read [docs/repository-context.md](docs/repository-context.md) before broad exploration.
+- Use the context document to choose targeted files and docs, then verify behavior against relevant source code and tests.
+- Update the context document when process ownership, storage boundaries, product surfaces, required commands, design-system source-of-truth, or authoritative documentation changes.
+
 ## Project Structure & Module Organization
 
 - `src/main/`: Electron main-process code, IPC handlers, vault services, schedules, and persistence.

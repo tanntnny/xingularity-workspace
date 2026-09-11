@@ -4,7 +4,7 @@ import type { FilledIcon } from './icons'
 import { cn } from '../../lib/utils'
 
 export interface EmptyStateProps extends Omit<React.HTMLAttributes<HTMLElement>, 'title'> {
-  icon: FilledIcon
+  icon: FilledIcon | React.ReactElement
   title: React.ReactNode
   description: React.ReactNode
   action?: React.ReactNode
@@ -44,7 +44,7 @@ const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
             aria-hidden="true"
             className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground"
           >
-            <Icon size={20} aria-hidden="true" />
+            {React.isValidElement(Icon) ? Icon : <Icon size={20} aria-hidden="true" />}
           </div>
           <div className="space-y-1">
             <h2 id={titleId} className="text-base font-semibold text-foreground">

@@ -64,9 +64,9 @@ export function WorkspaceViewBreadcrumb({
                 aria-label={`Edit view: ${view.name}`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                className="max-w-[320px] truncate text-sm font-semibold text-foreground"
+                className="max-w-[320px] text-sm font-semibold text-foreground"
               >
-                <span className="block truncate">{view.name}</span>
+                {view.name}
               </BreadcrumbButton>
             </PopoverTrigger>
           </BreadcrumbItem>

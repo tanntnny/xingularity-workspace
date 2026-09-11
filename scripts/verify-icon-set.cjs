@@ -15,7 +15,8 @@ const registryFiles = new Set([
   path.join(rootDir, 'packages', 'workspace-template', 'src', 'ui', 'icons.tsx')
 ])
 const directTablerImportAllowlist = new Set([
-  path.join(rootDir, 'src', 'renderer', 'src', 'lib', 'projectIconCatalog.ts')
+  path.join(rootDir, 'src', 'renderer', 'src', 'lib', 'projectIconCatalog.ts'),
+  path.join(rootDir, 'src', 'renderer', 'src', 'components', 'ui', 'project-icon.tsx')
 ])
 
 const violations = []

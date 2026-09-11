@@ -21,6 +21,7 @@ import type {
   ResourceRelation,
   ExternalProduct
 } from '../../../shared/types'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import {
   normalizeResourceLabelKey,
   normalizeResourceLabels,
@@ -83,6 +84,7 @@ import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import { ColumnFolderPicker, type ColumnFolderPickerNode } from './ui/column-folder-picker'
+import { NotebookFolderIcon } from './ui/notebook-folder-icon'
 import { StatusChip } from './ui/status-chip'
 import { StatusChipToggleGroup, StatusChipToggleItem } from './ui/status-chip-toggle'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
@@ -142,6 +144,7 @@ export interface ProjectResourcesTableProps {
   scope?: 'project' | 'global'
   projects?: Project[]
   noteTree: NoteTreeNode[]
+  folderColors?: FolderColorMap
   resources: ResourceRef[]
   relations: ResourceRelation[]
   resourceFilters?: ResourceFilterState
@@ -288,6 +291,7 @@ export function ProjectResourcesTable({
   scope = 'project',
   projects = [],
   noteTree,
+  folderColors = {},
   resources,
   relations,
   resourceFilters = {},
@@ -742,8 +746,10 @@ export function ProjectResourcesTable({
         {preview ? (
           <div className="border-t border-border/60 bg-muted/20 px-4 py-3" aria-live="polite">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="min-w-0 truncate text-xs font-semibold" title={preview.resource.title}>
-                Preview · {preview.resource.title}
+              <p className="min-w-0" title={preview.resource.title}>
+                <WorkspaceTextFade className="text-xs font-semibold">
+                  Preview · {preview.resource.title}
+                </WorkspaceTextFade>
               </p>
               <WorkspaceIconButton
                 label="Close preview"
@@ -779,6 +785,7 @@ export function ProjectResourcesTable({
         }
         context={scope === 'global' ? 'Resources' : 'Project Resources'}
         noteTree={noteTree}
+        folderColors={folderColors}
         resource={editingResource}
         onOpenChange={setDialogOpen}
         onAddResource={onAddResource}
@@ -828,12 +835,12 @@ export function ProjectResourcesTable({
                         checked={selectedGoogleDriveFileIds.has(file.id)}
                         onCheckedChange={(checked) => toggleGoogleDriveFile(file.id, checked)}
                       />
-                      <span
-                        className="min-w-0 flex-1 truncate text-sm font-medium"
+                      <WorkspaceTextFade
+                        className="min-w-0 flex-1 text-sm font-medium"
                         title={file.name}
                       >
                         {file.name}
-                      </span>
+                      </WorkspaceTextFade>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {file.modifiedTime ? formatResourceDate(file.modifiedTime) : 'Unknown'}
                       </span>
@@ -1101,6 +1108,7 @@ function ResourceEditorDialog({
   projects,
   existingResources,
   noteTree,
+  folderColors,
   resource,
   onOpenChange,
   onAddResource,
@@ -1115,6 +1123,7 @@ function ResourceEditorDialog({
   projects: readonly Project[]
   existingResources: readonly ResourceRef[]
   noteTree: NoteTreeNode[]
+  folderColors: FolderColorMap
   resource: ResourceRef | null
   onOpenChange: (open: boolean) => void
   onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
@@ -1177,6 +1186,7 @@ function ResourceEditorDialog({
             pathLabel: node.relPath,
             searchText: `${node.name} ${node.relPath}`,
             disabled: isDisabled,
+            color: folderColors[node.relPath],
             children: buildNodes(node.children)
           }
         ]
@@ -1192,11 +1202,12 @@ function ResourceEditorDialog({
         value: initialNotebookPath,
         label: `Current · ${initialNotebookPath.split('/').pop() ?? initialNotebookPath}`,
         pathLabel: initialNotebookPath,
-        searchText: initialNotebookPath
+        searchText: initialNotebookPath,
+        color: folderColors[initialNotebookPath]
       },
       ...mappedNodes
     ]
-  }, [folders, initialNotebookPath, linkedNotebookPaths, noteTree])
+  }, [folderColors, folders, initialNotebookPath, linkedNotebookPaths, noteTree])
   const [selectedType, setSelectedType] = useState(type)
   const [notebookPath, setNotebookPath] = useState(initialNotebookPath ?? '')
   const [externalUrl, setExternalUrl] = useState(resource?.canonicalUri ?? '')
@@ -1385,19 +1396,21 @@ function ResourceEditorDialog({
                       className="h-10 w-full justify-between px-3 text-left"
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <FolderOpen size={15} aria-hidden="true" />
+                        <NotebookFolderIcon
+                          variant="open"
+                          color={selectedFolder ? folderColors[selectedFolder.path] : undefined}
+                          size={15}
+                        />
                         <span className="min-w-0">
-                          <span
-                            className={
-                              selectedFolder ? 'block truncate' : 'block text-muted-foreground'
-                            }
+                          <WorkspaceTextFade
+                            className={selectedFolder ? undefined : 'text-muted-foreground'}
                           >
                             {selectedFolder?.name ?? 'Select a notebook folder'}
-                          </span>
+                          </WorkspaceTextFade>
                           {selectedFolder && selectedFolderHasDuplicateName ? (
-                            <span className="block truncate text-xs font-normal text-muted-foreground">
+                            <WorkspaceTextFade className="text-xs font-normal text-muted-foreground">
                               {selectedFolder.path}
-                            </span>
+                            </WorkspaceTextFade>
                           ) : null}
                         </span>
                       </span>

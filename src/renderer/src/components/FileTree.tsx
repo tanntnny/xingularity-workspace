@@ -9,6 +9,7 @@ import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { buildNoteNativeMenuItems, getNoteMenuGroups } from '../lib/noteMenu'
 
 interface FileTreeProps {
@@ -125,7 +126,7 @@ export function FileTree({
               key={folder.name}
               type="button"
             >
-              <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+              <WorkspaceTextFade className="min-w-0 flex-1">{folder.name}</WorkspaceTextFade>
               <Badge variant="outline">{folder.count}</Badge>
             </Button>
           ))
@@ -200,7 +201,7 @@ export function FileTree({
               <div>
                 <Button
                   variant={selectedPath === note.relPath ? 'secondary' : 'ghost'}
-                  className="h-auto w-full justify-start truncate px-2 py-1.5 text-left"
+                  className="h-auto w-full justify-start px-2 py-1.5 text-left"
                   onClick={() => onSelect(note.relPath)}
                   onContextMenu={
                     useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
@@ -214,7 +215,7 @@ export function FileTree({
                   }}
                   title={note.relPath}
                 >
-                  {note.relPath}
+                  <WorkspaceTextFade className="min-w-0">{note.relPath}</WorkspaceTextFade>
                 </Button>
               </div>
             )

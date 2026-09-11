@@ -105,7 +105,7 @@ export function TopBar({
                 <BreadcrumbSeparator className="text-muted-foreground" />
 
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="max-w-[200px] truncate text-foreground">
+                  <BreadcrumbPage className="max-w-[200px] text-foreground">
                     {itemName}
                   </BreadcrumbPage>
                 </BreadcrumbItem>

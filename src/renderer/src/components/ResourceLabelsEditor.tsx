@@ -15,6 +15,7 @@ import { ResponsivePicker } from './ui/responsive-picker'
 import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import { StatusChip, type StatusChipSurface } from './ui/status-chip'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 interface ResourceLabelsEditorProps {
   drafts: readonly ResourceLabelDraft[]
@@ -93,7 +94,7 @@ export function ResourceLabelsEditor({
         value: key,
         label: (
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="min-w-0 flex-1 truncate">{key}</span>
+            <WorkspaceTextFade className="min-w-0 flex-1">{key}</WorkspaceTextFade>
             <Badge
               variant="neutral"
               aria-label={`${valueCount} ${valueCount === 1 ? 'value' : 'values'}`}
@@ -195,12 +196,12 @@ export function ResourceLabelsEditor({
                   className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-2"
                 >
                   <div className="min-h-9 min-w-0 px-3 py-2">
-                    <span
-                      className="block min-w-0 truncate text-sm font-medium text-foreground"
+                    <WorkspaceTextFade
+                      className="text-sm font-medium text-foreground"
                       data-testid={`${draft.id}-key`}
                     >
                       {draft.key || 'Unnamed label'}
-                    </span>
+                    </WorkspaceTextFade>
                     {keyError ? (
                       <p
                         id={`${draft.id}-key-error`}
@@ -238,7 +239,9 @@ export function ResourceLabelsEditor({
                           !draft.value && 'text-muted-foreground'
                         )}
                       >
-                        <span className="min-w-0 truncate">{draft.value || 'Set value'}</span>
+                        <WorkspaceTextFade className="min-w-0 flex-1">
+                          {draft.value || 'Set value'}
+                        </WorkspaceTextFade>
                         <ChevronDown size={14} aria-hidden="true" />
                       </Button>
                     </SelectionPopover>

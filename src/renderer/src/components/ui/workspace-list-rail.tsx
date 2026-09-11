@@ -2,6 +2,7 @@ import * as React from 'react'
 
 import { Button, type ButtonProps } from './button'
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFadeContent } from './workspace-text-fade'
 
 export interface WorkspaceListRailProps extends React.HTMLAttributes<HTMLElement> {
   emptyState?: React.ReactNode
@@ -14,7 +15,6 @@ export interface WorkspaceListRailItemProps extends Omit<
   active?: boolean
   className?: string
   description?: React.ReactNode
-  labelOverflow?: 'truncate' | 'fade'
   leading?: React.ReactNode
   trailing?: React.ReactNode
 }
@@ -43,18 +43,12 @@ const WorkspaceListRailItem = React.forwardRef<HTMLButtonElement, WorkspaceListR
       children,
       className,
       description,
-      labelOverflow = 'truncate',
       leading,
       trailing,
       ...props
     },
     ref
   ) => {
-    const labelClassName =
-      labelOverflow === 'fade'
-        ? 'workspace-text-fade block max-w-full min-w-0 flex-1'
-        : 'block min-w-0 truncate'
-
     return (
       <li className="min-w-0">
         <Button
@@ -71,11 +65,13 @@ const WorkspaceListRailItem = React.forwardRef<HTMLButtonElement, WorkspaceListR
         >
           {leading ? <span className="shrink-0">{leading}</span> : null}
           <span className="min-w-0 flex-1">
-            <span className={labelClassName}>{children}</span>
+            <WorkspaceTextFadeContent className="max-w-full min-w-0">
+              {children}
+            </WorkspaceTextFadeContent>
             {description ? (
-              <span className="block min-w-0 truncate text-xs text-muted-foreground">
+              <WorkspaceTextFadeContent className="min-w-0 text-xs text-muted-foreground">
                 {description}
-              </span>
+              </WorkspaceTextFadeContent>
             ) : null}
           </span>
           {trailing ? <span className="shrink-0">{trailing}</span> : null}

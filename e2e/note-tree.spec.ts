@@ -212,6 +212,38 @@ test.describe('notes tree view', () => {
     }
   })
 
+  test('uses the neutral shell surface for the active note row', async () => {
+    const vaultRoot = await createFixtureVault()
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const alphaRow = page.getByTestId('note-tree-row:alpha.md')
+      await alphaRow.click()
+      await expect(page.getByTestId('note-block-editor')).toBeVisible({ timeout: 20_000 })
+
+      const rowStyles = await alphaRow.evaluate((element) => {
+        const probe = document.createElement('span')
+        probe.style.backgroundColor = 'var(--muted)'
+        document.body.append(probe)
+        const expectedMutedBackgroundColor = getComputedStyle(probe).backgroundColor
+        probe.remove()
+
+        const styles = getComputedStyle(element)
+        return {
+          backgroundColor: styles.backgroundColor,
+          expectedMutedBackgroundColor,
+          borderRadius: styles.borderTopLeftRadius
+        }
+      })
+
+      expect(rowStyles.backgroundColor).toBe(rowStyles.expectedMutedBackgroundColor)
+      expect(Number.parseFloat(rowStyles.borderRadius)).toBeGreaterThan(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('expands and collapses a folder when clicking the folder card', async () => {
     const vaultRoot = await createFixtureVault()
     await fs.writeFile(

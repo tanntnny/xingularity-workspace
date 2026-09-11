@@ -31,6 +31,7 @@ import type {
   ResourceUpdateInput,
   GoogleDriveFileCandidate
 } from '../../../shared/types'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import { normalizeTag } from '../../../shared/noteTags'
 import { NoteShapeIcon } from '../components/NoteShapeIcon'
 import { ProjectIconPicker } from '../components/ProjectIconPicker'
@@ -191,6 +192,7 @@ interface ProjectsWorkspacePageProps {
   ) => Promise<void>
   onDeleteProjectMeeting: (projectId: string, meetingId: string) => Promise<void>
   noteTree: NoteTreeNode[]
+  folderColors?: FolderColorMap
   resources: ResourceRef[]
   relations: ResourceRelation[]
   onAddResource: (projectId: string, input: ResourceInput) => Promise<void>
@@ -260,6 +262,7 @@ export function ProjectsWorkspacePage({
   onUpdateProjectMeeting,
   onDeleteProjectMeeting,
   noteTree,
+  folderColors = {},
   resources,
   relations,
   onAddResource,
@@ -446,6 +449,7 @@ export function ProjectsWorkspacePage({
             <ProjectResourcesTable
               project={selectedProject}
               noteTree={noteTree}
+              folderColors={folderColors}
               resources={resources}
               relations={relations}
               onAddResource={onAddResource}
@@ -758,7 +762,7 @@ export function ProjectsWorkspaceBreadcrumb({
             <BreadcrumbSeparator className="text-muted-foreground" />
             <BreadcrumbItem>
               {view === 'home' ? (
-                <BreadcrumbPage className="max-w-[220px] truncate text-sm font-bold text-foreground">
+                <BreadcrumbPage className="max-w-[220px] text-sm font-bold text-foreground">
                   <BreadcrumbIconLabel icon={<NoteShapeIcon icon={project.icon} size={16} />}>
                     {project.name}
                   </BreadcrumbIconLabel>
@@ -766,7 +770,7 @@ export function ProjectsWorkspaceBreadcrumb({
               ) : (
                 <BreadcrumbButton
                   onClick={onOpenProjectHome}
-                  className="max-w-[180px] truncate text-sm text-muted-foreground"
+                  className="max-w-[180px] text-sm text-muted-foreground"
                   data-testid="projects-breadcrumb:project"
                 >
                   <BreadcrumbIconLabel icon={<NoteShapeIcon icon={project.icon} size={16} />}>
@@ -779,7 +783,7 @@ export function ProjectsWorkspaceBreadcrumb({
               <>
                 <BreadcrumbSeparator className="text-muted-foreground" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="max-w-[180px] truncate text-sm font-semibold text-foreground">
+                  <BreadcrumbPage className="max-w-[180px] text-sm font-semibold text-foreground">
                     {viewLabel}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
@@ -1897,7 +1901,7 @@ function ProjectMilestoneRow({
                   <InlineEditableText
                     value={milestone.title}
                     onCommit={(title) => onUpdateMilestone(milestone.id, title)}
-                    displayClassName="block w-full min-w-0 truncate text-base font-semibold text-foreground hover:text-primary"
+                    displayClassName="block w-full min-w-0 text-base font-semibold text-foreground hover:text-primary"
                     inputClassName="inline-block h-8 w-auto max-w-full min-w-0 rounded-none border-0 bg-transparent px-0 text-base font-semibold text-foreground shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent focus-visible:outline-none focus-visible:ring-0"
                     title={`Edit milestone: ${milestone.title}`}
                     fitInputToContent
@@ -2120,9 +2124,9 @@ export function TaskDetailRow({
             }}
           />
           <div className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1 text-left">
-            <span className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
+            <WorkspaceTextFade className="min-w-0 flex-1 text-base font-semibold text-foreground">
               {task.title}
-            </span>
+            </WorkspaceTextFade>
           </div>
           {hasStartSchedule || hasEndSchedule ? (
             <div

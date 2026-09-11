@@ -3,9 +3,10 @@ import { Slot } from '@radix-ui/react-slot'
 import { ChevronRight, MoreHorizontal } from './icons'
 
 import { cn } from '../../lib/utils'
+import { WorkspaceTextFade, WorkspaceTextFadeContent } from './workspace-text-fade'
 
 const breadcrumbEntryClassName =
-  'inline-flex min-h-7 min-w-0 max-w-full items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-[var(--radius-button)] px-2 py-1'
+  'inline-flex min-h-7 min-w-0 max-w-full items-center overflow-hidden whitespace-nowrap rounded-[var(--radius-button)] px-2 py-1'
 
 const breadcrumbInteractiveClassName = cn(
   breadcrumbEntryClassName,
@@ -46,23 +47,31 @@ const BreadcrumbLink = React.forwardRef<
   React.ComponentPropsWithoutRef<'a'> & {
     asChild?: boolean
   }
->(({ asChild, className, ...props }, ref) => {
+>(({ asChild, children, className, ...props }, ref) => {
   const Comp = asChild ? Slot : 'a'
 
-  return <Comp ref={ref} className={cn(breadcrumbInteractiveClassName, className)} {...props} />
+  return (
+    <Comp ref={ref} className={cn(breadcrumbInteractiveClassName, className)} {...props}>
+      <WorkspaceTextFadeContent className="min-w-0 flex-1">{children}</WorkspaceTextFadeContent>
+    </Comp>
+  )
 })
 BreadcrumbLink.displayName = 'BreadcrumbLink'
 
 const BreadcrumbButton = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentPropsWithoutRef<'button'>
->(({ className, type = 'button', ...props }, ref) => (
+  React.ComponentPropsWithoutRef<'button'> & {
+    [key: `data-${string}`]: string | undefined
+  }
+>(({ children, className, type = 'button', ...props }, ref) => (
   <button
     ref={ref}
     type={type}
     className={cn('app-no-drag', breadcrumbInteractiveClassName, className)}
     {...props}
-  />
+  >
+    <WorkspaceTextFadeContent className="min-w-0 flex-1">{children}</WorkspaceTextFadeContent>
+  </button>
 ))
 BreadcrumbButton.displayName = 'BreadcrumbButton'
 
@@ -80,30 +89,34 @@ const BreadcrumbIconLabel = React.forwardRef<
     <span aria-hidden="true" className="inline-flex shrink-0 items-center justify-center">
       {icon}
     </span>
-    <span className="min-w-0 truncate">{children}</span>
+    <WorkspaceTextFade className="min-w-0 flex-1">{children}</WorkspaceTextFade>
   </span>
 ))
 BreadcrumbIconLabel.displayName = 'BreadcrumbIconLabel'
 
 const BreadcrumbLabel = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
-  ({ className, ...props }, ref) => (
+  ({ children, className, ...props }, ref) => (
     <span
       ref={ref}
       className={cn(breadcrumbEntryClassName, 'font-normal text-muted-foreground', className)}
       {...props}
-    />
+    >
+      <WorkspaceTextFadeContent className="min-w-0 flex-1">{children}</WorkspaceTextFadeContent>
+    </span>
   )
 )
 BreadcrumbLabel.displayName = 'BreadcrumbLabel'
 
 const BreadcrumbPage = React.forwardRef<HTMLSpanElement, React.ComponentPropsWithoutRef<'span'>>(
-  ({ className, ...props }, ref) => (
+  ({ children, className, ...props }, ref) => (
     <span
       ref={ref}
       aria-current="page"
       className={cn(breadcrumbEntryClassName, 'font-normal text-foreground', className)}
       {...props}
-    />
+    >
+      <WorkspaceTextFadeContent className="min-w-0 flex-1">{children}</WorkspaceTextFadeContent>
+    </span>
   )
 )
 BreadcrumbPage.displayName = 'BreadcrumbPage'

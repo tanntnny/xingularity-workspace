@@ -21,7 +21,8 @@ import {
   DialogShellHeader,
   Input,
   Label,
-  Trash2
+  Trash2,
+  WorkspaceTextFade
 } from '../ui'
 import { COMMAND_ENTER_ARIA_KEYSHORTCUT, handleCommandEnterSubmit } from '../../lib/formShortcuts'
 
@@ -174,9 +175,9 @@ export function ScheduleSecretsDialog({
                             htmlFor={referenceId}
                             className="min-w-0 flex-1 cursor-pointer leading-5"
                           >
-                            <span className="block truncate font-mono text-xs font-medium">
+                            <WorkspaceTextFade className="font-mono text-xs font-medium">
                               {name}
-                            </span>
+                            </WorkspaceTextFade>
                             <span className="block text-xs font-normal text-muted-foreground">
                               {isConfigured ? 'Configured secret' : 'Missing from secure storage'}
                             </span>

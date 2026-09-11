@@ -4,10 +4,20 @@ import { Check, ChevronDown, ChevronUp } from './icons'
 
 import { cn } from '../../lib/utils'
 import { getButtonTooltipLabel, TooltipButton } from './tooltip'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 const Select = SelectPrimitive.Root
 const SelectGroup = SelectPrimitive.Group
-const SelectValue = SelectPrimitive.Value
+
+const SelectValue = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Value>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>
+>(({ className, ...props }, ref) => (
+  <WorkspaceTextFade className="min-w-0 flex-1">
+    <SelectPrimitive.Value ref={ref} className={cn('block min-w-0', className)} {...props} />
+  </WorkspaceTextFade>
+))
+SelectValue.displayName = SelectPrimitive.Value.displayName
 
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
@@ -33,7 +43,7 @@ const SelectTrigger = React.forwardRef<
       <SelectPrimitive.Trigger
         ref={ref}
         className={cn(
-          'group ui-control flex w-full items-center justify-between whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card px-2 text-foreground shadow-sm ring-offset-background placeholder:text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:truncate',
+          'group ui-control flex w-full items-center justify-between whitespace-nowrap rounded-[var(--radius-control)] border border-input bg-card px-2 text-foreground shadow-sm ring-offset-background placeholder:text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         aria-label={ariaLabel}
@@ -142,7 +152,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'ui-control flex min-w-0 w-full max-w-full cursor-default select-none items-center overflow-hidden rounded-[var(--radius-control)] pl-1.5 pr-7 text-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'ui-control flex min-w-0 w-full max-w-full cursor-default select-none items-center overflow-hidden rounded-sm pl-1.5 pr-7 text-foreground outline-none transition-colors hover:!bg-surface-subtle-hover hover:!text-foreground focus:!bg-surface-subtle-hover focus:!text-foreground data-[highlighted]:!bg-surface-subtle-hover data-[highlighted]:!text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
@@ -152,8 +162,8 @@ const SelectItem = React.forwardRef<
         <Check className="size-[var(--control-icon-size)]" />
       </SelectPrimitive.ItemIndicator>
     </span>
-    <SelectPrimitive.ItemText className="min-w-0 flex-1 truncate">
-      {children}
+    <SelectPrimitive.ItemText className="min-w-0 flex-1">
+      <WorkspaceTextFade>{children}</WorkspaceTextFade>
     </SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
 ))

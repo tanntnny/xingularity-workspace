@@ -32,7 +32,7 @@ describe('ActionButtonGroup', () => {
     )
 
     expect(markup).toContain('[&amp;&gt;button]:px-2')
-    expect(markup).toContain('>Previous</button>')
+    expect(markup).toContain('>Previous</span>')
   })
 
   it('keeps semantic hover feedback across button variants', () => {

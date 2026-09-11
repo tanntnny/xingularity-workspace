@@ -3,6 +3,8 @@ import { CalendarTask, Project, TaskStatus } from '../../../shared/types'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { StatusChipSelect } from './ui/status-chip-select'
+import { WorkspaceTextClip } from './ui/workspace-text-clip'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import {
   getCalendarTaskBackgroundToken,
   getCalendarTaskBorderToken
@@ -87,23 +89,23 @@ export const CalendarTaskCard = forwardRef<
           />
         </div>
         {showTime ? (
-          <span
+          <WorkspaceTextFade
             data-calendar-task-field="time"
-            className="workspace-text-clip pointer-events-none min-w-0 w-full text-right text-[11px] text-muted-foreground"
+            className="pointer-events-none min-w-0 w-full text-right text-[11px] text-muted-foreground"
             title={timeLabel}
           >
             {timeLabel}
-          </span>
+          </WorkspaceTextFade>
         ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 shrink-0 items-start gap-1 overflow-hidden">
-        <span
+        <WorkspaceTextClip
           data-calendar-task-field="title"
-          className={`workspace-text-clip pointer-events-none min-w-0 flex-1 text-sm font-bold leading-tight text-foreground ${strikeCompleted && isTaskDone(task) ? 'line-through' : ''}`}
+          className={`pointer-events-none min-w-0 flex-1 text-sm font-bold leading-tight text-foreground ${strikeCompleted && isTaskDone(task) ? 'line-through' : ''}`}
           title={task.title}
         >
           {task.title}
-        </span>
+        </WorkspaceTextClip>
       </div>
       {project && showProject ? (
         <div
@@ -113,9 +115,9 @@ export const CalendarTaskCard = forwardRef<
           data-calendar-task-field="project"
         >
           <NoteShapeIcon icon={project.icon} size={18} />
-          <span className="workspace-text-clip min-w-0 flex-1" title={project.name}>
+          <WorkspaceTextFade className="min-w-0 flex-1" title={project.name}>
             {project.name}
-          </span>
+          </WorkspaceTextFade>
         </div>
       ) : null}
     </div>

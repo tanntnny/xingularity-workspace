@@ -13,6 +13,7 @@ import {
 } from '../ui'
 import type { ButtonProps } from '../ui'
 import { ArrowRight, Check, Link2, Plus, Settings2 } from '../ui/icons'
+import { WorkspaceTextFade } from '../ui/workspace-text-fade'
 
 export type DesignAuditActionsTabId = 'button' | 'button-groups' | 'toggle-groups' | 'keyboard'
 
@@ -162,7 +163,9 @@ function DesignAuditButton(): React.ReactElement {
               data-testid={`design-audit-variant:button:${value}`}
               className="flex min-w-0 items-center justify-between gap-3 border-b border-border/50 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:px-4 sm:first-of-type:pl-0 xl:nth-[3n]:border-r-0"
             >
-              <span className="min-w-0 truncate text-sm text-muted-foreground">{label}</span>
+              <WorkspaceTextFade className="min-w-0 text-sm text-muted-foreground">
+                {label}
+              </WorkspaceTextFade>
               {value === 'link' ? (
                 <Button variant="link" asChild>
                   <a
@@ -170,7 +173,7 @@ function DesignAuditButton(): React.ReactElement {
                     onClick={() => announce('Link button')}
                   >
                     <Link2 aria-hidden="true" />
-                    Link
+                    <WorkspaceTextFade>Link</WorkspaceTextFade>
                   </a>
                 </Button>
               ) : (
@@ -316,7 +319,7 @@ function DesignAuditButton(): React.ReactElement {
           >
             <Button variant="link" asChild>
               <a href="#design-audit-button-composition" onClick={() => announce('As-child link')}>
-                Read the link behavior note
+                <WorkspaceTextFade>Read the link behavior note</WorkspaceTextFade>
                 <Link2 aria-hidden="true" />
               </a>
             </Button>

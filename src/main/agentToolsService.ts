@@ -14,8 +14,9 @@ import {
   WeeklyPlanReview,
   WeeklyPlanWeek
 } from '../shared/types'
-import { VaultRuntime } from './runtime'
-import { WeeklyPlanService } from './planning/weeklyPlanService'
+import { buildVaultContext, type VaultContextBundle } from './vaultContext'
+import type { VaultRuntime } from './runtime'
+import type { WeeklyPlanService } from './planning/weeklyPlanService'
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/)
@@ -26,6 +27,14 @@ const noteSearchSchema = z.object({
 
 const noteReadSchema = z.object({
   path: z.string().trim().min(1).max(512)
+})
+
+const workspaceContextSchema = z.object({
+  query: z.string().trim().min(1).max(200).optional(),
+  project: z.string().trim().min(1).max(200).optional(),
+  note: z.string().trim().min(1).max(512).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  maxChars: z.number().int().min(1_000).max(200_000).optional()
 })
 
 const noteCreateSchema = z.object({
@@ -189,6 +198,7 @@ const weeklyPlanUpsertReviewSchema = z
   })
 
 export type AgentToolName =
+  | 'workspace.context'
   | 'note.search'
   | 'note.read'
   | 'note.create'
@@ -212,6 +222,8 @@ export class AgentToolsService {
 
   async invoke(name: AgentToolName, input: unknown): Promise<unknown> {
     switch (name) {
+      case 'workspace.context':
+        return this.workspaceContext(workspaceContextSchema.parse(input))
       case 'note.search':
         return this.noteSearch(noteSearchSchema.parse(input))
       case 'note.read':
@@ -243,6 +255,13 @@ export class AgentToolsService {
       default:
         throw new Error(`Unsupported agent tool: ${name satisfies never}`)
     }
+  }
+
+  private async workspaceContext(
+    input: z.infer<typeof workspaceContextSchema>
+  ): Promise<VaultContextBundle> {
+    const context = await buildVaultContext(this.runtime.getCurrentVaultRoot(), input)
+    return { ...context, rootPath: '[active vault]' }
   }
 
   private noteSearch(input: z.infer<typeof noteSearchSchema>): SearchResult[] {

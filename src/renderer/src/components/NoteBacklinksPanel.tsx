@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
 import type { NoteListItem } from '../../../shared/types'
 import { TooltipButton } from './ui/tooltip'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 interface NoteBacklinksPanelProps {
   backlinks: readonly Pick<NoteListItem, 'relPath'>[]
@@ -31,12 +32,12 @@ export function NoteBacklinksPanel({
                     onClick={() => onOpenBacklink(note.relPath)}
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">
+                      <WorkspaceTextFade className="font-medium">
                         {getNoteDisplayName(note.relPath)}
-                      </span>
-                      <span className="block max-w-full min-w-0 truncate text-xs text-muted-foreground">
+                      </WorkspaceTextFade>
+                      <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
                         {pathLabel}
-                      </span>
+                      </WorkspaceTextFade>
                     </span>
                   </button>
                 </TooltipButton>

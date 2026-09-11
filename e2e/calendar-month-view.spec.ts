@@ -577,8 +577,8 @@ test.describe('calendar monthly view', () => {
     }
   })
 
-  test('divides monthly task metadata evenly and hard cuts long values', async () => {
-    const longTitle = 'A very long task title that hard cuts without fade or ellipsis'
+  test('divides monthly task metadata evenly and clips long title and status values', async () => {
+    const longTitle = 'A very long task title that clips without ellipsis'
     const timeLabel = '09:00 - 17:00'
     const { rootPath } = await createFixtureVault(
       1,
@@ -613,12 +613,12 @@ test.describe('calendar monthly view', () => {
       }
       expect(Math.abs(statusBox.width - timeBox.width)).toBeLessThanOrEqual(1)
 
-      await expect(statusField.locator('.status-chip-label-clip')).toHaveCount(1)
-      await expect(statusField.locator('.status-chip-label-fade')).toHaveCount(0)
+      await expect(statusField.locator('.workspace-text-clip')).toHaveCount(1)
+      await expect(statusField.locator('.workspace-text-fade')).toHaveCount(0)
       await expect(titleField).toHaveClass(/workspace-text-clip/)
-      await expect(timeField).toHaveClass(/workspace-text-clip/)
       await expect(titleField).not.toHaveClass(/workspace-text-fade/)
-      await expect(timeField).not.toHaveClass(/workspace-text-fade/)
+      await expect(timeField).toHaveClass(/workspace-text-fade/)
+      await expect(timeField).not.toHaveClass(/workspace-text-clip/)
       await expect(titleField).toHaveAttribute('title', longTitle)
       await expect(timeField).toHaveAttribute('title', timeLabel)
 

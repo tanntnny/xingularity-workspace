@@ -21,6 +21,7 @@ import {
   Button,
   Input,
   StatusChip,
+  WorkspaceTextFade,
   type ActionMenuGroup
 } from '../components/ui'
 import { ActionButtonGroup } from '../components/ui/button-group'
@@ -241,7 +242,7 @@ export function CapturePage({
             <Button type="button" variant="outline" size="sm" asChild disabled={resourceBusy}>
               <span>
                 <FileText size={14} />
-                Choose file
+                <WorkspaceTextFade>Choose file</WorkspaceTextFade>
               </span>
             </Button>
             <Input
@@ -266,7 +267,7 @@ export function CapturePage({
                 onClick={() => void onOpenResource(resource.id)}
               >
                 <Link size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{resource.title}</span>
+                <WorkspaceTextFade className="min-w-0 flex-1">{resource.title}</WorkspaceTextFade>
                 <StatusChip item={RESOURCE_STATE_CHIP_ITEMS[resource.state]} />
               </button>
             ))}
@@ -300,7 +301,7 @@ export function CapturePage({
                       className="inline-flex min-w-0 max-w-full items-center rounded-[var(--radius-button)] border px-2 py-0.5"
                       style={getFleetingNoteGroupColorStyles(group)}
                     >
-                      <span className="min-w-0 truncate">{group.label}</span>
+                      <WorkspaceTextFade className="min-w-0">{group.label}</WorkspaceTextFade>
                     </span>
                   </div>
                   <div className="flex flex-1 items-center justify-center p-3 text-sm text-muted-foreground">
@@ -363,7 +364,7 @@ function FleetingNoteColumn({
             className="inline-flex min-w-0 max-w-full items-center rounded-[var(--radius-button)] border px-2 py-0.5"
             style={groupColorStyles}
           >
-            <span className="min-w-0 truncate">{group.label}</span>
+            <WorkspaceTextFade className="min-w-0">{group.label}</WorkspaceTextFade>
           </span>
         </h3>
         <Badge variant={group.notes.length > 0 ? 'secondary' : 'outline'}>

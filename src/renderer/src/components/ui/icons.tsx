@@ -1,3 +1,4 @@
+import { forwardRef, useId } from 'react'
 import {
   IconAdjustmentsHorizontalFilled,
   IconAlertCircle,
@@ -67,7 +68,6 @@ import {
   IconEyeFilled,
   IconFileDownloadFilled,
   IconFiles,
-  IconFileTextFilled,
   IconFilter2,
   IconFilterFilled,
   IconFlagFilled,
@@ -125,9 +125,64 @@ import {
   IconXFilled
 } from '@tabler/icons-react'
 import type { IconProps, TablerIcon } from '@tabler/icons-react'
+import { cn } from '../../lib/utils'
 
 export type FilledIcon = TablerIcon
 export type FilledIconProps = IconProps
+
+export const MarkdownFileIcon = forwardRef<SVGSVGElement, FilledIconProps>(
+  ({ className, size = 24, title, children, stroke: _stroke, ...props }, ref) => {
+    void _stroke
+    const gradientId = useId().replace(/:/g, '')
+
+    return (
+      <svg
+        ref={ref}
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 30 30"
+        className={cn('tabler-icon icon-tabler-markdown-file', className)}
+        fill="none"
+        {...props}
+      >
+        {title ? <title>{title}</title> : null}
+        <defs>
+          <linearGradient
+            id={`markdown-file-gradient-${gradientId}`}
+            x1="6"
+            y1="3"
+            x2="24"
+            y2="27"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stopColor="#f8f8f8" />
+            <stop offset="1" stopColor="#d9d9d9" />
+          </linearGradient>
+          <linearGradient
+            id={`markdown-file-fold-gradient-${gradientId}`}
+            x1="19"
+            y1="3"
+            x2="24"
+            y2="8"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stopColor="#eeeeee" />
+            <stop offset="1" stopColor="#c8c8c8" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M19 3H8C6.9 3 6 3.9 6 5v20c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8L19 3z"
+          fill={`url(#markdown-file-gradient-${gradientId})`}
+        />
+        <polygon points="19,3 19,8 24,8" fill={`url(#markdown-file-fold-gradient-${gradientId})`} />
+        {children}
+      </svg>
+    )
+  }
+)
+
+MarkdownFileIcon.displayName = 'MarkdownFileIcon'
 
 export const AlertCircle = IconAlertCircleFilled
 export const AlertCircleOutline = IconAlertCircle
@@ -190,7 +245,7 @@ export const ExclamationMark = IconExclamationMark
 export const Eye = IconEyeFilled
 export const FileDown = IconFileDownloadFilled
 export const Files = IconFiles
-export const FileText = IconFileTextFilled
+export const FileText = MarkdownFileIcon
 export const Flag = IconFlagFilled
 export const FlaskConical = IconFlaskFilled
 export const Filter = IconFilter2

@@ -10,7 +10,8 @@ import {
   EmptyState,
   WorkspaceIconButton,
   WorkspacePanelSection,
-  WorkspacePanelSectionHeader
+  WorkspacePanelSectionHeader,
+  WorkspaceTextFade
 } from '../components/ui'
 import {
   CheckCircle2,
@@ -105,8 +106,8 @@ function SummaryCard({ testId, title, value, detail, icon, tone }: SummaryCardPr
         </span>
       </CardHeader>
       <CardContent className="space-y-2 p-3 pt-0">
-        <p className="truncate text-base font-semibold text-foreground" title={value}>
-          {value}
+        <p className="text-base font-semibold text-foreground" title={value}>
+          <WorkspaceTextFade>{value}</WorkspaceTextFade>
         </p>
         {tone ? (
           <Badge variant="neutral" tone={tone}>

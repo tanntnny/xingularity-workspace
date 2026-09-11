@@ -327,6 +327,34 @@ async function startNoteTreeDrag(
   )
 }
 
+async function startNoteTreePointerDrag(
+  page: Page,
+  sourceRelPath: string,
+  targetRelPath: string
+): Promise<void> {
+  const source = page.getByTestId(`note-tree-row:${sourceRelPath}`)
+  const target = page.getByTestId(`note-tree-row:${targetRelPath}`)
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+  if (!sourceBox || !targetBox) {
+    throw new Error('Note tree pointer drag bounds are unavailable')
+  }
+
+  const sourcePoint = {
+    x: sourceBox.x + sourceBox.width / 2,
+    y: sourceBox.y + sourceBox.height / 2
+  }
+  const targetPoint = {
+    x: targetBox.x + targetBox.width / 2,
+    y: targetBox.y + targetBox.height / 2
+  }
+
+  await page.mouse.move(sourcePoint.x, sourcePoint.y)
+  await page.mouse.down()
+  await page.mouse.move(sourcePoint.x + 12, sourcePoint.y + 2, { steps: 6 })
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 20 })
+}
+
 async function endNoteTreeDrag(page: Page, sourceRelPath: string): Promise<void> {
   await page.evaluate((sourceRelPath) => {
     const source = document.querySelector<HTMLElement>(
@@ -626,6 +654,11 @@ test.describe('note page block editor switching', () => {
       if (!contentBox) {
         throw new Error('Notebook browser content bounds are unavailable')
       }
+      const browserBox = await browser.boundingBox()
+      if (!browserBox) {
+        throw new Error('Notebook browser bounds are unavailable')
+      }
+      expect(contentBox.height).toBeGreaterThanOrEqual(browserBox.height - 2)
 
       await page.mouse.click(
         contentBox.x + Math.max(40, contentBox.width - 40),
@@ -964,6 +997,236 @@ test.describe('note page block editor switching', () => {
       await expect(target).toHaveAttribute('data-drag-over', 'true')
       await endNoteTreeDrag(page, 'source')
       await expect(preview).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('highlights a folder during native pointer file and folder drags', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'source'), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', 'source', 'nested.md'),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Nested note\n')),
+      'utf-8'
+    )
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const target = page.getByTestId('note-tree-row:archive')
+      await expect(target).toBeVisible()
+
+      const initialBackground = await target.evaluate(
+        (element) => getComputedStyle(element).backgroundColor
+      )
+      await startNoteTreePointerDrag(page, 'alpha.md', 'archive')
+      await expect(target).toHaveAttribute('data-drag-over', 'true', { timeout: 10_000 })
+      await expect
+        .poll(() => target.evaluate((element) => getComputedStyle(element).backgroundColor))
+        .not.toBe(initialBackground)
+      const dropBackgroundChannels = await target.evaluate((element) => {
+        const channels = getComputedStyle(element).backgroundColor.match(/\d+(?:\.\d+)?/g) ?? []
+        return channels.slice(0, 3).map(Number)
+      })
+      expect(dropBackgroundChannels).toHaveLength(3)
+      expect(new Set(dropBackgroundChannels).size).toBe(1)
+      await page.mouse.up()
+
+      await expect(page.getByTestId('note-tree-row:archive/alpha.md')).toBeVisible({
+        timeout: 20_000
+      })
+
+      await expect(page.getByTestId('note-tree-row:source')).toBeVisible()
+      await startNoteTreePointerDrag(page, 'source', 'archive')
+      await expect(target).toHaveAttribute('data-drag-over', 'true', { timeout: 10_000 })
+      await page.mouse.up()
+      await expect(target).toHaveAttribute('data-drag-over', 'false', { timeout: 10_000 })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps a 400-row file tree drag within the frame budget', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
+    await Promise.all(
+      Array.from({ length: 398 }, (_, index) =>
+        fs.writeFile(
+          path.join(vaultRoot, 'notes', `note-${String(index + 1).padStart(3, '0')}.md`),
+          serializeStoredNoteDocument(createStoredNoteDocumentFromText(`Note ${index + 1}\n`)),
+          'utf-8'
+        )
+      )
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const source = page.getByTestId('note-tree-row:alpha.md')
+      const target = page.getByTestId('note-tree-row:archive')
+      await expect(source).toBeVisible()
+      await expect(target).toBeVisible()
+
+      await page.evaluate(() => {
+        const treeRoot = document.querySelector<HTMLElement>('[data-testid="notes-tree-view"]')
+        if (!treeRoot) {
+          throw new Error('Note tree root is not mounted')
+        }
+
+        let isActive = false
+        let frameId: number | null = null
+        let lastFrameTime: number | null = null
+        let frameGaps: number[] = []
+        let longTaskCount = 0
+        let childListMutationCount = 0
+        const mutationRowIds = new Set<string>()
+
+        const collectMutations = (records: MutationRecord[]): void => {
+          for (const record of records) {
+            if (record.type !== 'childList') {
+              continue
+            }
+
+            childListMutationCount += 1
+            const target = record.target
+            if (!(target instanceof Element)) {
+              continue
+            }
+
+            const row = target.closest<HTMLElement>('[data-testid^="note-tree-row:"]')
+            if (row?.dataset.testid) {
+              mutationRowIds.add(row.dataset.testid)
+            }
+          }
+        }
+
+        const mutationObserver = new MutationObserver((records) => {
+          if (isActive) {
+            collectMutations(records)
+          }
+        })
+        mutationObserver.observe(treeRoot, { childList: true, subtree: true })
+
+        const longTaskObserver =
+          typeof PerformanceObserver === 'undefined'
+            ? null
+            : new PerformanceObserver((list) => {
+                if (isActive) {
+                  longTaskCount += list.getEntries().length
+                }
+              })
+        try {
+          longTaskObserver?.observe({ type: 'longtask' })
+        } catch {
+          longTaskObserver?.disconnect()
+        }
+
+        const sampleFrame = (time: number): void => {
+          if (!isActive) {
+            return
+          }
+
+          if (lastFrameTime !== null) {
+            frameGaps.push(time - lastFrameTime)
+          }
+          lastFrameTime = time
+          frameId = window.requestAnimationFrame(sampleFrame)
+        }
+
+        const profile = {
+          start: (): void => {
+            mutationObserver.takeRecords()
+            isActive = true
+            frameGaps = []
+            lastFrameTime = null
+            longTaskCount = 0
+            childListMutationCount = 0
+            mutationRowIds.clear()
+            frameId = window.requestAnimationFrame(sampleFrame)
+          },
+          stop: async (): Promise<void> => {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+            isActive = false
+            if (frameId !== null) {
+              window.cancelAnimationFrame(frameId)
+              frameId = null
+            }
+            collectMutations(mutationObserver.takeRecords())
+            longTaskObserver?.disconnect()
+          },
+          read: (): {
+            rowCount: number
+            frameCount: number
+            averageFrameGap: number
+            longTaskCount: number
+            childListMutationCount: number
+            mutationRowIds: string[]
+          } => ({
+            rowCount: treeRoot.querySelectorAll('[data-testid^="note-tree-row:"]').length,
+            frameCount: frameGaps.length,
+            averageFrameGap:
+              frameGaps.length > 0
+                ? frameGaps.reduce((total, gap) => total + gap, 0) / frameGaps.length
+                : Number.POSITIVE_INFINITY,
+            longTaskCount,
+            childListMutationCount,
+            mutationRowIds: [...mutationRowIds]
+          })
+        }
+
+        Object.defineProperty(window, '__XINGULARITY_NOTE_TREE_PROFILE__', {
+          configurable: true,
+          value: profile
+        })
+      })
+
+      await page.waitForTimeout(250)
+      await page.evaluate(() => {
+        const profile = (
+          window as typeof window & {
+            __XINGULARITY_NOTE_TREE_PROFILE__?: { start: () => void }
+          }
+        ).__XINGULARITY_NOTE_TREE_PROFILE__
+        profile?.start()
+      })
+
+      await source.dragTo(target, { steps: 120 })
+
+      await page.evaluate(async () => {
+        const profile = (
+          window as typeof window & {
+            __XINGULARITY_NOTE_TREE_PROFILE__?: {
+              stop: () => Promise<void>
+              read: () => unknown
+            }
+          }
+        ).__XINGULARITY_NOTE_TREE_PROFILE__
+        await profile?.stop()
+      })
+      const metrics = await page.evaluate(() => {
+        const profile = (
+          window as typeof window & {
+            __XINGULARITY_NOTE_TREE_PROFILE__?: { read: () => unknown }
+          }
+        ).__XINGULARITY_NOTE_TREE_PROFILE__
+        return profile?.read() as {
+          rowCount: number
+          frameCount: number
+          averageFrameGap: number
+          longTaskCount: number
+          childListMutationCount: number
+          mutationRowIds: string[]
+        }
+      })
+
+      expect(metrics.rowCount).toBeGreaterThanOrEqual(400)
+      expect(metrics.frameCount).toBeGreaterThan(10)
+      expect(metrics.averageFrameGap).toBeLessThanOrEqual(22)
+      expect(metrics.longTaskCount).toBe(0)
+      expect(metrics.childListMutationCount).toBeLessThanOrEqual(100)
+      expect(metrics.mutationRowIds.length).toBeLessThanOrEqual(2)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -3358,6 +3621,29 @@ test.describe('note page block editor switching', () => {
           fontSize: '30px',
           fontWeight: '700'
         })
+
+      const titleSelectionStyles = await titleInput.evaluate((element) => {
+        const probe = document.createElement('span')
+        probe.style.backgroundColor = 'var(--selection-background)'
+        probe.style.color = 'var(--selection-foreground)'
+        document.body.append(probe)
+        const expectedBackgroundColor = getComputedStyle(probe).backgroundColor
+        const expectedColor = getComputedStyle(probe).color
+        probe.remove()
+
+        const selectionStyles = getComputedStyle(element, '::selection')
+        return {
+          backgroundColor: selectionStyles.backgroundColor,
+          color: selectionStyles.color,
+          expectedBackgroundColor,
+          expectedColor
+        }
+      })
+
+      expect(titleSelectionStyles.backgroundColor).toBe(
+        titleSelectionStyles.expectedBackgroundColor
+      )
+      expect(titleSelectionStyles.color).toBe(titleSelectionStyles.expectedColor)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

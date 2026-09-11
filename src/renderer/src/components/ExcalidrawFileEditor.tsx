@@ -114,6 +114,11 @@ export const ExcalidrawFileEditor = forwardRef<
     [scene]
   )
 
+  const handleExcalidrawApi = useCallback((api: ExcalidrawApi | null): void => {
+    apiRef.current = api
+    setActiveToolType(api?.getAppState().activeTool.type ?? 'selection')
+  }, [])
+
   const flushPendingSave = useCallback(
     async ({ throwOnError = false }: FlushPendingSaveOptions = {}): Promise<void> => {
       if (!vaultApi) {
@@ -346,10 +351,7 @@ export const ExcalidrawFileEditor = forwardRef<
             initialData={initialData}
             theme={theme}
             UIOptions={excalidrawUiOptions}
-            excalidrawAPI={(api) => {
-              apiRef.current = api
-              setActiveToolType(api?.getAppState().activeTool.type ?? 'selection')
-            }}
+            excalidrawAPI={handleExcalidrawApi}
             onChange={handleSceneChange}
           />
         )}

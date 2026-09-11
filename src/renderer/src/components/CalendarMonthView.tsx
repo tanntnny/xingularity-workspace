@@ -44,6 +44,7 @@ import {
 } from '../lib/calendarTaskDragSession'
 import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 interface CalendarMonthViewProps {
   selectedDate: string
@@ -729,7 +730,7 @@ export function CalendarMonthView({
           eventContent={(arg) => {
             const task = tasksById[arg.event.id]
             if (!task) {
-              return <span className="truncate text-foreground">{arg.event.title}</span>
+              return <WorkspaceTextFade className="text-foreground">{arg.event.title}</WorkspaceTextFade>
             }
 
             return (

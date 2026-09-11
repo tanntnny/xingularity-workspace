@@ -4,6 +4,7 @@ import { AgentToolName, AgentToolsService } from './agentToolsService'
 import { handleIpc } from './errorReporting'
 
 const agentToolNameSchema = z.enum([
+  'workspace.context',
   'note.search',
   'note.read',
   'note.create',

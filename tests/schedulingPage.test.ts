@@ -254,7 +254,7 @@ describe('Scheduling page UI', () => {
 
     expect(markup).toContain('data-testid="scheduling-add-automation"')
     expect(markup).toContain('aria-label="Add automation"')
-    expect(markup).toContain('<span>Add automation</span>')
+    expect(markup).toContain('>Add automation</span>')
     expect(markup).toContain('bg-accent')
   })
 

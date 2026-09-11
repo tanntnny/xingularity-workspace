@@ -5,6 +5,7 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '.
 import { Rows3 } from './ui/icons'
 import { ResponsivePicker } from './ui/responsive-picker'
 import { WorkspaceIconButton } from './ui/document-workspace'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 export interface TaskGroupByPopoverProps {
   value: TaskGroupBy
@@ -66,7 +67,7 @@ export function TaskGroupByPopover({ value, onChange }: TaskGroupByPopoverProps)
                   data-testid={`task-group-by-option:${option.value}`}
                   className="min-h-9 cursor-pointer rounded-[var(--radius-control)] px-2 text-sm text-foreground hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
                 >
-                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  <WorkspaceTextFade className="min-w-0 flex-1">{option.label}</WorkspaceTextFade>
                   {selected ? <span className="text-xs text-primary">Selected</span> : null}
                 </CommandItem>
               )

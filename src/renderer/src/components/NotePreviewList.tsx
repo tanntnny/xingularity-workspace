@@ -9,6 +9,7 @@ import { EmptyState } from './ui/empty-state'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import { ActionMenuItems } from './ui/action-menu'
 import { WorkspacePanelSection, WorkspacePanelSectionHeader } from './ui/workspace-panel-section'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { buildNoteNativeMenuItems, getNoteMenuGroups } from '../lib/noteMenu'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
@@ -286,10 +287,10 @@ function NoteSection({
             >
               <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">
+                <WorkspaceTextFade className="text-sm font-semibold">
                   {stripNoteExtension(note.name)}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">{note.relPath}</span>
+                </WorkspaceTextFade>
+                <WorkspaceTextFade className="text-xs text-muted-foreground">{note.relPath}</WorkspaceTextFade>
                 <span className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                   <Badge variant="neutral" tone="subtle">
                     <Pencil size={12} aria-hidden="true" />

@@ -406,7 +406,6 @@ export const DESIGN_AUDIT_TABS = [
           'attention surface',
           'hover surface',
           'hover pill',
-          'truncate',
           'wrap',
           'fade',
           'muted label',

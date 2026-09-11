@@ -43,6 +43,7 @@ import '@milkdown/crepe/theme/common/style.css'
 import katex from 'katex'
 import { Check } from './ui/icons'
 import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
 import {
   NOTE_PDF_IMAGE_URI_PREFIX,
@@ -80,6 +81,7 @@ interface EditorProps {
   initialContent?: string | null
   density?: 'default' | 'compact'
   background?: 'transparent' | 'inherit'
+  className?: string
   readOnly?: boolean
   onDirty: () => void
   onSnapshotChange?: (snapshot: NoteEditorSnapshot) => void
@@ -548,6 +550,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     initialContent,
     density = 'default',
     background = 'transparent',
+    className,
     readOnly = false,
     onDirty,
     onSnapshotChange,
@@ -603,10 +606,12 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       label: (
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{getNoteDisplayName(note.relPath)}</span>
-            <span className="block truncate text-xs opacity-75">
+            <WorkspaceTextFade className="font-medium">
+              {getNoteDisplayName(note.relPath)}
+            </WorkspaceTextFade>
+            <WorkspaceTextFade className="text-xs opacity-75">
               {stripNoteExtension(note.relPath)}
-            </span>
+            </WorkspaceTextFade>
           </span>
           {alreadyLinked ? <Check aria-hidden="true" size={14} /> : null}
         </span>
@@ -1559,7 +1564,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       data-editor-ready={isEditorVisible ? 'true' : 'false'}
       data-editor-density={density}
       data-editor-background={background}
-      className="motion-editor-surface relative h-full min-h-[10vh]"
+      className={cn('motion-editor-surface relative h-full min-h-[10vh]', className)}
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
       onFocusCapture={(event) => {
         if (isEditorTarget(event.target)) {

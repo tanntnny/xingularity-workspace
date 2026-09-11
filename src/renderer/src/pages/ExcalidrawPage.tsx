@@ -32,6 +32,7 @@ import {
   WorkspacePanelSectionHeader
 } from '../components/ui/workspace-panel-section'
 import { EmptyState } from '../components/ui/empty-state'
+import { WorkspaceTextFade } from '../components/ui/workspace-text-fade'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 
 type ExcalidrawTheme = typeof THEME.DARK
@@ -655,9 +656,9 @@ export function ExcalidrawSidebar(): ReactElement {
                           }}
                           className="w-full rounded-md text-left transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          <div className="truncate text-sm font-semibold text-foreground">
+                          <WorkspaceTextFade className="text-sm font-semibold text-foreground">
                             {session.title}
-                          </div>
+                          </WorkspaceTextFade>
                           <div className="mt-1 text-xs text-muted-foreground">
                             Updated {formatUpdatedAt(session.updatedAt)}
                           </div>

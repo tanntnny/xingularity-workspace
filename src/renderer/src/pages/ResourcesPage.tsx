@@ -8,6 +8,7 @@ import type {
   ResourceRelation,
   ResourceUpdateInput
 } from '../../../shared/types'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import { ProjectResourcesTable } from '../components/ProjectResourcesPanel'
 import { ResourceFiltersPopover } from '../components/ResourceFiltersPopover'
 import {
@@ -51,6 +52,7 @@ export function ResourceSearchInput({ value, onChange }: ResourceSearchInputProp
 export interface ResourcesPageProps {
   projects: Project[]
   noteTree: NoteTreeNode[]
+  folderColors?: FolderColorMap
   resources: ResourceRef[]
   relations: ResourceRelation[]
   addResourceRequest?: boolean
@@ -72,6 +74,7 @@ export interface ResourcesPageProps {
 export function ResourcesPage({
   projects,
   noteTree,
+  folderColors = {},
   resources,
   relations,
   addResourceRequest = false,
@@ -129,6 +132,7 @@ export function ResourcesPage({
         scope="global"
         projects={projects}
         noteTree={noteTree}
+        folderColors={folderColors}
         resources={resources}
         relations={relations}
         resourceFilters={resourceFilters}

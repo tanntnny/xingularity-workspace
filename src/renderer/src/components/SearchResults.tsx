@@ -3,6 +3,7 @@ import { SearchResult } from '../../../shared/types'
 import { Search } from './ui/icons'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
+import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 interface SearchResultsProps {
   results: SearchResult[]
@@ -30,21 +31,21 @@ export function SearchResults({ results, onOpen }: SearchResultsProps): ReactEle
           className="h-auto w-full min-w-0 flex-col items-start justify-start gap-0 p-2.5 text-left whitespace-normal"
           onClick={() => onOpen(result)}
         >
-          <span className="mb-0.5 block min-w-0 max-w-full truncate text-base font-semibold">
+          <WorkspaceTextFade className="mb-0.5 max-w-full text-base font-semibold">
             {result.title}
-          </span>
-          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
+          </WorkspaceTextFade>
+          <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
             {result.provider ?? result.entityType} · {result.state ?? 'available'}
-          </span>
-          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
+          </WorkspaceTextFade>
+          <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
             {result.relPath}
-          </span>
-          <span className="block min-w-0 max-w-full line-clamp-2 text-xs text-muted-foreground">
+          </WorkspaceTextFade>
+          <WorkspaceTextFade lines={2} className="max-w-full text-xs text-muted-foreground">
             {result.snippet}
-          </span>
-          <span className="block min-w-0 max-w-full truncate text-xs text-muted-foreground">
+          </WorkspaceTextFade>
+          <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
             {result.tags.map((tag) => `#${tag}`).join(' ')}
-          </span>
+          </WorkspaceTextFade>
         </Button>
       ))}
     </div>

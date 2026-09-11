@@ -3,6 +3,7 @@ import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group'
 
 import { cn } from '../../lib/utils'
 import { statusChipVariants } from './status-chip-variants'
+import { WorkspaceTextFade } from './workspace-text-fade'
 
 export type StatusChipToggleGroupProps = Omit<
   React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root>,
@@ -52,7 +53,7 @@ const StatusChipToggleItem = React.forwardRef<
     {...props}
     className={cn(statusChipToggleItemClassName, className)}
   >
-    <span className="min-w-0 truncate text-left">{children}</span>
+    <WorkspaceTextFade className="min-w-0 flex-1 text-left">{children}</WorkspaceTextFade>
   </ToggleGroupPrimitive.Item>
 ))
 StatusChipToggleItem.displayName = 'StatusChipToggleItem'

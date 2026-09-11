@@ -91,6 +91,7 @@ function renderProjectsPage(
       onUpdateProjectMeeting: async () => undefined,
       onDeleteProjectMeeting: async () => undefined,
       noteTree: notebookTree,
+      folderColors: {},
       resources,
       relations: [],
       onAddResource: async () => undefined,
@@ -544,10 +545,10 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('data-testid="project-view-tab:meetings"')
     expect(markup).toContain('data-testid="project-view-tab:resources"')
     expect(markup).toContain('aria-controls="project-view-panel"')
-    expect(markup).toContain('>Overview</button>')
-    expect(markup).toContain('>Activity</button>')
-    expect(markup).toContain('>Meeting</button>')
-    expect(markup).toContain('>Resources</button>')
+    expect(markup).toContain('>Overview</span>')
+    expect(markup).toContain('>Activity</span>')
+    expect(markup).toContain('>Meeting</span>')
+    expect(markup).toContain('>Resources</span>')
     expect(markup).not.toContain('Project Home')
     expect(markup).not.toContain('>Pulse</button>')
     expect(markup).not.toContain('data-testid="project-view-tab-icon:home"')

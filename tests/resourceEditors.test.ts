@@ -64,7 +64,7 @@ describe('resource dialog property editors', () => {
       })
     )
 
-    expect(markup).toContain('>Add label</button>')
+    expect(markup).toContain('>Add label</span>')
     expect(markup).not.toContain('Use stable keys and values to make resources easier to filter.')
     expect(markup).not.toContain(
       'Enter a key and value. Press Enter in the last value to add another row.'

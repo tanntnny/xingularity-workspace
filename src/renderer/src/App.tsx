@@ -16,7 +16,6 @@ import {
   StarOutline,
   FileText,
   PenTool,
-  Folder,
   ListTodo,
   RefreshCw
 } from './components/ui/icons'
@@ -60,6 +59,7 @@ import {
 } from '../../shared/types'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../shared/excalidrawFile'
 import { normalizeProjectIcon } from '../../shared/projectIcons'
+import type { FolderColorMap } from '../../shared/folderColors'
 import { createWorkspaceView } from '../../shared/workspaceViews'
 import { notebookPathFromResource } from '../../shared/resourceDomain'
 import { normalizeCalendarEndDate } from '../../shared/calendarTaskDates'
@@ -79,6 +79,11 @@ import { splitNoteContent } from '../../shared/noteContent'
 import { mergeMarkdownThreeWay } from '../../shared/markdownMerge'
 import { normalizeTag } from '../../shared/noteTags'
 import {
+  getAppFontOption,
+  getCodeFontOption,
+  type AppFontId
+} from '../../shared/fontCatalog'
+import {
   createNoteMentionResolver,
   extractMentionTargetsFromMarkdown
 } from '../../shared/noteMentions'
@@ -93,6 +98,7 @@ import { CalendarTaskFilter } from './components/CalendarTaskFilter'
 import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
 import { NotesTreeView } from './components/NotesTreeView'
 import { NotebookCardBrowser } from './components/NotebookCardBrowser'
+import { NotebookFolderIcon } from './components/ui/notebook-folder-icon'
 import { NoteShapeIcon } from './components/NoteShapeIcon'
 import { NoteOutlinePanel } from './components/NoteOutlinePanel'
 import { NoteBacklinksPanel } from './components/NoteBacklinksPanel'
@@ -588,6 +594,7 @@ function App(): ReactElement {
   const favoriteNotePathSettings = useVaultStore((state) => state.settings.favoriteNotePaths)
   const favoriteProjectIdSettings = useVaultStore((state) => state.settings.favoriteProjectIds)
   const fontFamily = useVaultStore((state) => state.settings.fontFamily)
+  const codeFontFamily = useVaultStore((state) => state.settings.codeFontFamily)
   const featureFlags = useVaultStore((state) => state.settings.featureFlags ?? EMPTY_FEATURE_FLAGS)
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
   const editorVimModeEnabled = useVaultStore((state) => state.settings.editorVimModeEnabled)
@@ -595,6 +602,7 @@ function App(): ReactElement {
   const profileName = useVaultStore((state) => state.settings.profile.name)
   const lastVaultPath = useVaultStore((state) => state.settings.lastVaultPath)
   const projectIcons = useVaultStore((state) => state.settings.projectIcons)
+  const folderColors = useVaultStore((state) => state.settings.folderColors)
   const setVault = useVaultStore((state) => state.setVault)
   const setNotes = useVaultStore((state) => state.setNotes)
   const setCurrentNotePath = useVaultStore((state) => state.setCurrentNotePath)
@@ -605,6 +613,20 @@ function App(): ReactElement {
   const setSettings = useVaultStore((state) => state.setSettings)
   const patchSettings = useVaultStore((state) => state.patchSettings)
   const pushToast = useVaultStore((state) => state.pushToast)
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--app-font-family',
+      getAppFontOption(fontFamily).cssFamily
+    )
+  }, [fontFamily])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--code-font-family',
+      getCodeFontOption(codeFontFamily).cssFamily
+    )
+  }, [codeFontFamily])
   const [activePage, setActivePage] = useState<AppPage>('notes')
   const [settingsTabRequest, setSettingsTabRequest] = useState<SettingsTabId>('profile')
   const [activeDesignAuditTab, setActiveDesignAuditTab] =
@@ -1327,6 +1349,48 @@ function App(): ReactElement {
       }
     },
     [vaultApi, favoriteNotePathSettings, patchSettings, pushToast]
+  )
+
+  const updateFolderColor = useCallback(
+    async (folderPath: string, color: string | null): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const currentSettings = useVaultStore.getState().settings
+      const nextFolderColors: FolderColorMap = { ...currentSettings.folderColors }
+      if (color) {
+        nextFolderColors[folderPath] = color
+      } else {
+        delete nextFolderColors[folderPath]
+      }
+
+      if (JSON.stringify(nextFolderColors) === JSON.stringify(currentSettings.folderColors)) {
+        return
+      }
+
+      const mutationVersion = ++settingsMutationVersionRef.current
+      flushSync(() => {
+        setSettings({ ...currentSettings, folderColors: nextFolderColors })
+      })
+
+      try {
+        const nextSettings = await vaultApi.settings.update({ folderColors: nextFolderColors })
+        if (mutationVersion === settingsMutationVersionRef.current) {
+          setSettings(nextSettings)
+        }
+      } catch (error) {
+        if (mutationVersion === settingsMutationVersionRef.current) {
+          try {
+            setSettings(await vaultApi.settings.get())
+          } catch {
+            setSettings(currentSettings)
+          }
+        }
+        pushToast('error', String(error))
+      }
+    },
+    [pushToast, setSettings, vaultApi]
   )
 
   const updateFeatureFlag = useCallback(
@@ -3246,6 +3310,34 @@ function App(): ReactElement {
         }
       })
       patchSettings({ profile: nextSettings.profile })
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateAppFont = async (fontId: AppFontId): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({ fontFamily: fontId })
+      patchSettings({ fontFamily: nextSettings.fontFamily })
+      pushToast('success', `${getAppFontOption(fontId).label} selected`)
+    } catch (error) {
+      pushToast('error', String(error))
+    }
+  }
+
+  const updateCodeFont = async (fontId: AppFontId): Promise<void> => {
+    if (!vaultApi) {
+      return
+    }
+
+    try {
+      const nextSettings = await vaultApi.settings.update({ codeFontFamily: fontId })
+      patchSettings({ codeFontFamily: nextSettings.codeFontFamily })
+      pushToast('success', `${getCodeFontOption(fontId).label} selected for code`)
     } catch (error) {
       pushToast('error', String(error))
     }
@@ -6727,6 +6819,7 @@ function App(): ReactElement {
         }
 
         await refreshNotesAndTree()
+        setSettings(await vaultApi.settings.get())
         const nextRecentPaths = remapRecentNotebookPaths(recentNotebookPaths, relPath, nextRelPath)
         if (nextRecentPaths.some((path, index) => path !== recentNotebookPaths[index])) {
           void persistRecentNotebookPaths(nextRecentPaths)
@@ -6783,6 +6876,7 @@ function App(): ReactElement {
       recentNotebookPaths,
       recentPageTargets,
       refreshNotesAndTree,
+      setSettings,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
       vaultApi
@@ -6827,6 +6921,7 @@ function App(): ReactElement {
         await vaultApi.files.deletePaths(normalizedEntries.map((entry) => entry.relPath))
 
         await refreshNotesAndTree()
+        setSettings(await vaultApi.settings.get())
         setSelectedNoteTreeEntries([])
 
         const removedPaths = normalizedEntries
@@ -6921,6 +7016,7 @@ function App(): ReactElement {
       recentPageTargets,
       refreshNotesAndTree,
       resetCurrentNoteEditorSession,
+      setSettings,
       setCurrentExcalidrawPath,
       setCurrentNoteContent,
       setCurrentNotePath,
@@ -6991,6 +7087,7 @@ function App(): ReactElement {
       }
 
       await refreshNotesAndTree()
+      setSettings(await vaultApi.settings.get())
       const nextRecentPaths = moveOperations.reduce(
         (paths, operation) =>
           remapRecentNotebookPaths(paths, operation.relPath, operation.toRelPath),
@@ -7051,6 +7148,7 @@ function App(): ReactElement {
       refreshNotesAndTree,
       recentNotebookPaths,
       recentPageTargets,
+      setSettings,
       setCurrentExcalidrawPath,
       setCurrentNotePath,
       vaultApi
@@ -7493,7 +7591,7 @@ function App(): ReactElement {
       if (folderPath) {
         return {
           label: getNotebookFolderContents(noteTree, folderPath).name,
-          icon: <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+          icon: <NotebookFolderIcon variant="open" color={folderColors[folderPath]} size={16} />
         }
       }
 
@@ -8178,7 +8276,7 @@ function App(): ReactElement {
                                           selectProject(activeTaskProject.id)
                                           void closeTaskPage()
                                         }}
-                                        className="max-w-[180px] truncate text-sm text-muted-foreground"
+                                        className="max-w-[180px] text-sm text-muted-foreground"
                                       >
                                         <BreadcrumbIconLabel
                                           icon={
@@ -8196,7 +8294,7 @@ function App(): ReactElement {
                                 ) : null}
                                 <BreadcrumbSeparator className="text-muted-foreground" />
                                 <BreadcrumbItem>
-                                  <BreadcrumbPage className="max-w-[260px] truncate text-sm font-semibold text-foreground">
+                                  <BreadcrumbPage className="max-w-[260px] text-sm font-semibold text-foreground">
                                     <BreadcrumbIconLabel
                                       icon={
                                         <ListTodo size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -8274,15 +8372,15 @@ function App(): ReactElement {
                                         <BreadcrumbItem>
                                           {isLast ? (
                                             <BreadcrumbPage
-                                              className="max-w-[220px] truncate text-sm font-semibold text-foreground"
+                                              className="max-w-[220px] text-sm font-semibold text-foreground"
                                               data-testid={`notebook-breadcrumb:current:${path}`}
                                             >
                                               <BreadcrumbIconLabel
                                                 icon={
-                                                  <Folder
+                                                  <NotebookFolderIcon
+                                                    variant="open"
+                                                    color={folderColors[path]}
                                                     size={14}
-                                                    strokeWidth={1.8}
-                                                    aria-hidden="true"
                                                   />
                                                 }
                                               >
@@ -8292,15 +8390,15 @@ function App(): ReactElement {
                                           ) : (
                                             <BreadcrumbButton
                                               onClick={() => handleNotebookBrowseFolder(path)}
-                                              className="max-w-[140px] truncate text-sm text-muted-foreground"
+                                              className="max-w-[140px] text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
                                             >
                                               <BreadcrumbIconLabel
                                                 icon={
-                                                  <Folder
+                                                  <NotebookFolderIcon
+                                                    variant="closed"
+                                                    color={folderColors[path]}
                                                     size={14}
-                                                    strokeWidth={1.8}
-                                                    aria-hidden="true"
                                                   />
                                                 }
                                               >
@@ -8324,7 +8422,7 @@ function App(): ReactElement {
                                         <BreadcrumbSeparator className="text-muted-foreground" />
                                         <BreadcrumbItem>
                                           {isLast ? (
-                                            <BreadcrumbPage className="max-w-[220px] truncate text-sm font-semibold text-foreground">
+                                            <BreadcrumbPage className="max-w-[220px] text-sm font-semibold text-foreground">
                                               <BreadcrumbIconLabel
                                                 icon={
                                                   currentExcalidrawPath ? (
@@ -8350,15 +8448,15 @@ function App(): ReactElement {
                                               onClick={() => {
                                                 void handleNotebookBreadcrumbFolderClick(path)
                                               }}
-                                              className="max-w-[140px] truncate text-sm text-muted-foreground"
+                                              className="max-w-[140px] text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
                                             >
                                               <BreadcrumbIconLabel
                                                 icon={
-                                                  <Folder
+                                                  <NotebookFolderIcon
+                                                    variant="closed"
+                                                    color={folderColors[path]}
                                                     size={14}
-                                                    strokeWidth={1.8}
-                                                    aria-hidden="true"
                                                   />
                                                 }
                                               >
@@ -8374,7 +8472,7 @@ function App(): ReactElement {
                                   <>
                                     <BreadcrumbSeparator className="text-muted-foreground" />
                                     <BreadcrumbItem>
-                                      <BreadcrumbPage className="max-w-[320px] truncate text-sm font-semibold text-foreground">
+                                      <BreadcrumbPage className="max-w-[320px] text-sm font-semibold text-foreground">
                                         <BreadcrumbIconLabel icon={headerPageIcon}>
                                           {middleHeaderBreadcrumbItem}
                                         </BreadcrumbIconLabel>
@@ -8574,7 +8672,7 @@ function App(): ReactElement {
                       pageContextMenuTrailing={
                         calendarCurrentPeriodLabel ? (
                           <span
-                            className="truncate text-sm font-semibold text-foreground"
+                            className="text-sm font-semibold text-foreground"
                             data-testid="calendar-current-period"
                             title={calendarCurrentPeriodLabel}
                           >
@@ -8697,6 +8795,7 @@ function App(): ReactElement {
                                 <NotebookCardBrowser
                                   tree={visibleNoteTree}
                                   folderPath={browseFolderPath}
+                                  folderColors={folderColors}
                                   selectedEntries={selectedNoteTreeEntries}
                                   onBrowseFolder={handleNotebookBrowseFolder}
                                   onSelectionChange={setSelectedNoteTreeEntries}
@@ -8734,6 +8833,9 @@ function App(): ReactElement {
                                     void deleteTreeEntries(entries)
                                   }}
                                   onMoveEntries={moveTreeEntries}
+                                  onFolderColorChange={(folderPath, color) => {
+                                    void updateFolderColor(folderPath, color)
+                                  }}
                                 />
                               )
                             ) : activePage === 'knowledge' ? (
@@ -8784,6 +8886,7 @@ function App(): ReactElement {
                                 resourcePageProps={{
                                   projects,
                                   noteTree,
+                                  folderColors,
                                   resources: resourceSnapshot.resources,
                                   relations: resourceSnapshot.relations,
                                   addResourceRequest: resourceAddRequest,
@@ -8806,6 +8909,7 @@ function App(): ReactElement {
                               <ResourcesPage
                                 projects={projects}
                                 noteTree={noteTree}
+                                folderColors={folderColors}
                                 resources={resourceSnapshot.resources}
                                 relations={resourceSnapshot.relations}
                                 addResourceRequest={resourceAddRequest}
@@ -8858,6 +8962,7 @@ function App(): ReactElement {
                                 onUpdateProjectMeeting={updateProjectMeeting}
                                 onDeleteProjectMeeting={deleteProjectMeeting}
                                 noteTree={noteTree}
+                                folderColors={folderColors}
                                 resources={resourceSnapshot.resources}
                                 relations={resourceSnapshot.relations}
                                 onAddResource={addProjectResource}
@@ -9029,7 +9134,7 @@ function App(): ReactElement {
                               </div>
                             ) : activePage === 'designAudit' ? (
                               <DesignAuditPage
-                                themeVersion={`dark:${fontFamily}`}
+                                themeVersion={`dark:${fontFamily}:${codeFontFamily}`}
                                 activeTab={activeDesignAuditTab}
                                 onTabChange={setActiveDesignAuditTab}
                               />
@@ -9053,6 +9158,14 @@ function App(): ReactElement {
                                 savedVaultCount={savedVaultCount}
                                 onSaveProfile={(name) => {
                                   void updateProfileName(name)
+                                }}
+                                fontFamily={fontFamily}
+                                onSaveFont={(fontId) => {
+                                  void updateAppFont(fontId)
+                                }}
+                                codeFontFamily={codeFontFamily}
+                                onSaveCodeFont={(fontId) => {
+                                  void updateCodeFont(fontId)
                                 }}
                                 onSaveMistralApiKey={(apiKey) => {
                                   void updateMistralApiKey(apiKey)
@@ -9211,7 +9324,7 @@ function App(): ReactElement {
                                                     {
                                                       id: 'new-folder',
                                                       label: 'New folder',
-                                                      icon: <Folder aria-hidden="true" />,
+                                                      icon: <NotebookFolderIcon variant="closed" size={16} />,
                                                       onSelect: () => {
                                                         void createFolderFromTree()
                                                       }
@@ -9278,6 +9391,7 @@ function App(): ReactElement {
                                     >
                                       <NotesTreeView
                                         tree={visibleNoteTree}
+                                        folderColors={folderColors}
                                         searchTerm={searchQuery}
                                         activeNotePath={currentNotePath ?? currentExcalidrawPath}
                                         selectedEntries={selectedNoteTreeEntries}
@@ -9328,6 +9442,9 @@ function App(): ReactElement {
                                           void deleteTreeEntries(entries)
                                         }}
                                         onMoveEntries={moveTreeEntries}
+                                        onFolderColorChange={(folderPath, color) => {
+                                          void updateFolderColor(folderPath, color)
+                                        }}
                                       />
                                     </CollapsibleWorkspacePanelSection>
                                     {noteIsOpen && !searchQuery.trim() && !currentExcalidrawPath ? (
