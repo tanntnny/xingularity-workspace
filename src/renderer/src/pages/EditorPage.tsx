@@ -34,6 +34,8 @@ interface EditorPageProps {
   onFindByTag: (tag: string) => void
   onOpenNoteLink?: (target: string) => void
   onRename: (newName: string) => Promise<void>
+  initialScrollTop?: number
+  onScrollPositionChange?: (scrollTop: number) => void
   titleEditToken?: number
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
@@ -187,6 +189,8 @@ export function EditorPage({
   onFindByTag,
   onOpenNoteLink,
   onRename,
+  initialScrollTop = 0,
+  onScrollPositionChange,
   titleEditToken = 0,
   vimModeEnabled,
   vimKeyMappings
@@ -194,6 +198,12 @@ export function EditorPage({
   const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const noteScrollRef = useRef<HTMLDivElement | null>(null)
   const noteTitleRef = useRef<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    if (noteScrollRef.current) {
+      noteScrollRef.current.scrollTop = Math.max(0, initialScrollTop)
+    }
+  }, [initialScrollTop, notePath])
 
   const currentName = stripNoteExtension(notePath).split('/').pop() || ''
   const availableTags = useMemo(
@@ -218,6 +228,7 @@ export function EditorPage({
           <div className="h-full min-h-0 overflow-hidden">
             <div
               ref={noteScrollRef}
+              onScroll={(event) => onScrollPositionChange?.(event.currentTarget.scrollTop)}
               className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1"
             >
               <ScrollAwareNoteTitleArea

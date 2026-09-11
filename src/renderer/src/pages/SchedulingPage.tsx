@@ -53,12 +53,22 @@ import { WorkspacePage } from '../components/workspace'
 type ToastKind = 'info' | 'error' | 'success' | 'warning'
 
 export interface SchedulingWorkspaceProviderProps {
+  workspaceTabId?: string
   enabled: boolean
   vaultApi: RendererVaultApi | null | undefined
   vaultRoot?: string | null
   pushToast: (kind: ToastKind, message: string) => void
   onWorkspaceDataChanged?: () => Promise<void>
   children?: ReactNode
+}
+
+interface SchedulingWorkspaceSessionSnapshot {
+  selectedJobId: string | null
+  draft: ScheduleDraft
+  isNewDraft: boolean
+  isDirty: boolean
+  runs: ScheduleRunRecord[]
+  selectedRunId: string | null
 }
 
 interface SchedulingWorkspaceValue {
@@ -157,20 +167,61 @@ function rememberTrustAcknowledgement(vaultRoot: string | null | undefined): voi
 }
 
 export function SchedulingWorkspaceProvider({
+  workspaceTabId = 'default',
+  ...props
+}: SchedulingWorkspaceProviderProps): ReactElement {
+  const [sessions, setSessions] = useState<Record<string, SchedulingWorkspaceSessionSnapshot>>({})
+  const sessionKey = `${props.vaultRoot ?? 'default'}:${workspaceTabId}`
+  const session = sessions[sessionKey] ?? {
+    selectedJobId: null,
+    draft: createNewDraft(),
+    isNewDraft: true,
+    isDirty: false,
+    runs: [],
+    selectedRunId: null
+  }
+  const handleSessionChange = useCallback(
+    (nextSession: SchedulingWorkspaceSessionSnapshot): void => {
+      setSessions((current) => ({ ...current, [sessionKey]: nextSession }))
+    },
+    [sessionKey]
+  )
+
+  return (
+    <SchedulingWorkspaceSessionProvider
+      key={sessionKey}
+      {...props}
+      initialSession={session}
+      onSessionChange={handleSessionChange}
+    />
+  )
+}
+
+interface SchedulingWorkspaceSessionProviderProps extends Omit<
+  SchedulingWorkspaceProviderProps,
+  'workspaceTabId'
+> {
+  initialSession: SchedulingWorkspaceSessionSnapshot
+  onSessionChange: (session: SchedulingWorkspaceSessionSnapshot) => void
+}
+
+function SchedulingWorkspaceSessionProvider({
   enabled,
   vaultApi,
   vaultRoot = null,
   pushToast,
   onWorkspaceDataChanged,
-  children
-}: SchedulingWorkspaceProviderProps): ReactElement {
+  children,
+  initialSession,
+  onSessionChange
+}: SchedulingWorkspaceSessionProviderProps): ReactElement {
   const [jobs, setJobs] = useState<ScheduleJob[]>([])
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<ScheduleDraft>(() => createNewDraft())
-  const [isNewDraft, setIsNewDraft] = useState(true)
-  const [isDirty, setIsDirty] = useState(false)
-  const [runs, setRuns] = useState<ScheduleRunRecord[]>([])
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialSession.selectedJobId)
+  const [draft, setDraft] = useState<ScheduleDraft>(() => ({ ...initialSession.draft }))
+  const [isNewDraft, setIsNewDraft] = useState(initialSession.isNewDraft)
+  const [isDirty, setIsDirty] = useState(initialSession.isDirty)
+  const [runs, setRuns] = useState<ScheduleRunRecord[]>(() => [...initialSession.runs])
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialSession.selectedRunId)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -181,7 +232,8 @@ export function SchedulingWorkspaceProvider({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [pendingDeleteJobId, setPendingDeleteJobId] = useState<string | null>(null)
   const trustActionRef = useRef<(() => Promise<void>) | null>(null)
-  const isNewDraftRef = useRef(false)
+  const isNewDraftRef = useRef(initialSession.isNewDraft)
+  const preserveInitialDraftRef = useRef(initialSession.isDirty)
   const jobsRef = useRef(jobs)
   const vaultRootRef = useRef<string | null | undefined>(vaultRoot)
   const jobsLoadRequestRef = useRef(0)
@@ -189,6 +241,17 @@ export function SchedulingWorkspaceProvider({
 
   jobsRef.current = jobs
   vaultRootRef.current = vaultRoot
+
+  useEffect(() => {
+    onSessionChange({
+      selectedJobId,
+      draft: { ...draft },
+      isNewDraft,
+      isDirty,
+      runs: [...runs],
+      selectedRunId
+    })
+  }, [draft, isDirty, isNewDraft, onSessionChange, runs, selectedJobId, selectedRunId])
 
   useEffect(() => {
     if (!enabled) {
@@ -272,19 +335,6 @@ export function SchedulingWorkspaceProvider({
   }, [pushToast, vaultApi])
 
   useEffect(() => {
-    jobsLoadRequestRef.current += 1
-    runsLoadRequestRef.current += 1
-    isNewDraftRef.current = true
-    setJobs([])
-    setSelectedJobId(null)
-    setDraft(createNewDraft())
-    setIsNewDraft(true)
-    setIsDirty(false)
-    setRuns([])
-    setSelectedRunId(null)
-  }, [vaultRoot])
-
-  useEffect(() => {
     if (!enabled) {
       return
     }
@@ -332,13 +382,16 @@ export function SchedulingWorkspaceProvider({
       return
     }
 
-    setDraft(toDraft(selectedJob))
-    setIsNewDraft(false)
-    setIsDirty(false)
+    if (preserveInitialDraftRef.current) {
+      preserveInitialDraftRef.current = false
+    } else if (!isDirty) {
+      setDraft(toDraft(selectedJob))
+      setIsNewDraft(false)
+    }
     void loadRuns(selectedJob.id).catch((error: unknown) => {
       pushToast('error', `Could not load run history: ${String(error)}`)
     })
-  }, [enabled, loadRuns, pushToast, selectedJobId])
+  }, [enabled, isDirty, loadRuns, pushToast, selectedJobId])
 
   useEffect(() => {
     if (!enabled || !selectedJobId || !vaultApi) {
@@ -558,6 +611,8 @@ export function SchedulingWorkspaceProvider({
 
   const handleSelectJob = useCallback((jobId: string): void => {
     isNewDraftRef.current = false
+    preserveInitialDraftRef.current = false
+    setIsDirty(false)
     setSelectedJobId(jobId)
   }, [])
 

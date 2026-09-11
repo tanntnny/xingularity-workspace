@@ -1,4 +1,12 @@
-import { KeyboardEvent, ReactElement, useEffect, useMemo, useState } from 'react'
+import {
+  KeyboardEvent,
+  ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import * as d3 from 'd3'
 import {
   Archive,
@@ -62,32 +70,21 @@ import {
   SUBSCRIPTION_USAGE_CHIP_ITEMS
 } from '../lib/statusChipMeta'
 import { sortTableItems, type TableSortColumn, type TableSortDirection } from '../lib/tableSort'
+import {
+  createEmptySubscriptionDraft,
+  type SubscriptionDraft,
+  type SubscriptionWorkspaceSession
+} from '../lib/subscriptionSession'
 
 interface SubscriptionsPageProps {
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
+  session?: SubscriptionWorkspaceSession
+  onSessionChange?: (session: SubscriptionWorkspaceSession) => void
 }
 
 type SortField = 'name' | 'category' | 'amount' | 'nextRenewalAt' | 'status'
-type ModalDraft = {
-  id?: string
-  name: string
-  provider: string
-  category: string
-  amount: string
-  billingCycle: CreateSubscriptionInput['billingCycle']
-  billingIntervalMonths: string
-  nextRenewalAt: string
-  renewalReminderDays: string
-  cancellationUrl: string
-  cancellationContact: string
-  usageReviewState: NonNullable<SubscriptionRecord['usageReviewState']>
-  status: SubscriptionStatus
-  reviewFlag: SubscriptionReviewFlag
-  lastUsedAt: string
-  tags: string[]
-  notes: string
-}
+type ModalDraft = SubscriptionDraft
 
 const SUBSCRIPTION_SORT_COLUMNS: readonly TableSortColumn<SubscriptionRecord>[] = [
   { id: 'name', sortValue: (record) => record.name },
@@ -202,24 +199,7 @@ function isSubscriptionTablePreferences(value: unknown): value is SubscriptionTa
 }
 
 function emptyDraft(): ModalDraft {
-  return {
-    name: '',
-    provider: '',
-    category: '',
-    amount: '',
-    billingCycle: 'monthly',
-    billingIntervalMonths: '1',
-    nextRenewalAt: '',
-    renewalReminderDays: '7, 1',
-    cancellationUrl: '',
-    cancellationContact: '',
-    usageReviewState: 'not-reviewed',
-    status: 'active',
-    reviewFlag: 'none',
-    lastUsedAt: '',
-    tags: [],
-    notes: ''
-  }
+  return createEmptySubscriptionDraft()
 }
 
 function toDateInputValue(value?: string): string {
@@ -800,20 +780,66 @@ function TreemapCard({
   )
 }
 
-export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProps): ReactElement {
+export function SubscriptionsPage({
+  vaultApi,
+  pushToast,
+  session,
+  onSessionChange
+}: SubscriptionsPageProps): ReactElement {
   const subscriptionsApi = vaultApi?.subscriptions
   const [records, setRecords] = useState<SubscriptionRecord[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [localSelectedId, setLocalSelectedId] = useState<string | null>(null)
   const [tablePreferences, setTablePreferences] = usePersistentState<SubscriptionTablePreferences>(
     'beacon:subscriptions:table-preferences',
     defaultSubscriptionTablePreferences,
     { validate: isSubscriptionTablePreferences }
   )
-  const [draft, setDraft] = useState<ModalDraft>(emptyDraft())
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [localDraft, setLocalDraft] = useState<ModalDraft>(emptyDraft())
+  const [localIsDrawerOpen, setLocalIsDrawerOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const selectedId = session ? session.selectedId : localSelectedId
+  const draft = session ? session.draft : localDraft
+  const isDrawerOpen = session ? session.isDrawerOpen : localIsDrawerOpen
   const { statusFilter, categoryFilter, sortField, sortDirection } = tablePreferences
+
+  const workspaceSessionRef = useRef<SubscriptionWorkspaceSession>({
+    selectedId,
+    draft,
+    isDrawerOpen
+  })
+  workspaceSessionRef.current = { selectedId, draft, isDrawerOpen }
+
+  const updateWorkspaceSession = useCallback(
+    (patch: Partial<SubscriptionWorkspaceSession>): void => {
+      const currentSession = workspaceSessionRef.current
+      const nextSession: SubscriptionWorkspaceSession = {
+        selectedId: currentSession.selectedId,
+        draft: { ...currentSession.draft, tags: [...currentSession.draft.tags] },
+        isDrawerOpen: currentSession.isDrawerOpen,
+        ...patch
+      }
+      nextSession.draft = { ...nextSession.draft, tags: [...nextSession.draft.tags] }
+
+      if (!session) {
+        setLocalSelectedId(nextSession.selectedId)
+        setLocalDraft(nextSession.draft)
+        setLocalIsDrawerOpen(nextSession.isDrawerOpen)
+      }
+      onSessionChange?.(nextSession)
+    },
+    [onSessionChange, session]
+  )
+
+  const updateDraft = (patch: Partial<ModalDraft>): void => {
+    updateWorkspaceSession({
+      draft: {
+        ...workspaceSessionRef.current.draft,
+        ...patch,
+        tags: patch.tags ? [...patch.tags] : [...workspaceSessionRef.current.draft.tags]
+      }
+    })
+  }
 
   useEffect(() => {
     if (!subscriptionsApi) {
@@ -829,7 +855,6 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
           return
         }
         setRecords(items)
-        setSelectedId(items[0]?.id ?? null)
         migrationWarnings.forEach((warning) => pushToast('info', warning))
       })
       .catch((error) => pushToast('error', String(error)))
@@ -843,6 +868,17 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
       active = false
     }
   }, [pushToast, subscriptionsApi])
+
+  useEffect(() => {
+    if (
+      records.length === 0 ||
+      (selectedId && records.some((record) => record.id === selectedId))
+    ) {
+      return
+    }
+
+    updateWorkspaceSession({ selectedId: records[0]?.id ?? null })
+  }, [records, selectedId, updateWorkspaceSession])
 
   const categories = useMemo(
     () =>
@@ -910,17 +946,15 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
       updated[index] = next
       return updated
     })
-    setSelectedId(next.id)
+    updateWorkspaceSession({ selectedId: next.id })
   }
 
   const openCreateModal = (): void => {
-    setDraft(emptyDraft())
-    setIsDrawerOpen(true)
+    updateWorkspaceSession({ draft: emptyDraft(), isDrawerOpen: true })
   }
 
   const openEditModal = (record: SubscriptionRecord): void => {
-    setDraft(draftFromRecord(record))
-    setIsDrawerOpen(true)
+    updateWorkspaceSession({ draft: draftFromRecord(record), isDrawerOpen: true })
   }
 
   const handleSave = async (): Promise<void> => {
@@ -942,7 +976,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         ? await subscriptionsApi.update(toUpdateInput(draft))
         : await subscriptionsApi.create(toCreateInput(draft))
       upsertRecord(saved)
-      setIsDrawerOpen(false)
+      updateWorkspaceSession({ isDrawerOpen: false })
       pushToast('success', draft.id ? 'Subscription updated' : 'Subscription added')
     } catch (error) {
       pushToast('error', String(error))
@@ -971,7 +1005,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
     try {
       await subscriptionsApi.delete(record.id)
       setRecords((current) => current.filter((item) => item.id !== record.id))
-      setSelectedId((current) => (current === record.id ? null : current))
+      updateWorkspaceSession({ selectedId: selectedId === record.id ? null : selectedId })
       pushToast('success', 'Subscription removed')
     } catch (error) {
       pushToast('error', String(error))
@@ -1057,7 +1091,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 onSelectCategory={(value) =>
                   setTablePreferences((current) => ({ ...current, categoryFilter: value }))
                 }
-                onSelectRecord={setSelectedId}
+                onSelectRecord={(recordId) => updateWorkspaceSession({ selectedId: recordId })}
               />
             </section>
 
@@ -1143,7 +1177,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                             data-state={selectedId === record.id ? 'selected' : undefined}
                             className="cursor-pointer"
                             title={buildSubscriptionTooltip(record)}
-                            onClick={() => setSelectedId(record.id)}
+                            onClick={() => updateWorkspaceSession({ selectedId: record.id })}
                           >
                             <TableCell>
                               <div
@@ -1254,7 +1288,10 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
         )}
       </div>
 
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+      <Drawer
+        open={isDrawerOpen}
+        onOpenChange={(open) => updateWorkspaceSession({ isDrawerOpen: open })}
+      >
         <DrawerContent side="right">
           <DrawerHeader className="border-b border-border pb-4">
             <DrawerTitle>{draft.id ? 'Edit subscription' : 'Add subscription'}</DrawerTitle>
@@ -1270,7 +1307,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.name}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, name: value }))
+                    updateDraft({ name: value })
                   }}
                 />
               </Field>
@@ -1280,7 +1317,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.provider}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, provider: value }))
+                    updateDraft({ provider: value })
                   }}
                 />
               </Field>
@@ -1293,10 +1330,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     ...categoryOptions.map((option) => ({ value: option, label: option }))
                   ]}
                   onValueChange={(value) => {
-                    setDraft((current) => ({
-                      ...current,
-                      category: value === '__none__' ? '' : value
-                    }))
+                    updateDraft({ category: value === '__none__' ? '' : value })
                   }}
                   label="Category"
                   searchPlaceholder="Search categories"
@@ -1315,7 +1349,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.amount}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, amount: value }))
+                    updateDraft({ amount: value })
                   }}
                 />
               </Field>
@@ -1329,7 +1363,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   }))}
                   onValueChange={(value) => {
                     const billingCycle = value as CreateSubscriptionInput['billingCycle']
-                    setDraft((current) => ({ ...current, billingCycle }))
+                    updateDraft({ billingCycle })
                   }}
                   label="Billing cycle"
                   searchPlaceholder="Search billing cycles"
@@ -1353,7 +1387,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     value={draft.billingIntervalMonths}
                     onChange={(event) => {
                       const value = event.currentTarget.value
-                      setDraft((current) => ({ ...current, billingIntervalMonths: value }))
+                      updateDraft({ billingIntervalMonths: value })
                     }}
                   />
                 </Field>
@@ -1365,7 +1399,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.nextRenewalAt}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, nextRenewalAt: value }))
+                    updateDraft({ nextRenewalAt: value })
                   }}
                 />
               </Field>
@@ -1375,7 +1409,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.renewalReminderDays}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, renewalReminderDays: value }))
+                    updateDraft({ renewalReminderDays: value })
                   }}
                   placeholder="7, 1"
                 />
@@ -1389,7 +1423,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     value: option
                   }))}
                   onValueChange={(value) => {
-                    setDraft((current) => ({ ...current, status: value as SubscriptionStatus }))
+                    updateDraft({ status: value as SubscriptionStatus })
                   }}
                   id="subscription-status"
                 />
@@ -1403,10 +1437,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     value: option
                   }))}
                   onValueChange={(value) => {
-                    setDraft((current) => ({
-                      ...current,
-                      reviewFlag: value as SubscriptionReviewFlag
-                    }))
+                    updateDraft({ reviewFlag: value as SubscriptionReviewFlag })
                   }}
                   id="subscription-review-flag"
                 />
@@ -1418,7 +1449,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.lastUsedAt}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, lastUsedAt: value }))
+                    updateDraft({ lastUsedAt: value })
                   }}
                 />
               </Field>
@@ -1431,10 +1462,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                     value: option
                   }))}
                   onValueChange={(value) => {
-                    setDraft((current) => ({
-                      ...current,
-                      usageReviewState: value as ModalDraft['usageReviewState']
-                    }))
+                    updateDraft({ usageReviewState: value as ModalDraft['usageReviewState'] })
                   }}
                   id="subscription-usage-review"
                 />
@@ -1450,7 +1478,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.cancellationUrl}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, cancellationUrl: value }))
+                    updateDraft({ cancellationUrl: value })
                   }}
                   placeholder="https://…"
                 />
@@ -1465,7 +1493,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.cancellationContact}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, cancellationContact: value }))
+                    updateDraft({ cancellationContact: value })
                   }}
                   placeholder="support@example.com"
                 />
@@ -1474,7 +1502,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                 <TagEditor
                   value={draft.tags}
                   availableTags={subscriptionTagOptions}
-                  onChange={(tags) => setDraft((current) => ({ ...current, tags }))}
+                  onChange={(tags) => updateDraft({ tags })}
                   label="Subscription tags"
                   searchPlaceholder="Search or add subscription tags"
                   testId="subscription-tags-editor"
@@ -1494,7 +1522,7 @@ export function SubscriptionsPage({ vaultApi, pushToast }: SubscriptionsPageProp
                   value={draft.notes}
                   onChange={(event) => {
                     const value = event.currentTarget.value
-                    setDraft((current) => ({ ...current, notes: value }))
+                    updateDraft({ notes: value })
                   }}
                   rows={4}
                 />

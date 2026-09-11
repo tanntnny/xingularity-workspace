@@ -61,6 +61,10 @@ interface CapturePageProps {
   resources: ResourceRef[]
   onCaptureResource: (canonicalUri: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
+  draft?: string
+  onDraftChange?: (value: string) => void
+  resourceDraft?: string
+  onResourceDraftChange?: (value: string) => void
 }
 
 export function CapturePage({
@@ -72,13 +76,21 @@ export function CapturePage({
   onConvert,
   resources,
   onCaptureResource,
-  onOpenResource
+  onOpenResource,
+  draft: controlledDraft,
+  onDraftChange,
+  resourceDraft: controlledResourceDraft,
+  onResourceDraftChange
 }: CapturePageProps): ReactElement {
-  const [draft, setDraft] = useState('')
+  const [localDraft, setLocalDraft] = useState('')
   const [isCapturing, setIsCapturing] = useState(false)
   const [convertingPath, setConvertingPath] = useState<string | null>(null)
-  const [resourceDraft, setResourceDraft] = useState('')
+  const [localResourceDraft, setLocalResourceDraft] = useState('')
   const [resourceBusy, setResourceBusy] = useState(false)
+  const draft = controlledDraft ?? localDraft
+  const resourceDraft = controlledResourceDraft ?? localResourceDraft
+  const setDraft = onDraftChange ?? setLocalDraft
+  const setResourceDraft = onResourceDraftChange ?? setLocalResourceDraft
   const groupedNotes = useMemo(() => groupFleetingNotes(notes), [notes])
   const isBusy = isCapturing || convertingPath !== null
 

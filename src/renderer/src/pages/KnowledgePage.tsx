@@ -12,6 +12,7 @@ import {
   type KnowledgeEntityKind
 } from '../lib/knowledgeGraph'
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
+import type { WorkspaceViewport } from '../lib/workspaceTabs'
 
 interface KnowledgePageProps {
   notes: NoteListItem[]
@@ -22,6 +23,8 @@ interface KnowledgePageProps {
   onOpenEntity?: (kind: KnowledgeEntityKind, id: string) => void
   orphanRingRadiusPx?: number | null
   showOrphans?: boolean
+  initialViewport?: WorkspaceViewport | null
+  onViewportChange?: (viewport: WorkspaceViewport) => void
 }
 
 interface GraphNodeDatum extends SimulationNodeDatum {
@@ -53,7 +56,9 @@ export function KnowledgePage({
   resources = [],
   onOpenEntity,
   orphanRingRadiusPx = null,
-  showOrphans = true
+  showOrphans = true,
+  initialViewport = null,
+  onViewportChange
 }: KnowledgePageProps): ReactElement {
   return (
     <ReactFlowProvider>
@@ -66,6 +71,8 @@ export function KnowledgePage({
         onOpenEntity={onOpenEntity}
         orphanRingRadiusPx={orphanRingRadiusPx}
         showOrphans={showOrphans}
+        initialViewport={initialViewport}
+        onViewportChange={onViewportChange}
       />
     </ReactFlowProvider>
   )
@@ -79,7 +86,9 @@ function KnowledgeCanvas({
   resources = [],
   onOpenEntity,
   orphanRingRadiusPx = null,
-  showOrphans = true
+  showOrphans = true,
+  initialViewport = null,
+  onViewportChange
 }: KnowledgePageProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -299,6 +308,7 @@ function KnowledgeCanvas({
         nodes={[]}
         edges={[]}
         fitView={false}
+        defaultViewport={initialViewport ?? undefined}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -306,6 +316,7 @@ function KnowledgeCanvas({
         zoomOnScroll
         panOnScroll
         panOnDrag
+        onMoveEnd={(_event, viewport) => onViewportChange?.(viewport)}
         proOptions={{ hideAttribution: true }}
       />
       {hasGraphNodes ? (

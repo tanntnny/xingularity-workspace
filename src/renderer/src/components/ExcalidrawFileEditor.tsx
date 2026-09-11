@@ -36,9 +36,12 @@ interface ExcalidrawFileEditorProps {
   notePath: string
   vaultApi: RendererVaultApi | undefined
   pushToast: (kind: ToastKind, message: string) => void
+  initialScene?: ExcalidrawSessionScene | null
+  onSceneChange?: (scene: ExcalidrawSessionScene) => void
 }
 
 export interface ExcalidrawFileEditorHandle {
+  captureScene: () => ExcalidrawSessionScene | null
   prepareForPathMutation: () => Promise<void>
   cancelPathMutation: () => void
 }
@@ -78,7 +81,10 @@ function serializeScene(
 export const ExcalidrawFileEditor = forwardRef<
   ExcalidrawFileEditorHandle,
   ExcalidrawFileEditorProps
->(function ExcalidrawFileEditor({ notePath, vaultApi, pushToast }, ref): ReactElement {
+>(function ExcalidrawFileEditor(
+  { notePath, vaultApi, pushToast, initialScene = null, onSceneChange },
+  ref
+): ReactElement {
   const [theme] = useState<ExcalidrawTheme>(THEME.DARK)
   const [isLoading, setIsLoading] = useState(true)
   const [activeToolType, setActiveToolType] = useState('selection')
@@ -109,9 +115,9 @@ export const ExcalidrawFileEditor = forwardRef<
           ...scene.appState,
           viewBackgroundColor: 'transparent'
         },
-        scrollToContent: true
+        scrollToContent: initialScene == null
       }) as ExcalidrawInitialData,
-    [scene]
+    [initialScene, scene]
   )
 
   const flushPendingSave = useCallback(
@@ -191,9 +197,19 @@ export const ExcalidrawFileEditor = forwardRef<
     [pushToast, vaultApi]
   )
 
+  const captureScene = useCallback((): ExcalidrawSessionScene | null => {
+    const api = apiRef.current
+    if (!api) {
+      return scene
+    }
+
+    return serializeScene(api.getSceneElements(), api.getAppState(), api.getFiles())
+  }, [scene])
+
   useImperativeHandle(
     ref,
     () => ({
+      captureScene,
       prepareForPathMutation: async () => {
         skipCleanupSaveRef.current = true
         pathMutationPendingRef.current = true
@@ -216,7 +232,7 @@ export const ExcalidrawFileEditor = forwardRef<
         setReloadToken((current) => current + 1)
       }
     }),
-    [flushPendingSave]
+    [captureScene, flushPendingSave]
   )
 
   useEffect(() => {
@@ -257,7 +273,7 @@ export const ExcalidrawFileEditor = forwardRef<
         if (result.recovered) {
           pushToast('info', 'Drawing recovered from its last valid save')
         }
-        setScene(result.document.scene)
+        setScene(initialScene ?? result.document.scene)
         setMetadata(
           result.document.metadata ?? {
             title: notePath
@@ -295,7 +311,7 @@ export const ExcalidrawFileEditor = forwardRef<
     return () => {
       cancelled = true
     }
-  }, [flushPendingSave, notePath, pushToast, reloadToken, vaultApi])
+  }, [flushPendingSave, initialScene, notePath, pushToast, reloadToken, vaultApi])
 
   useEffect(() => {
     return () => {
@@ -313,10 +329,12 @@ export const ExcalidrawFileEditor = forwardRef<
       }
 
       setActiveToolType(appState.activeTool.type)
+      const nextScene = serializeScene(elements, appState, files)
       pendingSceneRef.current = {
         notePath,
-        scene: serializeScene(elements, appState, files)
+        scene: nextScene
       }
+      onSceneChange?.(nextScene)
 
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current)
@@ -326,7 +344,7 @@ export const ExcalidrawFileEditor = forwardRef<
         void flushPendingSave()
       }, SAVE_DEBOUNCE_MS)
     },
-    [flushPendingSave, notePath]
+    [flushPendingSave, notePath, onSceneChange]
   )
 
   return (
