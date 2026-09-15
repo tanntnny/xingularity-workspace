@@ -75,4 +75,47 @@ describe('createNoteSaveCoordinator', () => {
       document: { version: 1, tags: [], markdown: 'recovered' }
     })
   })
+
+  it('keeps each workspace tab on its own compare-and-swap baseline', async () => {
+    const bases: Array<{ content: string; baseHash: string | null; workspaceTabId?: string }> = []
+    let revisionNumber = 0
+    const coordinator = createNoteSaveCoordinator({
+      writeNote: async ({ content, baseHash, workspaceTabId }) => {
+        bases.push({ content, baseHash: baseHash ?? null, workspaceTabId })
+        revisionNumber += 1
+        return {
+          ok: true,
+          path: 'note.md',
+          revision: {
+            contentHash: `sha256:written-${revisionNumber}`,
+            size: content.length,
+            mtimeMs: revisionNumber
+          },
+          transactionId: `tx-${revisionNumber}`
+        }
+      }
+    })
+
+    coordinator.setBaseRevision('note.md', 'sha256:base', 'tab-two')
+
+    await coordinator.enqueue({
+      relPath: 'note.md',
+      content: 'tab one draft',
+      document: { version: 1, tags: [], markdown: 'tab one draft' },
+      baseHash: 'sha256:base',
+      workspaceTabId: 'tab-one'
+    })
+    await coordinator.enqueue({
+      relPath: 'note.md',
+      content: 'tab two draft',
+      document: { version: 1, tags: [], markdown: 'tab two draft' },
+      baseHash: 'sha256:base',
+      workspaceTabId: 'tab-two'
+    })
+
+    expect(bases).toEqual([
+      { content: 'tab one draft', baseHash: 'sha256:base', workspaceTabId: 'tab-one' },
+      { content: 'tab two draft', baseHash: 'sha256:base', workspaceTabId: 'tab-two' }
+    ])
+  })
 })

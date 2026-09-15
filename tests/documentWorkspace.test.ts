@@ -266,6 +266,8 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('max-w-none')
     expect(markup).toContain('overflow-auto')
     expect(markup).toContain('px-2')
+    expect(markup).toContain('data-workspace-scrollport="true"')
+    expect(markup).not.toContain('scrollbar-none')
   })
 
   it('keeps page composition full-width without adding a nested main landmark', () => {
@@ -299,6 +301,7 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('gap-3')
     expect(markup).toContain('overflow-y-auto')
     expect(markup).toContain('data-workspace-scrollport="true"')
+    expect(markup).not.toContain('scrollbar-none')
     expect(markup).not.toContain('bg-card p-3')
   })
 
@@ -345,6 +348,7 @@ describe('document workspace right panel', () => {
     expect(markup).toContain('overflow-hidden')
     expect(markup).toContain('overflow-y-auto')
     expect(markup).toContain('data-workspace-scrollport="true"')
+    expect(markup).not.toContain('scrollbar-none')
   })
 
   it('marks a multi-section right panel as the shared scrollport', () => {
@@ -359,6 +363,7 @@ describe('document workspace right panel', () => {
 
     expect(markup).toContain('data-workspace-scrollport="true"')
     expect(markup).toContain('overflow-y-auto')
+    expect(markup).not.toContain('scrollbar-none')
   })
 
   it('composes the main content and right panel into an accessible resizable group', () => {

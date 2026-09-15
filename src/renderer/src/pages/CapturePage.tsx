@@ -34,6 +34,7 @@ import type {
   FleetingNote,
   ResourceRef
 } from '../../../shared/types'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
 import {
   FLEETING_NOTE_GROUPS,
   getFleetingNoteGroupColorStyles,
@@ -61,11 +62,7 @@ interface CapturePageProps {
   ) => Promise<FleetingConversionResult>
   resources: ResourceRef[]
   onCaptureResource: (canonicalUri: string) => Promise<void>
-  onOpenResource: (resourceId: string) => Promise<void>
-  draft?: string
-  onDraftChange?: (value: string) => void
-  resourceDraft?: string
-  onResourceDraftChange?: (value: string) => void
+  onOpenResource: (resourceId: string, options?: WorkspaceOpenOptions) => Promise<void>
 }
 
 export function CapturePage({
@@ -77,21 +74,13 @@ export function CapturePage({
   onConvert,
   resources,
   onCaptureResource,
-  onOpenResource,
-  draft: controlledDraft,
-  onDraftChange,
-  resourceDraft: controlledResourceDraft,
-  onResourceDraftChange
+  onOpenResource
 }: CapturePageProps): ReactElement {
-  const [localDraft, setLocalDraft] = useState('')
+  const [draft, setDraft] = useState('')
   const [isCapturing, setIsCapturing] = useState(false)
   const [convertingPath, setConvertingPath] = useState<string | null>(null)
-  const [localResourceDraft, setLocalResourceDraft] = useState('')
+  const [resourceDraft, setResourceDraft] = useState('')
   const [resourceBusy, setResourceBusy] = useState(false)
-  const draft = controlledDraft ?? localDraft
-  const resourceDraft = controlledResourceDraft ?? localResourceDraft
-  const setDraft = onDraftChange ?? setLocalDraft
-  const setResourceDraft = onResourceDraftChange ?? setLocalResourceDraft
   const groupedNotes = useMemo(() => groupFleetingNotes(notes), [notes])
   const isBusy = isCapturing || convertingPath !== null
 
@@ -276,7 +265,22 @@ export function CapturePage({
                 key={resource.id}
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
-                onClick={() => void onOpenResource(resource.id)}
+                onClick={(event) => {
+                  const options = getWorkspaceOpenOptions(event)
+                  if (options.openInNewTab) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }
+                  void onOpenResource(resource.id, options)
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void onOpenResource(resource.id, { openInNewTab: true })
+                }}
               >
                 <Link size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
                 <WorkspaceTextFade className="min-w-0 flex-1">{resource.title}</WorkspaceTextFade>

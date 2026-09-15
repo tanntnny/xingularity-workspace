@@ -44,6 +44,7 @@ import {
 } from '../lib/calendarTaskDragSession'
 import { useCalendarDragAutoScroll } from '../hooks/useCalendarDragAutoScroll'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { getWorkspaceOpenOptions } from '../lib/workspaceOpen'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 
 interface CalendarMonthViewProps {
@@ -139,6 +140,7 @@ export function CalendarMonthView({
       HTMLElement,
       {
         onContextMenu?: (event: MouseEvent) => void
+        onAuxClick?: (event: MouseEvent) => void
         onMouseMove: (event: MouseEvent) => void
         onMouseLeave: () => void
         contextMenuTargets: HTMLElement[]
@@ -540,6 +542,24 @@ export function CalendarMonthView({
       })
     }
 
+    const onAuxClick = (event: MouseEvent): void => {
+      if (event.button !== 1) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      const task = tasksByIdRef.current[taskId]
+      if (!task) {
+        return
+      }
+      const date = task.date ?? task.endDate ?? selectedDate
+      setHoveredTaskCard(null)
+      setCalendarContextMenu(null)
+      onSelectDate(date)
+      onOpenTask?.(taskId, { openInNewTab: true })
+    }
+
     const contextMenuTargets = [
       mountInfo.el,
       mountInfo.el.querySelector<HTMLElement>('.fc-event-main')
@@ -552,8 +572,10 @@ export function CalendarMonthView({
     }
     mountInfo.el.addEventListener('mousemove', onMouseMove)
     mountInfo.el.addEventListener('mouseleave', onMouseLeave)
+    mountInfo.el.addEventListener('auxclick', onAuxClick)
     eventListenerMapRef.current.set(mountInfo.el, {
       onContextMenu,
+      onAuxClick,
       onMouseMove,
       onMouseLeave,
       contextMenuTargets
@@ -580,6 +602,9 @@ export function CalendarMonthView({
     }
     mountInfo.el.removeEventListener('mousemove', handlers.onMouseMove)
     mountInfo.el.removeEventListener('mouseleave', handlers.onMouseLeave)
+    if (handlers.onAuxClick) {
+      mountInfo.el.removeEventListener('auxclick', handlers.onAuxClick)
+    }
     eventListenerMapRef.current.delete(mountInfo.el)
   }
 
@@ -709,7 +734,7 @@ export function CalendarMonthView({
             setHoveredTaskCard(null)
             setCalendarContextMenu(null)
             onSelectDate(date)
-            onOpenTask?.(info.event.id)
+            onOpenTask?.(info.event.id, getWorkspaceOpenOptions(info.jsEvent))
           }}
           eventClassNames={(arg) => {
             const task = tasksById[arg.event.id]

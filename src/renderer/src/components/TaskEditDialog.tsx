@@ -1,4 +1,4 @@
-import { ReactElement, useCallback, useEffect, useRef, useState } from 'react'
+import { ReactElement, useRef, useState } from 'react'
 import {
   CalendarTask,
   CalendarTaskType,
@@ -31,7 +31,6 @@ import { WorkspaceCenterEditDialog } from './WorkspaceCenterEditDialog'
 import { Copy } from './ui/icons'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import { TaskRecurrenceEditor } from './TaskRecurrenceEditor'
-import { createTaskEditDialogDraft, type TaskEditDialogDraft } from '../lib/taskDialogSession'
 
 const TASK_DIALOG_STATUS_CHIP_CLASS_NAME =
   'max-w-full justify-start rounded-[var(--radius-button-pill)]'
@@ -46,9 +45,6 @@ export interface TaskEditDialogProps {
   availableTags?: readonly string[]
   onClose: () => void
   onSave: (taskId: string, patch: Partial<CalendarTask>) => void | Promise<void>
-  draft?: TaskEditDialogDraft
-  onDraftChange?: (draft: TaskEditDialogDraft) => void
-  onRegisterFlush?: (flush: (() => Promise<void>) | null) => void
   onDelete: (taskId: string) => void
   onDuplicate?: (taskId: string) => void | Promise<void>
   onConfigureRecurrence?: (
@@ -68,9 +64,6 @@ export function TaskEditDialog({
   availableTags = [],
   onClose,
   onSave,
-  draft: controlledDraft,
-  onDraftChange,
-  onRegisterFlush,
   onDelete,
   onDuplicate,
   onConfigureRecurrence,
@@ -78,62 +71,25 @@ export function TaskEditDialog({
   vimModeEnabled,
   vimKeyMappings
 }: TaskEditDialogProps): ReactElement {
-  const [localDraft, setLocalDraft] = useState<TaskEditDialogDraft>(() => ({
-    ...createTaskEditDialogDraft(task, isNewTask),
-    status: getTaskStatus(task.status, task.completed)
-  }))
-  const activeDraft = controlledDraft ?? localDraft
-  const titleDraft = activeDraft.title
-  const priority = activeDraft.priority
-  const taskType = activeDraft.taskType
-  const status = activeDraft.status
-  const projectId = activeDraft.projectId
-  const milestoneId = activeDraft.milestoneId
-  const tags = activeDraft.tags
-  const date = activeDraft.date
-  const endDate = activeDraft.endDate
-  const time = activeDraft.time
-  const endTime = activeDraft.endTime
+  const [titleDraft, setTitleDraft] = useState(() => (isNewTask ? '' : task.title))
+  const [priority, setPriority] = useState<TaskPriority>(task.priority ?? 'low')
+  const [taskType, setTaskType] = useState<CalendarTaskType>(task.taskType ?? 'assignment')
+  const [status, setStatus] = useState<TaskStatus>(getTaskStatus(task.status, task.completed))
+  const [projectId, setProjectId] = useState(task.projectId ?? '')
+  const [milestoneId, setMilestoneId] = useState(task.milestoneId ?? '')
+  const [tags, setTags] = useState(task.tags ?? [])
+  const [date, setDate] = useState(task.date ?? '')
+  const [endDate, setEndDate] = useState(task.endDate ?? '')
+  const [time, setTime] = useState(task.time ?? '')
+  const [endTime, setEndTime] = useState(task.endTime ?? '')
   const editorRef = useRef<NoteEditorHandle | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
-  const descriptionRef = useRef(activeDraft.description)
+  const descriptionRef = useRef(task.description ?? '')
   const closeHandledRef = useRef(false)
   const duplicateInFlightRef = useRef(false)
-  const flushDescriptionRef = useRef<() => Promise<void>>(async () => undefined)
   const selectedProject = projects.find((project) => project.id === projectId)
   const dialogTitle = titleDraft.trim() || (isNewTask ? 'New task' : task.title)
   const milestoneOptions = getMilestoneChipOptions(selectedProject, tasks)
-
-  const updateDraft = useCallback(
-    (patch: Partial<TaskEditDialogDraft>): void => {
-      const nextDraft: TaskEditDialogDraft = {
-        ...activeDraft,
-        ...patch,
-        tags: patch.tags ? [...patch.tags] : [...activeDraft.tags]
-      }
-      if (!controlledDraft) {
-        setLocalDraft(nextDraft)
-      }
-      onDraftChange?.(nextDraft)
-    },
-    [activeDraft, controlledDraft, onDraftChange]
-  )
-
-  const setTitleDraft = (value: string): void => updateDraft({ title: value })
-  const setPriority = (value: TaskPriority): void => updateDraft({ priority: value })
-  const setTaskType = (value: CalendarTaskType): void => updateDraft({ taskType: value })
-  const setStatus = (value: TaskStatus): void => updateDraft({ status: value })
-  const setProjectId = (value: string): void => updateDraft({ projectId: value })
-  const setMilestoneId = (value: string): void => updateDraft({ milestoneId: value })
-  const setTags = (value: string[]): void => updateDraft({ tags: value })
-  const setDate = (value: string): void => updateDraft({ date: value })
-  const setEndDate = (value: string): void => updateDraft({ endDate: value })
-  const setTime = (value: string): void => updateDraft({ time: value })
-  const setEndTime = (value: string): void => updateDraft({ endTime: value })
-
-  useEffect(() => {
-    descriptionRef.current = activeDraft.description
-  }, [activeDraft.description])
 
   const buildPatch = (): Partial<CalendarTask> => {
     const patch: Partial<CalendarTask> = {}
@@ -196,25 +152,14 @@ export function TaskEditDialog({
 
   const handleDescriptionSnapshot = (snapshot: NoteEditorSnapshot): void => {
     descriptionRef.current = snapshot.content
-    updateDraft({ description: snapshot.content })
   }
 
-  const flushDescription = useCallback(async (): Promise<void> => {
+  const flushDescription = async (): Promise<void> => {
     const snapshot = await editorRef.current?.flushPendingChanges()
     if (snapshot) {
       descriptionRef.current = snapshot.content
-      updateDraft({ description: snapshot.content })
     }
-  }, [updateDraft])
-
-  useEffect(() => {
-    flushDescriptionRef.current = flushDescription
-  }, [flushDescription])
-
-  useEffect(() => {
-    onRegisterFlush?.(() => flushDescriptionRef.current())
-    return () => onRegisterFlush?.(null)
-  }, [onRegisterFlush])
+  }
 
   const handleClose = async (): Promise<void> => {
     if (closeHandledRef.current) return
@@ -328,7 +273,7 @@ export function TaskEditDialog({
           <Editor
             ref={editorRef}
             key={task.id}
-            initialContent={activeDraft.description}
+            initialContent={task.description ?? ''}
             density="compact"
             onDirty={() => undefined}
             onSnapshotChange={handleDescriptionSnapshot}

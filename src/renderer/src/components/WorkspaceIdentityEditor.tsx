@@ -32,8 +32,8 @@ export function WorkspaceIdentityEditor({
 
   return (
     <div data-testid={`${testIdPrefix}-identity`}>
-      <div className="space-y-3" data-testid={`${testIdPrefix}-header`}>
-        <div className="flex items-center gap-3" data-testid={`${testIdPrefix}-icon-row`}>
+      <div className="flex items-center gap-3" data-testid={`${testIdPrefix}-header`}>
+        <div className="flex shrink-0 items-center" data-testid={`${testIdPrefix}-icon-row`}>
           <ProjectIconPicker
             icon={icon}
             onChange={onIconChange}
@@ -56,7 +56,7 @@ export function WorkspaceIdentityEditor({
             }
           }}
           className={cn(
-            'h-auto border-0 bg-transparent px-0 text-3xl font-bold shadow-none focus-visible:ring-0',
+            'min-w-0 flex-1 h-auto border-0 bg-transparent px-0 text-3xl font-bold shadow-none focus-visible:ring-0',
             inputClassName
           )}
           aria-label={`${label} name`}

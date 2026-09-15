@@ -76,6 +76,7 @@ export function WorkspaceCommandPalette({
                   <CommandItem
                     key={item.id}
                     value={item.id}
+                    variant="palette"
                     keywords={item.keywords ? [...item.keywords] : undefined}
                     disabled={item.disabled}
                     onSelect={() => {

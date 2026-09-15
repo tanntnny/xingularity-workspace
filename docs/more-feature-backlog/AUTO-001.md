@@ -8,7 +8,7 @@ Example: a schedule declaring `auto_apply` with mutating permissions could run a
 
 ## After change
 
-Schedule permissions are normalized and validated; secret access requires declared secret references; mutating or secret-enabled auto-apply jobs are downgraded to `review_before_apply`. A run can be cancelled through IPC, aborts JavaScript/Python execution, and persists `cancelled` status. Review runs apply actions only through the explicit approval path.
+Schedule permissions are normalized and validated; secret access requires declared secret references; the selected output mode is preserved so an explicit `auto_apply` choice applies emitted actions immediately. A run can be cancelled through IPC, aborts JavaScript/Python execution, and persists `cancelled` status. Review runs apply actions only through the explicit approval path.
 
 ## Verification
 

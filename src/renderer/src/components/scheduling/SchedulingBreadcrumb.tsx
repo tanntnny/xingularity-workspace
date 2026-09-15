@@ -10,11 +10,12 @@ import {
 } from '../ui'
 import { Bolt } from '../ui/icons'
 import type { SchedulingView } from './types'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../../lib/workspaceOpen'
 
 interface SchedulingBreadcrumbProps {
   value: SchedulingView
   automationName?: string | null
-  onNavigate: (view: SchedulingView) => void
+  onNavigate: (view: SchedulingView, options?: WorkspaceOpenOptions) => void
 }
 
 export function SchedulingBreadcrumb({
@@ -36,7 +37,15 @@ export function SchedulingBreadcrumb({
             </BreadcrumbPage>
           ) : (
             <BreadcrumbButton
-              onClick={() => onNavigate('list')}
+              onClick={(event) => onNavigate('list', getWorkspaceOpenOptions(event))}
+              onAuxClick={(event) => {
+                if (event.button !== 1) {
+                  return
+                }
+                event.preventDefault()
+                event.stopPropagation()
+                onNavigate('list', { openInNewTab: true })
+              }}
               className="text-sm text-muted-foreground"
               data-testid="scheduling-breadcrumb:scheduling"
             >

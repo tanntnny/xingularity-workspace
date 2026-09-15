@@ -30,7 +30,7 @@ interface ProjectJournalFeedProps<T extends ProjectJournalEntry> {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onDelete: (entryId: string) => Promise<void>
   renderMetadata: (entry: T) => ReactNode
   getMenuGroups: (entry: T, requestDelete: () => void) => ActionMenuGroup[]

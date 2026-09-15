@@ -629,6 +629,32 @@ const gridBoardStateSchema = z.object({
   items: z.array(gridBoardItemSchema).max(500)
 })
 
+const stickyNoteBoardStateSchema = z.object({
+  viewport: z.object({
+    x: z.number(),
+    y: z.number(),
+    zoom: z.number().positive().max(4)
+  }),
+  notes: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(200),
+        text: z.string().max(20_000),
+        color: z.enum(['yellow', 'pink', 'blue', 'green', 'orange', 'purple']),
+        position: z.object({
+          x: z.number(),
+          y: z.number()
+        }),
+        size: z.object({
+          width: z.number().positive().min(180).max(10_000),
+          height: z.number().positive().min(160).max(10_000)
+        }),
+        zIndex: z.number().int().min(0).max(10_000)
+      })
+    )
+    .max(500)
+})
+
 const noteVimKeyMappingSchema = z.object({
   id: z.string().min(1).max(120),
   mode: z.enum(NOTE_VIM_MAPPING_MODE_VALUES),
@@ -679,6 +705,7 @@ const settingsUpdateSchema = z.object({
   workspaceViews: z.array(workspaceViewSchema).max(100).optional(),
   folderColors: folderColorsSchema.optional(),
   gridBoard: gridBoardStateSchema.optional(),
+  stickyNoteBoard: stickyNoteBoardStateSchema.optional(),
   lastOpenedNotePath: z.string().min(1).max(512).nullable().optional(),
   recentNotebookPaths: z.array(z.string().min(1).max(512)).max(5).optional(),
   recentPageTargets: z.array(recentPageTargetSchema).max(MAX_RECENT_PAGE_TARGETS).optional(),

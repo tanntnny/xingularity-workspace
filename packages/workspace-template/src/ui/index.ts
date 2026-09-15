@@ -21,6 +21,11 @@ export { StatusChipSelect } from './status-chip-select'
 export type { StatusChipOption, StatusChipSelectProps } from './status-chip-select'
 export { WorkspaceTextClip } from './workspace-text-clip'
 export type { WorkspaceTextClipProps } from './workspace-text-clip'
+export { WorkspaceTextEllipsis } from './workspace-text-ellipsis'
+export type {
+  WorkspaceTextEllipsisLines,
+  WorkspaceTextEllipsisProps
+} from './workspace-text-ellipsis'
 export { SelectionPopover } from './selection-popover'
 export type {
   MultipleSelectionPopoverProps,

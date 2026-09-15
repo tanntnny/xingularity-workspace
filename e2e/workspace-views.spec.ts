@@ -209,7 +209,7 @@ test.describe('workspace views', () => {
         .filter({ hasText: 'Untitled Tasks View' })
         .first()
       await expect(taskViewBreadcrumb).toBeVisible()
-      await expect(taskViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(0)
+      await expect(taskViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(1)
       await expect(page.getByTestId('sidebar-page:tasks')).toHaveAttribute('data-active', 'false')
       await expect(taskViewButton).toHaveAttribute('data-active', 'true')
 
@@ -267,7 +267,7 @@ test.describe('workspace views', () => {
         .filter({ hasText: 'Untitled Resources View' })
         .first()
       await expect(resourceViewBreadcrumb).toBeVisible()
-      await expect(resourceViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(0)
+      await expect(resourceViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(1)
       await expect(page.getByTestId('sidebar-page:resources')).toHaveAttribute(
         'data-active',
         'false'
@@ -313,7 +313,7 @@ test.describe('workspace views', () => {
         .locator('nav[aria-label="breadcrumb"]')
         .filter({ hasText: 'Planning' })
         .first()
-      await expect(renamedTaskViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(0)
+      await expect(renamedTaskViewBreadcrumb.locator('[data-project-icon-surface]')).toHaveCount(1)
       await expect(page.getByTestId('sidebar-page:tasks')).toHaveAttribute('data-active', 'false')
       await expect(renamedTaskViewButton).toHaveAttribute('data-active', 'true')
       await page.getByTestId(`sidebar-view-actions:${taskViewId}`).click()

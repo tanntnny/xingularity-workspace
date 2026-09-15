@@ -40,6 +40,10 @@ function createDefaultSettings(): AppSettings {
     gridBoard: {
       items: [],
       viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    stickyNoteBoard: {
+      notes: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
     }
   }
 }
@@ -147,13 +151,14 @@ describe('ScheduleService action application', () => {
       ])`
     })
 
+    expect(job.outputMode).toBe('auto_apply')
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
     expect(resolvedRun.status).toBe('success')
+    expect(resolvedRun.appliedActions).toHaveLength(1)
     expect(settings.calendarTasks).toHaveLength(1)
     expect(settings.calendarTasks[0]).toMatchObject({
       title: 'Scheduled planning task',
@@ -207,8 +212,7 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const settings = await runtime.getSettings()
 
     expect(settings.calendarTasks[0]).toMatchObject({
@@ -243,8 +247,7 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const resolvedRun = (await service.listRuns(job.id))[0]!
     const notes = await runtime.listNotes()
 
@@ -278,8 +281,7 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
@@ -332,8 +334,7 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 
@@ -352,8 +353,7 @@ describe('ScheduleService action application', () => {
     })
 
     const repeatRun = await service.runNow(job.id)
-    expect(repeatRun.status).toBe('review')
-    await service.applyActions(repeatRun.id)
+    expect(repeatRun.status).toBe('success')
     const resolvedRepeatRun = (await service.listRuns(job.id))[0]!
     const repeatedSettings = await runtime.getSettings()
 
@@ -404,8 +404,7 @@ describe('ScheduleService action application', () => {
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
 
     const settings = await runtime.getSettings()
     expect(settings.calendarTasks).toHaveLength(1)
@@ -438,8 +437,7 @@ print(json.dumps({"actions": [{
     })
 
     const run = await service.runNow(job.id)
-    expect(run.status).toBe('review')
-    await service.applyActions(run.id)
+    expect(run.status).toBe('success')
     const resolvedRun = (await service.listRuns(job.id))[0]!
     const settings = await runtime.getSettings()
 

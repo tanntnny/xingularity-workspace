@@ -10,17 +10,19 @@ import {
 } from './ui/breadcrumb'
 import { WorkspaceIconButton } from './ui/document-workspace'
 import type { AppPage } from '../navigation'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
 
 interface TopBarProps {
   activePage: AppPage
   currentNoteName: string | null
   currentProjectName: string | null
-  onNavigateHome: () => void
+  onNavigateHome: (options?: WorkspaceOpenOptions) => void
   currentMonthLabel?: string | null
 }
 
 const PAGE_LABELS: Record<AppPage, string> = {
   capture: 'Capture',
+  stickyNote: 'Sticky Note',
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
@@ -74,7 +76,15 @@ export function TopBar({
               <WorkspaceIconButton
                 icon={<Home size={14} aria-hidden="true" />}
                 label="Home"
-                onClick={onNavigateHome}
+                onClick={(event) => onNavigateHome(getWorkspaceOpenOptions(event))}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onNavigateHome({ openInNewTab: true })
+                }}
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
               />
             </BreadcrumbItem>

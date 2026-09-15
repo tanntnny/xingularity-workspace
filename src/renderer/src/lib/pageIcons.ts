@@ -9,6 +9,7 @@ import {
   Files,
   ListTodo,
   Mail,
+  Palette,
   Shield,
   Settings2,
   Table,
@@ -17,6 +18,7 @@ import {
 
 export const APP_PAGE_ICONS: Record<AppPage, FilledIcon> = {
   capture: Mail,
+  stickyNote: Palette,
   knowledge: ChartDots3,
   notes: Files,
   projects: Box,

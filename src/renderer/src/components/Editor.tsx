@@ -17,7 +17,7 @@ import {
   schemaCtx,
   serializerCtx
 } from '@milkdown/kit/core'
-import type { Node as ProseNode } from '@milkdown/prose/model'
+import type { Node as ProseNode, ResolvedPos } from '@milkdown/prose/model'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import {
@@ -38,10 +38,11 @@ import {
 } from '@milkdown/kit/preset/commonmark'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { createTable } from '@milkdown/kit/preset/gfm'
-import { insert, replaceAll } from '@milkdown/kit/utils'
+import { getMarkdown, insert, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/crepe/theme/common/style.css'
 import katex from 'katex'
 import { Check } from './ui/icons'
+import { NoteRawEditor, type NoteRawEditorHandle } from './NoteRawEditor'
 import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
@@ -65,7 +66,16 @@ import {
   resolveNoteCallout
 } from '../lib/noteCallouts'
 import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
+import {
+  createNoteEditorSnapshotScheduler,
+  type NoteEditorSnapshotScheduler
+} from '../lib/noteEditorSnapshotScheduler'
 import { ensureEditorViewContext, hasReadyEditorView } from '../lib/milkdownEditorViewContext'
+import {
+  isMiddleMouseButton,
+  isModifiedNotebookOpen,
+  type NotebookOpenOptions
+} from '../lib/notebookOpen'
 import {
   NOTE_SLASH_COMMANDS,
   findNoteSlashTrigger,
@@ -73,23 +83,32 @@ import {
 } from '../lib/noteSlashMenu'
 import { resolveArrowReplacementForTextInput } from '../lib/noteArrowInputRules'
 import { registerNoteCodeBlockView } from '../lib/noteCodeBlockView'
+import { createNoteCodeBlockNavigationPlugin } from '../lib/noteCodeBlockNavigation'
 import { createNoteCodeBlockSyntaxPlugin } from '../lib/noteCodeBlockSyntax'
 import { createNoteVimModePlugin, type NoteVimMode } from '../lib/noteVimMode'
 import { cn } from '../lib/utils'
+
+export type NoteEditorMode = 'preview' | 'raw'
+
+const NOTE_EDITOR_SNAPSHOT_DEBOUNCE_MS = 250
+const NOTE_EDITOR_SNAPSHOT_MAX_WAIT_MS = 1000
 
 interface EditorProps {
   initialContent?: string | null
   density?: 'default' | 'compact'
   background?: 'transparent' | 'inherit'
   className?: string
+  mode?: NoteEditorMode
   readOnly?: boolean
   onDirty: () => void
+  onReady?: () => void
   onSnapshotChange?: (snapshot: NoteEditorSnapshot) => void
   onDropFile: (sourcePath: string) => Promise<string | null>
   onPasteImage: (imageBlob: Blob, fileExtension: string) => Promise<string | null>
   notes: NoteListItem[]
   currentNotePath?: string
-  onOpenNoteLink?: (target: string) => void
+  onOpenNoteLink?: (target: string, options?: NotebookOpenOptions) => void
+  onRawEditorElementChange?: (element: HTMLTextAreaElement | null) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
   onVimModeChange?: (mode: NoteVimMode) => void
@@ -256,6 +275,179 @@ const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
 const noteCalloutPluginKey = new PluginKey('note-callout')
 const noteArrowInputPluginKey = new PluginKey('note-arrow-input')
 
+interface DecorationRange {
+  from: number
+  to: number
+}
+
+interface DecorationTarget {
+  node: ProseNode
+  range: DecorationRange
+}
+
+interface TransactionLike {
+  docChanged: boolean
+  mapping: {
+    maps: readonly {
+      forEach: (
+        callback: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void
+      ) => void
+      map: (position: number, assoc?: number) => number
+    }[]
+  }
+}
+
+function getTransactionChangedRange(transaction: TransactionLike): DecorationRange | null {
+  if (!transaction.docChanged) {
+    return null
+  }
+
+  let from = Number.POSITIVE_INFINITY
+  let to = Number.NEGATIVE_INFINITY
+
+  transaction.mapping.maps.forEach((map, index) => {
+    if (index > 0) {
+      from = map.map(from, 1)
+      to = map.map(to, -1)
+    }
+
+    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+      from = Math.min(from, newStart)
+      to = Math.max(to, newEnd)
+    })
+  })
+
+  return from === Number.POSITIVE_INFINITY ? null : { from, to }
+}
+
+function getDecorationTarget(
+  position: ResolvedPos,
+  matches: (node: ProseNode) => boolean
+): DecorationTarget | null {
+  for (let depth = position.depth; depth > 0; depth -= 1) {
+    const node = position.node(depth)
+    if (matches(node)) {
+      return {
+        node,
+        range: {
+          from: position.before(depth),
+          to: position.after(depth)
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function rangesEqual(left: DecorationRange, right: DecorationRange): boolean {
+  return left.from === right.from && left.to === right.to
+}
+
+function isRangeWithin(inner: DecorationRange, outer: DecorationRange): boolean {
+  return inner.from >= outer.from && inner.to <= outer.to + 1
+}
+
+function refreshDecorationTarget(
+  decorationSet: DecorationSet,
+  doc: ProseNode,
+  target: DecorationTarget,
+  createDecorations: (node: ProseNode, pos: number) => Decoration[]
+): DecorationSet {
+  const staleDecorations = decorationSet.find(target.range.from, target.range.to)
+  return decorationSet
+    .remove(staleDecorations)
+    .add(doc, createDecorations(target.node, target.range.from))
+}
+
+interface PreviewMarkdownBlock {
+  node: ProseNode
+  pos: number
+}
+
+interface PreviewMarkdownSerialization {
+  content: string
+  cache: Map<ProseNode, string>
+}
+
+const PREVIEW_SERIALIZATION_CHUNK_BUDGET_MS = 4
+
+function getPreviewMarkdownBlocks(doc: ProseNode): PreviewMarkdownBlock[] {
+  const blocks: PreviewMarkdownBlock[] = []
+  doc.forEach((node, pos) => {
+    blocks.push({ node, pos })
+  })
+  return blocks
+}
+
+function joinPreviewMarkdownBlocks(blocks: readonly string[]): string {
+  if (blocks.length === 0) {
+    return ''
+  }
+
+  const hasTrailingLineBreak = blocks.some((block) => block.endsWith('\n'))
+  const normalizedBlocks = blocks.map((block) => block.replace(/\n+$/, ''))
+  return `${normalizedBlocks.join('\n\n')}${hasTrailingLineBreak ? '\n' : ''}`
+}
+
+function serializePreviewMarkdownInChunks(
+  editor: Crepe,
+  previousCache: ReadonlyMap<ProseNode, string>,
+  isCancelled: () => boolean
+): Promise<PreviewMarkdownSerialization | null> {
+  let blocks: PreviewMarkdownBlock[]
+  try {
+    const view = editor.editor.action((ctx) => ctx.get(editorViewCtx))
+    blocks = getPreviewMarkdownBlocks(view.state.doc)
+  } catch {
+    return Promise.resolve(null)
+  }
+
+  const cache = new Map<ProseNode, string>()
+  const serializedBlocks: string[] = []
+  let blockIndex = 0
+
+  return new Promise((resolve) => {
+    const serializeChunk = (): void => {
+      if (isCancelled()) {
+        resolve(null)
+        return
+      }
+
+      const chunkStartedAt = performance.now()
+      try {
+        while (
+          blockIndex < blocks.length &&
+          performance.now() - chunkStartedAt < PREVIEW_SERIALIZATION_CHUNK_BUDGET_MS
+        ) {
+          const block = blocks[blockIndex]
+          const cachedMarkdown = previousCache.get(block.node)
+          const markdown =
+            cachedMarkdown ??
+            editor.editor.action(
+              getMarkdown({ from: block.pos, to: block.pos + block.node.nodeSize })
+            )
+          cache.set(block.node, markdown)
+          serializedBlocks.push(markdown)
+          blockIndex += 1
+        }
+      } catch {
+        resolve(null)
+        return
+      }
+
+      if (blockIndex < blocks.length) {
+        window.requestAnimationFrame(serializeChunk)
+        return
+      }
+
+      resolve({ content: joinPreviewMarkdownBlocks(serializedBlocks), cache })
+    }
+
+    serializeChunk()
+  })
+}
+
 function isMissingEditorViewError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Context "editorView" not found')
 }
@@ -277,14 +469,227 @@ function inlinePrintableStyles(source: HTMLElement, target: HTMLElement): void {
   })
 }
 
+interface InlineLatexPluginState {
+  decorations: DecorationSet
+  isFocused: boolean
+}
+
+function appendInlineLatexDecorations(
+  decorations: Decoration[],
+  node: ProseNode,
+  pos: number,
+  selectionFrom: number,
+  selectionTo: number,
+  isFocused: boolean
+): void {
+  if (!node.isBlock || !node.inlineContent) {
+    return
+  }
+
+  const blockStart = pos + 1
+  const blockText = node.textBetween(0, node.content.size, '\n', '\0')
+
+  for (const match of findLatexTextMatches(blockText)) {
+    const from = blockStart + match.from
+    const to = blockStart + match.to
+
+    if (!match.valid) {
+      decorations.push(Decoration.inline(from, to, { class: 'note-inline-latex-error' }))
+      continue
+    }
+
+    const lineRange = getLogicalLineRange(blockText, match.from, match.to)
+    const isActiveLine =
+      isFocused &&
+      selectionTouchesTextblock(
+        selectionFrom,
+        selectionTo,
+        blockStart + lineRange.from,
+        blockStart + lineRange.to
+      )
+
+    if (isActiveLine) {
+      decorations.push(
+        Decoration.inline(from, to, {
+          class: cn('note-inline-latex-source', match.displayMode && 'note-display-latex-source')
+        })
+      )
+      continue
+    }
+
+    decorations.push(
+      Decoration.inline(from, to, {
+        class: cn(
+          'note-inline-latex-source-hidden',
+          match.displayMode && 'note-display-latex-source-hidden'
+        ),
+        'data-latex-source': 'true'
+      })
+    )
+    decorations.push(
+      Decoration.widget(
+        from,
+        (view) => {
+          const preview = createInlineLatexPreview(match.value, match.displayMode)
+          preview.addEventListener('mousedown', (event) => {
+            event.preventDefault()
+            view.dispatch(
+              view.state.tr.setSelection(
+                TextSelection.create(view.state.doc, from + match.delimiter.length)
+              )
+            )
+            view.focus()
+          })
+          return preview
+        },
+        {
+          key: `inline-latex-${from}-${to}-${match.value}`,
+          side: -1,
+          ignoreSelection: true
+        }
+      )
+    )
+  }
+}
+
+function createInlineLatexDecorations(
+  node: ProseNode,
+  pos: number,
+  selectionFrom: number,
+  selectionTo: number,
+  isFocused: boolean
+): Decoration[] {
+  const decorations: Decoration[] = []
+  appendInlineLatexDecorations(decorations, node, pos, selectionFrom, selectionTo, isFocused)
+  return decorations
+}
+
+function createInlineLatexDecorationSet(
+  doc: ProseNode,
+  selectionFrom: number,
+  selectionTo: number,
+  isFocused: boolean
+): DecorationSet {
+  const decorations: Decoration[] = []
+  doc.descendants((node, pos) => {
+    appendInlineLatexDecorations(decorations, node, pos, selectionFrom, selectionTo, isFocused)
+    return true
+  })
+  return DecorationSet.create(doc, decorations)
+}
+
 function inlineLatexPreviewPlugin(): Plugin {
   return new Plugin({
     key: inlineLatexPreviewPluginKey,
     state: {
-      init: () => false,
-      apply(transaction, isFocused: boolean) {
+      init: (_config, state): InlineLatexPluginState => ({
+        decorations: createInlineLatexDecorationSet(
+          state.doc,
+          state.selection.from,
+          state.selection.to,
+          false
+        ),
+        isFocused: false
+      }),
+      apply(transaction, previousState, oldState, newState): InlineLatexPluginState {
         const nextFocusState = transaction.getMeta(inlineLatexPreviewPluginKey)
-        return typeof nextFocusState === 'boolean' ? nextFocusState : isFocused
+        const isFocused =
+          typeof nextFocusState === 'boolean' ? nextFocusState : previousState.isFocused
+        const previousTarget = getDecorationTarget(oldState.selection.$from, (node) =>
+          Boolean(node.isBlock && node.inlineContent)
+        )
+        const nextTarget = getDecorationTarget(newState.selection.$from, (node) =>
+          Boolean(node.isBlock && node.inlineContent)
+        )
+        const selectionChanged = !oldState.selection.eq(newState.selection)
+        const focusChanged = isFocused !== previousState.isFocused
+
+        if (!transaction.docChanged && !selectionChanged && !focusChanged) {
+          return previousState
+        }
+
+        let decorations = previousState.decorations
+        if (transaction.docChanged) {
+          decorations = decorations.map(transaction.mapping, newState.doc)
+          const changedRange = getTransactionChangedRange(transaction)
+          if (!changedRange) {
+            return {
+              decorations: createInlineLatexDecorationSet(
+                newState.doc,
+                newState.selection.from,
+                newState.selection.to,
+                isFocused
+              ),
+              isFocused
+            }
+          }
+
+          if (!nextTarget) {
+            if (previousTarget) {
+              return {
+                decorations: createInlineLatexDecorationSet(
+                  newState.doc,
+                  newState.selection.from,
+                  newState.selection.to,
+                  isFocused
+                ),
+                isFocused
+              }
+            }
+
+            return { decorations, isFocused }
+          }
+
+          if (!isRangeWithin(changedRange, nextTarget.range)) {
+            return {
+              decorations: createInlineLatexDecorationSet(
+                newState.doc,
+                newState.selection.from,
+                newState.selection.to,
+                isFocused
+              ),
+              isFocused
+            }
+          }
+
+          decorations = refreshDecorationTarget(
+            decorations,
+            newState.doc,
+            nextTarget,
+            (node, pos) =>
+              createInlineLatexDecorations(
+                node,
+                pos,
+                newState.selection.from,
+                newState.selection.to,
+                isFocused
+              )
+          )
+        } else {
+          const targets: DecorationTarget[] = []
+          if (selectionChanged && previousTarget) {
+            targets.push(previousTarget)
+          }
+          if ((selectionChanged || focusChanged) && nextTarget) {
+            if (!targets.some((target) => rangesEqual(target.range, nextTarget.range))) {
+              targets.push(nextTarget)
+            }
+          }
+
+          for (const target of targets) {
+            decorations = refreshDecorationTarget(decorations, newState.doc, target, (node, pos) =>
+              createInlineLatexDecorations(
+                node,
+                pos,
+                newState.selection.from,
+                newState.selection.to,
+                isFocused
+              )
+            )
+          }
+        }
+
+        return { decorations, isFocused }
       }
     },
     props: {
@@ -299,153 +704,197 @@ function inlineLatexPreviewPlugin(): Plugin {
         }
       },
       decorations(state) {
-        const decorations: Decoration[] = []
-        const { from: selectionFrom, to: selectionTo } = state.selection
-        const isFocused = inlineLatexPreviewPluginKey.getState(state) === true
-
-        state.doc.descendants((node, pos) => {
-          if (!node.isBlock || !node.inlineContent) {
-            return true
-          }
-
-          const blockStart = pos + 1
-          const blockText = node.textBetween(0, node.content.size, '\n', '\0')
-
-          for (const match of findLatexTextMatches(blockText)) {
-            const from = blockStart + match.from
-            const to = blockStart + match.to
-
-            if (!match.valid) {
-              decorations.push(Decoration.inline(from, to, { class: 'note-inline-latex-error' }))
-              continue
-            }
-
-            const lineRange = getLogicalLineRange(blockText, match.from, match.to)
-            const isActiveLine =
-              isFocused &&
-              selectionTouchesTextblock(
-                selectionFrom,
-                selectionTo,
-                blockStart + lineRange.from,
-                blockStart + lineRange.to
-              )
-
-            if (isActiveLine) {
-              decorations.push(
-                Decoration.inline(from, to, {
-                  class: cn(
-                    'note-inline-latex-source',
-                    match.displayMode && 'note-display-latex-source'
-                  )
-                })
-              )
-              continue
-            }
-
-            decorations.push(
-              Decoration.inline(from, to, {
-                class: cn(
-                  'note-inline-latex-source-hidden',
-                  match.displayMode && 'note-display-latex-source-hidden'
-                ),
-                'data-latex-source': 'true'
-              })
-            )
-            decorations.push(
-              Decoration.widget(
-                from,
-                (view) => {
-                  const preview = createInlineLatexPreview(match.value, match.displayMode)
-                  preview.addEventListener('mousedown', (event) => {
-                    event.preventDefault()
-                    view.dispatch(
-                      view.state.tr.setSelection(
-                        TextSelection.create(view.state.doc, from + match.delimiter.length)
-                      )
-                    )
-                    view.focus()
-                  })
-                  return preview
-                },
-                {
-                  key: `inline-latex-${from}-${to}-${match.value}`,
-                  side: -1,
-                  ignoreSelection: true
-                }
-              )
-            )
-          }
-
-          return true
-        })
-
-        return DecorationSet.create(state.doc, decorations)
+        return inlineLatexPreviewPluginKey.getState(state)?.decorations ?? DecorationSet.empty
       }
     }
   })
 }
 
+function appendNoteCalloutDecorations(
+  decorations: Decoration[],
+  node: ProseNode,
+  pos: number,
+  selectionFrom: number,
+  selectionTo: number
+): void {
+  if (node.type.name !== 'blockquote') {
+    return
+  }
+
+  const blockquoteInfo = getBlockquoteCalloutInfo(node, pos)
+  if (!blockquoteInfo) {
+    return
+  }
+
+  const callout = resolveNoteCallout(blockquoteInfo.text)
+
+  decorations.push(
+    Decoration.node(pos, pos + node.nodeSize, {
+      class: cn('note-callout', `note-callout-${callout.variant}`)
+    })
+  )
+
+  const titleRange = getNoteCalloutTitleRange(blockquoteInfo.text, callout.marker)
+  if (titleRange) {
+    decorations.push(
+      Decoration.inline(
+        blockquoteInfo.contentStart + titleRange.start,
+        blockquoteInfo.contentStart + titleRange.end,
+        { class: 'note-callout-title' }
+      )
+    )
+  }
+
+  const shouldShowMarker = selectionTouchesTextblock(
+    selectionFrom,
+    selectionTo,
+    blockquoteInfo.contentStart,
+    blockquoteInfo.contentEnd
+  )
+  const shouldHideMarker =
+    callout.marker && hasNoteCalloutBodyText(blockquoteInfo.fullText, callout.marker)
+
+  if (shouldHideMarker && !shouldShowMarker) {
+    decorations.push(
+      Decoration.inline(
+        blockquoteInfo.contentStart,
+        blockquoteInfo.contentStart + callout.marker.length,
+        { class: 'note-callout-marker-hidden' }
+      )
+    )
+  }
+}
+
+function createNoteCalloutDecorations(
+  node: ProseNode,
+  pos: number,
+  selectionFrom: number,
+  selectionTo: number
+): Decoration[] {
+  const decorations: Decoration[] = []
+  appendNoteCalloutDecorations(decorations, node, pos, selectionFrom, selectionTo)
+  return decorations
+}
+
+function createNoteCalloutDecorationSet(
+  doc: ProseNode,
+  selectionFrom: number,
+  selectionTo: number
+): DecorationSet {
+  const decorations: Decoration[] = []
+  doc.descendants((node, pos) => {
+    appendNoteCalloutDecorations(decorations, node, pos, selectionFrom, selectionTo)
+    return node.type.name !== 'blockquote'
+  })
+  return DecorationSet.create(doc, decorations)
+}
+
 function noteCalloutPlugin(): Plugin {
   return new Plugin({
     key: noteCalloutPluginKey,
+    state: {
+      init: (_config, state) => ({
+        decorations: createNoteCalloutDecorationSet(
+          state.doc,
+          state.selection.from,
+          state.selection.to
+        )
+      }),
+      apply(transaction, previousState, oldState, newState) {
+        const previousTarget = getDecorationTarget(
+          oldState.selection.$from,
+          (node) => node.type.name === 'blockquote'
+        )
+        const nextTarget = getDecorationTarget(
+          newState.selection.$from,
+          (node) => node.type.name === 'blockquote'
+        )
+        const selectionChanged = !oldState.selection.eq(newState.selection)
+
+        if (!transaction.docChanged && !selectionChanged) {
+          return previousState
+        }
+
+        let decorations = previousState.decorations
+        if (transaction.docChanged) {
+          decorations = decorations.map(transaction.mapping, newState.doc)
+          const changedRange = getTransactionChangedRange(transaction)
+          if (!changedRange) {
+            return {
+              decorations: createNoteCalloutDecorationSet(
+                newState.doc,
+                newState.selection.from,
+                newState.selection.to
+              )
+            }
+          }
+
+          if (!nextTarget) {
+            if (previousTarget) {
+              return {
+                decorations: createNoteCalloutDecorationSet(
+                  newState.doc,
+                  newState.selection.from,
+                  newState.selection.to
+                )
+              }
+            }
+
+            return { decorations }
+          }
+
+          if (!isRangeWithin(changedRange, nextTarget.range)) {
+            return {
+              decorations: createNoteCalloutDecorationSet(
+                newState.doc,
+                newState.selection.from,
+                newState.selection.to
+              )
+            }
+          }
+
+          decorations = refreshDecorationTarget(
+            decorations,
+            newState.doc,
+            nextTarget,
+            (node, pos) =>
+              createNoteCalloutDecorations(
+                node,
+                pos,
+                newState.selection.from,
+                newState.selection.to
+              )
+          )
+        } else {
+          const targets: DecorationTarget[] = []
+          if (previousTarget) {
+            targets.push(previousTarget)
+          }
+          if (
+            nextTarget &&
+            !targets.some((target) => rangesEqual(target.range, nextTarget.range))
+          ) {
+            targets.push(nextTarget)
+          }
+
+          for (const target of targets) {
+            decorations = refreshDecorationTarget(decorations, newState.doc, target, (node, pos) =>
+              createNoteCalloutDecorations(
+                node,
+                pos,
+                newState.selection.from,
+                newState.selection.to
+              )
+            )
+          }
+        }
+
+        return { decorations }
+      }
+    },
     props: {
       decorations(state) {
-        const decorations: Decoration[] = []
-        const { from: selectionFrom, to: selectionTo } = state.selection
-
-        state.doc.descendants((node, pos) => {
-          if (node.type.name !== 'blockquote') {
-            return true
-          }
-
-          const blockquoteInfo = getBlockquoteCalloutInfo(node, pos)
-
-          if (!blockquoteInfo) {
-            return false
-          }
-
-          const callout = resolveNoteCallout(blockquoteInfo.text)
-
-          decorations.push(
-            Decoration.node(pos, pos + node.nodeSize, {
-              class: cn('note-callout', `note-callout-${callout.variant}`)
-            })
-          )
-
-          const titleRange = getNoteCalloutTitleRange(blockquoteInfo.text, callout.marker)
-          if (titleRange) {
-            decorations.push(
-              Decoration.inline(
-                blockquoteInfo.contentStart + titleRange.start,
-                blockquoteInfo.contentStart + titleRange.end,
-                { class: 'note-callout-title' }
-              )
-            )
-          }
-
-          const shouldShowMarker = selectionTouchesTextblock(
-            selectionFrom,
-            selectionTo,
-            blockquoteInfo.contentStart,
-            blockquoteInfo.contentEnd
-          )
-          const shouldHideMarker =
-            callout.marker && hasNoteCalloutBodyText(blockquoteInfo.fullText, callout.marker)
-
-          if (shouldHideMarker && !shouldShowMarker) {
-            decorations.push(
-              Decoration.inline(
-                blockquoteInfo.contentStart,
-                blockquoteInfo.contentStart + callout.marker.length,
-                { class: 'note-callout-marker-hidden' }
-              )
-            )
-          }
-
-          return false
-        })
-
-        return DecorationSet.create(state.doc, decorations)
+        return noteCalloutPluginKey.getState(state)?.decorations ?? DecorationSet.empty
       }
     }
   })
@@ -551,13 +1000,16 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     density = 'default',
     background = 'transparent',
     className,
+    mode = 'preview',
     readOnly = false,
     onDirty,
+    onReady,
     onSnapshotChange,
     onPasteImage,
     notes,
     currentNotePath,
     onOpenNoteLink,
+    onRawEditorElementChange,
     vimModeEnabled,
     vimKeyMappings,
     onVimModeChange
@@ -569,8 +1021,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const loadedNotePathRef = useRef(currentNotePath)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<Crepe | null>(null)
+  const rawEditorRef = useRef<NoteRawEditorHandle | null>(null)
   const editorReadyRef = useRef(false)
   const currentNotePathRef = useRef(currentNotePath)
+  const modeRef = useRef(mode)
   const mentionPickerRef = useRef<MentionPickerState | null>(null)
   const slashPickerRef = useRef<SlashPickerState | null>(null)
   const slashCommandSelectionRef = useRef(false)
@@ -584,17 +1038,23 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const readOnlyRef = useRef(readOnly)
   const onVimModeChangeRef = useRef(onVimModeChange)
   const [isEditorVisible, setIsEditorVisible] = useState(false)
+  const [rawContent, setRawContent] = useState(initialContent ?? '')
   const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
   const [slashPicker, setSlashPicker] = useState<SlashPickerState | null>(null)
   const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const hasFocusIntentRef = useRef(false)
   const onDirtyRef = useRef(onDirty)
+  const onReadyRef = useRef(onReady)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
   const onPasteImageRef = useRef(onPasteImage)
   const onOpenNoteLinkRef = useRef(onOpenNoteLink)
   const suppressNextDirtySyncRef = useRef(false)
+  const previousModeRef = useRef<NoteEditorMode>(mode)
+  const snapshotSchedulerRef = useRef<NoteEditorSnapshotScheduler | null>(null)
+  const previewMarkdownCacheRef = useRef<Map<ProseNode, string>>(new Map())
+  const previewSerializationVersionRef = useRef(0)
 
-  const resolveNoteMentionTarget = createNoteMentionResolver(notes)
+  const resolveNoteMentionTarget = useMemo(() => createNoteMentionResolver(notes), [notes])
   const mentionSuggestions = buildMentionSuggestions(notes, currentNotePath, mentionPicker)
   const mentionOptions: SelectionPopoverOption[] = mentionSuggestions.map((note) => {
     const alreadyLinked =
@@ -633,6 +1093,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   useEffect(() => {
     onDirtyRef.current = onDirty
   }, [onDirty])
+
+  useEffect(() => {
+    onReadyRef.current = onReady
+  }, [onReady])
 
   useEffect(() => {
     onSnapshotChangeRef.current = onSnapshotChange
@@ -675,21 +1139,141 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     onVimModeChangeRef.current = onVimModeChange
   }, [onVimModeChange])
 
+  const publishSnapshot = useCallback((content: string): void => {
+    onSnapshotChangeRef.current?.({ content })
+  }, [])
+
+  const publishScheduledSnapshot = useCallback(
+    (scheduledContent: string): void => {
+      if (modeRef.current === 'preview') {
+        const editor = editorRef.current
+        if (editor && editorReadyRef.current) {
+          const serializationVersion = previewSerializationVersionRef.current
+          void serializePreviewMarkdownInChunks(
+            editor,
+            previewMarkdownCacheRef.current,
+            () =>
+              serializationVersion !== previewSerializationVersionRef.current ||
+              modeRef.current !== 'preview'
+          ).then((serialization) => {
+            if (!serialization || serializationVersion !== previewSerializationVersionRef.current) {
+              return
+            }
+
+            previewMarkdownCacheRef.current = serialization.cache
+            const content = normalizeLatexEscapes(serialization.content)
+            contentRef.current = content
+            publishSnapshot(content)
+          })
+          return
+        }
+      }
+
+      contentRef.current = scheduledContent
+      publishSnapshot(scheduledContent)
+    },
+    [publishSnapshot]
+  )
+
+  useEffect(() => {
+    const scheduler = createNoteEditorSnapshotScheduler({
+      debounceMs: NOTE_EDITOR_SNAPSHOT_DEBOUNCE_MS,
+      maxWaitMs: NOTE_EDITOR_SNAPSHOT_MAX_WAIT_MS,
+      onFlush: publishScheduledSnapshot
+    })
+    snapshotSchedulerRef.current = scheduler
+
+    return () => {
+      previewSerializationVersionRef.current += 1
+      scheduler.cancel()
+      scheduler.dispose()
+      snapshotSchedulerRef.current = null
+    }
+  }, [publishScheduledSnapshot])
+
+  const flushPublishedSnapshot = useCallback((): void => {
+    previewSerializationVersionRef.current += 1
+
+    if (modeRef.current !== 'preview') {
+      snapshotSchedulerRef.current?.flush()
+      return
+    }
+
+    snapshotSchedulerRef.current?.cancel()
+
+    const editor = editorRef.current
+    if (!editor || !editorReadyRef.current) {
+      return
+    }
+
+    const content = normalizeLatexEscapes(editor.getMarkdown())
+    contentRef.current = content
+    publishSnapshot(content)
+  }, [publishSnapshot])
+
+  const publishSnapshotNow = useCallback(
+    (content: string): void => {
+      const scheduler = snapshotSchedulerRef.current
+      if (!scheduler) {
+        publishSnapshot(content)
+        return
+      }
+
+      previewSerializationVersionRef.current += 1
+      scheduler.cancel()
+      contentRef.current = content
+      publishSnapshot(content)
+    },
+    [publishSnapshot]
+  )
+
   const syncContent = useCallback((nextContent: string, dirty: boolean): void => {
     if (contentRef.current === nextContent) {
       return
     }
 
     contentRef.current = nextContent
-    onSnapshotChangeRef.current?.({ content: nextContent })
+    snapshotSchedulerRef.current?.schedule(nextContent)
     if (dirty) {
       onDirtyRef.current()
     }
   }, [])
 
+  const syncRawContent = useCallback((nextContent: string): void => {
+    if (contentRef.current === nextContent) {
+      return
+    }
+
+    contentRef.current = nextContent
+    snapshotSchedulerRef.current?.schedule(nextContent)
+    onDirtyRef.current()
+  }, [])
+
+  const handleRawContentChange = useCallback(
+    (nextContent: string): void => {
+      syncRawContent(nextContent)
+    },
+    [syncRawContent]
+  )
+
+  const handleRawVimModeChange = useCallback((nextMode: NoteVimMode): void => {
+    setVimMode(nextMode)
+    onVimModeChangeRef.current?.(nextMode)
+  }, [])
+
   const isEditorTarget = useCallback((target: EventTarget | null): boolean => {
-    const editable = rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')
-    return Boolean(editable && target instanceof Node && editable.contains(target))
+    const root = rootRef.current
+    if (!root || !(target instanceof Node)) {
+      return false
+    }
+
+    const editable = root.querySelector<HTMLElement>('[contenteditable="true"]')
+    const rawEditor = root.parentElement?.querySelector<HTMLElement>(
+      '[data-note-raw-editor="true"]'
+    )
+    return Boolean(
+      (editable && editable.contains(target)) || (rawEditor && rawEditor.contains(target))
+    )
   }, [])
 
   const editorHasFocus = useCallback((): boolean => {
@@ -720,6 +1304,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
   const focus = useCallback((): void => {
     hasFocusIntentRef.current = true
+    if (modeRef.current === 'raw') {
+      rawEditorRef.current?.focus()
+      return
+    }
+
     if (
       runEditorActionSafely((ctx) => {
         ctx.get(editorViewCtx).focus()
@@ -734,12 +1323,18 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const blur = useCallback((): void => {
     hasFocusIntentRef.current = false
     rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.blur()
+    rawEditorRef.current?.blur()
   }, [])
 
   const jumpToOutlineIndex = useCallback(
     (index: number): void => {
       const root = rootRef.current
       if (!root || index < 0) {
+        return
+      }
+
+      if (modeRef.current === 'raw') {
+        rawEditorRef.current?.jumpToOutlineIndex(index)
         return
       }
 
@@ -762,31 +1357,86 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [focus]
   )
 
-  const createSnapshot = useCallback((): NoteEditorSnapshot => {
-    const content =
-      editorRef.current && editorReadyRef.current
-        ? editorRef.current.getMarkdown()
-        : contentRef.current
+  const serializePreviewSnapshot = useCallback(async (): Promise<string> => {
+    const editor = editorRef.current
+    if (!editor || !editorReadyRef.current || modeRef.current !== 'preview') {
+      return contentRef.current
+    }
+
+    snapshotSchedulerRef.current?.cancel()
+    const serializationVersion = ++previewSerializationVersionRef.current
+
+    const serialization = await serializePreviewMarkdownInChunks(
+      editor,
+      previewMarkdownCacheRef.current,
+      () =>
+        serializationVersion !== previewSerializationVersionRef.current ||
+        modeRef.current !== 'preview'
+    )
+    if (serialization && serializationVersion === previewSerializationVersionRef.current) {
+      previewMarkdownCacheRef.current = serialization.cache
+      return serialization.content
+    }
+
+    try {
+      return editor.getMarkdown()
+    } catch {
+      return contentRef.current
+    }
+  }, [])
+
+  const createSnapshot = useCallback(async (): Promise<NoteEditorSnapshot> => {
+    if (modeRef.current === 'raw') {
+      const content = contentRef.current
+      publishSnapshotNow(content)
+      return { content }
+    }
+
+    const content = await serializePreviewSnapshot()
 
     const normalizedContent = normalizeNoteMentionMarkdown(normalizeLatexEscapes(content))
     syncContent(normalizedContent, false)
+    publishSnapshotNow(normalizedContent)
     return { content: normalizedContent }
-  }, [syncContent])
+  }, [publishSnapshotNow, serializePreviewSnapshot, syncContent])
 
   const captureSnapshot = useCallback(
-    async (): Promise<NoteEditorSnapshot> => createSnapshot(),
+    (): Promise<NoteEditorSnapshot> => createSnapshot(),
     [createSnapshot]
   )
 
   const flushPendingChanges = useCallback(
-    async (): Promise<NoteEditorSnapshot> => createSnapshot(),
+    (): Promise<NoteEditorSnapshot> => createSnapshot(),
     [createSnapshot]
   )
+
+  useEffect(() => {
+    const previousMode = previousModeRef.current
+    if (previousMode !== mode) {
+      flushPublishedSnapshot()
+      if (mode === 'raw') {
+        setRawContent(contentRef.current)
+      }
+    }
+
+    modeRef.current = mode
+    previousModeRef.current = mode
+  }, [flushPublishedSnapshot, mode])
 
   const capturePrintableDocument = useCallback((): {
     html: string
     images: NotePdfExportImage[]
   } | null => {
+    if (modeRef.current === 'raw') {
+      const editor = editorRef.current
+      if (editor && editorReadyRef.current && editor.getMarkdown() !== contentRef.current) {
+        suppressNextDirtySyncRef.current = true
+        if (!runEditorActionSafely(replaceAll(contentRef.current))) {
+          suppressNextDirtySyncRef.current = false
+        }
+      }
+    }
+
     const renderedDocument = rootRef.current?.querySelector<HTMLElement>('.ProseMirror')
     if (!renderedDocument) {
       return null
@@ -826,7 +1476,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     clone.style.paddingBottom = '0'
 
     return { html: clone.innerHTML, images }
-  }, [])
+  }, [runEditorActionSafely])
 
   const hasFocusIntent = useCallback(
     (): boolean => editorHasFocus() || hasFocusIntentRef.current,
@@ -851,6 +1501,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       notePath?: string
       preserveFocus?: boolean
     }): void => {
+      flushPublishedSnapshot()
       const nextContent = normalizeLatexEscapes(content ?? '')
       const samePath = loadedNotePathRef.current === notePath
       const sameContent = contentRef.current === nextContent
@@ -861,8 +1512,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
       if (!editorRef.current || !editorReadyRef.current) {
         contentRef.current = nextContent
+        setRawContent(nextContent)
         if (!sameContent) {
-          onSnapshotChangeRef.current?.({ content: nextContent })
+          publishSnapshotNow(nextContent)
         }
         return
       }
@@ -874,9 +1526,12 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       suppressNextDirtySyncRef.current = true
       if (!runEditorActionSafely(replaceAll(nextContent))) {
         contentRef.current = nextContent
+        setRawContent(nextContent)
         return
       }
       syncContent(nextContent, false)
+      setRawContent(nextContent)
+      publishSnapshotNow(nextContent)
       dismissedMentionTriggerRef.current = null
       closeMentionPicker()
       closeSlashPicker()
@@ -885,11 +1540,45 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         focus()
       }
     },
-    [closeMentionPicker, closeSlashPicker, focus, runEditorActionSafely, syncContent]
+    [
+      closeMentionPicker,
+      closeSlashPicker,
+      focus,
+      flushPublishedSnapshot,
+      publishSnapshotNow,
+      runEditorActionSafely,
+      syncContent
+    ]
   )
+
+  useEffect(() => {
+    if (mode !== 'preview') {
+      return
+    }
+
+    const editor = editorRef.current
+    if (!editor || !editorReadyRef.current) {
+      return
+    }
+
+    const nextContent = contentRef.current
+    if (editor.getMarkdown() === nextContent) {
+      return
+    }
+
+    suppressNextDirtySyncRef.current = true
+    if (!runEditorActionSafely(replaceAll(nextContent))) {
+      suppressNextDirtySyncRef.current = false
+    }
+  }, [mode, runEditorActionSafely])
 
   const insertNoteLink = useCallback(
     (targetRelPath: string): void => {
+      if (modeRef.current === 'raw') {
+        rawEditorRef.current?.insertText(`[[${stripNoteExtension(targetRelPath)}]]`)
+        return
+      }
+
       const editor = editorRef.current
       if (!editor || !editorReadyRef.current) {
         return
@@ -1166,7 +1855,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const syncMentionPicker = useCallback((): void => {
     const editor = editorRef.current
     const root = rootRef.current
-    if (!editor || !editorReadyRef.current || !root) {
+    if (modeRef.current === 'raw' || !editor || !editorReadyRef.current || !root) {
       closeMentionPicker()
       return
     }
@@ -1179,7 +1868,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       !runEditorActionSafely((ctx) => {
         const view = ctx.get(editorViewCtx)
         const { state } = view
-        const { from, empty } = state.selection
+        const { from, empty, $from } = state.selection
 
         if (!empty) {
           dismissedMentionTriggerRef.current = null
@@ -1187,8 +1876,8 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
           return
         }
 
-        const lookBehindStart = Math.max(0, from - 100)
-        const textBefore = state.doc.textBetween(lookBehindStart, from, '\n', '\0')
+        const lookBehindStart = Math.max(0, $from.parentOffset - 100)
+        const textBefore = $from.parent.textBetween(lookBehindStart, $from.parentOffset, '\n', '\0')
         const match = textBefore.match(/\[\[([^\]\n]*)$/)
         if (!match) {
           dismissedMentionTriggerRef.current = null
@@ -1231,7 +1920,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   const syncSlashPicker = useCallback((): void => {
     const editor = editorRef.current
     const root = rootRef.current
-    if (!editor || !editorReadyRef.current || !root) {
+    if (modeRef.current === 'raw' || !editor || !editorReadyRef.current || !root) {
       closeSlashPicker()
       return
     }
@@ -1315,8 +2004,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
     let cancelled = false
     let readyFrameId: number | null = null
-    let didRegisterMarkdownListener = false
     root.replaceChildren()
+    previewMarkdownCacheRef.current.clear()
+    previewSerializationVersionRef.current += 1
     const initialValue = normalizeLatexEscapes(initialContentRef.current)
     const editor = new Crepe({
       root,
@@ -1329,6 +2019,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         [CrepeFeature.Latex]: false
       },
       featureConfigs: {
+        [CrepeFeature.ListItem]: {
+          bulletIcon: '•'
+        },
         [CrepeFeature.LinkTooltip]: {
           inputPlaceholder: 'Paste link or select a note link'
         },
@@ -1344,9 +2037,39 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       registerNoteCodeBlockView(ctx)
       ctx.update(prosePluginsCtx, (plugins) => [
         ...plugins,
+        new Plugin({
+          props: {
+            attributes: {
+              spellcheck: 'false'
+            }
+          },
+          view: () => ({
+            update: (view, previousState) => {
+              const docChanged = view.state.doc !== previousState.doc
+              const selectionChanged = !view.state.selection.eq(previousState.selection)
+              if (!docChanged && !selectionChanged) {
+                return
+              }
+
+              if (docChanged) {
+                const shouldMarkDirty = editorReadyRef.current && !suppressNextDirtySyncRef.current
+                suppressNextDirtySyncRef.current = false
+                previewSerializationVersionRef.current += 1
+                snapshotSchedulerRef.current?.schedule('preview')
+                if (shouldMarkDirty) {
+                  onDirtyRef.current()
+                }
+              }
+
+              syncMentionPicker()
+              syncSlashPicker()
+            }
+          })
+        }),
         inlineLatexPreviewPlugin(),
         noteCalloutPlugin(),
         createNoteCodeBlockSyntaxPlugin(),
+        createNoteCodeBlockNavigationPlugin(),
         createNoteVimModePlugin({
           isEnabled: () => vimModeEnabledRef.current,
           getKeyMappings: () => vimKeyMappingsRef.current,
@@ -1370,6 +2093,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     editorRef.current = editor
     editorReadyRef.current = false
     contentRef.current = initialValue
+    setRawContent(initialValue)
     onSnapshotChangeRef.current?.({ content: initialValue })
     editor.editor.onStatusChange((status) => {
       if (status === EditorStatus.Destroyed) {
@@ -1399,20 +2123,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
           editorReadyRef.current = true
           loadedNotePathRef.current = currentNotePathRef.current
-          if (!didRegisterMarkdownListener) {
-            didRegisterMarkdownListener = true
-            editor.on((api) => {
-              api.markdownUpdated((_ctx, markdown) => {
-                const shouldMarkDirty = editorReadyRef.current && !suppressNextDirtySyncRef.current
-                suppressNextDirtySyncRef.current = false
-                syncContent(normalizeLatexEscapes(markdown), shouldMarkDirty)
-                syncMentionPicker()
-                syncSlashPicker()
-              })
-            })
-          }
           syncContent(nextContent, false)
           setIsEditorVisible(true)
+          onReadyRef.current?.()
         }
 
         markEditorReady()
@@ -1442,6 +2155,10 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     const previousPath = loadedNotePathRef.current
     const previousContent = contentRef.current
 
+    if (previousPath !== currentNotePath || previousContent !== nextContent) {
+      flushPublishedSnapshot()
+    }
+
     initialContentRef.current = nextContent
     currentNotePathRef.current = currentNotePath
     loadedNotePathRef.current = currentNotePath
@@ -1452,23 +2169,48 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
     if (!editorRef.current || !editorReadyRef.current) {
       contentRef.current = nextContent
+      window.requestAnimationFrame(() => {
+        if (contentRef.current === nextContent) {
+          setRawContent(nextContent)
+        }
+      })
       return
     }
 
     suppressNextDirtySyncRef.current = true
     if (!runEditorActionSafely(replaceAll(nextContent))) {
       contentRef.current = nextContent
+      window.requestAnimationFrame(() => {
+        if (contentRef.current === nextContent) {
+          setRawContent(nextContent)
+        }
+      })
       return
     }
-    syncContent(nextContent, false)
+    contentRef.current = nextContent
+    window.requestAnimationFrame(() => {
+      if (contentRef.current === nextContent) {
+        setRawContent(nextContent)
+      }
+    })
+    publishSnapshotNow(nextContent)
     if (hasFocusIntent()) {
       focus()
     }
-  }, [currentNotePath, focus, hasFocusIntent, initialContent, runEditorActionSafely, syncContent])
+  }, [
+    currentNotePath,
+    focus,
+    hasFocusIntent,
+    initialContent,
+    flushPublishedSnapshot,
+    publishSnapshotNow,
+    runEditorActionSafely
+  ])
 
   useEffect(() => {
     const root = rootRef.current
-    if (!root) {
+    const editorHost = root?.parentElement
+    if (!root || !editorHost) {
       return
     }
 
@@ -1489,7 +2231,16 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
 
       void (async () => {
         const imageUrl = await onPasteImageRef.current(imageFile, fileExtension)
-        if (!imageUrl || !editorRef.current || !editorReadyRef.current) {
+        if (!imageUrl) {
+          return
+        }
+
+        if (modeRef.current === 'raw') {
+          rawEditorRef.current?.insertText(`\n![Pasted image](${imageUrl})\n`)
+          return
+        }
+
+        if (!editorRef.current || !editorReadyRef.current) {
           return
         }
 
@@ -1500,9 +2251,9 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       })()
     }
 
-    root.addEventListener('paste', handlePaste, true)
+    editorHost.addEventListener('paste', handlePaste, true)
     return () => {
-      root.removeEventListener('paste', handlePaste, true)
+      editorHost.removeEventListener('paste', handlePaste, true)
     }
   }, [runEditorActionSafely])
 
@@ -1512,7 +2263,11 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       return
     }
 
-    const handleClick = (event: MouseEvent): void => {
+    const handleNoteLinkOpen = (event: MouseEvent): void => {
+      if (event.type === 'auxclick' && !isMiddleMouseButton(event)) {
+        return
+      }
+
       const target = event.target
       if (!(target instanceof HTMLElement)) {
         return
@@ -1528,14 +2283,18 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         return
       }
 
+      const openInNewTab = isMiddleMouseButton(event) || isModifiedNotebookOpen(event)
+
       event.preventDefault()
       event.stopPropagation()
-      onOpenNoteLinkRef.current?.(noteTarget)
+      onOpenNoteLinkRef.current?.(noteTarget, { openInNewTab })
     }
 
-    root.addEventListener('click', handleClick, true)
+    root.addEventListener('click', handleNoteLinkOpen, true)
+    root.addEventListener('auxclick', handleNoteLinkOpen, true)
     return () => {
-      root.removeEventListener('click', handleClick, true)
+      root.removeEventListener('click', handleNoteLinkOpen, true)
+      root.removeEventListener('auxclick', handleNoteLinkOpen, true)
     }
   }, [])
 
@@ -1560,11 +2319,16 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     <div
       data-testid="note-block-editor"
       data-vim-mode={vimModeEnabled ? vimMode : undefined}
+      data-editor-mode={mode}
       data-editor-read-only={readOnly ? 'true' : undefined}
       data-editor-ready={isEditorVisible ? 'true' : 'false'}
       data-editor-density={density}
       data-editor-background={background}
-      className={cn('motion-editor-surface relative h-full min-h-[10vh]', className)}
+      className={cn(
+        'motion-editor-surface relative',
+        mode === 'preview' ? 'h-full min-h-[10vh]' : 'h-full min-h-0',
+        className
+      )}
       style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
       onFocusCapture={(event) => {
         if (isEditorTarget(event.target)) {
@@ -1582,7 +2346,23 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         }
       }}
     >
-      <div ref={rootRef} data-testid="note-milkdown-root" className="min-h-[10vh] h-full" />
+      <div
+        ref={rootRef}
+        data-testid="note-milkdown-root"
+        className={cn('min-h-[10vh] h-full', mode === 'preview' ? undefined : 'hidden')}
+        aria-hidden={mode !== 'preview'}
+      />
+      <NoteRawEditor
+        ref={rawEditorRef}
+        value={rawContent}
+        active={mode === 'raw'}
+        readOnly={readOnly}
+        vimModeEnabled={vimModeEnabled}
+        vimKeyMappings={vimKeyMappings}
+        onChange={handleRawContentChange}
+        onVimModeChange={handleRawVimModeChange}
+        onEditorElementChange={onRawEditorElementChange}
+      />
       <SelectionPopover
         selectionMode="single"
         value=""
@@ -1592,7 +2372,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         searchPlaceholder="Search commands"
         testId="note-slash-completion"
         contentClassName="note-editor-popover w-72 p-1"
-        open={Boolean(slashPicker?.open)}
+        open={mode === 'preview' && Boolean(slashPicker?.open)}
         onOpenChange={handleSlashPopoverOpenChange}
         searchValue={slashPicker?.query ?? ''}
         onSearchValueChange={handleSlashSearchValueChange}
@@ -1616,7 +2396,7 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
         searchPlaceholder="Search notes"
         testId="note-link-completion"
         contentClassName="note-editor-popover w-72 p-1"
-        open={Boolean(mentionPicker?.open)}
+        open={mode === 'preview' && Boolean(mentionPicker?.open)}
         onOpenChange={handleMentionPopoverOpenChange}
         searchValue={mentionPicker?.query ?? ''}
         onSearchValueChange={handleMentionSearchValueChange}

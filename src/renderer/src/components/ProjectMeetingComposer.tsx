@@ -18,7 +18,7 @@ interface ProjectMeetingComposerProps {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onSubmit: (input: {
     markdown: string
     type: ProjectMeetingType

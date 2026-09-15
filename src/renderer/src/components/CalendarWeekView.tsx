@@ -61,6 +61,7 @@ import {
 } from '../lib/calendarTaskDragSession'
 import type { CalendarTaskDragMode } from '../lib/calendarTaskDragSession'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
+import { getWorkspaceOpenOptions } from '../lib/workspaceOpen'
 import { CalendarTaskCard } from './CalendarTaskCard'
 import { CalendarTaskHoverCard } from './CalendarTaskHoverCard'
 import { TaskContextMenu } from './TaskContextMenu'
@@ -797,7 +798,15 @@ export function CalendarWeekView({
             onClick={(event) => {
               event.stopPropagation()
               setHoveredTaskCard(null)
-              onOpenTask?.(task.id)
+              onOpenTask?.(task.id, getWorkspaceOpenOptions(event))
+            }}
+            onAuxClick={(event) => {
+              if (event.button !== 1) {
+                return
+              }
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenTask?.(task.id, { openInNewTab: true })
             }}
             onMouseMove={(event) => {
               const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
@@ -919,16 +928,27 @@ export function CalendarWeekView({
           setHoveredTaskCard(null)
           onOpenTask?.(task.id)
         }}
-        onClick={(event) => {
-          if (event.target instanceof HTMLElement && event.target.closest('button')) {
-            return
+          onClick={(event) => {
+            if (event.target instanceof HTMLElement && event.target.closest('button')) {
+              return
           }
           if (suppressTaskOpenRef.current === task.id) {
             suppressTaskOpenRef.current = null
             return
           }
           setHoveredTaskCard(null)
-          onOpenTask?.(task.id)
+          onOpenTask?.(task.id, getWorkspaceOpenOptions(event))
+        }}
+        onAuxClick={(event) => {
+          if (
+            event.button !== 1 ||
+            (event.target instanceof HTMLElement && event.target.closest('button'))
+          ) {
+            return
+          }
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenTask?.(task.id, { openInNewTab: true })
         }}
         className={`motion-calendar-event group absolute overflow-hidden rounded-md bg-card transition-colors hover:bg-muted ${
           isInteracting ? 'z-20 shadow-lg' : 'z-10 hover:shadow-md'

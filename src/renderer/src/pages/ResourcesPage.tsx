@@ -18,6 +18,7 @@ import {
 } from '../lib/resourceRows'
 import type { ResourceWorkspaceViewState } from '../lib/workspaceViewState'
 import type { TableSortState } from '../lib/tableSort'
+import type { WorkspaceOpenOptions } from '../lib/workspaceOpen'
 import { Search } from '../components/ui/icons'
 import { WorkspaceHeaderSecondaryActions } from '../components/ui/document-workspace'
 import { Input } from '../components/ui/input'
@@ -62,7 +63,7 @@ export interface ResourcesPageProps {
   onSetResourceProjectLinks: (input: { resourceId: string; projectIds: string[] }) => Promise<void>
   onRemoveResource: (resourceId: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
-  onOpenNotebookResource: (resourceId: string) => void
+  onOpenNotebookResource: (resourceId: string, options?: WorkspaceOpenOptions) => void
   onLocateResource?: (resourceId: string) => Promise<void>
   onRevealResource?: (resourceId: string) => Promise<void>
   onRefreshResource?: (resourceId: string) => Promise<void>

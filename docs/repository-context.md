@@ -13,8 +13,8 @@ workflows. User-facing workspace content lives in a user-selected local vault.
 The application uses Electron process isolation and exposes renderer
 capabilities through a narrow preload bridge.
 
-The main product areas are Notes, Projects, Calendar, Weekly Plan, Schedules,
-Agent Chat, and Settings. The current route and feature inventory can change;
+The main product areas are Notes, Projects, Calendar, Weekly Plan, Sticky Note,
+Schedules, Agent Chat, and Settings. The current route and feature inventory can change;
 use the source route definitions and the README for the exact active surface.
 
 ## Ownership boundaries
@@ -36,7 +36,8 @@ respect context isolation and must not call Node APIs directly.
 
 The selected vault is the canonical home for user workspace data, including
 notebooks, attachments, projects, calendar tasks, weekly plans, subscriptions,
-schedules, agent records, and Excalidraw sessions. Internal metadata, migration
+schedules, agent records, Excalidraw sessions, and Sticky Note board state.
+Internal metadata, migration
 markers, file maps, and the local search index are maintained separately from
 the user-facing content boundary.
 
@@ -55,13 +56,22 @@ without checking the relevant service and ownership documentation.
 
 ## Agent and CLI context
 
-The JSON-only CLI is the bounded interface for workspace inspection and
-portable vault operations. The primary context command is:
+The JSON-only `xingularity vault ...` CLI remains the compatibility interface
+for explicit-root inspection and portable vault operations. The standalone
+`x-workspace` CLI is the agent-facing interface for one per-user bound vault;
+it supports bounded context plus notes, projects, tasks, milestones, updates,
+meetings, and resource metadata operations while the app is open or closed.
+The primary context commands are:
 
     npm run xingularity -- vault context --root /path/to/vault --pretty
+    npm run x-workspace -- context --pretty
 
-Read [xingularity-cli.md](xingularity-cli.md) before changing CLI output,
-context redaction, validation, exit codes, or the shared x-workspace guidance.
+Read [xingularity-cli.md](xingularity-cli.md) and
+[x-workspace-cli.md](x-workspace-cli.md) before changing CLI output, context
+redaction, validation, exit codes, vault binding, or the shared x-workspace
+guidance. The new CLI uses the shared headless workspace service and preview /
+apply mutation contract; it must not import Electron or create a second vault
+write path.
 Agent Chat uses the same read-only workspace.context boundary through the
 main/preload contract.
 
@@ -104,6 +114,9 @@ repository.
 - [xingularity-cli.md](xingularity-cli.md): CLI contracts and context boundaries
 - [design-system/overview.md](design-system/overview.md): renderer primitives
   and reusable workspace layer
+- [features/editor-interaction-behavior.md](features/editor-interaction-behavior.md):
+  editor movement, Markdown list Enter, fenced code-block, and Vim behavior
+  investigation and contract
 - [features/centralize-workspace.md](features/centralize-workspace.md):
   context-layer product and architecture proposal
 - [revamp/README.md](revamp/README.md): vault reconciliation and sync

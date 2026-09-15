@@ -5130,6 +5130,7 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     projectIcons: settings.projectIcons,
     projects: settings.projects,
     gridBoard: settings.gridBoard,
+    stickyNoteBoard: settings.stickyNoteBoard,
     lastOpenedNotePath: settings.lastOpenedNotePath,
     lastOpenedProjectId: settings.lastOpenedProjectId,
     favoriteNotePaths: settings.favoriteNotePaths,

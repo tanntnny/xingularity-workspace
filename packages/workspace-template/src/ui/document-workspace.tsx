@@ -69,7 +69,19 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
               <div
                 key={tab.id}
                 data-active={tab.id === activeTabId ? 'true' : 'false'}
-                className="workspace-tab-card group app-no-drag flex h-8 w-52 shrink-0 items-center rounded-[var(--radius-button-pill)] border bg-background data-[active=true]:bg-accent"
+                data-testid={`workspace-tab-card:${tab.id}`}
+                className="workspace-tab-card group app-no-drag flex h-8 w-52 shrink-0 cursor-pointer items-center rounded-[var(--radius-button-pill)] border bg-background data-[active=true]:bg-accent"
+                onClick={(event) => {
+                  const target = event.target
+                  if (
+                    target instanceof Element &&
+                    target.closest('[role="tab"], [data-workspace-tab-close="true"]')
+                  ) {
+                    return
+                  }
+
+                  onSelectTab(tab.id)
+                }}
               >
                 <ToggleGroupItem
                   value={tab.id}
@@ -77,7 +89,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   id={`workspace-tab:${tab.id}`}
                   aria-label={tab.label}
                   data-testid={`workspace-tab:${tab.id}`}
-                  className="h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-medium text-foreground hover:bg-transparent hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                  className="h-full w-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-medium text-foreground hover:bg-transparent hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                 >
                   {TabIcon ? (
                     <TabIcon
@@ -107,6 +119,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   aria-label={`Close ${tab.label} tab`}
                   title={`Close ${tab.label} tab`}
                   data-testid={`workspace-tab-close:${tab.id}`}
+                  data-workspace-tab-close="true"
                   className="rounded-[var(--radius-button-pill)]"
                   onClick={() => onCloseTab(tab.id)}
                 >

@@ -92,7 +92,11 @@ declare global {
   }
 }
 
-async function createFixtureVault(alphaContent: string, alphaTags: string[] = []): Promise<string> {
+async function createFixtureVault(
+  alphaContent: string,
+  alphaTags: string[] = [],
+  betaContent = 'Side note\n'
+): Promise<string> {
   const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-e2e-vault-'))
   await fs.mkdir(path.join(rootPath, 'notes'), { recursive: true })
   await fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true })
@@ -103,10 +107,33 @@ async function createFixtureVault(alphaContent: string, alphaTags: string[] = []
   )
   await fs.writeFile(
     path.join(rootPath, 'notes', 'beta.md'),
-    serializeStoredNoteDocument(createStoredNoteDocumentFromText('Side note\n')),
+    serializeStoredNoteDocument(createStoredNoteDocumentFromText(betaContent)),
     'utf-8'
   )
   return rootPath
+}
+
+async function writeDrawingFixture(vaultRoot: string, relPath: string): Promise<void> {
+  const absolutePath = path.join(vaultRoot, 'notes', relPath)
+  await fs.writeFile(
+    absolutePath,
+    JSON.stringify(
+      {
+        version: 1,
+        scene: {
+          type: 'excalidraw',
+          version: 2,
+          source: 'https://excalidraw.com',
+          elements: [],
+          appState: { viewBackgroundColor: 'transparent' },
+          files: {}
+        }
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  )
 }
 
 async function createNestedNoteLinkFixtureVault(): Promise<string> {
@@ -277,6 +304,32 @@ async function openNote(page: Page, relPath: string): Promise<void> {
   await expect
     .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
     .toBe(relPath)
+}
+
+async function getNoteScrollTop(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const scrollContainer = document.querySelector<HTMLElement>(
+      '[data-testid="note-editor-scroll"]'
+    )
+    if (!scrollContainer) {
+      throw new Error('Note editor scroll container is not mounted')
+    }
+
+    return scrollContainer.scrollTop
+  })
+}
+
+async function setNoteScrollTop(page: Page, scrollTop: number): Promise<void> {
+  await page.evaluate((nextScrollTop) => {
+    const scrollContainer = document.querySelector<HTMLElement>(
+      '[data-testid="note-editor-scroll"]'
+    )
+    if (!scrollContainer) {
+      throw new Error('Note editor scroll container is not mounted')
+    }
+
+    scrollContainer.scrollTop = nextScrollTop
+  }, scrollTop)
 }
 
 async function startNoteTreeDrag(
@@ -598,6 +651,65 @@ test.describe('note page block editor switching', () => {
         .getByRole('button', { name: 'Open alpha' })
         .click()
       await expect(page.getByTestId('note-block-editor')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('uses trailing ellipsis for all notebook card labels without fading', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const longFolderName = 'A very long folder name that should be truncated'
+    const longNoteName = 'A very long notebook filename that should be truncated.md'
+    const longDrawingName = 'A very long drawing filename that should be truncated.excalidraw'
+
+    await fs.mkdir(path.join(vaultRoot, 'notes', longFolderName), { recursive: true })
+    await fs.writeFile(
+      path.join(vaultRoot, 'notes', longNoteName),
+      serializeStoredNoteDocument(createStoredNoteDocumentFromText('Long note\n')),
+      'utf-8'
+    )
+    await writeDrawingFixture(vaultRoot, longDrawingName)
+
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const entries = [
+        {
+          relPath: longFolderName,
+          displayName: longFolderName
+        },
+        {
+          relPath: longNoteName,
+          displayName: longNoteName.replace(/\.md$/i, '')
+        },
+        {
+          relPath: longDrawingName,
+          displayName: longDrawingName.replace(/\.excalidraw$/i, '')
+        }
+      ]
+
+      for (const entry of entries) {
+        const card = page.getByTestId(`notebook-card:${entry.relPath}`)
+        await expect(card).toBeVisible()
+
+        const title = page.getByTestId(`notebook-card-title:${entry.relPath}`)
+        await expect(title).toHaveAttribute('title', entry.displayName)
+        await expect(title).toHaveCSS('-webkit-line-clamp', '2')
+        await expect(card.locator('.workspace-text-fade')).toHaveCount(0)
+        await expect(card.locator('.workspace-text-ellipsis')).toHaveCount(2)
+
+        const styleState = await title.evaluate((element) => {
+          const style = window.getComputedStyle(element)
+          return {
+            maskImage: style.getPropertyValue('-webkit-mask-image'),
+            lineClamp: style.getPropertyValue('-webkit-line-clamp')
+          }
+        })
+
+        expect(styleState.maskImage).toBe('none')
+        expect(styleState.lineClamp).toBe('2')
+      }
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -1291,7 +1403,351 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('keeps independent notebook sessions in separate workspace tabs', async () => {
+  test('keeps large raw notes scrollable and flushes the latest edit', async () => {
+    const largeContent = Array.from(
+      { length: 5000 },
+      (_, index) => `## Section ${index}\nThis is a long raw markdown line for profiling.`
+    ).join('\n')
+    const vaultRoot = await createFixtureVault(largeContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await page.getByTestId('note-editor-mode-tab:raw').click()
+
+      const rawSurface = page.getByTestId('note-raw-editor-surface')
+      const rawEditor = page.getByTestId('note-raw-editor')
+      await expect(rawSurface).toBeVisible()
+      await expect(rawSurface).toHaveAttribute('data-note-raw-scroll', 'bounded')
+      await expect
+        .poll(() =>
+          rawEditor.evaluate((element) => {
+            const textarea = element as HTMLTextAreaElement
+            return {
+              scrollable: textarea.scrollHeight > textarea.clientHeight,
+              overflowY: window.getComputedStyle(textarea).overflowY
+            }
+          })
+        )
+        .toMatchObject({ scrollable: true, overflowY: 'auto' })
+
+      await rawEditor.click()
+      await rawEditor.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End')
+      await page.keyboard.type('\nraw latency marker')
+
+      await page.getByTestId('note-editor-mode-tab:preview').click()
+      await expect(
+        page.locator('[data-testid="note-block-editor"] .ProseMirror').first()
+      ).toContainText('raw latency marker', { timeout: 15_000 })
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('raw latency marker')
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+      await expect
+        .poll(() => readNoteFromDisk(page, 'alpha.md'), { timeout: 15_000 })
+        .toContain('raw latency marker')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('does not mirror preview edits into the hidden raw textarea', async () => {
+    const largeContent = Array.from(
+      { length: 5000 },
+      (_, index) => `## Section ${index}\nThis is a long preview markdown line for profiling.`
+    ).join('\n')
+    const vaultRoot = await createFixtureVault(largeContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const editor = page.locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+      await editor.click()
+      await editor.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End')
+
+      await page.evaluate(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+        if (!descriptor?.get || !descriptor.set) {
+          throw new Error('Could not instrument textarea value writes')
+        }
+
+        const target = window as Window & {
+          __XINGULARITY_RAW_VALUE_AUDIT__?: {
+            descriptor: PropertyDescriptor
+            writes: number
+          }
+        }
+        target.__XINGULARITY_RAW_VALUE_AUDIT__ = { descriptor, writes: 0 }
+
+        Object.defineProperty(HTMLTextAreaElement.prototype, 'value', {
+          configurable: descriptor.configurable,
+          enumerable: descriptor.enumerable,
+          get: descriptor.get,
+          set(value: string) {
+            if (this.matches('[data-note-raw-editor="true"]')) {
+              target.__XINGULARITY_RAW_VALUE_AUDIT__!.writes += 1
+            }
+            descriptor.set!.call(this, value)
+          }
+        })
+      })
+
+      await page.keyboard.type('\npreview latency marker')
+      await page.waitForTimeout(350)
+
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('preview latency marker')
+
+      const rawValueWrites = await page.evaluate(() => {
+        const target = window as Window & {
+          __XINGULARITY_RAW_VALUE_AUDIT__?: {
+            descriptor: PropertyDescriptor
+            writes: number
+          }
+        }
+        const audit = target.__XINGULARITY_RAW_VALUE_AUDIT__
+        if (!audit) {
+          throw new Error('Textarea value audit was not installed')
+        }
+
+        Object.defineProperty(HTMLTextAreaElement.prototype, 'value', audit.descriptor)
+        delete target.__XINGULARITY_RAW_VALUE_AUDIT__
+        return audit.writes
+      })
+
+      expect(rawValueWrites).toBe(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps large preview typing within the editor frame budget', async () => {
+    const largeContent = Array.from(
+      { length: 5000 },
+      (_, index) => `## Section ${index}\nThis is a long preview markdown line for profiling.`
+    ).join('\n')
+    const vaultRoot = await createFixtureVault(largeContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const editor = page.locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+      await editor.click()
+      await editor.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End')
+      await page.waitForTimeout(3000)
+
+      await page.evaluate(() => {
+        const target = window as Window & {
+          __XINGULARITY_FRAME_AUDIT__?: {
+            frameGaps: number[]
+            frameTimes: number[]
+            longTasks: Array<{ startTime: number; duration: number }>
+            observer: PerformanceObserver
+            frameId: number
+            previousFrame: number | null
+            startedAt: number | null
+          }
+        }
+        const frameGaps: number[] = []
+        const frameTimes: number[] = []
+        const longTasks: Array<{ startTime: number; duration: number }> = []
+        const observer = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            longTasks.push({ startTime: entry.startTime, duration: entry.duration })
+          }
+        })
+        observer.observe({ type: 'longtask' })
+
+        const audit = {
+          frameGaps,
+          frameTimes,
+          longTasks,
+          observer,
+          frameId: 0,
+          previousFrame: null,
+          startedAt: null
+        }
+        const sampleFrame = (timestamp: number): void => {
+          if (audit.startedAt !== null && audit.previousFrame !== null) {
+            audit.frameGaps.push(timestamp - audit.previousFrame)
+          }
+          if (audit.startedAt !== null) {
+            audit.frameTimes.push(timestamp)
+          }
+          audit.previousFrame = timestamp
+          audit.frameId = window.requestAnimationFrame(sampleFrame)
+        }
+        audit.frameId = window.requestAnimationFrame(sampleFrame)
+        target.__XINGULARITY_FRAME_AUDIT__ = audit
+      })
+
+      await page.evaluate(() => {
+        const target = window as Window & {
+          __XINGULARITY_FRAME_AUDIT__?: {
+            startedAt: number | null
+          }
+        }
+        const audit = target.__XINGULARITY_FRAME_AUDIT__
+        if (!audit) {
+          throw new Error('Editor performance audit was not installed')
+        }
+        audit.startedAt = performance.now()
+        audit.previousFrame = null
+      })
+      await page.keyboard.type('\npreview performance marker')
+      await page.waitForTimeout(500)
+
+      const metrics = await page.evaluate(() => {
+        const target = window as Window & {
+          __XINGULARITY_FRAME_AUDIT__?: {
+            frameGaps: number[]
+            frameTimes: number[]
+            longTasks: Array<{ startTime: number; duration: number }>
+            observer: PerformanceObserver
+            frameId: number
+            previousFrame: number | null
+            startedAt: number | null
+          }
+        }
+        const audit = target.__XINGULARITY_FRAME_AUDIT__
+        if (!audit) {
+          throw new Error('Editor performance audit was not installed')
+        }
+
+        window.cancelAnimationFrame(audit.frameId)
+        audit.observer.disconnect()
+        const startedAt = audit.startedAt ?? performance.now()
+        const relevantLongTasks = audit.longTasks.filter((task) => task.startTime >= startedAt)
+        const frameGapDetails = audit.frameGaps
+          .map((gap, index) => ({
+            gap,
+            timestamp: audit.frameTimes[index + 1] ?? null
+          }))
+          .sort((left, right) => right.gap - left.gap)
+        return {
+          maxFrameGap: Math.max(0, ...audit.frameGaps),
+          maxLongTask: Math.max(0, ...relevantLongTasks.map((task) => task.duration)),
+          frameSamples: audit.frameTimes.length,
+          longTaskSamples: relevantLongTasks.length,
+          worstFrameGaps: frameGapDetails.slice(0, 5),
+          relevantLongTasks: relevantLongTasks.slice(-10)
+        }
+      })
+
+      console.log(`Large preview typing metrics: ${JSON.stringify(metrics)}`)
+      expect(metrics.frameSamples).toBeGreaterThan(10)
+      expect(metrics.maxFrameGap).toBeLessThan(200)
+      expect(metrics.maxLongTask).toBeLessThan(200)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps preview tables separate from the raw markdown editor', async () => {
+    const vaultRoot = await createFixtureVault(
+      '| Header one | Header two |\n| --- | --- |\n| Cell one | Cell two |'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const previewRoot = page.getByTestId('note-milkdown-root')
+      const rawSurface = page.getByTestId('note-raw-editor-surface')
+      const rawEditor = page.getByTestId('note-raw-editor')
+      const previewTable = page
+        .locator('[data-testid="note-block-editor"] .milkdown-table-block')
+        .first()
+
+      await expect(previewRoot).toBeVisible()
+      await expect(previewTable).toBeVisible()
+      await expect(rawSurface).toBeHidden()
+
+      await page.getByTestId('note-editor-mode-tab:raw').click()
+      await expect(rawSurface).toBeVisible()
+      await expect(rawSurface).toHaveCSS('padding-bottom', '0px')
+      await expect(rawEditor).toHaveCSS('line-height', '24px')
+      await expect(previewRoot).toBeHidden()
+
+      await page.getByTestId('note-editor-mode-tab:preview').click()
+      await expect(previewRoot).toBeVisible()
+      await expect(previewTable).toBeVisible()
+      await expect(rawSurface).toBeHidden()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('continues and exits Markdown bullets in raw mode', async () => {
+    const vaultRoot = await createFixtureVault('- first item')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await page.getByTestId('note-editor-mode-tab:raw').click()
+
+      const rawEditor = page.getByTestId('note-raw-editor')
+      await expect(rawEditor).toBeVisible()
+      await rawEditor.click()
+      await rawEditor.press('End')
+      await rawEditor.press('Enter')
+      await expect(rawEditor).toHaveValue('- first item\n- ')
+
+      await rawEditor.press('Enter')
+      await expect(rawEditor).toHaveValue('- first item\n')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toBe('- first item\n')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('continues and exits Markdown bullets in preview mode', async () => {
+    const vaultRoot = await createFixtureVault('- first item')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page
+        .locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+        .first()
+      await editor.click()
+      await editor.press('End')
+      await editor.press('Enter')
+
+      const editable = page.locator('[data-testid="note-block-editor"] [contenteditable="true"]')
+      const bulletList = editable.locator('ul').first()
+      await expect(bulletList.locator('li')).toHaveCount(2)
+      await expect(bulletList.locator('li').first()).toContainText('first item')
+
+      await editor.press('Enter')
+
+      await expect(bulletList.locator('li')).toHaveCount(1)
+      await expect(editable.locator('ul + p')).toHaveCount(1)
+      await expect
+        .poll(
+          async () => getPersistedVisibleBlocks(await readNoteDocumentFromDisk(page, 'alpha.md')),
+          {
+            timeout: 15_000
+          }
+        )
+        .toEqual([{ type: 'bulletListItem', text: 'first item' }])
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('isolates notebook state across workspace tabs', async () => {
     const vaultRoot = await createFixtureVault('Alpha note\n')
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
@@ -1323,8 +1779,6 @@ test.describe('note page block editor switching', () => {
           tabOverflow: 'hidden'
         })
 
-      const tabCard = page.locator('.workspace-tab-card').first()
-      const tabCloseButton = page.getByTestId('workspace-tab-close:workspace-tab-1')
       const readTabAffordanceState = async (): Promise<{
         closeOpacity: string
         shortcutOpacity: string
@@ -1351,75 +1805,11 @@ test.describe('note page block editor switching', () => {
           }
         })
 
-      const readTabShortcutCloseGap = async (): Promise<number> =>
-        page.evaluate(() => {
-          const close = document.querySelector<HTMLElement>(
-            '[data-testid="workspace-tab-close:workspace-tab-1"]'
-          )
-          const shortcut = document.querySelector<HTMLElement>(
-            '[data-testid="workspace-tab-shortcut:workspace-tab-1"]'
-          )
-          if (!close || !shortcut) {
-            throw new Error('Expected workspace tab shortcut and close controls')
-          }
-
-          return Math.abs(
-            close.getBoundingClientRect().left - shortcut.getBoundingClientRect().right
-          )
-        })
-
-      const readTabLabelShortcutGap = async (): Promise<number> =>
-        page.evaluate(() => {
-          const shortcut = document.querySelector<HTMLElement>(
-            '[data-testid="workspace-tab-shortcut:workspace-tab-1"]'
-          )
-          const label = document.querySelector<HTMLElement>(
-            '[data-testid="workspace-tab-label:workspace-tab-1"]'
-          )
-          if (!shortcut || !label) {
-            throw new Error('Expected workspace tab label and shortcut')
-          }
-
-          return Math.abs(
-            label.getBoundingClientRect().right - shortcut.getBoundingClientRect().left
-          )
-        })
-
-      const readTabSurfaceColors = async (): Promise<string> =>
-        page.evaluate(() => {
-          const card = document.querySelector<HTMLElement>('.workspace-tab-card')
-          if (!card) {
-            throw new Error('Expected workspace tab card')
-          }
-
-          return window.getComputedStyle(card).backgroundColor
-        })
-
-      const idleSurfaceColors = await readTabSurfaceColors()
-
       await expect.poll(readTabAffordanceState).toEqual({
         closeOpacity: '0',
         shortcutOpacity: '0',
         hasMaskImage: true
       })
-      const idleLabelShortcutGap = await readTabLabelShortcutGap()
-      await tabCard.hover()
-      await expect.poll(readTabAffordanceState).toEqual({
-        closeOpacity: '1',
-        shortcutOpacity: '1',
-        hasMaskImage: true
-      })
-      await expect.poll(readTabShortcutCloseGap).toBeLessThanOrEqual(1)
-      await expect.poll(readTabLabelShortcutGap).toBeLessThanOrEqual(1)
-      expect(idleLabelShortcutGap).toBeGreaterThan(1)
-      const hoveredSurfaceColors = await readTabSurfaceColors()
-      expect(hoveredSurfaceColors).not.toBe(idleSurfaceColors)
-      await tabCloseButton.hover()
-      await expect
-        .poll(() =>
-          tabCloseButton.evaluate((element) => window.getComputedStyle(element).backgroundColor)
-        )
-        .not.toBe('rgba(0, 0, 0, 0)')
       await page.getByTestId('workspace-tab:workspace-tab-1').focus()
       await expect.poll(readTabAffordanceState).toEqual({
         closeOpacity: '1',
@@ -1432,7 +1822,9 @@ test.describe('note page block editor switching', () => {
 
       await page.getByTestId('workspace-tab-add').click()
       await expect(page.getByTestId('workspace-tab:workspace-tab-2')).toBeVisible()
-      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).path).toBeNull()
+      await expect
+        .poll(async () => getCurrentNoteSnapshot(page), { timeout: 15_000 })
+        .toMatchObject({ path: null, content: '' })
 
       await openNote(page, 'beta.md')
       await replaceEditorContent(page, ['Tab two draft'])
@@ -1468,6 +1860,126 @@ test.describe('note page block editor switching', () => {
           path: 'alpha.md',
           content: expect.stringContaining('Duplicate note draft')
         })
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('switches workspace tabs from the full tab card surface', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await page.getByTestId('workspace-tab-add').click()
+      const firstTabCard = page.getByTestId('workspace-tab-card:workspace-tab-1')
+      const secondTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(firstTabCard).toBeVisible()
+      await expect(secondTab).toHaveAttribute('aria-selected', 'true')
+
+      await firstTabCard.click({ position: { x: 156, y: 16 } })
+
+      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      await expect(secondTab).toHaveAttribute('aria-selected', 'false')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('opens note targets in fresh tabs with modified or middle click', async () => {
+    const vaultRoot = await createFixtureVault('Alpha note\n', [], 'Beta note\n')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+      await page.getByTestId('note-tree-row:alpha.md').click({ modifiers: [modifier] })
+
+      const secondTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondTab).toBeVisible()
+      await expect(secondTab).toHaveAttribute('aria-selected', 'false')
+      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe(null)
+
+      await secondTab.click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe('alpha.md')
+
+      await page.getByTestId('workspace-tab:workspace-tab-1').click()
+      await page.getByTestId('note-tree-row:beta.md').click({ button: 'middle' })
+
+      const thirdTab = page.getByTestId('workspace-tab:workspace-tab-3')
+      await expect(thirdTab).toBeVisible()
+      await expect(thirdTab).toHaveAttribute('aria-selected', 'false')
+      await expect(page.getByTestId('workspace-tab:workspace-tab-1')).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe(null)
+
+      await thirdTab.click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe('beta.md')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('restores note scroll positions independently per workspace tab and note', async () => {
+    const filler = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
+    const vaultRoot = await createFixtureVault(`# Alpha\n\n${filler}`, [], `# Beta\n\n${filler}`)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await expect(page.getByTestId('note-block-editor')).toBeVisible({ timeout: 20_000 })
+
+      await setNoteScrollTop(page, 260)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(260)
+
+      await page.getByTestId('workspace-tab-add').click()
+      const secondTab = page.getByTestId('workspace-tab:workspace-tab-2')
+      await expect(secondTab).toBeVisible()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).path, { timeout: 15_000 })
+        .toBe('alpha.md')
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(0)
+
+      await setNoteScrollTop(page, 520)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(520)
+
+      await page.getByTestId('workspace-tab:workspace-tab-1').click()
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(260)
+
+      await openNote(page, 'beta.md')
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(0)
+      await setNoteScrollTop(page, 180)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(180)
+
+      await openNote(page, 'alpha.md')
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(260)
+
+      await page.getByTestId('sidebar-page:projects').click()
+      await expect(page.getByTestId('sidebar-page:projects')).toHaveAttribute('data-active', 'true')
+      await page.getByTestId('sidebar-page:notes').click()
+      await openNote(page, 'alpha.md')
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(260)
+
+      await secondTab.click()
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(520)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -2301,9 +2813,9 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('renders visible bullet and numbered list markers in the note editor', async () => {
+  test('renders standard list markers aligned with the first content row', async () => {
     const vaultRoot = await createFixtureVault(
-      '- Bullet item\n\n1. Numbered item\n2. Second item\n'
+      '- Bullet item\n\n  Bullet detail paragraph\n\n1. Numbered item\n2. Second item\n'
     )
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
@@ -2312,35 +2824,70 @@ test.describe('note page block editor switching', () => {
 
       const styles = await page.evaluate(() => {
         const editorRoot = document.querySelector('[data-testid="note-block-editor"]')
-        const editable = editorRoot?.querySelector('[contenteditable="true"]')
-        const bulletParagraph = editable?.querySelector(
-          "ul li[data-list-type='bullet'] > p"
-        ) as HTMLElement | null
-        const numberedParagraph = editable?.querySelector(
-          "ol li[data-list-type='ordered'] > p"
-        ) as HTMLElement | null
+        const editable = editorRoot?.querySelector<HTMLElement>('[contenteditable="true"]')
+        const bulletItems = Array.from(
+          editable?.querySelectorAll<HTMLElement>('ul .milkdown-list-item-block li.list-item') ?? []
+        )
+        const bulletItem = bulletItems.find((item) => item.querySelector('.label.bullet'))
+        const bulletMarker = bulletItem?.querySelector<HTMLElement>('.label-wrapper')
+        const bulletParagraph = bulletItem?.querySelector<HTMLElement>('.children .content-dom > p')
+        const numberedItems = Array.from(
+          editable?.querySelectorAll<HTMLElement>('ol .milkdown-list-item-block li.list-item') ?? []
+        )
+        const numberedItem = numberedItems[0]
+        const numberedMarker = numberedItem?.querySelector<HTMLElement>('.label-wrapper')
+        const numberedParagraph = numberedItem?.querySelector<HTMLElement>(
+          '.children .content-dom > p'
+        )
+
+        const getFirstRowCenter = (paragraph: HTMLElement): number => {
+          const rect = paragraph.getBoundingClientRect()
+          const computedStyle = window.getComputedStyle(paragraph)
+          return (
+            rect.top +
+            Number.parseFloat(computedStyle.paddingTop) +
+            Number.parseFloat(computedStyle.lineHeight) / 2
+          )
+        }
+
+        const getCenter = (element: HTMLElement): number => {
+          const rect = element.getBoundingClientRect()
+          return rect.top + rect.height / 2
+        }
 
         return {
-          editableHtml: editable?.innerHTML ?? null,
-          bulletMarkerContent: bulletParagraph
-            ? window.getComputedStyle(bulletParagraph, '::before').content
+          bulletMarkerText: bulletItem?.querySelector('.label.bullet')?.textContent?.trim() ?? null,
+          bulletMarkerColor: bulletMarker ? window.getComputedStyle(bulletMarker).color : null,
+          bulletCenterDelta:
+            bulletMarker && bulletParagraph
+              ? Math.abs(getCenter(bulletMarker) - getFirstRowCenter(bulletParagraph))
+              : null,
+          bulletItemHeight: bulletItem?.getBoundingClientRect().height ?? null,
+          bulletMarkerHeight: bulletMarker?.getBoundingClientRect().height ?? null,
+          numberedMarkerText:
+            numberedItem?.querySelector('.label.ordered')?.textContent?.trim() ?? null,
+          secondNumberedMarkerText:
+            numberedItems[1]?.querySelector('.label.ordered')?.textContent?.trim() ?? null,
+          numberedMarkerColor: numberedMarker
+            ? window.getComputedStyle(numberedMarker).color
             : null,
-          bulletMarkerColor: bulletParagraph
-            ? window.getComputedStyle(bulletParagraph, '::before').color
-            : null,
-          numberedMarkerContent: numberedParagraph
-            ? window.getComputedStyle(numberedParagraph, '::before').content
-            : null,
-          numberedMarkerColor: numberedParagraph
-            ? window.getComputedStyle(numberedParagraph, '::before').color
-            : null
+          numberedCenterDelta:
+            numberedMarker && numberedParagraph
+              ? Math.abs(getCenter(numberedMarker) - getFirstRowCenter(numberedParagraph))
+              : null
         }
       })
 
-      expect(styles.bulletMarkerContent).toContain('•')
+      expect(styles.bulletMarkerText).toBe('•')
       expect(styles.bulletMarkerColor).not.toBe('rgba(0, 0, 0, 0)')
-      expect(styles.numberedMarkerContent).toContain('1.')
+      expect(styles.bulletCenterDelta).not.toBeNull()
+      expect(styles.bulletCenterDelta ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1)
+      expect(styles.bulletItemHeight).toBeGreaterThan(styles.bulletMarkerHeight ?? 0)
+      expect(styles.numberedMarkerText).toBe('1.')
+      expect(styles.secondNumberedMarkerText).toBe('2.')
       expect(styles.numberedMarkerColor).not.toBe('rgba(0, 0, 0, 0)')
+      expect(styles.numberedCenterDelta).not.toBeNull()
+      expect(styles.numberedCenterDelta ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -2660,6 +3207,104 @@ test.describe('note page block editor switching', () => {
       )
       await expect(javascriptBlock.getByText('const', { exact: true })).toBeVisible()
       await expect(javascriptBlock.getByText('greet', { exact: true })).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('leaves fenced code blocks with vertical arrow keys at their boundaries', async () => {
+    const initialMarkdown = ['Before', '', '```ts', 'alpha', 'beta', '```', '', 'After'].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      const codeBlock = editorRoot.locator('.milkdown-code-block').first()
+      await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+
+      await codeBlock.getByText('alpha', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Home')
+      await page.keyboard.press('ArrowUp')
+
+      let selection = await getEditorSelectionState(page)
+      expect(selection.anchorText).toBe('Before')
+
+      await codeBlock.getByText('beta', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('End')
+      await page.keyboard.press('ArrowDown')
+
+      selection = await getEditorSelectionState(page)
+      expect(selection.anchorText).toBe('After')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('leaves fenced code blocks with horizontal arrow keys at their boundaries', async () => {
+    const initialMarkdown = ['Before', '', '```ts', 'alpha', '```', '', 'After'].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      const codeBlock = editorRoot.locator('.milkdown-code-block').first()
+      await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+
+      await codeBlock.getByText('alpha', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Home')
+      await page.keyboard.press('ArrowLeft')
+
+      let selection = await getEditorSelectionState(page)
+      expect(selection.anchorText).toBe('Before')
+
+      await codeBlock.getByText('alpha', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('End')
+      await page.keyboard.press('ArrowRight')
+
+      selection = await getEditorSelectionState(page)
+      expect(selection.anchorText).toBe('After')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('leaves fenced code blocks with vertical arrow keys in Vim normal mode', async () => {
+    const initialMarkdown = ['Before', '', '```ts', 'alpha', 'beta', '```', '', 'After'].join('\n')
+    const vaultRoot = await createFixtureVault(initialMarkdown)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editorRoot = page.getByTestId('note-block-editor')
+      const codeBlock = editorRoot.locator('.milkdown-code-block').first()
+      await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+
+      await codeBlock.getByText('alpha', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('note-vim-mode-badge')).toHaveText('normal')
+      await page.keyboard.press('0')
+      await page.keyboard.press('ArrowUp')
+
+      expect(await getCurrentVimCursorChar(page)).toBe('B')
+
+      await codeBlock.getByText('beta', { exact: true }).click({ position: { x: 4, y: 8 } })
+      await page.keyboard.press('$')
+      await page.keyboard.press('ArrowDown')
+
+      expect(await getCurrentVimCursorChar(page)).toBe('A')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -3650,7 +4295,7 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('reclaims note space when the title header hides on scroll', async () => {
+  test('lets the note title and tags scroll with note content', async () => {
     const filler = Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
     const vaultRoot = await createFixtureVault(`# Alpha\n\n${filler}`, ['focus'])
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -3659,39 +4304,32 @@ test.describe('note page block editor switching', () => {
       clientHeight: number
       position: string
       scrollHeight: number
-      scrollHeightOnScreen: number
       scrollTop: number
-      surfaceHeight: number
+      surfaceTop: number
       titleHeight: number
+      titleTop: number
     }> =>
       page.evaluate(() => {
         const surface = document.querySelector<HTMLElement>('.note-editor-surface')
         const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
-        if (!surface || !title) {
+        const scrollContainer = document.querySelector<HTMLElement>(
+          '[data-testid="note-editor-scroll"]'
+        )
+        if (!surface || !title || !scrollContainer) {
           throw new Error('Note title area is not mounted')
         }
 
-        let scrollContainer: HTMLElement | null = title.parentElement
-        while (scrollContainer && scrollContainer !== document.body) {
-          const styles = window.getComputedStyle(scrollContainer)
-          if (/(auto|scroll)/.test(styles.overflowY)) {
-            break
-          }
-          scrollContainer = scrollContainer.parentElement
-        }
-
-        if (!scrollContainer) {
-          throw new Error('Note editor scroll container is not mounted')
-        }
+        const surfaceRect = surface.getBoundingClientRect()
+        const titleRect = title.getBoundingClientRect()
 
         return {
           clientHeight: scrollContainer.clientHeight,
           position: window.getComputedStyle(title).position,
           scrollHeight: scrollContainer.scrollHeight,
-          scrollHeightOnScreen: scrollContainer.getBoundingClientRect().height,
           scrollTop: scrollContainer.scrollTop,
-          surfaceHeight: surface.getBoundingClientRect().height,
-          titleHeight: title.getBoundingClientRect().height
+          surfaceTop: surfaceRect.top,
+          titleHeight: titleRect.height,
+          titleTop: titleRect.top
         }
       })
 
@@ -3704,79 +4342,82 @@ test.describe('note page block editor switching', () => {
 
       const initialMetrics = await readTitleMetrics()
       expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.clientHeight)
-      expect(initialMetrics.scrollHeightOnScreen).toBeGreaterThanOrEqual(
-        initialMetrics.surfaceHeight - 8
-      )
-      expect(initialMetrics.position).toBe('sticky')
-
-      await page.evaluate(() => {
-        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
-        const scrollContainer = title?.parentElement
-        if (!scrollContainer) {
-          throw new Error('Note editor scroll container is not mounted')
-        }
-
-        scrollContainer.scrollTop = 260
-      })
-      await expect(titleArea).toHaveAttribute('data-scroll-state', 'hidden')
-      await expect(titleArea).toHaveAttribute('data-scroll-position', 'scrolled')
-
-      const hiddenMetrics = await readTitleMetrics()
-      expect(hiddenMetrics.scrollTop).toBe(260)
-      expect(hiddenMetrics.scrollHeightOnScreen).toBeGreaterThanOrEqual(
-        hiddenMetrics.surfaceHeight - 8
-      )
-
-      await page.evaluate(() => {
-        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
-        const scrollContainer = title?.parentElement
-        if (!scrollContainer) {
-          throw new Error('Note editor scroll container is not mounted')
-        }
-
-        scrollContainer.scrollTop = 120
-      })
-      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
-      expect((await readTitleMetrics()).scrollTop).toBe(120)
+      expect(initialMetrics.position).toBe('static')
+      expect(initialMetrics.titleHeight).toBeGreaterThan(0)
+      expect(Math.abs(initialMetrics.titleTop - initialMetrics.surfaceTop)).toBeLessThanOrEqual(1)
 
       await page.getByRole('button', { name: 'Note tags selection', exact: true }).click()
       const tagPopover = page.getByTestId('note-tags-editor-popover')
-      const tagInput = tagPopover.getByRole('combobox', {
-        name: 'Search or add tags',
-        exact: true
-      })
       await expect(tagPopover).toBeVisible()
-      await expect(tagInput).toBeFocused()
-
-      await page.evaluate(() => {
-        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
-        const scrollContainer = title?.parentElement
-        if (!scrollContainer) {
-          throw new Error('Note editor scroll container is not mounted')
-        }
-
-        scrollContainer.scrollTop = 420
-      })
-      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
-      await tagInput.press('Escape')
+      await tagPopover
+        .getByRole('combobox', { name: 'Search or add tags', exact: true })
+        .press('Escape')
       await expect(tagPopover).toBeHidden()
 
-      await page.evaluate(() => {
-        const title = document.querySelector<HTMLElement>('[data-testid="note-title-area"]')
-        const scrollContainer = title?.parentElement
-        if (!scrollContainer) {
-          throw new Error('Note editor scroll container is not mounted')
-        }
+      await setNoteScrollTop(page, 260)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(260)
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+      await expect(titleArea).toHaveAttribute('data-scroll-position', 'flow')
 
-        scrollContainer.scrollTop = 520
-      })
-      await expect(titleArea).toHaveAttribute('data-scroll-state', 'hidden')
+      const scrolledMetrics = await readTitleMetrics()
+      expect(scrolledMetrics.position).toBe('static')
+      expect(scrolledMetrics.scrollTop).toBe(260)
+      expect(scrolledMetrics.titleTop).toBeLessThan(scrolledMetrics.surfaceTop - 100)
+      expect(scrolledMetrics.titleHeight).toBe(initialMetrics.titleHeight)
+
+      await setNoteScrollTop(page, 420)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(420)
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+
+      await setNoteScrollTop(page, 520)
+      await expect.poll(() => getNoteScrollTop(page), { timeout: 15_000 }).toBe(520)
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
 
       await openNote(page, 'beta.md')
       await expect(page.getByTestId('note-title-area')).toHaveAttribute(
         'data-scroll-state',
         'visible'
       )
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps the title and tags visible while raw markdown scrolls', async () => {
+    const filler = Array.from({ length: 160 }, (_, index) => `Raw paragraph ${index + 1}`).join(
+      '\n\n'
+    )
+    const vaultRoot = await createFixtureVault(`# Alpha\n\n${filler}`)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await page.getByTestId('note-editor-mode-tab:raw').click()
+
+      const titleArea = page.getByTestId('note-title-area')
+      const rawEditor = page.getByTestId('note-raw-editor')
+      await expect(rawEditor).toBeVisible()
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+
+      await rawEditor.evaluate((element) => {
+        ;(element as HTMLTextAreaElement).scrollTop = 260
+      })
+      await expect(titleArea).toBeVisible()
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+      await expect(titleArea).toHaveAttribute('data-scroll-position', 'flow')
+
+      await rawEditor.evaluate((element) => {
+        ;(element as HTMLTextAreaElement).scrollTop = 120
+      })
+      await expect(titleArea).toBeVisible()
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+
+      await rawEditor.evaluate((element) => {
+        ;(element as HTMLTextAreaElement).scrollTop = 0
+      })
+      await expect(titleArea).toHaveAttribute('data-scroll-state', 'visible')
+      await expect(titleArea).toHaveAttribute('data-scroll-position', 'flow')
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })

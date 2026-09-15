@@ -1,10 +1,12 @@
 import { useRef, useState, type ReactElement } from 'react'
 
 import type { ProjectIconStyle, WorkspaceView } from '../../../shared/types'
+import { NoteShapeIcon } from './NoteShapeIcon'
 import { WorkspaceIdentityEditor } from './WorkspaceIdentityEditor'
 import {
   Breadcrumb,
   BreadcrumbButton,
+  BreadcrumbIconLabel,
   BreadcrumbItem,
   BreadcrumbLabel,
   BreadcrumbList,
@@ -66,7 +68,9 @@ export function WorkspaceViewBreadcrumb({
                 aria-expanded={open}
                 className="max-w-[320px] text-sm font-semibold text-foreground"
               >
-                {view.name}
+                <BreadcrumbIconLabel icon={<NoteShapeIcon icon={view.icon} size={16} />}>
+                  {view.name}
+                </BreadcrumbIconLabel>
               </BreadcrumbButton>
             </PopoverTrigger>
           </BreadcrumbItem>

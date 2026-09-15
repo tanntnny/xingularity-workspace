@@ -221,6 +221,24 @@
     text-overflow: clip;
   }
 
+  .workspace-text-ellipsis {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .workspace-text-ellipsis[data-lines='2'] {
+    display: -webkit-box;
+    max-height: 2lh;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    text-overflow: ellipsis;
+  }
+
   .workspace-tab-label-fade {
     -webkit-mask-image: none;
     mask-image: none;

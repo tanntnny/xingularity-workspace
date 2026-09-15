@@ -82,8 +82,8 @@
     --drop-zone-active-border: var(--ring);
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
     --scrollbar-size: 3px;
-    --scrollbar-thumb: #d0d0d0;
-    --scrollbar-thumb-hover: #b8b8b8;
+    --scrollbar-thumb: #b2b2b2;
+    --scrollbar-thumb-hover: #989898;
     --radius: 0.75rem;
     --radius-surface: var(--radius);
     --radius-shell: calc(var(--radius) + 2px);
@@ -325,8 +325,8 @@
     --ring: #a3a3a3;
     --ring-rgb: 163 163 163;
     --calendar-drop-zone-active-bg: rgb(188 232 241 / 0.3);
-    --scrollbar-thumb: #303030;
-    --scrollbar-thumb-hover: #484848;
+    --scrollbar-thumb: #686868;
+    --scrollbar-thumb-hover: #858585;
     --sidebar-background: #080808;
     --sidebar-foreground: #eeeeee;
     --sidebar-primary: #e5e5e5;
@@ -494,7 +494,7 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    border-radius: 9999px;
+    border-radius: 0;
     background: transparent;
     transition: background-color 160ms ease;
   }
@@ -1354,6 +1354,23 @@
 }
 
 @layer utilities {
+  .note-editor-surface {
+    --note-editor-ui-selection: color-mix(in srgb, var(--accent) 18%, var(--popover));
+    --note-editor-selection: var(--selection-background);
+    --note-editor-selection-foreground: var(--selection-foreground);
+    --note-editor-cursor: var(--note-editor-selection);
+    --note-editor-cursor-foreground: var(--note-editor-selection-foreground);
+    --note-editor-body-font-size: 15px;
+    --note-editor-body-line-height: 22px;
+    --note-editor-body-row-height: 26px;
+    --note-editor-list-gap: 8px;
+    --note-editor-block-gap: 8px;
+    --note-editor-separator-gap: 16px;
+    --note-editor-code-line-height: 20px;
+    --note-editor-raw-line-height: 24px;
+    --note-editor-list-marker-row-height: var(--note-editor-body-row-height);
+  }
+
   .note-editor-surface .milkdown {
     --crepe-color-background: transparent;
     --crepe-color-on-background: var(--foreground);
@@ -1393,6 +1410,77 @@
     caret-color: var(--foreground);
   }
 
+  .note-editor-surface .milkdown .milkdown-list-item-block > .list-item {
+    align-items: flex-start;
+  }
+
+  .note-editor-surface .milkdown .milkdown-list-item-block li {
+    gap: var(--note-editor-list-gap);
+    min-height: var(--note-editor-body-row-height);
+  }
+
+  .note-editor-surface .milkdown .milkdown-list-item-block li .label-wrapper {
+    box-sizing: border-box;
+    flex: 0 0 24px;
+    height: var(--note-editor-list-marker-row-height);
+    width: 24px;
+  }
+
+  .note-editor-surface .milkdown .milkdown-list-item-block li .label-wrapper .label {
+    align-items: center;
+    height: var(--note-editor-list-marker-row-height);
+    justify-content: flex-end;
+    line-height: 22px;
+    padding: 0;
+    width: 24px;
+  }
+
+  .note-editor-surface .milkdown .milkdown-list-item-block li .label-wrapper .label.bullet {
+    justify-content: center;
+  }
+
+  .note-editor-surface .note-raw-editor-surface {
+    display: flex;
+    height: 100%;
+    min-height: 10vh;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .note-editor-surface .note-raw-editor-surface[hidden] {
+    display: none !important;
+  }
+
+  .note-editor-surface .note-raw-editor-input {
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 10vh;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--foreground);
+    caret-color: var(--foreground);
+    font-family: var(--code-font-family);
+    font-size: 0.875rem;
+    line-height: var(--note-editor-raw-line-height);
+    outline: none;
+    padding: 0.5rem 0;
+    resize: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .note-editor-surface .note-raw-editor-input::selection {
+    background: var(--note-editor-selection) !important;
+    color: var(--note-editor-selection-foreground) !important;
+  }
+
   .motion-editor-surface[data-editor-density='compact'] .milkdown .ProseMirror {
     padding: 0.5rem 0;
   }
@@ -1412,6 +1500,7 @@
   }
 
   .note-editor-surface .milkdown .ProseMirror blockquote {
+    margin: var(--note-editor-block-gap) 0;
     padding-left: 34px;
   }
 
@@ -1422,6 +1511,15 @@
 
   .note-editor-surface [data-vim-mode='normal'] .milkdown .ProseMirror {
     caret-color: transparent;
+  }
+
+  .note-editor-surface [data-vim-mode='normal'] .note-raw-editor-input {
+    caret-color: transparent;
+  }
+
+  .note-editor-surface [data-vim-mode='normal'] .note-raw-editor-input::selection {
+    background: var(--note-editor-cursor) !important;
+    color: var(--note-editor-cursor-foreground) !important;
   }
 
   .note-editor-surface [data-vim-mode='normal'] .note-vim-block-cursor-char {
@@ -1469,10 +1567,15 @@
 .note-editor-surface .milkdown-code-block,
 .note-editor-surface .note-fenced-code-block {
   position: relative;
+  margin: var(--note-editor-block-gap) 0;
   background: transparent !important;
   border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-shadow: none;
+}
+
+.note-editor-surface .milkdown .milkdown-code-block {
+  margin: var(--note-editor-block-gap) 0;
 }
 
 .note-editor-surface .note-fenced-code-block {
@@ -1664,6 +1767,7 @@
 }
 
 .note-editor-surface .milkdown .ProseMirror .milkdown-table-block {
+  margin: var(--note-editor-block-gap) 0;
   border: var(--border-width) solid var(--note-block-border) !important;
   border-radius: var(--note-block-radius);
   box-sizing: border-box;
@@ -1682,9 +1786,13 @@
   border-color: var(--note-block-border) !important;
 }
 
+.note-editor-surface .milkdown .ProseMirror .milkdown-image-block {
+  margin: var(--note-editor-block-gap) 0;
+}
+
 .note-editor-surface .milkdown .ProseMirror hr {
   height: var(--border-width);
-  margin: 16px 0;
+  margin: var(--note-editor-separator-gap) 0;
   padding: 0;
   border: 0 !important;
   border-top: var(--border-width) solid var(--note-block-border) !important;
@@ -1715,6 +1823,7 @@
   min-height: 1.5rem;
   color: var(--foreground);
   font-family: var(--code-font-family) !important;
+  line-height: var(--note-editor-code-line-height);
 }
 
 .note-editor-surface .code-token-comment,
@@ -1842,7 +1951,7 @@
 .note-editor-surface .milkdown .ProseMirror .note-callout {
   --note-callout-accent: var(--border);
   --note-callout-surface: var(--muted);
-  margin: 8px 0;
+  margin: var(--note-editor-block-gap) 0;
   border: var(--border-width) solid
     color-mix(in srgb, var(--note-callout-accent) 45%, var(--note-callout-surface));
   border-radius: var(--note-block-radius);
@@ -1907,14 +2016,20 @@
   color: var(--foreground);
 }
 
+.motion-editor-surface .milkdown .ProseMirror > :is(ul, ol) {
+  margin: var(--note-editor-block-gap) 0;
+}
+
 .motion-editor-surface .milkdown .ProseMirror p {
   padding: 2px 0;
-  font-size: 15px;
-  line-height: 22px;
+  min-height: var(--note-editor-body-row-height);
+  font-size: var(--note-editor-body-font-size);
+  line-height: var(--note-editor-body-line-height);
 }
 
 .motion-editor-surface .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
   padding: 1px 0;
+  margin-bottom: var(--note-editor-block-gap);
 }
 
 .motion-editor-surface .milkdown .ProseMirror h1 {
@@ -2067,6 +2182,24 @@
   text-overflow: clip;
 }
 
+.workspace-text-ellipsis {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.workspace-text-ellipsis[data-lines='2'] {
+  display: -webkit-box;
+  max-height: 2lh;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+}
+
 @property --sidebar-workspace-fade-width {
   syntax: '<length>';
   inherits: false;
@@ -2191,6 +2324,29 @@
 .workspace-tab-card:is(:hover, :focus-within) .workspace-tab-trigger,
 .workspace-tab-card:is(:hover, :focus-within) .workspace-tab-label-fade {
   transition-duration: 150ms;
+}
+
+.sticky-note-board {
+  background-color: var(--workspace-background);
+}
+
+.sticky-note-board .react-flow__node {
+  overflow: visible;
+}
+
+.sticky-note-card {
+  font-family: var(--app-font-family);
+}
+
+.sticky-note-drag-handle {
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-position: center;
+  background-size: 8px 8px;
+  opacity: 0.24;
+}
+
+.sticky-note-drag-handle:hover {
+  opacity: 0.48;
 }
 
 .workspace-tab-card:is(:hover, :focus-within) .workspace-tab-label-fade {

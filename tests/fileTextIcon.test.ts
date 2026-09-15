@@ -4,16 +4,16 @@ import { describe, expect, it } from 'vitest'
 import { FileText } from '../src/renderer/src/components/ui/icons'
 
 describe('FileText icon', () => {
-  it('renders the shared light grey gradient Markdown file artwork', () => {
+  it('renders the shared higher-contrast grey gradient Markdown file artwork', () => {
     const markup = renderToStaticMarkup(createElement(FileText, { size: 30 }))
 
     expect(markup).toContain('class="tabler-icon icon-tabler-markdown-file"')
     expect(markup).toContain('viewBox="0 0 30 30"')
     expect(markup).toContain('<linearGradient')
     expect(markup).toContain('stop-color="#f8f8f8"')
-    expect(markup).toContain('stop-color="#d9d9d9"')
+    expect(markup).toContain('stop-color="#ababab"')
     expect(markup).toContain('stop-color="#eeeeee"')
-    expect(markup).toContain('stop-color="#c8c8c8"')
+    expect(markup).toContain('stop-color="#999999"')
     expect(markup).toContain('fill="url(#markdown-file-gradient-')
     expect(markup).toContain('fill="url(#markdown-file-fold-gradient-')
     expect(markup).toContain(

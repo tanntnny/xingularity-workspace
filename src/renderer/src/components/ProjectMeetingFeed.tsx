@@ -14,7 +14,7 @@ interface ProjectMeetingFeedProps {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onEdit: (meeting: ProjectMeeting) => void
   onDelete: (meetingId: string) => Promise<void>
   onCreateFollowUpTask?: () => void | Promise<void>

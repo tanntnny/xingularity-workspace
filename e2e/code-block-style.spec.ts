@@ -16,7 +16,7 @@ async function createFixtureVault(): Promise<string> {
     path.join(rootPath, 'notes', 'alpha.md'),
     serializeStoredNoteDocument(
       createStoredNoteDocumentFromText(
-        '# Heading 1\n\n## Heading 2\n\n### Heading 3\n\n#### Heading 4\n\n##### Heading 5\n\n###### Heading 6\n\nInline `const value = 42` code\n\n```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n\n---\n\n> A consistent quote\n\n> [!INFO] Informational callout\n> Details\n\nBroken inline $2^{\n'
+        '# Heading 1\n\n## Heading 2\n\n### Heading 3\n\n#### Heading 4\n\n##### Heading 5\n\n###### Heading 6\n\nBody row\n\n- Bullet item\n\n1. Numbered item\n\nInline `const value = 42` code\n\n```ts\nconst value = 42\n```\n\n| Name | Value |\n| --- | --- |\n| alpha | 42 |\n\n---\n\n> A consistent quote\n\n> [!INFO] Informational callout\n> Details\n\nBroken inline $2^{\n'
       )
     ),
     'utf-8'
@@ -103,6 +103,103 @@ for (const colorScheme of ['light'] as const) {
         return headings.map((heading) => Number.parseInt(getComputedStyle(heading).fontWeight, 10))
       })
       expect(headingWeights).toEqual([650, 625, 600, 575, 550, 500])
+
+      const rhythmStyles = await editorRoot.locator('.ProseMirror').evaluate((element) => {
+        const read = (selector: string): Record<string, string> => {
+          const target = element.querySelector<HTMLElement>(selector)
+          if (!target) {
+            throw new Error(`Missing editor element: ${selector}`)
+          }
+
+          const computed = getComputedStyle(target)
+          return {
+            fontSize: computed.fontSize,
+            lineHeight: computed.lineHeight,
+            marginTop: computed.marginTop,
+            marginBottom: computed.marginBottom,
+            paddingTop: computed.paddingTop,
+            paddingBottom: computed.paddingBottom,
+            height: `${target.getBoundingClientRect().height}px`
+          }
+        }
+
+        const readGap = (selector: string): string => {
+          const target = element.querySelector<HTMLElement>(selector)
+          if (!target) {
+            throw new Error(`Missing editor element: ${selector}`)
+          }
+
+          return getComputedStyle(target).gap
+        }
+
+        const readMarkerHeight = (selector: string): string => {
+          const target = element.querySelector<HTMLElement>(selector)
+          if (!target) {
+            throw new Error(`Missing editor element: ${selector}`)
+          }
+
+          return `${target.getBoundingClientRect().height}px`
+        }
+
+        return {
+          paragraph: read('p'),
+          h1: read('h1'),
+          bulletList: read('ul'),
+          orderedList: read('ol'),
+          bulletItemGap: readGap('ul .milkdown-list-item-block li.list-item'),
+          bulletMarkerHeight: readMarkerHeight(
+            'ul .milkdown-list-item-block li.list-item .label-wrapper'
+          ),
+          codeBlock: read('.milkdown-code-block[data-language]'),
+          code: read('.milkdown-code-block[data-language] code'),
+          tableBlock: read('.milkdown-table-block'),
+          separator: read('hr'),
+          quote: read('blockquote'),
+          callout: read('.note-callout-info')
+        }
+      })
+
+      expect(rhythmStyles.paragraph).toMatchObject({
+        fontSize: '15px',
+        lineHeight: '22px',
+        marginTop: '0px',
+        marginBottom: '0px',
+        paddingTop: '2px',
+        paddingBottom: '2px',
+        height: '26px'
+      })
+      expect(rhythmStyles.h1.marginBottom).toBe('8px')
+      expect(rhythmStyles.bulletList).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
+      expect(rhythmStyles.orderedList).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
+      expect(rhythmStyles.bulletItemGap).toBe('8px')
+      expect(rhythmStyles.bulletMarkerHeight).toBe('26px')
+      expect(rhythmStyles.codeBlock).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
+      expect(rhythmStyles.code.lineHeight).toBe('20px')
+      expect(rhythmStyles.tableBlock).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
+      expect(rhythmStyles.separator).toMatchObject({
+        marginTop: '16px',
+        marginBottom: '16px'
+      })
+      expect(rhythmStyles.quote).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
+      expect(rhythmStyles.callout).toMatchObject({
+        marginTop: '8px',
+        marginBottom: '8px'
+      })
 
       const editorThemeStyles = await editor.evaluate((element) => {
         const resolveColor = (

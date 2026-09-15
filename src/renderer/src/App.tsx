@@ -72,17 +72,12 @@ import {
   isNotePath,
   parseStoredNoteDocument,
   serializeStoredNoteDocument,
-  stripNoteExtension,
   withNoteExtension
 } from '../../shared/noteDocument'
 import { splitNoteContent } from '../../shared/noteContent'
 import { mergeMarkdownThreeWay } from '../../shared/markdownMerge'
 import { normalizeTag } from '../../shared/noteTags'
-import {
-  getAppFontOption,
-  getCodeFontOption,
-  type AppFontId
-} from '../../shared/fontCatalog'
+import { getAppFontOption, getCodeFontOption, type AppFontId } from '../../shared/fontCatalog'
 import {
   createNoteMentionResolver,
   extractMentionTargetsFromMarkdown
@@ -95,7 +90,17 @@ import { TaskEditDialog } from './components/TaskEditDialog'
 import type { WeeklyTimedCreateSchedule } from './lib/calendarWeekDrag'
 import { TaskPropertiesPanel } from './components/TaskPropertiesPanel'
 import { CalendarTaskFilter } from './components/CalendarTaskFilter'
-import { CommandPalette, type CommandPaletteSearchResult } from './components/CommandPalette'
+import { CommandPalette } from './components/CommandPalette'
+import {
+  createCommandPaletteBodyExcerpt,
+  createCommandPaletteNoteHighlights,
+  createCommandPaletteNoteSearchIndex,
+  createCommandPaletteProjectSearchIndex,
+  searchCommandPaletteNotes,
+  searchCommandPaletteProjects,
+  type CommandPaletteSearchMode,
+  type CommandPaletteSearchResult
+} from './lib/commandPaletteSearch'
 import { NotesTreeView } from './components/NotesTreeView'
 import { NotebookCardBrowser } from './components/NotebookCardBrowser'
 import { NotebookFolderIcon } from './components/ui/notebook-folder-icon'
@@ -187,6 +192,11 @@ import { TaskPage } from './pages/TaskPage'
 import { MilestonePage } from './pages/MilestonePage'
 import { NoVaultPage } from './pages/NoVaultPage'
 import { CapturePage } from './pages/CapturePage'
+import { StickyNotePage } from './pages/StickyNotePage'
+import {
+  createStickyNoteSaveCoordinator,
+  type StickyNoteSaveRequest
+} from './lib/stickyNoteSaveCoordinator'
 import type { VaultSyncPageActions } from './pages/VaultSyncPage'
 import { WorkspaceViewPage, type WorkspaceViewUpdate } from './pages/WorkspaceViewPage'
 import type {
@@ -243,6 +253,8 @@ import { createLatestRefreshCoordinator } from './lib/latestRefreshCoordinator'
 import { createNoteSaveCoordinator, NoteSaveConflictError } from './lib/noteSaveCoordinator'
 import { createProjectSaveCoordinator } from './lib/projectSaveCoordinator'
 import { getNotebookFolderContents } from './lib/notebookFolderContents'
+import type { NotebookOpenOptions } from './lib/notebookOpen'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from './lib/workspaceOpen'
 import { formatWeekRange, shiftIsoMonthClamped } from './lib/calendarDate'
 import {
   getPrimaryNoteTreeSelectionEntry,
@@ -252,19 +264,16 @@ import {
 import { canUseNativeMenus, getElementMenuPosition, showNativeMenu } from './lib/nativeMenu'
 import { buildRenamedNotebookPath } from './lib/notebookPathRename'
 import { type ProjectsWorkspaceFilterMode } from './pages/ProjectsWorkspacePage'
-import type {
-  TaskEditDialogDraft,
-  WorkspaceTaskOrigin,
-  WorkspaceTaskOriginRequest
-} from './lib/taskDialogSession'
-import { createTaskEditDialogDraft } from './lib/taskDialogSession'
 import {
-  createEmptyWorkspaceTabSession,
-  type CalendarViewMode,
+  createEmptyNotebookWorkspaceSession,
   getNextActiveWorkspaceTabId,
-  type WorkspaceTabSession,
-  remapWorkspaceTabSessionPaths,
-  removeWorkspaceTabSessionPaths
+  type NotebookNoteBaseline,
+  type NotebookWorkspaceSession,
+  type WorkspaceTabNoteScrollPositions,
+  remapWorkspaceTabNoteScrollPositions,
+  remapNotebookWorkspaceSessionPaths,
+  removeWorkspaceTabNoteScrollPositions,
+  removeNotebookWorkspaceSessionPaths
 } from './lib/workspaceTabs'
 import {
   rememberRecentNotebookPath as rememberNotebookPath,
@@ -281,6 +290,7 @@ import {
 } from '../../shared/recentPages'
 const PAGE_LABELS: Record<AppPage, string> = {
   capture: 'Capture',
+  stickyNote: 'Sticky Note',
   knowledge: 'Knowledge',
   notes: 'Notebooks',
   projects: 'Projects',
@@ -372,10 +382,13 @@ function toVaultSyncPageSnapshot(snapshot: VaultProtocolSnapshot): VaultSyncPage
 }
 
 interface NoteConflictState {
+  workspaceTabId: string
   path: string
   message: string
   actualRevision: VaultFileRevision | null
 }
+
+type CalendarViewMode = 'month' | 'week' | 'day'
 
 type CalendarTaskSchedule = {
   date?: string
@@ -388,41 +401,76 @@ type WorkspacePageTab = {
   id: string
   page: AppPage
   workspaceViewId: string | null
-  projectId: string | null
-  projectView: ProjectsWorkspaceView
-  calendarDate: string
-  calendarViewMode: CalendarViewMode
 }
 
-type TaskOrigin = WorkspaceTaskOrigin
-type TaskOriginRequest = WorkspaceTaskOriginRequest
+type TaskOrigin =
+  | {
+      source: 'calendar'
+      selectedDate: string
+      viewMode: CalendarViewMode
+      contentFilter: CalendarContentFilter
+      tags: string[]
+    }
+  | { source: 'tasks'; workspaceViewId?: string }
+  | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
-const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
+type TaskOriginRequest =
+  | { source: 'calendar' }
+  | { source: 'tasks'; workspaceViewId?: string }
+  | { source: 'projects'; projectId: string | null; milestoneId?: string }
 
-function createWorkspacePageTab(
-  id: string,
-  page: AppPage,
-  context: Partial<
-    Pick<
-      WorkspacePageTab,
-      'workspaceViewId' | 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'
-    >
-  > = {}
-): WorkspacePageTab {
+interface WorkspaceTabPageContext {
+  projectId: string | null
+  projectView: ProjectsWorkspaceView
+  projectFilterMode: ProjectsWorkspaceFilterMode
+  calendarDate: string | null
+  calendarViewMode: CalendarViewMode | null
+  calendarContentFilter: CalendarContentFilter | null
+  calendarTaskTagSettings: string[] | null
+  calendarHeaderNewTask: string
+  settingsTabRequest: SettingsTabId
+  activeDesignAuditTab: DesignAuditTabId
+  schedulingView: SchedulingView
+  knowledgeOrphanRingRadiusInput: string
+  knowledgeShowOrphans: boolean
+  openTaskDialogId: string | null
+  taskDialogOrigin: TaskOriginRequest | null
+  taskDialogIsNewTask: boolean
+  openTaskId: string | null
+  taskOrigin: TaskOrigin | null
+}
+
+function createEmptyWorkspaceTabPageContext(): WorkspaceTabPageContext {
   return {
-    id,
-    page,
-    workspaceViewId: null,
     projectId: null,
     projectView: 'list',
-    calendarDate: toIsoDate(new Date()),
-    calendarViewMode: 'month',
-    ...context
+    projectFilterMode: 'all',
+    calendarDate: null,
+    calendarViewMode: null,
+    calendarContentFilter: null,
+    calendarTaskTagSettings: null,
+    calendarHeaderNewTask: '',
+    settingsTabRequest: 'profile',
+    activeDesignAuditTab: DEFAULT_DESIGN_AUDIT_TAB,
+    schedulingView: 'list',
+    knowledgeOrphanRingRadiusInput: '',
+    knowledgeShowOrphans: true,
+    openTaskDialogId: null,
+    taskDialogOrigin: null,
+    taskDialogIsNewTask: false,
+    openTaskId: null,
+    taskOrigin: null
   }
 }
 
-function getWorkspaceScrollPositionKey(page: AppPage, workspaceViewId: string | null): string {
-  return workspaceViewId ? `view:${workspaceViewId}` : `page:${page}`
+const INITIAL_WORKSPACE_TAB_ID = 'workspace-tab-1'
+
+function createWorkspacePageTab(id: string, page: AppPage): WorkspacePageTab {
+  return {
+    id,
+    page,
+    workspaceViewId: null
+  }
 }
 
 const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 300
@@ -583,6 +631,7 @@ function App(): ReactElement {
   const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
   const settingsProjects = useVaultStore((state) => state.settings.projects)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
+  const stickyNoteBoard = useVaultStore((state) => state.settings.stickyNoteBoard)
   const workspaceViews = useVaultStore((state) => state.settings.workspaceViews ?? [])
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
   const recentNotebookPaths = useVaultStore((state) => state.settings.recentNotebookPaths)
@@ -632,10 +681,10 @@ function App(): ReactElement {
   )
   const [vaultSyncSnapshot, setVaultSyncSnapshot] = useState<VaultSyncPageSnapshot | null>(null)
   const [noteConflict, setNoteConflict] = useState<NoteConflictState | null>(null)
+  const noteConflictsRef = useRef<Record<string, NoteConflictState>>({})
   const [openTaskDialogId, setOpenTaskDialogId] = useState<string | null>(null)
   const [taskDialogOrigin, setTaskDialogOrigin] = useState<TaskOriginRequest | null>(null)
   const [taskDialogIsNewTask, setTaskDialogIsNewTask] = useState(false)
-  const [taskDialogDraft, setTaskDialogDraft] = useState<TaskEditDialogDraft | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [taskOrigin, setTaskOrigin] = useState<TaskOrigin | null>(null)
   const [openMilestoneDialogId, setOpenMilestoneDialogId] = useState<string | null>(null)
@@ -645,9 +694,11 @@ function App(): ReactElement {
   const [schedulingReviewCount, setSchedulingReviewCount] = useState(0)
   const schedulingReviewRequestRef = useRef(0)
   const [schedulingView, setSchedulingView] = useState<SchedulingView>('list')
-  const [subscriptionWorkspaceSession, setSubscriptionWorkspaceSession] = useState<
-    WorkspaceTabSession['subscriptions']
-  >(() => createEmptyWorkspaceTabSession().subscriptions)
+  useEffect(() => {
+    if (activePage !== 'schedules') {
+      setSchedulingView('list')
+    }
+  }, [activePage])
 
   const refreshSchedulingReviewCount = useCallback(async (): Promise<void> => {
     const requestId = ++schedulingReviewRequestRef.current
@@ -690,14 +741,15 @@ function App(): ReactElement {
   const activeWorkspaceTabIdRef = useRef(INITIAL_WORKSPACE_TAB_ID)
   const activeWorkspaceViewIdRef = useRef<string | null>(null)
   const workspaceViewsWriteVersionRef = useRef(0)
-  const workspaceTabSessionsRef = useRef<Record<string, WorkspaceTabSession>>({
-    [INITIAL_WORKSPACE_TAB_ID]: createEmptyWorkspaceTabSession()
+  const workspaceTabSessionsRef = useRef<Record<string, NotebookWorkspaceSession>>({
+    [INITIAL_WORKSPACE_TAB_ID]: createEmptyNotebookWorkspaceSession()
   })
-  const subscriptionWorkspaceSessionRef = useRef(subscriptionWorkspaceSession)
+  const workspaceTabPageContextsRef = useRef<Record<string, WorkspaceTabPageContext>>({
+    [INITIAL_WORKSPACE_TAB_ID]: createEmptyWorkspaceTabPageContext()
+  })
+  const workspaceTabNoteScrollPositionsRef = useRef<WorkspaceTabNoteScrollPositions>({})
   const [knowledgeOrphanRingRadiusInput, setKnowledgeOrphanRingRadiusInput] = useState('')
   const [knowledgeShowOrphans, setKnowledgeShowOrphans] = useState(true)
-  const [knowledgeViewport, setKnowledgeViewport] =
-    useState<WorkspaceTabSession['knowledgeViewport']>(null)
   const availablePages = useMemo(() => getAvailablePages(platform), [platform])
   const useNativeMenus = platform.capabilities.supportsNativeMenus && canUseNativeMenus()
   const [settingsLoaded, setSettingsLoaded] = useState(false)
@@ -762,8 +814,6 @@ function App(): ReactElement {
         Array.isArray(value) && value.every((tag) => typeof tag === 'string')
     }
   )
-  const [captureDraft, setCaptureDraft] = useState('')
-  const [captureResourceDraft, setCaptureResourceDraft] = useState('')
   const restoreTaskOrigin = useCallback((): void => {
     const origin = taskOriginRef.current
     if (!origin || origin.source !== 'calendar') {
@@ -785,7 +835,6 @@ function App(): ReactElement {
   }>({ resources: [], relations: [], locators: [] })
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
-  const [currentNoteScrollTop, setCurrentNoteScrollTop] = useState(0)
   const [currentExcalidrawPath, setCurrentExcalidrawPath] = useState<string | null>(null)
   const [noteTitleEditTarget, setNoteTitleEditTarget] = useState<{
     relPath: string
@@ -837,6 +886,14 @@ function App(): ReactElement {
     }
   }, [])
   const projects = settingsProjects
+  const commandPaletteNoteSearchIndex = useMemo(
+    () => createCommandPaletteNoteSearchIndex(notes),
+    [notes]
+  )
+  const commandPaletteProjectSearchIndex = useMemo(
+    () => createCommandPaletteProjectSearchIndex(projects),
+    [projects]
+  )
   const hasVault = Boolean(vault?.rootPath)
   const activeWorkspaceViewId = useMemo(
     () => workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId)?.workspaceViewId ?? null,
@@ -872,19 +929,6 @@ function App(): ReactElement {
   const projectMilestoneMutationVersionRef = useRef(new Map<string, number>())
   const favoriteProjectMutationVersionRef = useRef(new Map<string, number>())
   const [projectFilterMode, setProjectFilterMode] = useState<ProjectsWorkspaceFilterMode>('all')
-  const [taskWorkspaceViewState, setTaskWorkspaceViewState] = useState<
-    WorkspaceTabSession['taskViewState']
-  >({
-    filters: {},
-    groupBy: 'none',
-    sortState: { columnId: 'start-date', direction: 'asc' }
-  })
-  const [resourceWorkspaceViewState, setResourceWorkspaceViewState] = useState<
-    WorkspaceTabSession['resourceViewState']
-  >({
-    filters: {},
-    sortState: null
-  })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [commandPaletteResults, setCommandPaletteResults] = useState<CommandPaletteSearchResult[]>(
@@ -923,14 +967,15 @@ function App(): ReactElement {
   const recentNotebookWriteVersionRef = useRef(0)
   const recentPageTargetsRef = useRef(recentPageTargets)
   const recentPageWriteVersionRef = useRef(0)
+  const stickyNoteBoardRef = useRef(stickyNoteBoard)
+  const stickyNoteBoardWriteVersionRef = useRef(0)
+  const stickyNoteTextFlushRef = useRef<(() => void) | null>(null)
   const currentNotePathRef = useRef(currentNotePath)
   const currentExcalidrawPathRef = useRef(currentExcalidrawPath)
   const currentNoteContentRef = useRef(currentNoteContent)
   const currentNoteTagsRef = useRef<string[]>([])
-  const currentNoteScrollTopRef = useRef(0)
   const currentNoteEditorRef = useRef<NoteEditorHandle | null>(null)
   const currentExcalidrawEditorRef = useRef<ExcalidrawFileEditorHandle | null>(null)
-  const workspaceMainContentRef = useRef<HTMLElement | null>(null)
   const currentNoteEditorDirtyRef = useRef(false)
   const persistedNoteFingerprintsRef = useRef<Record<string, string>>({})
   const persistedNoteRevisionsRef = useRef<Record<string, string | null>>({})
@@ -943,20 +988,19 @@ function App(): ReactElement {
   const activePageRef = useRef(activePage)
   const pageNavigationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const taskFlushRef = useRef<(() => Promise<void>) | null>(null)
-  const taskDialogFlushRef = useRef<(() => Promise<void>) | null>(null)
-  const taskDialogDraftRef = useRef<TaskEditDialogDraft | null>(null)
-  const knowledgeViewportRef = useRef<WorkspaceTabSession['knowledgeViewport']>(null)
   const notebookRefreshQueueRef = useRef<Promise<void>>(Promise.resolve())
   const calendarTasksRef = useRef(calendarTasks)
   const hasAttemptedVaultRestoreRef = useRef(false)
-  taskDialogDraftRef.current = taskDialogDraft
-  subscriptionWorkspaceSessionRef.current = subscriptionWorkspaceSession
-  knowledgeViewportRef.current = knowledgeViewport
+
+  useEffect(() => {
+    stickyNoteBoardRef.current = stickyNoteBoard
+  }, [stickyNoteBoard])
   const hasRightPanel =
     Boolean(openTaskId) ||
     (activePage !== 'capture' &&
       activePage !== 'resources' &&
       activePage !== 'tasks' &&
+      activePage !== 'stickyNote' &&
       activePage !== 'schedulingGuide' &&
       activePage !== 'settings' &&
       !(activePage === 'schedules' && schedulingView === 'list') &&
@@ -1036,114 +1080,148 @@ function App(): ReactElement {
   }, [activeWorkspaceViewId])
 
   const getWorkspaceTabSession = useCallback(
-    (tabId = activeWorkspaceTabIdRef.current): WorkspaceTabSession => {
+    (tabId: string = activeWorkspaceTabIdRef.current): NotebookWorkspaceSession => {
       const existingSession = workspaceTabSessionsRef.current[tabId]
       if (existingSession) {
         return existingSession
       }
 
-      const nextSession = createEmptyWorkspaceTabSession()
+      const nextSession = createEmptyNotebookWorkspaceSession()
       workspaceTabSessionsRef.current[tabId] = nextSession
       return nextSession
     },
     []
   )
 
-  const setTaskDialogDraftSession = useCallback((draft: TaskEditDialogDraft | null): void => {
-    taskDialogDraftRef.current = draft
-    setTaskDialogDraft(draft)
-  }, [])
-
-  const setCurrentNoteScrollPosition = useCallback((scrollTop: number): void => {
-    currentNoteScrollTopRef.current = scrollTop
-    setCurrentNoteScrollTop(scrollTop)
-  }, [])
-
-  const setKnowledgeViewportSession = useCallback(
-    (viewport: WorkspaceTabSession['knowledgeViewport']): void => {
-      knowledgeViewportRef.current = viewport
-      setKnowledgeViewport(viewport)
-    },
-    []
-  )
-
-  const setSubscriptionWorkspaceSessionState = useCallback(
-    (session: WorkspaceTabSession['subscriptions']): void => {
-      subscriptionWorkspaceSessionRef.current = session
-      setSubscriptionWorkspaceSession(session)
-    },
-    []
-  )
-
-  const clearTaskDialogDraft = useCallback((): void => {
-    setTaskDialogDraftSession(null)
-  }, [setTaskDialogDraftSession])
-
-  useEffect(() => {
-    const scrollContainer = workspaceMainContentRef.current
-    if (!scrollContainer) {
-      return
-    }
-
-    const handleScroll = (): void => {
-      const session = getWorkspaceTabSession(activeWorkspaceTabIdRef.current)
-      session.scrollPositions[
-        getWorkspaceScrollPositionKey(activePageRef.current, activeWorkspaceViewIdRef.current)
-      ] = {
-        top: scrollContainer.scrollTop,
-        left: scrollContainer.scrollLeft
+  const getWorkspaceTabPageContext = useCallback(
+    (tabId: string = activeWorkspaceTabIdRef.current): WorkspaceTabPageContext => {
+      const existingContext = workspaceTabPageContextsRef.current[tabId]
+      if (existingContext) {
+        return existingContext
       }
-    }
 
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-    return () => scrollContainer.removeEventListener('scroll', handleScroll)
-  }, [activeWorkspaceTabId, getWorkspaceTabSession])
-
-  useEffect(() => {
-    const scrollPosition =
-      getWorkspaceTabSession(activeWorkspaceTabId).scrollPositions[
-        getWorkspaceScrollPositionKey(activePage, activeWorkspaceViewId)
-      ]
-    const frame = window.requestAnimationFrame(() => {
-      const scrollContainer = workspaceMainContentRef.current
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollPosition?.top ?? 0
-        scrollContainer.scrollLeft = scrollPosition?.left ?? 0
-      }
-    })
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [activePage, activeWorkspaceTabId, activeWorkspaceViewId, getWorkspaceTabSession])
-
-  const updateActiveWorkspaceTabContext = useCallback(
-    (
-      patch: Partial<
-        Pick<WorkspacePageTab, 'projectId' | 'projectView' | 'calendarDate' | 'calendarViewMode'>
-      >
-    ): void => {
-      const activeTabId = activeWorkspaceTabIdRef.current
-      setWorkspaceTabs((tabs) =>
-        tabs.map((tab) => (tab.id === activeTabId ? { ...tab, ...patch } : tab))
-      )
+      const nextContext = createEmptyWorkspaceTabPageContext()
+      workspaceTabPageContextsRef.current[tabId] = nextContext
+      return nextContext
     },
     []
   )
 
-  useEffect(() => {
-    updateActiveWorkspaceTabContext({
-      projectId: selectedProjectId,
-      projectView,
-      calendarDate: selectedCalendarDate,
-      calendarViewMode
-    })
+  const captureActiveWorkspacePageContext = useCallback((): void => {
+    const context = getWorkspaceTabPageContext()
+    context.projectId = selectedProjectIdRef.current
+    context.projectView = projectView
+    context.projectFilterMode = projectFilterMode
+    context.calendarDate = selectedCalendarDate
+    context.calendarViewMode = calendarViewMode
+    context.calendarContentFilter = calendarContentFilter
+    context.calendarTaskTagSettings = [...calendarTaskTagSettings]
+    context.calendarHeaderNewTask = calendarHeaderNewTask
+    context.settingsTabRequest = settingsTabRequest
+    context.activeDesignAuditTab = activeDesignAuditTab
+    context.schedulingView = schedulingView
+    context.knowledgeOrphanRingRadiusInput = knowledgeOrphanRingRadiusInput
+    context.knowledgeShowOrphans = knowledgeShowOrphans
+    context.openTaskDialogId = openTaskDialogId
+    context.taskDialogOrigin = taskDialogOrigin
+    context.taskDialogIsNewTask = taskDialogIsNewTask
+    context.openTaskId = openTaskId
+    context.taskOrigin = taskOrigin
   }, [
-    activeWorkspaceTabId,
+    activeDesignAuditTab,
+    calendarContentFilter,
+    calendarHeaderNewTask,
+    calendarTaskTagSettings,
     calendarViewMode,
+    getWorkspaceTabPageContext,
+    knowledgeOrphanRingRadiusInput,
+    knowledgeShowOrphans,
+    openTaskDialogId,
+    openTaskId,
+    projectFilterMode,
     projectView,
+    schedulingView,
     selectedCalendarDate,
-    selectedProjectId,
-    updateActiveWorkspaceTabContext
+    settingsTabRequest,
+    taskDialogIsNewTask,
+    taskDialogOrigin,
+    taskOrigin
   ])
+
+  const restoreWorkspacePageContext = useCallback(
+    (tabId: string): void => {
+      const context = getWorkspaceTabPageContext(tabId)
+      selectedProjectIdRef.current = context.projectId
+      setSelectedProjectId(context.projectId)
+      setProjectView(context.projectView)
+      setProjectFilterMode(context.projectFilterMode)
+      if (context.calendarDate) {
+        setSelectedCalendarDate(context.calendarDate)
+      }
+      if (context.calendarViewMode) {
+        setCalendarViewMode(context.calendarViewMode)
+      }
+      if (context.calendarContentFilter) {
+        setCalendarContentFilter(context.calendarContentFilter)
+      }
+      if (context.calendarTaskTagSettings) {
+        setCalendarTaskTagSettings([...context.calendarTaskTagSettings])
+      }
+      setCalendarHeaderNewTask(context.calendarHeaderNewTask)
+      setSettingsTabRequest(context.settingsTabRequest)
+      setActiveDesignAuditTab(context.activeDesignAuditTab)
+      setSchedulingView(context.schedulingView)
+      setKnowledgeOrphanRingRadiusInput(context.knowledgeOrphanRingRadiusInput)
+      setKnowledgeShowOrphans(context.knowledgeShowOrphans)
+      setOpenTaskDialogId(context.openTaskDialogId)
+      setTaskDialogOrigin(context.taskDialogOrigin)
+      setTaskDialogIsNewTask(context.taskDialogIsNewTask)
+      taskOriginRef.current = context.taskOrigin
+      setTaskOrigin(context.taskOrigin)
+      setOpenTaskId(context.openTaskId)
+    },
+    [
+      getWorkspaceTabPageContext,
+      setCalendarContentFilter,
+      setCalendarTaskTagSettings,
+      setCalendarViewMode
+    ]
+  )
+
+  useEffect(() => {
+    captureActiveWorkspacePageContext()
+  }, [captureActiveWorkspacePageContext])
+
+  const queueNoteConflict = useCallback((conflict: NoteConflictState): void => {
+    noteConflictsRef.current[conflict.workspaceTabId] = conflict
+    if (activeWorkspaceTabIdRef.current === conflict.workspaceTabId) {
+      setNoteConflict(conflict)
+    }
+  }, [])
+
+  const dismissNoteConflict = useCallback((workspaceTabId: string): void => {
+    delete noteConflictsRef.current[workspaceTabId]
+    setNoteConflict((current) => (current?.workspaceTabId === workspaceTabId ? null : current))
+  }, [])
+
+  const getWorkspaceTabNoteScrollTop = useCallback((tabId: string, notePath: string): number => {
+    const scrollTop = workspaceTabNoteScrollPositionsRef.current[tabId]?.[notePath]
+    return typeof scrollTop === 'number' && Number.isFinite(scrollTop) ? Math.max(0, scrollTop) : 0
+  }, [])
+
+  const handleWorkspaceTabNoteScrollTopChange = useCallback(
+    (notePath: string, scrollTop: number): void => {
+      const normalizedScrollTop = Number.isFinite(scrollTop) ? Math.max(0, scrollTop) : 0
+      const tabPositions = workspaceTabNoteScrollPositionsRef.current[activeWorkspaceTabId] ?? {}
+      tabPositions[notePath] = normalizedScrollTop
+      workspaceTabNoteScrollPositionsRef.current[activeWorkspaceTabId] = tabPositions
+    },
+    [activeWorkspaceTabId]
+  )
+
+  const clearWorkspaceTabNoteScrollPositions = useCallback((tabId: string): void => {
+    delete workspaceTabNoteScrollPositionsRef.current[tabId]
+  }, [])
 
   useEffect(() => {
     const session = getWorkspaceTabSession()
@@ -1157,6 +1235,7 @@ function App(): ReactElement {
     session.searchResults = [...searchResults]
     session.selectedNoteTreeEntries = selectedNoteTreeEntries.map((entry) => ({ ...entry }))
   }, [
+    activeWorkspaceTabId,
     currentExcalidrawPath,
     currentNoteContent,
     currentNoteEditorDraft,
@@ -1167,85 +1246,6 @@ function App(): ReactElement {
     searchQuery,
     searchResults,
     selectedNoteTreeEntries
-  ])
-
-  useEffect(() => {
-    const session = getWorkspaceTabSession()
-    session.calendarDate = selectedCalendarDate
-    session.calendarViewMode = calendarViewMode
-    session.calendarContentFilter = calendarContentFilter
-    session.calendarTaskTagSettings = [...calendarTaskTagSettings]
-    session.calendarHeaderNewTask = calendarHeaderNewTask
-    session.taskViewState = {
-      filters: { ...taskWorkspaceViewState.filters },
-      groupBy: taskWorkspaceViewState.groupBy,
-      sortState: taskWorkspaceViewState.sortState ? { ...taskWorkspaceViewState.sortState } : null
-    }
-    session.resourceViewState = {
-      filters: { ...resourceWorkspaceViewState.filters },
-      sortState: resourceWorkspaceViewState.sortState
-        ? { ...resourceWorkspaceViewState.sortState }
-        : null
-    }
-    session.projectFilterMode = projectFilterMode
-    session.captureDraft = captureDraft
-    session.captureResourceDraft = captureResourceDraft
-    session.schedulingView = schedulingView
-    session.subscriptions = {
-      selectedId: subscriptionWorkspaceSessionRef.current.selectedId,
-      draft: {
-        ...subscriptionWorkspaceSessionRef.current.draft,
-        tags: [...subscriptionWorkspaceSessionRef.current.draft.tags]
-      },
-      isDrawerOpen: subscriptionWorkspaceSessionRef.current.isDrawerOpen
-    }
-    const capturedTaskDialogDraft = taskDialogDraftRef.current
-    session.taskDialog =
-      openTaskDialogId && taskDialogOrigin && capturedTaskDialogDraft
-        ? {
-            taskId: openTaskDialogId,
-            isNewTask: taskDialogIsNewTask,
-            origin: { ...taskDialogOrigin },
-            draft: {
-              ...capturedTaskDialogDraft,
-              tags: [...capturedTaskDialogDraft.tags]
-            }
-          }
-        : null
-    session.taskPage =
-      openTaskId && taskOrigin
-        ? {
-            taskId: openTaskId,
-            origin:
-              taskOrigin.source === 'calendar'
-                ? { ...taskOrigin, tags: [...taskOrigin.tags] }
-                : { ...taskOrigin }
-          }
-        : null
-    session.knowledgeViewport = knowledgeViewportRef.current
-      ? { ...knowledgeViewportRef.current }
-      : null
-  }, [
-    calendarContentFilter,
-    calendarTaskTagSettings,
-    calendarViewMode,
-    captureDraft,
-    captureResourceDraft,
-    getWorkspaceTabSession,
-    knowledgeViewport,
-    projectFilterMode,
-    resourceWorkspaceViewState,
-    schedulingView,
-    subscriptionWorkspaceSession,
-    selectedCalendarDate,
-    calendarHeaderNewTask,
-    taskWorkspaceViewState,
-    openTaskDialogId,
-    taskDialogDraft,
-    taskDialogIsNewTask,
-    taskDialogOrigin,
-    openTaskId,
-    taskOrigin
   ])
 
   useEffect(() => {
@@ -1323,10 +1323,6 @@ function App(): ReactElement {
     currentNoteTagsRef.current = currentNoteTagsState
   }, [currentNoteTagsState])
 
-  useEffect(() => {
-    currentNoteScrollTopRef.current = currentNoteScrollTop
-  }, [currentNoteScrollTop])
-
   const buildStoredNoteDocument = useCallback(
     (session: NoteEditorSessionSnapshot) => ({
       version: 1 as const,
@@ -1348,8 +1344,11 @@ function App(): ReactElement {
         return
       }
 
-      const session = getWorkspaceTabSession().noteEditorSessions[relPath]
-      const persistedFingerprint = persistedNoteFingerprintsRef.current[relPath]
+      const workspaceSession = getWorkspaceTabSession()
+      const session = workspaceSession.noteEditorSessions[relPath]
+      const persistedFingerprint =
+        workspaceSession.noteEditorBaselines[relPath]?.fingerprint ??
+        persistedNoteFingerprintsRef.current[relPath]
       currentNoteEditorDirtyRef.current = Boolean(
         session && getStoredNoteFingerprint(session) !== persistedFingerprint
       )
@@ -1521,6 +1520,66 @@ function App(): ReactElement {
     [vaultApi, favoriteNotePathSettings, patchSettings, pushToast]
   )
 
+  const saveStickyNoteBoard = useCallback(
+    async ({ board, version }: StickyNoteSaveRequest): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      try {
+        const nextSettings = await vaultApi.settings.update(
+          { stickyNoteBoard: board },
+          { history: false }
+        )
+        if (version === stickyNoteBoardWriteVersionRef.current) {
+          stickyNoteBoardRef.current = nextSettings.stickyNoteBoard
+          patchSettings({ stickyNoteBoard: nextSettings.stickyNoteBoard })
+        }
+      } catch (error) {
+        if (version === stickyNoteBoardWriteVersionRef.current) {
+          pushToast('error', String(error))
+        }
+      }
+    },
+    [patchSettings, pushToast, vaultApi]
+  )
+
+  const stickyNoteSaveCoordinator = useMemo(
+    () => createStickyNoteSaveCoordinator({ save: saveStickyNoteBoard }),
+    [saveStickyNoteBoard]
+  )
+
+  const persistStickyNoteBoard = useCallback(
+    (nextBoard: typeof stickyNoteBoard): void => {
+      if (!vaultApi) {
+        return
+      }
+
+      stickyNoteBoardRef.current = nextBoard
+      patchSettings({ stickyNoteBoard: nextBoard })
+      stickyNoteSaveCoordinator.enqueue({
+        board: nextBoard,
+        version: ++stickyNoteBoardWriteVersionRef.current
+      })
+    },
+    [patchSettings, stickyNoteSaveCoordinator, vaultApi]
+  )
+
+  const registerStickyNoteTextFlush = useCallback((flush: () => void): (() => void) => {
+    stickyNoteTextFlushRef.current = flush
+    return () => {
+      if (stickyNoteTextFlushRef.current === flush) {
+        stickyNoteTextFlushRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      void stickyNoteSaveCoordinator.flush()
+    }
+  }, [stickyNoteSaveCoordinator])
+
   const updateFolderColor = useCallback(
     async (folderPath: string, color: string | null): Promise<void> => {
       if (!vaultApi) {
@@ -1647,13 +1706,14 @@ function App(): ReactElement {
   }, [])
 
   const noteIsOpen = Boolean(currentNotePath)
-  const currentNoteOutline = useMemo(
-    () =>
-      noteIsOpen && activePage === 'notes' && !searchQuery.trim() && !currentExcalidrawPath
-        ? extractNoteOutlineFromMarkdown(currentNoteContent)
-        : [],
-    [activePage, currentExcalidrawPath, currentNoteContent, noteIsOpen, searchQuery]
-  )
+  const activeNoteScrollTop = currentNotePath
+    ? getWorkspaceTabNoteScrollTop(activeWorkspaceTabId, currentNotePath)
+    : 0
+  const currentNoteOutline = useMemo(() => {
+    return noteIsOpen && activePage === 'notes' && !searchQuery.trim() && !currentExcalidrawPath
+      ? extractNoteOutlineFromMarkdown(currentNoteContent)
+      : []
+  }, [activePage, currentExcalidrawPath, currentNoteContent, noteIsOpen, searchQuery])
   const currentNoteBacklinks = useMemo(() => {
     if (!currentNotePath) {
       return []
@@ -1674,8 +1734,6 @@ function App(): ReactElement {
 
   const resetCurrentNoteEditorSession = useCallback((): void => {
     currentNoteEditorDirtyRef.current = false
-    currentNoteScrollTopRef.current = 0
-    setCurrentNoteScrollTop(0)
     setCurrentNoteEditorDraft(null)
   }, [])
 
@@ -1707,8 +1765,7 @@ function App(): ReactElement {
       const snapshot: NoteEditorSnapshot = await currentNoteEditorRef.current.flushPendingChanges()
       const nextSession: NoteEditorSessionSnapshot = {
         content: snapshot.content,
-        tags: [...currentNoteTagsRef.current],
-        scrollTop: currentNoteScrollTopRef.current
+        tags: [...currentNoteTagsRef.current]
       }
 
       getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
@@ -1733,8 +1790,7 @@ function App(): ReactElement {
       const relPath = currentNotePathRef.current
       const nextSession: NoteEditorSessionSnapshot = {
         content: nextContent,
-        tags: [...currentNoteTagsRef.current],
-        scrollTop: currentNoteScrollTopRef.current
+        tags: [...currentNoteTagsRef.current]
       }
 
       if (relPath) {
@@ -1755,8 +1811,7 @@ function App(): ReactElement {
       const relPath = currentNotePathRef.current
       const nextSession: NoteEditorSessionSnapshot = {
         content: snapshot.content,
-        tags: [...currentNoteTagsRef.current],
-        scrollTop: currentNoteScrollTopRef.current
+        tags: [...currentNoteTagsRef.current]
       }
 
       if (relPath) {
@@ -1768,7 +1823,7 @@ function App(): ReactElement {
       setCurrentNoteContent(nextSession.content)
       pushNoteSaveTrace('editor:snapshot-change', {
         relPath,
-        contentPreview: summarizeTraceContent(nextSession.content),
+        contentLength: nextSession.content.length,
         tagCount: nextSession.tags.length
       })
     },
@@ -1776,8 +1831,7 @@ function App(): ReactElement {
   )
 
   const captureActiveWorkspaceSession = useCallback(async (): Promise<void> => {
-    const capturedTabId = activeWorkspaceTabIdRef.current
-    const session = getWorkspaceTabSession(capturedTabId)
+    const session = getWorkspaceTabSession()
     let checkpointedSession: NoteEditorSessionSnapshot | null = null
     if (currentNotePathRef.current) {
       checkpointedSession = await checkpointCurrentNote({ updateDraftState: false })
@@ -1789,232 +1843,65 @@ function App(): ReactElement {
     session.currentNoteContent = checkpointedSession?.content ?? currentNoteContentRef.current
     session.currentNoteTags = [...(checkpointedSession?.tags ?? currentNoteTagsRef.current)]
     session.currentNoteEditorDraft = checkpointedSession?.content ?? currentNoteEditorDraft
-    if (currentNotePathRef.current && session.noteEditorSessions[currentNotePathRef.current]) {
-      session.noteEditorSessions[currentNotePathRef.current].scrollTop =
-        currentNoteScrollTopRef.current
-    }
-    if (currentExcalidrawPathRef.current) {
-      const scene = currentExcalidrawEditorRef.current?.captureScene()
-      if (scene) {
-        session.excalidrawScenes[currentExcalidrawPathRef.current] = scene
-      }
-    }
-    if (workspaceMainContentRef.current) {
-      session.scrollPositions[
-        getWorkspaceScrollPositionKey(activePageRef.current, activeWorkspaceViewIdRef.current)
-      ] = {
-        top: workspaceMainContentRef.current.scrollTop,
-        left: workspaceMainContentRef.current.scrollLeft
-      }
-    }
     session.searchQuery = searchQuery
     session.searchResults = [...searchResults]
     session.selectedNoteTreeEntries = selectedNoteTreeEntries.map((entry) => ({ ...entry }))
-    session.calendarDate = selectedCalendarDate
-    session.calendarViewMode = calendarViewMode
-    session.calendarContentFilter = calendarContentFilter
-    session.calendarTaskTagSettings = [...calendarTaskTagSettings]
-    session.calendarHeaderNewTask = calendarHeaderNewTask
-    session.taskViewState = {
-      filters: { ...taskWorkspaceViewState.filters },
-      groupBy: taskWorkspaceViewState.groupBy,
-      sortState: taskWorkspaceViewState.sortState ? { ...taskWorkspaceViewState.sortState } : null
-    }
-    session.resourceViewState = {
-      filters: { ...resourceWorkspaceViewState.filters },
-      sortState: resourceWorkspaceViewState.sortState
-        ? { ...resourceWorkspaceViewState.sortState }
-        : null
-    }
-    session.projectFilterMode = projectFilterMode
-    session.captureDraft = captureDraft
-    session.captureResourceDraft = captureResourceDraft
-    session.schedulingView = schedulingView
-    session.subscriptions = {
-      selectedId: subscriptionWorkspaceSessionRef.current.selectedId,
-      draft: {
-        ...subscriptionWorkspaceSessionRef.current.draft,
-        tags: [...subscriptionWorkspaceSessionRef.current.draft.tags]
-      },
-      isDrawerOpen: subscriptionWorkspaceSessionRef.current.isDrawerOpen
-    }
-    const capturedTaskDialogDraft = taskDialogDraftRef.current
-    session.taskDialog =
-      openTaskDialogId && taskDialogOrigin && capturedTaskDialogDraft
-        ? {
-            taskId: openTaskDialogId,
-            isNewTask: taskDialogIsNewTask,
-            origin: { ...taskDialogOrigin },
-            draft: {
-              ...capturedTaskDialogDraft,
-              tags: [...capturedTaskDialogDraft.tags]
-            }
-          }
-        : null
-    session.taskPage =
-      openTaskId && taskOrigin
-        ? {
-            taskId: openTaskId,
-            origin:
-              taskOrigin.source === 'calendar'
-                ? { ...taskOrigin, tags: [...taskOrigin.tags] }
-                : { ...taskOrigin }
-          }
-        : null
-    session.knowledgeViewport = knowledgeViewportRef.current
-      ? { ...knowledgeViewportRef.current }
-      : null
-    setWorkspaceTabs((tabs) =>
-      tabs.map((tab) =>
-        tab.id === capturedTabId
-          ? {
-              ...tab,
-              projectId: selectedProjectId,
-              projectView,
-              calendarDate: selectedCalendarDate,
-              calendarViewMode
-            }
-          : tab
-      )
-    )
   }, [
-    calendarViewMode,
-    calendarContentFilter,
-    calendarTaskTagSettings,
     checkpointCurrentNote,
-    captureDraft,
-    captureResourceDraft,
     currentNoteEditorDraft,
     getWorkspaceTabSession,
     browseFolderPath,
-    openTaskDialogId,
-    taskDialogIsNewTask,
-    taskDialogOrigin,
-    openTaskId,
-    taskOrigin,
-    projectFilterMode,
-    projectView,
-    resourceWorkspaceViewState,
-    schedulingView,
-    selectedCalendarDate,
-    calendarHeaderNewTask,
-    selectedProjectId,
     searchQuery,
     searchResults,
-    selectedNoteTreeEntries,
-    taskWorkspaceViewState
+    selectedNoteTreeEntries
   ])
 
-  const restoreWorkspaceSession = useCallback(
-    (tabId: string): void => {
-      const session = getWorkspaceTabSession(tabId)
-      const nextNotePath = session.currentNotePath
-      const nextNoteSession = nextNotePath ? session.noteEditorSessions[nextNotePath] : null
-      const nextNoteContent = nextNoteSession?.content ?? session.currentNoteContent
-      const nextTags = [...(nextNoteSession?.tags ?? session.currentNoteTags)]
-      const nextScrollTop = nextNoteSession?.scrollTop ?? 0
+  const restoreWorkspaceSession = useCallback((): void => {
+    const session = getWorkspaceTabSession()
+    const nextNotePath = session.currentNotePath
+    const nextNoteSession = nextNotePath ? session.noteEditorSessions[nextNotePath] : null
+    const nextNoteContent = nextNoteSession?.content ?? session.currentNoteContent
+    const nextTags = [...(nextNoteSession?.tags ?? session.currentNoteTags)]
 
-      currentNotePathRef.current = nextNotePath
-      currentExcalidrawPathRef.current = session.currentExcalidrawPath
-      currentNoteContentRef.current = nextNoteContent
-      currentNoteTagsRef.current = nextTags
-      currentNoteScrollTopRef.current = nextScrollTop
-      currentNoteEditorDirtyRef.current = Boolean(
-        nextNotePath &&
-        session.noteEditorSessions[nextNotePath] &&
-        getStoredNoteFingerprint(session.noteEditorSessions[nextNotePath]) !==
-          persistedNoteFingerprintsRef.current[nextNotePath]
-      )
+    currentNotePathRef.current = nextNotePath
+    currentExcalidrawPathRef.current = session.currentExcalidrawPath
+    currentNoteContentRef.current = nextNoteContent
+    currentNoteTagsRef.current = nextTags
+    currentNoteEditorDirtyRef.current = Boolean(
+      nextNotePath &&
+      session.noteEditorSessions[nextNotePath] &&
+      getStoredNoteFingerprint(session.noteEditorSessions[nextNotePath]) !==
+        (session.noteEditorBaselines[nextNotePath]?.fingerprint ??
+          persistedNoteFingerprintsRef.current[nextNotePath])
+    )
 
-      if (nextNotePath) {
-        currentNoteEditorRef.current?.loadDocument({
-          content: nextNoteContent,
-          notePath: nextNotePath,
-          preserveFocus: currentNoteEditorRef.current.hasFocusIntent()
-        })
-      }
+    if (nextNotePath) {
+      currentNoteEditorRef.current?.loadDocument({
+        content: nextNoteContent,
+        notePath: nextNotePath,
+        preserveFocus: currentNoteEditorRef.current.hasFocusIntent()
+      })
+    }
 
-      setCurrentExcalidrawPath(session.currentExcalidrawPath)
-      setBrowseFolderPath(session.browseFolderPath)
-      setCurrentNotePath(nextNotePath)
-      setCurrentNoteContent(nextNoteContent)
-      setCurrentNoteTagsState(nextTags)
-      setCurrentNoteEditorDraft(nextNoteSession?.content ?? session.currentNoteEditorDraft)
-      setCurrentNoteScrollTop(nextScrollTop)
-      setSearchQuery(session.searchQuery)
-      setSearchResults([...session.searchResults])
-      setSelectedNoteTreeEntries(session.selectedNoteTreeEntries.map((entry) => ({ ...entry })))
-      setSelectedCalendarDate(session.calendarDate)
-      setCalendarViewMode(session.calendarViewMode)
-      setCalendarContentFilter(session.calendarContentFilter)
-      setCalendarTaskTagSettings([...session.calendarTaskTagSettings])
-      setCalendarHeaderNewTask(session.calendarHeaderNewTask)
-      setTaskWorkspaceViewState({
-        filters: { ...session.taskViewState.filters },
-        groupBy: session.taskViewState.groupBy,
-        sortState: session.taskViewState.sortState ? { ...session.taskViewState.sortState } : null
-      })
-      setResourceWorkspaceViewState({
-        filters: { ...session.resourceViewState.filters },
-        sortState: session.resourceViewState.sortState
-          ? { ...session.resourceViewState.sortState }
-          : null
-      })
-      setProjectFilterMode(session.projectFilterMode)
-      setCaptureDraft(session.captureDraft)
-      setCaptureResourceDraft(session.captureResourceDraft)
-      setSchedulingView(session.schedulingView)
-      setSubscriptionWorkspaceSessionState({
-        selectedId: session.subscriptions.selectedId,
-        draft: { ...session.subscriptions.draft, tags: [...session.subscriptions.draft.tags] },
-        isDrawerOpen: session.subscriptions.isDrawerOpen
-      })
-      setOpenTaskDialogId(session.taskDialog?.taskId ?? null)
-      setTaskDialogOrigin(session.taskDialog?.origin ? { ...session.taskDialog.origin } : null)
-      setTaskDialogIsNewTask(session.taskDialog?.isNewTask ?? false)
-      setTaskDialogDraftSession(
-        session.taskDialog?.draft
-          ? { ...session.taskDialog.draft, tags: [...session.taskDialog.draft.tags] }
-          : null
-      )
-      const nextTaskPage = session.taskPage
-      setOpenTaskId(nextTaskPage?.taskId ?? null)
-      const nextTaskOrigin = nextTaskPage?.origin
-        ? nextTaskPage.origin.source === 'calendar'
-          ? { ...nextTaskPage.origin, tags: [...nextTaskPage.origin.tags] }
-          : { ...nextTaskPage.origin }
-        : null
-      taskOriginRef.current = nextTaskOrigin
-      setTaskOrigin(nextTaskOrigin)
-      setKnowledgeViewportSession(
-        session.knowledgeViewport ? { ...session.knowledgeViewport } : null
-      )
-    },
-    [
-      getStoredNoteFingerprint,
-      getWorkspaceTabSession,
-      setCurrentExcalidrawPath,
-      setBrowseFolderPath,
-      setCurrentNoteContent,
-      setCurrentNotePath,
-      setCalendarContentFilter,
-      setCalendarTaskTagSettings,
-      setCalendarViewMode,
-      setSelectedCalendarDate,
-      setCalendarHeaderNewTask,
-      setTaskWorkspaceViewState,
-      setResourceWorkspaceViewState,
-      setProjectFilterMode,
-      setCaptureDraft,
-      setCaptureResourceDraft,
-      setSchedulingView,
-      setSubscriptionWorkspaceSessionState,
-      setTaskDialogDraftSession,
-      setSearchQuery,
-      setSearchResults,
-      setKnowledgeViewportSession
-    ]
-  )
+    setCurrentExcalidrawPath(session.currentExcalidrawPath)
+    setBrowseFolderPath(session.browseFolderPath)
+    setCurrentNotePath(nextNotePath)
+    setCurrentNoteContent(nextNoteContent)
+    setCurrentNoteTagsState(nextTags)
+    setCurrentNoteEditorDraft(nextNoteSession?.content ?? session.currentNoteEditorDraft)
+    setSearchQuery(session.searchQuery)
+    setSearchResults([...session.searchResults])
+    setSelectedNoteTreeEntries(session.selectedNoteTreeEntries.map((entry) => ({ ...entry })))
+  }, [
+    getStoredNoteFingerprint,
+    getWorkspaceTabSession,
+    setCurrentExcalidrawPath,
+    setBrowseFolderPath,
+    setCurrentNoteContent,
+    setCurrentNotePath,
+    setSearchQuery,
+    setSearchResults
+  ])
 
   const normalizedCalendarTasks = useMemo(
     () => normalizeCalendarTasks(calendarTasks),
@@ -2100,20 +1987,15 @@ function App(): ReactElement {
     setOpenTaskDialogId(null)
     setTaskDialogOrigin(null)
     setTaskDialogIsNewTask(false)
-    clearTaskDialogDraft()
-  }, [clearTaskDialogDraft, openTaskDialogId, taskDialogTask])
+  }, [openTaskDialogId, taskDialogTask])
 
   const openTaskDialog = useCallback(
     (taskId: string, origin: TaskOriginRequest, options: TaskOpenOptions = {}): void => {
       setTaskDialogOrigin(origin)
       setTaskDialogIsNewTask(options.isNewTask === true)
-      const task = calendarTasksRef.current.find((candidate) => candidate.id === taskId)
-      setTaskDialogDraftSession(
-        task ? createTaskEditDialogDraft(task, options.isNewTask === true) : null
-      )
       setOpenTaskDialogId(taskId)
     },
-    [setTaskDialogDraftSession]
+    []
   )
 
   const openMilestoneDialog = useCallback(
@@ -2146,18 +2028,11 @@ function App(): ReactElement {
       setOpenTaskDialogId(null)
       setTaskDialogOrigin(null)
       setTaskDialogIsNewTask(false)
-      clearTaskDialogDraft()
       taskOriginRef.current = nextOrigin
       setTaskOrigin(nextOrigin)
       setOpenTaskId(taskId)
     },
-    [
-      calendarContentFilter,
-      calendarTaskTagSettings,
-      calendarViewMode,
-      clearTaskDialogDraft,
-      selectedCalendarDate
-    ]
+    [calendarContentFilter, calendarTaskTagSettings, calendarViewMode, selectedCalendarDate]
   )
 
   const closeTaskPage = useCallback(async (): Promise<void> => {
@@ -2166,19 +2041,14 @@ function App(): ReactElement {
     setOpenTaskDialogId(null)
     setTaskDialogOrigin(null)
     setTaskDialogIsNewTask(false)
-    clearTaskDialogDraft()
     restoreTaskOrigin()
     taskOriginRef.current = null
     setOpenTaskId(null)
     setTaskOrigin(null)
-  }, [clearTaskDialogDraft, restoreTaskOrigin])
+  }, [restoreTaskOrigin])
 
   const registerTaskFlush = useCallback((flush: (() => Promise<void>) | null): void => {
     taskFlushRef.current = flush
-  }, [])
-
-  const registerTaskDialogFlush = useCallback((flush: (() => Promise<void>) | null): void => {
-    taskDialogFlushRef.current = flush
   }, [])
 
   // Unscheduled tasks have neither a start date nor a deadline.
@@ -2479,7 +2349,7 @@ function App(): ReactElement {
     }
 
     return createNoteSaveCoordinator({
-      writeNote: async ({ relPath, document, baseHash, clientMutationId }) => {
+      writeNote: async ({ relPath, document, baseHash, clientMutationId, workspaceTabId }) => {
         pushNoteSaveTrace('coordinator:write-start', {
           relPath,
           tagCount: document.tags.length,
@@ -2493,6 +2363,15 @@ function App(): ReactElement {
         })
         if (result.ok) {
           persistedNoteRevisionsRef.current[relPath] = result.revision.contentHash
+          if (workspaceTabId) {
+            const workspaceSession = workspaceTabSessionsRef.current[workspaceTabId]
+            if (workspaceSession) {
+              workspaceSession.noteEditorBaselines[relPath] = {
+                fingerprint: serializeStoredNoteDocument(document),
+                revision: result.revision.contentHash
+              }
+            }
+          }
         }
         pushNoteSaveTrace('coordinator:write-done', {
           relPath,
@@ -2502,7 +2381,7 @@ function App(): ReactElement {
         return result
       }
     })
-  }, [vaultApi])
+  }, [pushNoteSaveTrace, vaultApi])
 
   const projectSaveCoordinator = useMemo(() => {
     if (!vaultApi) {
@@ -2520,9 +2399,15 @@ function App(): ReactElement {
         return
       }
 
+      const workspaceTabId = activeWorkspaceTabIdRef.current
+      const workspaceSession = getWorkspaceTabSession(workspaceTabId)
+      const baseline: NotebookNoteBaseline | undefined =
+        workspaceSession.noteEditorBaselines[relPath]
       const document = buildStoredNoteDocument(session)
       const fingerprint = serializeStoredNoteDocument(document)
-      if (persistedNoteFingerprintsRef.current[relPath] === fingerprint) {
+      if (
+        (baseline?.fingerprint ?? persistedNoteFingerprintsRef.current[relPath]) === fingerprint
+      ) {
         syncCurrentNoteDirtyState(relPath)
         return
       }
@@ -2536,8 +2421,9 @@ function App(): ReactElement {
         relPath,
         content: session.content,
         document,
-        baseHash: persistedNoteRevisionsRef.current[relPath] ?? null,
-        clientMutationId: `${Date.now()}-${Math.random()}`
+        baseHash: baseline?.revision ?? persistedNoteRevisionsRef.current[relPath] ?? null,
+        clientMutationId: `${Date.now()}-${Math.random()}`,
+        workspaceTabId
       })
       noteSaveInFlightRef.current = savePromise
 
@@ -2552,11 +2438,15 @@ function App(): ReactElement {
           contentPreview: summarizeTraceContent(document.markdown)
         })
       } catch (error) {
-        if (currentNotePathRef.current === relPath) {
+        if (
+          activeWorkspaceTabIdRef.current === workspaceTabId &&
+          currentNotePathRef.current === relPath
+        ) {
           currentNoteEditorDirtyRef.current = true
         }
-        if (error instanceof NoteSaveConflictError && currentNotePathRef.current === relPath) {
-          setNoteConflict({
+        if (error instanceof NoteSaveConflictError) {
+          queueNoteConflict({
+            workspaceTabId,
             path: error.result.path.startsWith('notebooks/')
               ? error.result.path
               : `notebooks/${error.result.path}`,
@@ -2584,8 +2474,10 @@ function App(): ReactElement {
     },
     [
       buildStoredNoteDocument,
+      getWorkspaceTabSession,
       noteSaveCoordinator,
       pushToast,
+      queueNoteConflict,
       syncCurrentNoteDirtyState,
       updateNoteListEntryFromDocument
     ]
@@ -2727,7 +2619,7 @@ function App(): ReactElement {
       syncCurrentNoteDirtyState(relPath)
       const activeElement = document.activeElement
       const editorRoot = document.querySelector<HTMLElement>(
-        '[data-testid="note-block-editor"] [contenteditable="true"]'
+        '[data-testid="note-block-editor"] [contenteditable="true"], [data-testid="note-block-editor"] [data-note-raw-editor="true"]'
       )
       const focusIsInEditor = Boolean(
         editorRoot && activeElement && editorRoot.contains(activeElement)
@@ -2817,7 +2709,7 @@ function App(): ReactElement {
     }
     pushNoteSaveTrace('autosave:scheduled', {
       relPath: currentNotePathRef.current,
-      contentPreview: summarizeTraceContent(currentNoteContentRef.current)
+      contentLength: currentNoteContentRef.current.length
     })
     if (noteSaveTimerRef.current) {
       clearTimeout(noteSaveTimerRef.current)
@@ -2827,7 +2719,7 @@ function App(): ReactElement {
       noteSaveTimerRef.current = null
       pushNoteSaveTrace('autosave:timer-fired', {
         relPath: currentNotePathRef.current,
-        contentPreview: summarizeTraceContent(currentNoteContentRef.current)
+        contentLength: currentNoteContentRef.current.length
       })
       void flushCurrentNote().catch((error: unknown) => {
         pushToast('error', String(error))
@@ -2884,6 +2776,10 @@ function App(): ReactElement {
           tags: [...currentNoteTagsRef.current]
         }
         const fingerprint = getStoredNoteFingerprint(session)
+        const workspaceSession = getWorkspaceTabSession()
+        const baselineFingerprint =
+          workspaceSession.noteEditorBaselines[relPath]?.fingerprint ??
+          persistedNoteFingerprintsRef.current[relPath]
 
         pageLeaveSaveDebugState.attempted = true
         pageLeaveSaveDebugState.snapshotContent = session.content
@@ -2893,7 +2789,7 @@ function App(): ReactElement {
           await noteSaveInFlightRef.current
         }
 
-        if (persistedNoteFingerprintsRef.current[relPath] === fingerprint) {
+        if (baselineFingerprint === fingerprint) {
           pageLeaveSaveDebugState.skippedReason = 'unchanged'
           pageLeaveSaveDebugState.writeCompleted = true
           pushNoteSaveTrace('page-leave:skip-unchanged', {
@@ -2939,6 +2835,7 @@ function App(): ReactElement {
     [
       checkpointCurrentNote,
       getStoredNoteFingerprint,
+      getWorkspaceTabSession,
       noteSaveCoordinator,
       persistNoteSession,
       settleCurrentNoteEditor
@@ -2957,13 +2854,11 @@ function App(): ReactElement {
         if (targetPage !== 'settings') {
           setSettingsTabRequest('profile')
         }
-        await taskDialogFlushRef.current?.()
-        taskDialogFlushRef.current = null
+        captureActiveWorkspacePageContext()
         await taskFlushRef.current?.()
         taskFlushRef.current = null
         setOpenTaskDialogId(null)
         setTaskDialogOrigin(null)
-        clearTaskDialogDraft()
         restoreTaskOrigin()
         taskOriginRef.current = null
         setOpenTaskId(null)
@@ -2990,25 +2885,23 @@ function App(): ReactElement {
         activePageRef.current = targetPage
         activeWorkspaceViewIdRef.current = workspaceViewId
         setActivePage(targetPage)
+        const pageContext = getWorkspaceTabPageContext()
+        pageContext.openTaskDialogId = null
+        pageContext.taskDialogOrigin = null
+        pageContext.taskDialogIsNewTask = false
+        pageContext.openTaskId = null
+        pageContext.taskOrigin = null
         if (targetPage === 'projects') {
           selectedProjectIdRef.current = null
           setSelectedProjectId(null)
           setProjectView('list')
+          pageContext.projectId = null
+          pageContext.projectView = 'list'
         }
         setWorkspaceTabs((tabs) =>
           tabs.map((tab) =>
             tab.id === activeWorkspaceTabIdRef.current
-              ? {
-                  ...tab,
-                  page: targetPage,
-                  workspaceViewId,
-                  ...(targetPage === 'projects'
-                    ? {
-                        projectId: null,
-                        projectView: 'list' as ProjectsWorkspaceView
-                      }
-                    : {})
-                }
+              ? { ...tab, page: targetPage, workspaceViewId }
               : tab
           )
         )
@@ -3028,11 +2921,12 @@ function App(): ReactElement {
     },
     [
       captureActiveWorkspaceSession,
+      captureActiveWorkspacePageContext,
+      getWorkspaceTabPageContext,
       hasVault,
       persistCurrentNoteForPageLeave,
       platform,
-      restoreTaskOrigin,
-      clearTaskDialogDraft
+      restoreTaskOrigin
     ]
   )
 
@@ -3063,24 +2957,57 @@ function App(): ReactElement {
     return `workspace-tab-${workspaceTabSequenceRef.current}`
   }, [])
 
+  const createWorkspaceTabInBackground = useCallback(
+    (
+      page: AppPage,
+      workspaceViewId: string | null = null,
+      contextPatch: Partial<WorkspaceTabPageContext> = {}
+    ): string => {
+      const nextTabId = createWorkspaceTabId()
+      const nextContext = {
+        ...createEmptyWorkspaceTabPageContext(),
+        ...contextPatch
+      }
+      if (page === 'calendar') {
+        nextContext.calendarDate ??= selectedCalendarDate
+        nextContext.calendarViewMode ??= calendarViewMode
+        nextContext.calendarContentFilter ??= calendarContentFilter
+        nextContext.calendarTaskTagSettings ??= [...calendarTaskTagSettings]
+      }
+
+      workspaceTabSessionsRef.current[nextTabId] = createEmptyNotebookWorkspaceSession()
+      workspaceTabPageContextsRef.current[nextTabId] = nextContext
+      setWorkspaceTabs((tabs) => [
+        ...tabs,
+        { ...createWorkspacePageTab(nextTabId, page), workspaceViewId }
+      ])
+      return nextTabId
+    },
+    [
+      calendarContentFilter,
+      calendarTaskTagSettings,
+      calendarViewMode,
+      createWorkspaceTabId,
+      selectedCalendarDate
+    ]
+  )
+
   const getRecentTargetForWorkspaceTab = useCallback(
     (tab: WorkspacePageTab): RecentPageTarget | null => {
       if (tab.workspaceViewId) {
         return { kind: 'view', viewId: tab.workspaceViewId }
       }
 
-      const isActiveTab = tab.id === activeWorkspaceTabIdRef.current
-      const projectId = isActiveTab ? selectedProjectIdRef.current : tab.projectId
-      const currentProjectView = isActiveTab ? projectView : tab.projectView
+      const context = getWorkspaceTabPageContext(tab.id)
+      const projectId = context.projectId
+      const currentProjectView = context.projectView
       if (tab.page === 'projects' && projectId && currentProjectView === 'home') {
         return { kind: 'project', projectId }
       }
 
       if (tab.page === 'notes') {
         const session = getWorkspaceTabSession(tab.id)
-        const path = isActiveTab
-          ? (currentNotePathRef.current ?? currentExcalidrawPathRef.current)
-          : (session.currentNotePath ?? session.currentExcalidrawPath)
+        const path = session.currentNotePath ?? session.currentExcalidrawPath
         if (path) {
           return { kind: isExcalidrawPath(path) ? 'drawing' : 'note', path }
         }
@@ -3088,7 +3015,7 @@ function App(): ReactElement {
 
       return null
     },
-    [getWorkspaceTabSession, projectView]
+    [getWorkspaceTabPageContext, getWorkspaceTabSession]
   )
 
   const activateWorkspaceTab = useCallback(
@@ -3107,7 +3034,7 @@ function App(): ReactElement {
         workspaceViewIdOverride !== undefined
           ? workspaceViewIdOverride
           : (targetTab?.workspaceViewId ?? null)
-      if (!targetPage || !workspaceTabSessionsRef.current[tabId]) {
+      if (!targetPage) {
         return
       }
 
@@ -3127,36 +3054,28 @@ function App(): ReactElement {
       }
 
       const runActivation = async (): Promise<void> => {
-        openNoteRequestIdRef.current += 1
-        await taskDialogFlushRef.current?.()
-        taskDialogFlushRef.current = null
+        captureActiveWorkspacePageContext()
         await taskFlushRef.current?.()
         taskFlushRef.current = null
+        setOpenTaskDialogId(null)
+        setTaskDialogOrigin(null)
+        restoreTaskOrigin()
+        taskOriginRef.current = null
+        setOpenTaskId(null)
+        setTaskOrigin(null)
+        setOpenMilestoneDialogId(null)
+        setMilestoneDialogIsNew(false)
         await captureActiveWorkspaceSession()
         await stageCurrentNoteForBackgroundSave()
 
         activeWorkspaceTabIdRef.current = tabId
         activePageRef.current = targetPage
         activeWorkspaceViewIdRef.current = targetWorkspaceViewId
-        if (targetPage === 'projects') {
-          const targetProjectView = targetTab?.projectView ?? 'list'
-          const targetProjectId =
-            targetProjectView === 'list'
-              ? null
-              : targetTab?.projectId &&
-                  projects.some((project) => project.id === targetTab.projectId)
-                ? targetTab.projectId
-                : null
-          setProjectView(targetProjectView)
-          selectProject(targetProjectId)
-        }
-        if (targetPage === 'calendar') {
-          setSelectedCalendarDate(targetTab?.calendarDate ?? selectedCalendarDate)
-          setCalendarViewMode(targetTab?.calendarViewMode ?? calendarViewMode)
-        }
         setActiveWorkspaceTabId(tabId)
         setActivePage(targetPage)
-        restoreWorkspaceSession(tabId)
+        setNoteConflict(noteConflictsRef.current[tabId] ?? null)
+        restoreWorkspaceSession()
+        restoreWorkspacePageContext(tabId)
       }
 
       const queuedActivation = pageNavigationQueueRef.current
@@ -3167,24 +3086,112 @@ function App(): ReactElement {
     },
     [
       captureActiveWorkspaceSession,
-      calendarViewMode,
+      captureActiveWorkspacePageContext,
       getRecentTargetForWorkspaceTab,
+      getWorkspaceTabSession,
       hasVault,
-      openNoteRequestIdRef,
-      projects,
       restoreWorkspaceSession,
+      restoreWorkspacePageContext,
       stageCurrentNoteForBackgroundSave,
+      restoreTaskOrigin,
       rememberRecentTarget,
-      selectProject,
-      selectedCalendarDate,
-      setCalendarViewMode,
-      setSelectedCalendarDate,
       workspaceTabs
     ]
   )
 
+  const openWorkspacePage = useCallback(
+    async (
+      page: AppPage,
+      workspaceViewId: string | null = null,
+      options: WorkspaceOpenOptions = {},
+      contextPatch: Partial<WorkspaceTabPageContext> = {}
+    ): Promise<boolean> => {
+      if (!options.openInNewTab) {
+        await navigateToPage(page, workspaceViewId)
+        return true
+      }
+
+      if (!hasVault) {
+        return false
+      }
+
+      createWorkspaceTabInBackground(page, workspaceViewId, contextPatch)
+      return true
+    },
+    [createWorkspaceTabInBackground, hasVault, navigateToPage]
+  )
+
+  const openProjectTarget = useCallback(
+    async (projectId: string, options: WorkspaceOpenOptions = {}): Promise<void> => {
+      if (!options.openInNewTab) {
+        await navigateToPage('projects')
+        openProject(projectId)
+        return
+      }
+
+      const opened = await openWorkspacePage('projects', null, options, {
+        projectId,
+        projectView: 'home'
+      })
+      if (opened) {
+        rememberRecentTarget({ kind: 'project', projectId })
+      }
+    },
+    [navigateToPage, openProject, openWorkspacePage, rememberRecentTarget]
+  )
+
+  const openTaskTarget = useCallback(
+    async (
+      taskId: string,
+      origin: TaskOriginRequest,
+      options: TaskOpenOptions = {}
+    ): Promise<void> => {
+      if (!options.openInNewTab) {
+        openTaskDialog(taskId, origin, options)
+        return
+      }
+
+      const taskOrigin: TaskOrigin =
+        origin.source === 'calendar'
+          ? {
+              source: 'calendar',
+              selectedDate: selectedCalendarDate,
+              viewMode: calendarViewMode,
+              contentFilter: calendarContentFilter,
+              tags: [...calendarTaskTagSettings]
+            }
+          : origin
+      const targetPage: AppPage =
+        origin.source === 'calendar'
+          ? 'calendar'
+          : origin.source === 'projects'
+            ? 'projects'
+            : 'tasks'
+      const contextPatch: Partial<WorkspaceTabPageContext> = {
+        openTaskId: taskId,
+        taskOrigin,
+        projectId: origin.source === 'projects' ? origin.projectId : null,
+        projectView: origin.source === 'projects' ? 'home' : 'list'
+      }
+      await openWorkspacePage(
+        targetPage,
+        origin.source === 'tasks' ? (origin.workspaceViewId ?? null) : null,
+        options,
+        contextPatch
+      )
+    },
+    [
+      calendarContentFilter,
+      calendarTaskTagSettings,
+      calendarViewMode,
+      openTaskDialog,
+      openWorkspacePage,
+      selectedCalendarDate
+    ]
+  )
+
   const openWorkspaceView = useCallback(
-    (viewId: string): void => {
+    (viewId: string, options: WorkspaceOpenOptions = {}): void => {
       if (!hasVault) {
         return
       }
@@ -3197,9 +3204,9 @@ function App(): ReactElement {
       }
 
       rememberRecentTarget({ kind: 'view', viewId: view.id })
-      void navigateToPage(view.source, view.id)
+      void openWorkspacePage(view.source, view.id, options)
     },
-    [hasVault, navigateToPage, rememberRecentTarget]
+    [hasVault, openWorkspacePage, rememberRecentTarget]
   )
 
   const updateWorkspaceView = useCallback(
@@ -3370,7 +3377,8 @@ function App(): ReactElement {
     }
 
     const tabId = createWorkspaceTabId()
-    workspaceTabSessionsRef.current[tabId] = createEmptyWorkspaceTabSession()
+    workspaceTabSessionsRef.current[tabId] = createEmptyNotebookWorkspaceSession()
+    workspaceTabPageContextsRef.current[tabId] = createEmptyWorkspaceTabPageContext()
     setWorkspaceTabs((tabs) => [...tabs, createWorkspacePageTab(tabId, 'notes')])
     void activateWorkspaceTab(tabId, 'notes')
   }, [activateWorkspaceTab, createWorkspaceTabId, hasVault])
@@ -3404,6 +3412,9 @@ function App(): ReactElement {
 
       if (tabId !== activeWorkspaceTabIdRef.current) {
         delete workspaceTabSessionsRef.current[tabId]
+        delete workspaceTabPageContextsRef.current[tabId]
+        delete noteConflictsRef.current[tabId]
+        clearWorkspaceTabNoteScrollPositions(tabId)
         setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
         return
       }
@@ -3412,19 +3423,31 @@ function App(): ReactElement {
       if (nextTab) {
         void activateWorkspaceTab(nextTab.id, nextTab.page, nextTab.workspaceViewId).then(() => {
           delete workspaceTabSessionsRef.current[tabId]
+          delete workspaceTabPageContextsRef.current[tabId]
+          delete noteConflictsRef.current[tabId]
+          clearWorkspaceTabNoteScrollPositions(tabId)
           setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
         })
         return
       }
 
       const replacementTabId = createWorkspaceTabId()
-      workspaceTabSessionsRef.current[replacementTabId] = createEmptyWorkspaceTabSession()
+      workspaceTabSessionsRef.current[replacementTabId] = createEmptyNotebookWorkspaceSession()
+      workspaceTabPageContextsRef.current[replacementTabId] = createEmptyWorkspaceTabPageContext()
       void activateWorkspaceTab(replacementTabId, 'notes').then(() => {
         delete workspaceTabSessionsRef.current[tabId]
+        delete workspaceTabPageContextsRef.current[tabId]
+        delete noteConflictsRef.current[tabId]
+        clearWorkspaceTabNoteScrollPositions(tabId)
         setWorkspaceTabs([createWorkspacePageTab(replacementTabId, 'notes')])
       })
     },
-    [activateWorkspaceTab, createWorkspaceTabId, workspaceTabs]
+    [
+      activateWorkspaceTab,
+      clearWorkspaceTabNoteScrollPositions,
+      createWorkspaceTabId,
+      workspaceTabs
+    ]
   )
 
   const refreshAfterHistoryOperation = useCallback(
@@ -3446,14 +3469,26 @@ function App(): ReactElement {
         ])
         replaceNotes(nextNotes)
         setNoteTree(nextTree)
+        const nextNotePaths = new Set(nextNotes.map((note) => note.relPath))
+        Object.values(workspaceTabSessionsRef.current).forEach((session) => {
+          const staleSessionPaths = Array.from(
+            new Set([
+              ...Object.keys(session.noteEditorSessions),
+              ...(session.currentNotePath ? [session.currentNotePath] : [])
+            ])
+          ).filter((relPath) => !nextNotePaths.has(relPath))
+          if (staleSessionPaths.length > 0) {
+            removeNotebookWorkspaceSessionPaths(session, staleSessionPaths)
+          }
+        })
+        Object.keys(persistedNoteFingerprintsRef.current).forEach((relPath) => {
+          if (!nextNotePaths.has(relPath)) {
+            delete persistedNoteFingerprintsRef.current[relPath]
+            delete persistedNoteRevisionsRef.current[relPath]
+          }
+        })
 
-        if (
-          currentNotePathRef.current &&
-          !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
-        ) {
-          delete getWorkspaceTabSession().noteEditorSessions[currentNotePathRef.current]
-          delete persistedNoteFingerprintsRef.current[currentNotePathRef.current]
-          delete persistedNoteRevisionsRef.current[currentNotePathRef.current]
+        if (currentNotePathRef.current && !nextNotePaths.has(currentNotePathRef.current)) {
           currentNotePathRef.current = null
           currentNoteContentRef.current = ''
           currentNoteTagsRef.current = []
@@ -3466,7 +3501,6 @@ function App(): ReactElement {
       }
     },
     [
-      getWorkspaceTabSession,
       persistLastOpenedNotePath,
       replaceNotes,
       resetCurrentNoteEditorSession,
@@ -3559,26 +3593,28 @@ function App(): ReactElement {
   }, [activePage, flushCurrentNote, hasPendingCurrentNoteSave, pushToast])
 
   useEffect(() => {
-    const flushPendingNote = (): void => {
+    const flushPendingWorkspaceSaves = (): void => {
+      stickyNoteTextFlushRef.current?.()
+      void stickyNoteSaveCoordinator.flush()
       void flushCurrentNote({ force: true }).catch(() => undefined)
     }
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'hidden') {
-        flushPendingNote()
+        flushPendingWorkspaceSaves()
       }
     }
 
-    window.addEventListener('beforeunload', flushPendingNote)
-    window.addEventListener('pagehide', flushPendingNote)
+    window.addEventListener('beforeunload', flushPendingWorkspaceSaves)
+    window.addEventListener('pagehide', flushPendingWorkspaceSaves)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      window.removeEventListener('beforeunload', flushPendingNote)
-      window.removeEventListener('pagehide', flushPendingNote)
+      window.removeEventListener('beforeunload', flushPendingWorkspaceSaves)
+      window.removeEventListener('pagehide', flushPendingWorkspaceSaves)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [flushCurrentNote])
+  }, [flushCurrentNote, stickyNoteSaveCoordinator])
 
   const updateEditorVimMode = async (enabled: boolean): Promise<void> => {
     if (!vaultApi) {
@@ -4461,7 +4497,6 @@ function App(): ReactElement {
   const applyOpenNoteSession = useCallback(
     (relPath: string, session: NoteEditorSessionSnapshot): void => {
       const nextTags = [...session.tags]
-      const nextScrollTop = session.scrollTop ?? 0
       const activeSession = getWorkspaceTabSession()
       activeSession.currentNotePath = relPath
       activeSession.currentExcalidrawPath = null
@@ -4472,10 +4507,11 @@ function App(): ReactElement {
       currentNotePathRef.current = relPath
       currentNoteContentRef.current = session.content
       currentNoteTagsRef.current = nextTags
-      currentNoteScrollTopRef.current = nextScrollTop
       currentExcalidrawPathRef.current = null
+      const baseline = activeSession.noteEditorBaselines[relPath]
       currentNoteEditorDirtyRef.current =
-        getStoredNoteFingerprint(session) !== persistedNoteFingerprintsRef.current[relPath]
+        getStoredNoteFingerprint(session) !==
+        (baseline?.fingerprint ?? persistedNoteFingerprintsRef.current[relPath])
       const editor = currentNoteEditorRef.current
       editor?.loadDocument({
         content: session.content,
@@ -4487,7 +4523,6 @@ function App(): ReactElement {
       setCurrentNoteContent(session.content)
       setCurrentNoteTagsState(nextTags)
       setCurrentNoteEditorDraft(session.content)
-      setCurrentNoteScrollTop(nextScrollTop)
       setSelectedNoteTreeEntries([{ kind: 'note', relPath }])
     },
     [
@@ -4506,8 +4541,14 @@ function App(): ReactElement {
       }
 
       const requestId = ++openNoteRequestIdRef.current
+      const workspaceTabId = activeWorkspaceTabIdRef.current
+      const workspaceSession = getWorkspaceTabSession(workspaceTabId)
 
       if (currentNotePathRef.current === relPath) {
+        const currentBaseline = workspaceSession.noteEditorBaselines[relPath]
+        if (currentBaseline) {
+          noteSaveCoordinator?.setBaseRevision(relPath, currentBaseline.revision, workspaceTabId)
+        }
         pushNoteSaveTrace('open-note:skip-current', {
           targetRelPath: relPath,
           currentContentPreview: summarizeTraceContent(currentNoteContentRef.current)
@@ -4529,16 +4570,30 @@ function App(): ReactElement {
           await stageCurrentNoteForBackgroundSave()
         }
 
-        const cachedSession = getWorkspaceTabSession().noteEditorSessions[relPath]
+        const cachedSession = workspaceSession.noteEditorSessions[relPath]
         if (cachedSession) {
           pushNoteSaveTrace('open-note:use-session', {
             relPath,
             tagCount: cachedSession.tags.length,
             contentPreview: summarizeTraceContent(cachedSession.content)
           })
-          if (requestId !== openNoteRequestIdRef.current) {
+          if (
+            requestId !== openNoteRequestIdRef.current ||
+            workspaceTabId !== activeWorkspaceTabIdRef.current
+          ) {
             return
           }
+          if (!workspaceSession.noteEditorBaselines[relPath]) {
+            workspaceSession.noteEditorBaselines[relPath] = {
+              fingerprint: persistedNoteFingerprintsRef.current[relPath] ?? null,
+              revision: persistedNoteRevisionsRef.current[relPath] ?? null
+            }
+          }
+          noteSaveCoordinator?.setBaseRevision(
+            relPath,
+            workspaceSession.noteEditorBaselines[relPath]?.revision ?? null,
+            workspaceTabId
+          )
           applyOpenNoteSession(relPath, cachedSession)
           void persistLastOpenedNotePath(relPath)
           rememberRecentNotebookFile(relPath)
@@ -4547,12 +4602,19 @@ function App(): ReactElement {
         }
 
         const readResult = await vaultApi.files.readNoteDocumentWithRevision(relPath)
-        if (requestId !== openNoteRequestIdRef.current) {
+        if (
+          requestId !== openNoteRequestIdRef.current ||
+          workspaceTabId !== activeWorkspaceTabIdRef.current
+        ) {
           return
         }
         const document = readResult.document
         persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
-        noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
+        noteSaveCoordinator?.setBaseRevision(
+          relPath,
+          readResult.revision.contentHash,
+          workspaceTabId
+        )
         const content = splitNoteContent(document.markdown).body
         pushNoteSaveTrace('open-note:read-disk', {
           relPath,
@@ -4563,8 +4625,13 @@ function App(): ReactElement {
           content,
           tags: [...document.tags]
         }
-        getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
-        persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(document)
+        workspaceSession.noteEditorSessions[relPath] = nextSession
+        const fingerprint = serializeStoredNoteDocument(document)
+        workspaceSession.noteEditorBaselines[relPath] = {
+          fingerprint,
+          revision: readResult.revision.contentHash
+        }
+        persistedNoteFingerprintsRef.current[relPath] = fingerprint
         applyOpenNoteSession(relPath, nextSession)
         void persistLastOpenedNotePath(relPath)
         rememberRecentNotebookFile(relPath)
@@ -4634,7 +4701,7 @@ function App(): ReactElement {
     ]
   )
 
-  const openNotebookPath = useCallback(
+  const openNotebookPathInCurrentTab = useCallback(
     async (relPath: string): Promise<void> => {
       if (isExcalidrawPath(relPath)) {
         await openExcalidrawFile(relPath)
@@ -4646,8 +4713,150 @@ function App(): ReactElement {
     [openExcalidrawFile, openNote]
   )
 
+  const openNotebookPathInBackgroundTab = useCallback(
+    async (relPath: string, workspaceTabId: string): Promise<void> => {
+      if (!vaultApi) {
+        return
+      }
+
+      const workspaceSession = workspaceTabSessionsRef.current[workspaceTabId]
+      if (!workspaceSession) {
+        return
+      }
+
+      const initialNotePath = workspaceSession.currentNotePath
+      const initialExcalidrawPath = workspaceSession.currentExcalidrawPath
+      if (isExcalidrawPath(relPath)) {
+        workspaceSession.currentExcalidrawPath = relPath
+        workspaceSession.currentNotePath = null
+        workspaceSession.currentNoteContent = ''
+        workspaceSession.currentNoteTags = []
+        workspaceSession.currentNoteEditorDraft = null
+        workspaceSession.selectedNoteTreeEntries = [{ kind: 'excalidraw', relPath }]
+        rememberRecentNotebookFile(relPath)
+        rememberRecentTarget({ kind: 'drawing', path: relPath })
+        if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+          restoreWorkspaceSession()
+        }
+        return
+      }
+
+      const readResult = await vaultApi.files.readNoteDocumentWithRevision(relPath)
+      if (
+        workspaceTabSessionsRef.current[workspaceTabId] !== workspaceSession ||
+        workspaceSession.currentNotePath !== initialNotePath ||
+        workspaceSession.currentExcalidrawPath !== initialExcalidrawPath
+      ) {
+        return
+      }
+
+      const document = readResult.document
+      const content = splitNoteContent(document.markdown).body
+      const nextSession = {
+        content,
+        tags: [...document.tags]
+      }
+      workspaceSession.noteEditorSessions[relPath] = nextSession
+      workspaceSession.noteEditorBaselines[relPath] = {
+        fingerprint: serializeStoredNoteDocument(document),
+        revision: readResult.revision.contentHash
+      }
+      workspaceSession.currentNotePath = relPath
+      workspaceSession.currentExcalidrawPath = null
+      workspaceSession.currentNoteContent = content
+      workspaceSession.currentNoteTags = [...document.tags]
+      workspaceSession.currentNoteEditorDraft = content
+      workspaceSession.selectedNoteTreeEntries = [{ kind: 'note', relPath }]
+      persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
+      persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(document)
+      noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash, workspaceTabId)
+      rememberRecentNotebookFile(relPath)
+      rememberRecentTarget({ kind: 'note', path: relPath })
+      if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+        restoreWorkspaceSession()
+      }
+    },
+    [
+      noteSaveCoordinator,
+      rememberRecentNotebookFile,
+      rememberRecentTarget,
+      restoreWorkspaceSession,
+      vaultApi
+    ]
+  )
+
+  const openNotebookPath = useCallback(
+    async (relPath: string, options: NotebookOpenOptions = {}): Promise<void> => {
+      if (!options.openInNewTab) {
+        await openNotebookPathInCurrentTab(relPath)
+        return
+      }
+
+      if (!vaultApi) {
+        return
+      }
+
+      const nextTabId = createWorkspaceTabInBackground('notes')
+
+      try {
+        await openNotebookPathInBackgroundTab(relPath, nextTabId)
+      } catch (error) {
+        setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== nextTabId))
+        delete workspaceTabSessionsRef.current[nextTabId]
+        delete workspaceTabPageContextsRef.current[nextTabId]
+        delete noteConflictsRef.current[nextTabId]
+        clearWorkspaceTabNoteScrollPositions(nextTabId)
+        pushToast('error', String(error))
+      }
+    },
+    [
+      clearWorkspaceTabNoteScrollPositions,
+      createWorkspaceTabInBackground,
+      openNotebookPathInCurrentTab,
+      openNotebookPathInBackgroundTab,
+      pushToast,
+      vaultApi
+    ]
+  )
+
+  const openNotebookFolder = useCallback(
+    async (requestedPath: string | null, options: WorkspaceOpenOptions = {}): Promise<void> => {
+      const nextPath = getNotebookFolderContents(noteTree, requestedPath).path
+      if (options.openInNewTab) {
+        if (!hasVault) {
+          return
+        }
+
+        const nextTabId = createWorkspaceTabInBackground('notes')
+        const workspaceSession = workspaceTabSessionsRef.current[nextTabId]
+        if (workspaceSession) {
+          workspaceSession.currentNotePath = null
+          workspaceSession.currentExcalidrawPath = null
+          workspaceSession.currentNoteContent = ''
+          workspaceSession.currentNoteTags = []
+          workspaceSession.currentNoteEditorDraft = null
+          workspaceSession.browseFolderPath = nextPath
+          workspaceSession.selectedNoteTreeEntries = nextPath
+            ? [{ kind: 'folder', relPath: nextPath }]
+            : []
+        }
+        return
+      }
+
+      await navigateToPage('notes')
+      await handleNotebookBreadcrumbFolderClick(nextPath)
+    },
+    [
+      createWorkspaceTabInBackground,
+      handleNotebookBreadcrumbFolderClick,
+      hasVault,
+      navigateToPage,
+      noteTree
+    ]
+  )
+
   const openNotebookResource = useCallback(
-    async (resourceId: string): Promise<void> => {
+    async (resourceId: string, options: WorkspaceOpenOptions = {}): Promise<void> => {
       const resource = resourceSnapshot.resources.find((candidate) => candidate.id === resourceId)
       if (!resource || resource.type !== 'notebook') {
         pushToast('error', 'Notebook resource not found')
@@ -4662,6 +4871,11 @@ function App(): ReactElement {
 
       if (!treeContainsPath(noteTree, requestedPath)) {
         pushToast('info', `Linked notebook folder not found for ${resource.title}`)
+        return
+      }
+
+      if (options.openInNewTab) {
+        await openNotebookFolder(requestedPath, options)
         return
       }
 
@@ -4702,6 +4916,7 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       navigateToPage,
       noteTree,
+      openNotebookFolder,
       pushToast,
       resetCurrentNoteEditorSession,
       resourceSnapshot.resources,
@@ -4755,8 +4970,14 @@ function App(): ReactElement {
 
   const resetVaultScopedUiState = useCallback((): void => {
     workspaceTabSessionsRef.current = {
-      [INITIAL_WORKSPACE_TAB_ID]: createEmptyWorkspaceTabSession()
+      [INITIAL_WORKSPACE_TAB_ID]: createEmptyNotebookWorkspaceSession()
     }
+    workspaceTabPageContextsRef.current = {
+      [INITIAL_WORKSPACE_TAB_ID]: createEmptyWorkspaceTabPageContext()
+    }
+    noteConflictsRef.current = {}
+    setNoteConflict(null)
+    workspaceTabNoteScrollPositionsRef.current = {}
     workspaceTabSequenceRef.current = 1
     activeWorkspaceTabIdRef.current = INITIAL_WORKSPACE_TAB_ID
     activeWorkspaceViewIdRef.current = null
@@ -4784,7 +5005,6 @@ function App(): ReactElement {
     setCurrentNoteTagsState([])
     setCurrentNoteContent('')
     setCurrentNoteEditorDraft(null)
-    setCurrentNoteScrollTop(0)
     setSearchQuery('')
     setSearchResults([])
     setNoteTree([])
@@ -4793,31 +5013,6 @@ function App(): ReactElement {
     selectedProjectIdRef.current = null
     setSelectedProjectId(null)
     setProjectView('list')
-    setSelectedCalendarDate(toIsoDate(new Date()))
-    setCalendarHeaderNewTask('')
-    setCaptureDraft('')
-    setCaptureResourceDraft('')
-    setProjectFilterMode('all')
-    setTaskWorkspaceViewState({
-      filters: {},
-      groupBy: 'none',
-      sortState: { columnId: 'start-date', direction: 'asc' }
-    })
-    setResourceWorkspaceViewState({ filters: {}, sortState: null })
-    setSchedulingView('list')
-    setSubscriptionWorkspaceSessionState(createEmptyWorkspaceTabSession().subscriptions)
-    setKnowledgeViewportSession(null)
-    setOpenTaskDialogId(null)
-    setTaskDialogOrigin(null)
-    setTaskDialogIsNewTask(false)
-    clearTaskDialogDraft()
-    taskDialogFlushRef.current = null
-    taskFlushRef.current = null
-    setOpenTaskId(null)
-    taskOriginRef.current = null
-    setTaskOrigin(null)
-    setOpenMilestoneDialogId(null)
-    setMilestoneDialogIsNew(false)
   }, [
     setActivePage,
     setActiveWorkspaceTabId,
@@ -4829,26 +5024,7 @@ function App(): ReactElement {
     setSearchQuery,
     setSearchResults,
     setNoteTree,
-    setFleetingNotes,
-    setCalendarHeaderNewTask,
-    setCaptureDraft,
-    setCaptureResourceDraft,
-    setKnowledgeViewportSession,
-    setOpenTaskDialogId,
-    setTaskDialogIsNewTask,
-    setTaskDialogOrigin,
-    setOpenTaskId,
-    setTaskOrigin,
-    setOpenMilestoneDialogId,
-    setMilestoneDialogIsNew,
-    setProjectFilterMode,
-    setResourceWorkspaceViewState,
-    setSchedulingView,
-    setSelectedCalendarDate,
-    setSubscriptionWorkspaceSessionState,
-    setTaskWorkspaceViewState,
-    setCurrentNoteScrollTop,
-    clearTaskDialogDraft
+    setFleetingNotes
   ])
 
   const applyVaultActivationResult = useCallback(
@@ -5086,6 +5262,7 @@ function App(): ReactElement {
       const result = await vaultApi.files.migrateBlockNoteNotes()
       Object.values(workspaceTabSessionsRef.current).forEach((session) => {
         session.noteEditorSessions = {}
+        session.noteEditorBaselines = {}
       })
       persistedNoteFingerprintsRef.current = {}
       persistedNoteRevisionsRef.current = {}
@@ -5131,6 +5308,7 @@ function App(): ReactElement {
       const result = await vaultApi.files.migrateTaggedNoteBodyFrontmatter()
       Object.values(workspaceTabSessionsRef.current).forEach((session) => {
         session.noteEditorSessions = {}
+        session.noteEditorBaselines = {}
       })
       persistedNoteFingerprintsRef.current = {}
       persistedNoteRevisionsRef.current = {}
@@ -5176,6 +5354,7 @@ function App(): ReactElement {
       const result = await vaultApi.files.migrateNoteImagePaths()
       Object.values(workspaceTabSessionsRef.current).forEach((session) => {
         session.noteEditorSessions = {}
+        session.noteEditorBaselines = {}
       })
       persistedNoteFingerprintsRef.current = {}
       persistedNoteRevisionsRef.current = {}
@@ -5275,40 +5454,17 @@ function App(): ReactElement {
       }
 
       if (searchInput.mode === 'name') {
-        const noteResults = rankCommandPaletteNotes(notes, searchInput.query, searchInput.mode)
-          .slice(0, 10)
-          .map<CommandPaletteSearchResult>((note) => ({
-            id: `note:${note.relPath}`,
-            kind: 'note',
-            title: note.title,
-            subtitle: note.relPath,
-            value: `note:${note.relPath}`,
-            keywords: [
-              note.title,
-              note.fileName,
-              note.relPath,
-              ...note.aliases,
-              ...note.pathSegments
-            ],
-            tags: note.tags,
-            updatedAt: note.updatedAt
-          }))
-
-        const projectResults = rankCommandPaletteProjects(projects, searchInput.query)
-          .slice(0, 10)
-          .map<CommandPaletteSearchResult>((project) => ({
-            id: `project:${project.id}`,
-            kind: 'project',
-            title: project.name,
-            subtitle: project.summary || 'Project',
-            value: `project:${project.id}`,
-            keywords: [
-              project.name,
-              project.summary,
-              project.folderPath ?? '',
-              ...getSearchPathSegments(project.folderPath ?? '')
-            ]
-          }))
+        const noteResults = searchCommandPaletteNotes(
+          commandPaletteNoteSearchIndex,
+          searchInput.query,
+          searchInput.mode,
+          10
+        )
+        const projectResults = searchCommandPaletteProjects(
+          commandPaletteProjectSearchIndex,
+          searchInput.query,
+          10
+        )
 
         if (commandPaletteSearchRequestRef.current !== requestId) {
           return
@@ -5331,32 +5487,36 @@ function App(): ReactElement {
           }
         }
         const indexedNotePaths = new Set(indexedNoteResults.map((result) => result.relPath))
-        const rankedNoteResults = rankCommandPaletteNotes(
-          notes,
+        const rankedNoteResults = searchCommandPaletteNotes(
+          commandPaletteNoteSearchIndex,
           searchInput.query,
-          searchInput.mode
-        ).filter((note) => !indexedNotePaths.has(note.relPath))
+          searchInput.mode,
+          10,
+          indexedNotePaths
+        )
         const noteResults = [
-          ...indexedNoteResults.map<CommandPaletteSearchResult>((result) => ({
-            id: `note:${result.relPath}`,
-            kind: 'note',
-            title: result.title,
-            subtitle: result.relPath,
-            value: `note:${result.relPath}`,
-            keywords: [result.title, result.relPath, result.snippet],
-            tags: result.tags,
-            updatedAt: result.updated
-          })),
-          ...rankedNoteResults.map<CommandPaletteSearchResult>((note) => ({
-            id: `note:${note.relPath}`,
-            kind: 'note',
-            title: note.title,
-            subtitle: note.relPath,
-            value: `note:${note.relPath}`,
-            keywords: [note.title, note.fileName, note.relPath, note.bodyPreview],
-            tags: note.tags,
-            updatedAt: note.updatedAt
-          }))
+          ...indexedNoteResults.slice(0, 10).map<CommandPaletteSearchResult>((result) => {
+            const snippet = createCommandPaletteBodyExcerpt(result.snippet, searchInput.query)
+            return {
+              id: `note:${result.relPath}`,
+              kind: 'note',
+              title: result.title,
+              subtitle: result.relPath,
+              value: `note:${result.relPath}`,
+              keywords: [result.title, result.relPath, result.snippet],
+              tags: result.tags,
+              updatedAt: result.updated,
+              searchMode: 'body',
+              snippet: snippet?.text,
+              highlights: createCommandPaletteNoteHighlights({
+                title: result.title,
+                relPath: result.relPath,
+                query: searchInput.query,
+                excerpt: snippet?.text
+              })
+            }
+          }),
+          ...rankedNoteResults
         ].slice(0, 10)
 
         if (commandPaletteSearchRequestRef.current !== requestId) {
@@ -5375,7 +5535,7 @@ function App(): ReactElement {
         }
       }
     },
-    [notes, projects, pushToast, vaultApi]
+    [commandPaletteNoteSearchIndex, commandPaletteProjectSearchIndex, pushToast, vaultApi]
   )
 
   const runCommandPaletteAi = useCallback(
@@ -5598,16 +5758,16 @@ function App(): ReactElement {
       await vaultApi.files.rename(oldPath, newPath)
       const nextNotes = await vaultApi.files.listNotes()
       replaceNotes(nextNotes)
-      getWorkspaceTabSession().noteEditorSessions[newPath] = {
-        content,
-        tags
-      }
-      delete getWorkspaceTabSession().noteEditorSessions[oldPath]
+      Object.values(workspaceTabSessionsRef.current).forEach((session) => {
+        remapNotebookWorkspaceSessionPaths(session, oldPath, newPath)
+      })
+      getWorkspaceTabSession().noteEditorSessions[newPath] = { content, tags }
       persistedNoteFingerprintsRef.current[newPath] = serializeStoredNoteDocument(document)
       delete persistedNoteFingerprintsRef.current[oldPath]
-      persistedNoteRevisionsRef.current[newPath] =
-        persistedNoteRevisionsRef.current[oldPath] ?? null
+      const revision = persistedNoteRevisionsRef.current[oldPath] ?? null
+      persistedNoteRevisionsRef.current[newPath] = revision
       delete persistedNoteRevisionsRef.current[oldPath]
+      noteSaveCoordinator?.setBaseRevision(newPath, revision, activeWorkspaceTabIdRef.current)
       currentNotePathRef.current = newPath
       currentNoteContentRef.current = content
       currentNoteTagsRef.current = tags
@@ -5645,7 +5805,9 @@ function App(): ReactElement {
       await vaultApi.files.delete(relPath)
       const nextNotes = await vaultApi.files.listNotes()
       replaceNotes(nextNotes)
-      delete getWorkspaceTabSession().noteEditorSessions[relPath]
+      Object.values(workspaceTabSessionsRef.current).forEach((session) => {
+        removeNotebookWorkspaceSessionPaths(session, [relPath])
+      })
       delete persistedNoteFingerprintsRef.current[relPath]
       delete persistedNoteRevisionsRef.current[relPath]
       if (favoriteNotePaths.includes(relPath)) {
@@ -6569,13 +6731,25 @@ function App(): ReactElement {
         ({ nextNotes, nextTree }) => {
           replaceNotes(nextNotes)
           setNoteTree(nextTree)
-          if (
-            currentNotePathRef.current &&
-            !nextNotes.some((note) => note.relPath === currentNotePathRef.current)
-          ) {
-            delete getWorkspaceTabSession().noteEditorSessions[currentNotePathRef.current]
-            delete persistedNoteFingerprintsRef.current[currentNotePathRef.current]
-            delete persistedNoteRevisionsRef.current[currentNotePathRef.current]
+          const nextNotePaths = new Set(nextNotes.map((note) => note.relPath))
+          Object.values(workspaceTabSessionsRef.current).forEach((session) => {
+            const staleSessionPaths = Array.from(
+              new Set([
+                ...Object.keys(session.noteEditorSessions),
+                ...(session.currentNotePath ? [session.currentNotePath] : [])
+              ])
+            ).filter((relPath) => !nextNotePaths.has(relPath))
+            if (staleSessionPaths.length > 0) {
+              removeNotebookWorkspaceSessionPaths(session, staleSessionPaths)
+            }
+          })
+          Object.keys(persistedNoteFingerprintsRef.current).forEach((relPath) => {
+            if (!nextNotePaths.has(relPath)) {
+              delete persistedNoteFingerprintsRef.current[relPath]
+              delete persistedNoteRevisionsRef.current[relPath]
+            }
+          })
+          if (currentNotePathRef.current && !nextNotePaths.has(currentNotePathRef.current)) {
             currentNotePathRef.current = null
             currentNoteContentRef.current = ''
             currentNoteTagsRef.current = []
@@ -6679,6 +6853,8 @@ function App(): ReactElement {
         return
       }
 
+      const workspaceTabId = activeWorkspaceTabIdRef.current
+      const workspaceSession = getWorkspaceTabSession(workspaceTabId)
       const requestId = ++externalNoteRefreshRequestRef.current
       const hasDraft =
         currentNoteEditorDirtyRef.current ||
@@ -6687,7 +6863,8 @@ function App(): ReactElement {
 
       if (event.kind === 'delete') {
         if (hasDraft) {
-          setNoteConflict({
+          queueNoteConflict({
+            workspaceTabId,
             path: event.path,
             message: 'The open note was deleted outside Xingularity.',
             actualRevision: null
@@ -6716,7 +6893,8 @@ function App(): ReactElement {
             pendingNoteSaveRef.current?.relPath === relPath ||
             Boolean(noteSaveInFlightRef.current)
           ) {
-            setNoteConflict({
+            queueNoteConflict({
+              workspaceTabId,
               path: event.path,
               message: 'The open note changed outside Xingularity.',
               actualRevision: readResult.revision
@@ -6728,12 +6906,19 @@ function App(): ReactElement {
             content: splitNoteContent(readResult.document.markdown).body,
             tags: [...readResult.document.tags]
           }
-          getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
-          persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(
-            readResult.document
-          )
+          const fingerprint = serializeStoredNoteDocument(readResult.document)
+          workspaceSession.noteEditorSessions[relPath] = nextSession
+          workspaceSession.noteEditorBaselines[relPath] = {
+            fingerprint,
+            revision: readResult.revision.contentHash
+          }
+          persistedNoteFingerprintsRef.current[relPath] = fingerprint
           persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
-          noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
+          noteSaveCoordinator?.setBaseRevision(
+            relPath,
+            readResult.revision.contentHash,
+            workspaceTabId
+          )
           updateNoteListEntryFromDocument(relPath, readResult.document)
           applyOpenNoteSession(relPath, nextSession)
         })
@@ -6743,7 +6928,8 @@ function App(): ReactElement {
           }
           if (String(error).includes('ENOENT')) {
             if (hasDraft) {
-              setNoteConflict({
+              queueNoteConflict({
+                workspaceTabId,
                 path: event.path,
                 message: 'The open note was deleted outside Xingularity.',
                 actualRevision: null
@@ -6765,6 +6951,7 @@ function App(): ReactElement {
     getWorkspaceTabSession,
     noteSaveCoordinator,
     pushToast,
+    queueNoteConflict,
     refreshNotesOnly,
     refreshNotesAndTree,
     updateNoteListEntryFromDocument,
@@ -7041,7 +7228,7 @@ function App(): ReactElement {
   )
 
   const openNoteMention = useCallback(
-    async (rawTarget: string): Promise<void> => {
+    async (rawTarget: string, options: NotebookOpenOptions = {}): Promise<void> => {
       if (!vaultApi) {
         pushToast('error', 'Note links are only available inside the Electron app')
         return
@@ -7070,18 +7257,23 @@ function App(): ReactElement {
           return
         }
 
+        if (options.openInNewTab) {
+          await openNotebookPath(relPath, options)
+          return
+        }
+
         setSearchQuery('')
         setSearchResults([])
         await navigateToPage('notes')
         setSelectedNoteTreeEntries([{ kind: 'note', relPath }])
-        await openNote(relPath)
+        await openNotebookPath(relPath)
       } catch (error) {
         pushToast('error', String(error))
       }
     },
     [
       navigateToPage,
-      openNote,
+      openNotebookPath,
       pushToast,
       refreshNotesAndTree,
       setSearchQuery,
@@ -7160,8 +7352,13 @@ function App(): ReactElement {
         renameCommitted = true
 
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
-          remapWorkspaceTabSessionPaths(session, relPath, nextRelPath)
+          remapNotebookWorkspaceSessionPaths(session, relPath, nextRelPath)
         })
+        remapWorkspaceTabNoteScrollPositions(
+          workspaceTabNoteScrollPositionsRef.current,
+          relPath,
+          nextRelPath
+        )
         Object.entries(persistedNoteFingerprintsRef.current).forEach(([path, fingerprint]) => {
           const remappedPath = remapNestedPath(path, relPath, nextRelPath)
           if (remappedPath && remappedPath !== path) {
@@ -7320,8 +7517,12 @@ function App(): ReactElement {
           removeRecentPageTargets(recentPageTargets, removedSessionPaths)
         )
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
-          removeWorkspaceTabSessionPaths(session, removedSessionPaths)
+          removeNotebookWorkspaceSessionPaths(session, removedSessionPaths)
         })
+        removeWorkspaceTabNoteScrollPositions(
+          workspaceTabNoteScrollPositionsRef.current,
+          removedSessionPaths
+        )
         const shouldClearCurrent =
           previousActiveNotePath !== activeSession.currentNotePath ||
           previousActiveExcalidrawPath !== activeSession.currentExcalidrawPath
@@ -7414,8 +7615,13 @@ function App(): ReactElement {
 
       for (const operation of moveOperations) {
         Object.values(workspaceTabSessionsRef.current).forEach((session) => {
-          remapWorkspaceTabSessionPaths(session, operation.relPath, operation.toRelPath)
+          remapNotebookWorkspaceSessionPaths(session, operation.relPath, operation.toRelPath)
         })
+        remapWorkspaceTabNoteScrollPositions(
+          workspaceTabNoteScrollPositionsRef.current,
+          operation.relPath,
+          operation.toRelPath
+        )
         Object.entries(persistedNoteFingerprintsRef.current).forEach(([path, fingerprint]) => {
           const remappedPath = remapNestedPath(path, operation.relPath, operation.toRelPath)
           if (remappedPath && remappedPath !== path) {
@@ -7705,6 +7911,19 @@ function App(): ReactElement {
     [pushToast, vaultApi]
   )
 
+  const openResourceTarget = useCallback(
+    async (resourceId: string, options: WorkspaceOpenOptions = {}): Promise<void> => {
+      const resource = resourceSnapshot.resources.find((candidate) => candidate.id === resourceId)
+      if (resource?.type === 'notebook') {
+        await openNotebookResource(resourceId, options)
+        return
+      }
+
+      await openResource(resourceId)
+    },
+    [openNotebookResource, openResource, resourceSnapshot.resources]
+  )
+
   const revealResource = useCallback(
     async (resourceId: string): Promise<void> => {
       if (!vaultApi) return
@@ -7931,10 +8150,7 @@ function App(): ReactElement {
 
     if (tab.page === 'notes') {
       const session = getWorkspaceTabSession(tab.id)
-      const notePath =
-        tab.id === activeWorkspaceTabId
-          ? (currentNotePath ?? currentExcalidrawPath)
-          : (session.currentNotePath ?? session.currentExcalidrawPath)
+      const notePath = session.currentNotePath ?? session.currentExcalidrawPath
 
       if (notePath) {
         const isDrawing = isExcalidrawPath(notePath)
@@ -7948,8 +8164,7 @@ function App(): ReactElement {
         }
       }
 
-      const folderPath =
-        tab.id === activeWorkspaceTabId ? browseFolderPath : session.browseFolderPath
+      const folderPath = session.browseFolderPath
       if (folderPath) {
         return {
           label: getNotebookFolderContents(noteTree, folderPath).name,
@@ -7964,25 +8179,21 @@ function App(): ReactElement {
     }
 
     if (tab.page === 'projects') {
-      if ((tab.projectView ?? 'list') === 'list') {
+      const context = getWorkspaceTabPageContext(tab.id)
+      if (context.projectView === 'list') {
         return {
           label: 'All Projects',
           icon: <APP_PAGE_ICONS.projects size={16} strokeWidth={1.8} aria-hidden="true" />
         }
       }
-      const project =
-        projects.find((candidate) => candidate.id === tab.projectId) ??
-        (tab.id === activeWorkspaceTabId
-          ? (projects.find((candidate) => candidate.id === selectedProjectId) ??
-            selectedProjectForHeader)
-          : null)
+      const project = projects.find((candidate) => candidate.id === context.projectId) ?? null
 
       return project
         ? {
             label:
-              tab.projectView === 'pulse'
+              context.projectView === 'pulse'
                 ? `${project.name} · Activity`
-                : tab.projectView === 'meetings'
+                : context.projectView === 'meetings'
                   ? `${project.name} · Meeting`
                   : project.name,
             icon: <NoteShapeIcon icon={project.icon} size={18} />
@@ -7994,8 +8205,12 @@ function App(): ReactElement {
     }
 
     if (tab.page === 'calendar') {
+      const context = getWorkspaceTabPageContext(tab.id)
       return {
-        label: formatCalendarTabPeriodTitle(tab.calendarDate, tab.calendarViewMode),
+        label: formatCalendarTabPeriodTitle(
+          context.calendarDate ?? selectedCalendarDate,
+          context.calendarViewMode ?? calendarViewMode
+        ),
         icon: <CalendarDays size={16} strokeWidth={1.8} aria-hidden="true" />
       }
     }
@@ -8070,30 +8285,41 @@ function App(): ReactElement {
         : null
   const activeRecentPageId = activeRecentTarget ? getRecentPageTargetId(activeRecentTarget) : null
   const handleSidebarPageChange = useCallback(
-    (page: AppPage): void => {
+    (page: AppPage, options: WorkspaceOpenOptions = {}): void => {
       if (page === 'notes') {
-        void navigateToPage('notes').then(() => handleNotebookBreadcrumbFolderClick(null))
+        void openNotebookFolder(null, options)
         return
       }
 
       if (page === 'projects') {
-        void navigateToPage('projects').then(() => {
-          openAllProjects()
-        })
+        if (options.openInNewTab) {
+          void openWorkspacePage('projects', null, options, {
+            projectId: null,
+            projectView: 'list'
+          })
+        } else {
+          void navigateToPage('projects').then(() => {
+            openAllProjects()
+          })
+        }
         return
       }
 
       if (page === 'settings') {
-        openSettingsTab('profile')
+        if (options.openInNewTab) {
+          void openWorkspacePage('settings', null, options, { settingsTabRequest: 'profile' })
+        } else {
+          openSettingsTab('profile')
+        }
         return
       }
 
-      void navigateToPage(page)
+      void openWorkspacePage(page, null, options)
     },
-    [handleNotebookBreadcrumbFolderClick, navigateToPage, openAllProjects, openSettingsTab]
+    [navigateToPage, openAllProjects, openNotebookFolder, openSettingsTab, openWorkspacePage]
   )
   const handleOpenRecentPage = useCallback(
-    (targetId: string): void => {
+    (targetId: string, options: WorkspaceOpenOptions = {}): void => {
       const target = recentPageTargets.find(
         (candidate) => getRecentPageTargetId(candidate) === targetId
       )
@@ -8105,7 +8331,11 @@ function App(): ReactElement {
         if (!treeContainsPath(noteTree, target.path)) {
           return
         }
-        void navigateToPage('notes').then(() => openNotebookPath(target.path))
+        if (options.openInNewTab) {
+          void openNotebookPath(target.path, options)
+        } else {
+          void navigateToPage('notes').then(() => openNotebookPath(target.path))
+        }
         return
       }
 
@@ -8113,21 +8343,56 @@ function App(): ReactElement {
         if (!projects.some((project) => project.id === target.projectId)) {
           return
         }
-        void navigateToPage('projects').then(() => openProject(target.projectId))
+        void openProjectTarget(target.projectId, options)
         return
       }
 
-      openWorkspaceView(target.viewId)
+      openWorkspaceView(target.viewId, options)
     },
     [
       navigateToPage,
       noteTree,
       openNotebookPath,
-      openProject,
+      openProjectTarget,
       openWorkspaceView,
       projects,
       recentPageTargets
     ]
+  )
+  const openTaskOrigin = useCallback(
+    (options: WorkspaceOpenOptions = {}): void => {
+      if (!taskOrigin) {
+        return
+      }
+
+      if (!options.openInNewTab) {
+        if (taskOrigin.source === 'projects' && taskOrigin.projectId) {
+          selectProject(taskOrigin.projectId)
+        }
+        void closeTaskPage()
+        return
+      }
+
+      if (taskOrigin.source === 'projects') {
+        if (taskOrigin.projectId) {
+          void openProjectTarget(taskOrigin.projectId, options)
+        }
+        return
+      }
+
+      if (taskOrigin.source === 'tasks') {
+        void openWorkspacePage('tasks', taskOrigin.workspaceViewId ?? null, options)
+        return
+      }
+
+      void openWorkspacePage('calendar', null, options, {
+        calendarDate: taskOrigin.selectedDate,
+        calendarViewMode: taskOrigin.viewMode,
+        calendarContentFilter: taskOrigin.contentFilter,
+        calendarTaskTagSettings: [...taskOrigin.tags]
+      })
+    },
+    [closeTaskPage, openProjectTarget, openWorkspacePage, selectProject, taskOrigin]
   )
   const handleOpenSearchPalette = useCallback((): void => {
     if (!hasVault) {
@@ -8404,26 +8669,46 @@ function App(): ReactElement {
       return
     }
 
+    const workspaceTabId = noteConflict.workspaceTabId
     const relPath = noteConflict.path.replace(/^notebooks\//, '')
+    const workspaceSession = getWorkspaceTabSession(workspaceTabId)
     const readResult = await vaultApi.files.readNoteDocumentWithRevision(relPath)
     const nextSession = {
       content: splitNoteContent(readResult.document.markdown).body,
       tags: [...readResult.document.tags]
     }
-    getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
-    persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(readResult.document)
+    const fingerprint = serializeStoredNoteDocument(readResult.document)
+    workspaceSession.noteEditorBaselines[relPath] = {
+      fingerprint,
+      revision: readResult.revision.contentHash
+    }
+    workspaceSession.noteEditorSessions[relPath] = nextSession
+    persistedNoteFingerprintsRef.current[relPath] = fingerprint
     persistedNoteRevisionsRef.current[relPath] = readResult.revision.contentHash
-    noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash)
-    applyOpenNoteSession(relPath, nextSession)
-    setNoteConflict(null)
-  }, [applyOpenNoteSession, getWorkspaceTabSession, noteConflict, noteSaveCoordinator, vaultApi])
+    noteSaveCoordinator?.setBaseRevision(relPath, readResult.revision.contentHash, workspaceTabId)
+    if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+      applyOpenNoteSession(relPath, nextSession)
+    }
+    dismissNoteConflict(workspaceTabId)
+  }, [
+    applyOpenNoteSession,
+    dismissNoteConflict,
+    getWorkspaceTabSession,
+    noteConflict,
+    noteSaveCoordinator,
+    vaultApi
+  ])
   const mergeNoteConflictFromDisk = useCallback(async (): Promise<void> => {
     if (!noteConflict || !vaultApi) {
       return
     }
 
+    const workspaceTabId = noteConflict.workspaceTabId
     const relPath = noteConflict.path.replace(/^notebooks\//, '')
-    const baseSerialized = persistedNoteFingerprintsRef.current[relPath]
+    const workspaceSession = getWorkspaceTabSession(workspaceTabId)
+    const baseSerialized =
+      workspaceSession.noteEditorBaselines[relPath]?.fingerprint ??
+      persistedNoteFingerprintsRef.current[relPath]
     if (!baseSerialized) {
       pushToast(
         'warning',
@@ -8432,7 +8717,7 @@ function App(): ReactElement {
       return
     }
 
-    const session = getWorkspaceTabSession().noteEditorSessions[relPath] ?? {
+    const session = workspaceSession.noteEditorSessions[relPath] ?? {
       content: currentNoteContentRef.current,
       tags: [...currentNoteTagsRef.current]
     }
@@ -8456,18 +8741,28 @@ function App(): ReactElement {
       content: mergeResult.content,
       tags: [...session.tags]
     }
-    getWorkspaceTabSession().noteEditorSessions[relPath] = nextSession
+    workspaceSession.noteEditorSessions[relPath] = nextSession
+    workspaceSession.noteEditorBaselines[relPath] = {
+      fingerprint: serializeStoredNoteDocument(externalRead.document),
+      revision: externalRead.revision.contentHash
+    }
+    persistedNoteFingerprintsRef.current[relPath] = serializeStoredNoteDocument(
+      externalRead.document
+    )
     persistedNoteRevisionsRef.current[relPath] = externalRead.revision.contentHash
-    noteSaveCoordinator?.setBaseRevision(relPath, externalRead.revision.contentHash)
+    noteSaveCoordinator?.setBaseRevision(relPath, externalRead.revision.contentHash, workspaceTabId)
     updateNoteListEntryFromDocument(relPath, {
       markdown: mergeResult.content,
       tags: nextSession.tags
     })
-    applyOpenNoteSession(relPath, nextSession)
-    setNoteConflict(null)
+    if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+      applyOpenNoteSession(relPath, nextSession)
+    }
+    dismissNoteConflict(workspaceTabId)
     pushToast('success', 'Non-overlapping note edits were merged. Save to commit the result.')
   }, [
     applyOpenNoteSession,
+    dismissNoteConflict,
     getWorkspaceTabSession,
     noteConflict,
     noteSaveCoordinator,
@@ -8570,8 +8865,6 @@ function App(): ReactElement {
                 />
                 <DocumentWorkspace hasPanel={hasRightPanel}>
                   <SchedulingWorkspaceProvider
-                    key={`scheduling-workspace:${vault?.rootPath ?? 'default'}`}
-                    workspaceTabId={activeWorkspaceTabId}
                     enabled={activePage === 'schedules'}
                     vaultApi={vaultApi}
                     vaultRoot={vault?.rootPath ?? null}
@@ -8586,8 +8879,16 @@ function App(): ReactElement {
                               <BreadcrumbList className="text-muted-foreground">
                                 <BreadcrumbItem>
                                   <BreadcrumbButton
-                                    onClick={() => {
-                                      void closeTaskPage()
+                                    onClick={(event) => {
+                                      openTaskOrigin(getWorkspaceOpenOptions(event))
+                                    }}
+                                    onAuxClick={(event) => {
+                                      if (event.button !== 1) {
+                                        return
+                                      }
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      openTaskOrigin({ openInNewTab: true })
                                     }}
                                     className="text-sm text-muted-foreground"
                                   >
@@ -8634,9 +8935,16 @@ function App(): ReactElement {
                                     <BreadcrumbSeparator className="text-muted-foreground" />
                                     <BreadcrumbItem>
                                       <BreadcrumbButton
-                                        onClick={() => {
-                                          selectProject(activeTaskProject.id)
-                                          void closeTaskPage()
+                                        onClick={(event) => {
+                                          openTaskOrigin(getWorkspaceOpenOptions(event))
+                                        }}
+                                        onAuxClick={(event) => {
+                                          if (event.button !== 1) {
+                                            return
+                                          }
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          openTaskOrigin({ openInNewTab: true })
                                         }}
                                         className="max-w-[180px] text-sm text-muted-foreground"
                                       >
@@ -8671,16 +8979,33 @@ function App(): ReactElement {
                           ) : activePage === 'schedules' ? (
                             <SchedulingWorkspaceBreadcrumb
                               value={schedulingView}
-                              onNavigate={setSchedulingView}
+                              onNavigate={(view, options) => {
+                                if (options?.openInNewTab) {
+                                  void openWorkspacePage('schedules', null, options, {
+                                    schedulingView: view
+                                  })
+                                  return
+                                }
+                                setSchedulingView(view)
+                              }}
                             />
                           ) : activePage === 'projects' ? (
                             <ProjectsWorkspaceBreadcrumb
                               project={selectedProjectForHeader}
                               view={projectView}
-                              onOpenAllProjects={openAllProjects}
-                              onOpenProjectHome={() => {
+                              onOpenAllProjects={(options) => {
+                                if (options?.openInNewTab) {
+                                  void openWorkspacePage('projects', null, options, {
+                                    projectId: null,
+                                    projectView: 'list'
+                                  })
+                                  return
+                                }
+                                openAllProjects()
+                              }}
+                              onOpenProjectHome={(options) => {
                                 if (selectedProjectForHeader) {
-                                  openProject(selectedProjectForHeader.id)
+                                  void openProjectTarget(selectedProjectForHeader.id, options)
                                 }
                               }}
                             />
@@ -8698,8 +9023,19 @@ function App(): ReactElement {
                                 <BreadcrumbItem>
                                   {noteHeaderBreadcrumbSegments ? (
                                     <BreadcrumbButton
-                                      onClick={() => {
-                                        void handleNotebookBreadcrumbFolderClick(null)
+                                      onClick={(event) => {
+                                        void openNotebookFolder(
+                                          null,
+                                          getWorkspaceOpenOptions(event)
+                                        )
+                                      }}
+                                      onAuxClick={(event) => {
+                                        if (event.button !== 1) {
+                                          return
+                                        }
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        void openNotebookFolder(null, { openInNewTab: true })
                                       }}
                                       className="text-sm text-muted-foreground"
                                       data-testid="notebook-breadcrumb:root"
@@ -8708,7 +9044,20 @@ function App(): ReactElement {
                                     </BreadcrumbButton>
                                   ) : notebookBrowseBreadcrumbSegments && browseFolderPath ? (
                                     <BreadcrumbButton
-                                      onClick={() => handleNotebookBrowseFolder(null)}
+                                      onClick={(event) => {
+                                        void openNotebookFolder(
+                                          null,
+                                          getWorkspaceOpenOptions(event)
+                                        )
+                                      }}
+                                      onAuxClick={(event) => {
+                                        if (event.button !== 1) {
+                                          return
+                                        }
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        void openNotebookFolder(null, { openInNewTab: true })
+                                      }}
                                       className="text-sm text-muted-foreground"
                                       data-testid="notebook-breadcrumb:root"
                                     >
@@ -8751,7 +9100,22 @@ function App(): ReactElement {
                                             </BreadcrumbPage>
                                           ) : (
                                             <BreadcrumbButton
-                                              onClick={() => handleNotebookBrowseFolder(path)}
+                                              onClick={(event) => {
+                                                void openNotebookFolder(
+                                                  path,
+                                                  getWorkspaceOpenOptions(event)
+                                                )
+                                              }}
+                                              onAuxClick={(event) => {
+                                                if (event.button !== 1) {
+                                                  return
+                                                }
+                                                event.preventDefault()
+                                                event.stopPropagation()
+                                                void openNotebookFolder(path, {
+                                                  openInNewTab: true
+                                                })
+                                              }}
                                               className="max-w-[140px] text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
                                             >
@@ -8807,8 +9171,21 @@ function App(): ReactElement {
                                             </BreadcrumbPage>
                                           ) : (
                                             <BreadcrumbButton
-                                              onClick={() => {
-                                                void handleNotebookBreadcrumbFolderClick(path)
+                                              onClick={(event) => {
+                                                void openNotebookFolder(
+                                                  path,
+                                                  getWorkspaceOpenOptions(event)
+                                                )
+                                              }}
+                                              onAuxClick={(event) => {
+                                                if (event.button !== 1) {
+                                                  return
+                                                }
+                                                event.preventDefault()
+                                                event.stopPropagation()
+                                                void openNotebookFolder(path, {
+                                                  openInNewTab: true
+                                                })
                                               }}
                                               className="max-w-[140px] text-sm text-muted-foreground"
                                               data-testid={`notebook-breadcrumb:ancestor:${path}`}
@@ -9067,7 +9444,6 @@ function App(): ReactElement {
                         onPanelCollapsedChange={setIsRightPanelCollapsed}
                       >
                         <DocumentWorkspaceMainContent
-                          ref={workspaceMainContentRef}
                           className={
                             activeTask
                               ? '!overflow-hidden'
@@ -9075,6 +9451,8 @@ function App(): ReactElement {
                                 ? 'overflow-y-auto overflow-x-hidden'
                                 : activePage === 'schedules'
                                   ? '!overflow-hidden'
+                                  : activePage === 'stickyNote'
+                                    ? '!overflow-hidden'
                                   : activePage === 'notes' &&
                                       !searchQuery.trim() &&
                                       noteIsOpen &&
@@ -9105,65 +9483,62 @@ function App(): ReactElement {
                                 onConvert={convertFleetingNote}
                                 resources={resourceSnapshot.resources}
                                 onCaptureResource={captureResource}
-                                onOpenResource={openResource}
-                                draft={captureDraft}
-                                onDraftChange={setCaptureDraft}
-                                resourceDraft={captureResourceDraft}
-                                onResourceDraftChange={setCaptureResourceDraft}
+                                onOpenResource={openResourceTarget}
+                              />
+                            ) : activePage === 'stickyNote' ? (
+                              <StickyNotePage
+                                board={stickyNoteBoard}
+                                onBoardChange={persistStickyNoteBoard}
+                                onRegisterTextFlush={registerStickyNoteTextFlush}
                               />
                             ) : activePage === 'notes' ? (
                               searchQuery.trim() ? (
                                 <SearchPage
                                   results={searchResults}
-                                  onOpen={(result) => {
+                                  onOpen={(result, options) => {
                                     if (result.entityType === 'resource' && result.resourceId) {
-                                      void openResource(result.resourceId)
+                                      if (!options?.openInNewTab) {
+                                        setSearchQuery('')
+                                        setSearchResults([])
+                                      }
+                                      void openResourceTarget(result.resourceId, options)
                                       return
                                     }
-                                    void openNotebookPath(result.relPath)
+                                    void openNotebookPath(result.relPath, options)
+                                    if (options?.openInNewTab) {
+                                      return
+                                    }
                                     setSearchQuery('')
                                     setSearchResults([])
                                   }}
                                 />
                               ) : currentExcalidrawPath ? (
                                 <ExcalidrawFileEditor
-                                  key={`${activeWorkspaceTabId}:${currentExcalidrawPath}`}
                                   ref={currentExcalidrawEditorRef}
                                   notePath={currentExcalidrawPath}
                                   vaultApi={vaultApi}
                                   pushToast={pushToast}
-                                  initialScene={
-                                    getWorkspaceTabSession().excalidrawScenes[
-                                      currentExcalidrawPath
-                                    ] ?? null
-                                  }
-                                  onSceneChange={(scene) => {
-                                    getWorkspaceTabSession().excalidrawScenes[
-                                      currentExcalidrawPath
-                                    ] = scene
-                                  }}
                                 />
                               ) : noteIsOpen && currentNotePath ? (
                                 <EditorPage
-                                  key={`${activeWorkspaceTabId}:${currentNotePath}`}
                                   editorRef={currentNoteEditorRef}
                                   initialContent={currentNoteEditorDraft}
+                                  initialScrollTop={activeNoteScrollTop}
                                   notePath={currentNotePath}
                                   tags={currentNoteTags}
                                   notes={notes}
                                   onDirty={handleCurrentNoteEditorDirty}
+                                  onScrollTopChange={handleWorkspaceTabNoteScrollTopChange}
                                   onSnapshotChange={handleCurrentNoteSnapshotChange}
                                   onDropFile={(sourcePath) => importAttachment(sourcePath)}
                                   onPasteImage={importImageFromBlob}
                                   onAddTag={addTagToCurrentNote}
                                   onRemoveTag={removeTagFromCurrentNote}
                                   onFindByTag={findByTag}
-                                  onOpenNoteLink={(target) => {
-                                    void openNoteMention(target)
+                                  onOpenNoteLink={(target, options) => {
+                                    void openNoteMention(target, options)
                                   }}
                                   onRename={renameCurrentNote}
-                                  initialScrollTop={currentNoteScrollTop}
-                                  onScrollPositionChange={setCurrentNoteScrollPosition}
                                   titleEditToken={
                                     noteTitleEditTarget?.relPath === currentNotePath
                                       ? noteTitleEditTarget.token
@@ -9180,8 +9555,11 @@ function App(): ReactElement {
                                   selectedEntries={selectedNoteTreeEntries}
                                   onBrowseFolder={handleNotebookBrowseFolder}
                                   onSelectionChange={setSelectedNoteTreeEntries}
-                                  onOpenPath={(relPath) => {
-                                    void openNotebookPath(relPath)
+                                  onOpenPath={(relPath, options) => {
+                                    void openNotebookPath(relPath, options)
+                                  }}
+                                  onOpenFolder={(folderPath, options) => {
+                                    void openNotebookFolder(folderPath, options)
                                   }}
                                   onCreateNote={(parentDir) => {
                                     setSelectedNoteTreeEntries(
@@ -9221,28 +9599,28 @@ function App(): ReactElement {
                               )
                             ) : activePage === 'knowledge' ? (
                               <KnowledgePage
-                                key={activeWorkspaceTabId}
                                 notes={notes}
                                 projects={projects}
                                 tasks={calendarTasks}
                                 resources={resourceSnapshot.resources}
                                 orphanRingRadiusPx={knowledgeOrphanRingRadiusPx}
                                 showOrphans={knowledgeShowOrphans}
-                                initialViewport={knowledgeViewport}
-                                onViewportChange={setKnowledgeViewportSession}
-                                onOpenNote={(relPath) => {
-                                  void navigateToPage('notes')
+                                onOpenNote={(relPath, options) => {
+                                  if (options?.openInNewTab) {
+                                    void openNotebookPath(relPath, options)
+                                    return
+                                  }
                                   setSearchQuery('')
                                   setSearchResults([])
-                                  void openNote(relPath)
+                                  void navigateToPage('notes').then(() => openNotebookPath(relPath))
                                 }}
-                                onOpenEntity={(kind, id) => {
+                                onOpenEntity={(kind, id, options) => {
                                   if (kind === 'task') {
-                                    openTaskDialog(id, { source: 'calendar' })
+                                    void openTaskTarget(id, { source: 'calendar' }, options)
                                   } else if (kind === 'resource') {
-                                    void openResource(id)
+                                    void openResourceTarget(id, options)
                                   } else {
-                                    void navigateToPage('projects').then(() => openProject(id))
+                                    void openProjectTarget(id, options)
                                   }
                                 }}
                               />
@@ -9252,11 +9630,15 @@ function App(): ReactElement {
                                 view={activeWorkspaceView}
                                 projects={projects}
                                 tasks={calendarTasks}
-                                onOpenTask={(taskId) =>
-                                  openTaskDialog(taskId, {
-                                    source: 'tasks',
-                                    workspaceViewId: activeWorkspaceView.id
-                                  })
+                                onOpenTask={(taskId, options) =>
+                                  void openTaskTarget(
+                                    taskId,
+                                    {
+                                      source: 'tasks',
+                                      workspaceViewId: activeWorkspaceView.id
+                                    },
+                                    options
+                                  )
                                 }
                                 onDuplicateTask={(taskId) =>
                                   duplicateTaskInDialog(taskId, {
@@ -9280,8 +9662,8 @@ function App(): ReactElement {
                                   onSetResourceProjectLinks: setResourceProjectLinks,
                                   onRemoveResource: removeResource,
                                   onOpenResource: openResource,
-                                  onOpenNotebookResource: (resourceId) => {
-                                    void openNotebookResource(resourceId)
+                                  onOpenNotebookResource: (resourceId, options) => {
+                                    void openNotebookResource(resourceId, options)
                                   },
                                   onLocateResource: locateResource,
                                   onRevealResource: revealResource,
@@ -9302,27 +9684,25 @@ function App(): ReactElement {
                                 onUpdateResource={updateProjectResource}
                                 onSetResourceProjectLinks={setResourceProjectLinks}
                                 onRemoveResource={removeResource}
-                                onOpenResource={openResource}
-                                onOpenNotebookResource={(resourceId) => {
-                                  void openNotebookResource(resourceId)
+                                onOpenResource={openResourceTarget}
+                                onOpenNotebookResource={(resourceId, options) => {
+                                  void openNotebookResource(resourceId, options)
                                 }}
                                 onLocateResource={locateResource}
                                 onRevealResource={revealResource}
                                 onRefreshResource={refreshResource}
                                 onPreviewResource={previewResource}
-                                viewState={resourceWorkspaceViewState}
-                                onViewStateChange={setResourceWorkspaceViewState}
                               />
                             ) : activePage === 'tasks' ? (
                               <TasksPage
                                 projects={projects}
                                 tasks={calendarTasks}
-                                onOpenTask={(taskId) => openTaskDialog(taskId, { source: 'tasks' })}
+                                onOpenTask={(taskId, options) =>
+                                  void openTaskTarget(taskId, { source: 'tasks' }, options)
+                                }
                                 onDuplicateTask={(taskId) =>
                                   duplicateTaskInDialog(taskId, { source: 'tasks' })
                                 }
-                                viewState={taskWorkspaceViewState}
-                                onViewStateChange={setTaskWorkspaceViewState}
                               />
                             ) : activePage === 'projects' ? (
                               <ProjectsWorkspacePage
@@ -9334,7 +9714,7 @@ function App(): ReactElement {
                                 filterMode={projectFilterMode}
                                 onFilterModeChange={setProjectFilterMode}
                                 onUpdateProjectProperties={saveProjectProperties}
-                                onOpenProject={openProject}
+                                onOpenProject={openProjectTarget}
                                 onToggleProjectFavorite={toggleProjectFavoriteById}
                                 onToggleProjectArchive={toggleProjectArchiveById}
                                 onExportProjectContext={(project) =>
@@ -9360,8 +9740,8 @@ function App(): ReactElement {
                                 onUpdateResource={updateProjectResource}
                                 onDetachResource={detachProjectResource}
                                 onOpenResource={openResource}
-                                onOpenNotebookResource={(resourceId) => {
-                                  void openNotebookResource(resourceId)
+                                onOpenNotebookResource={(resourceId, options) => {
+                                  void openNotebookResource(resourceId, options)
                                 }}
                                 onLocateResource={locateResource}
                                 onRevealResource={revealResource}
@@ -9374,8 +9754,8 @@ function App(): ReactElement {
                                 notes={notes}
                                 vimModeEnabled={editorVimModeEnabled}
                                 vimKeyMappings={editorVimKeyMappings}
-                                onOpenNoteLink={(target) => {
-                                  void openNoteMention(target)
+                                onOpenNoteLink={(target, options) => {
+                                  void openNoteMention(target, options)
                                 }}
                                 onCreateTask={createProjectTask}
                                 onCreateMilestone={createProjectMilestone}
@@ -9399,7 +9779,7 @@ function App(): ReactElement {
                                   })
                                 }
                                 onOpenTask={(taskId, options) => {
-                                  openTaskDialog(
+                                  void openTaskTarget(
                                     taskId,
                                     {
                                       source: 'projects',
@@ -9411,12 +9791,7 @@ function App(): ReactElement {
                               />
                             ) : activePage === 'subscriptions' ? (
                               vaultApi ? (
-                                <SubscriptionsPage
-                                  vaultApi={vaultApi}
-                                  pushToast={pushToast}
-                                  session={subscriptionWorkspaceSession}
-                                  onSessionChange={setSubscriptionWorkspaceSessionState}
-                                />
+                                <SubscriptionsPage vaultApi={vaultApi} pushToast={pushToast} />
                               ) : null
                             ) : activePage === 'schedules' ? (
                               <SchedulingPage
@@ -9443,7 +9818,11 @@ function App(): ReactElement {
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForWeeklyTime}
                                         onOpenTask={(taskId, options) => {
-                                          openTaskDialog(taskId, { source: 'calendar' }, options)
+                                          void openTaskTarget(
+                                            taskId,
+                                            { source: 'calendar' },
+                                            options
+                                          )
                                         }}
                                         onDuplicateTask={(taskId) =>
                                           duplicateTaskInDialog(taskId, { source: 'calendar' })
@@ -9470,8 +9849,12 @@ function App(): ReactElement {
                                         onRescheduleTask={(taskId, newDate) => {
                                           void rescheduleCalendarTask(taskId, newDate)
                                         }}
-                                        onOpenTask={(taskId) => {
-                                          openTaskDialog(taskId, { source: 'calendar' })
+                                        onOpenTask={(taskId, options) => {
+                                          void openTaskTarget(
+                                            taskId,
+                                            { source: 'calendar' },
+                                            options
+                                          )
                                         }}
                                         onDuplicateTask={(taskId) =>
                                           duplicateTaskInDialog(taskId, { source: 'calendar' })
@@ -9489,7 +9872,11 @@ function App(): ReactElement {
                                         onSelectDate={setSelectedCalendarDate}
                                         onCreateTask={createTaskForDate}
                                         onOpenTask={(taskId, options) => {
-                                          openTaskDialog(taskId, { source: 'calendar' }, options)
+                                          void openTaskTarget(
+                                            taskId,
+                                            { source: 'calendar' },
+                                            options
+                                          )
                                         }}
                                         onDuplicateTask={(taskId) =>
                                           duplicateTaskInDialog(taskId, { source: 'calendar' })
@@ -9717,7 +10104,12 @@ function App(): ReactElement {
                                                     {
                                                       id: 'new-folder',
                                                       label: 'New folder',
-                                                      icon: <NotebookFolderIcon variant="closed" size={16} />,
+                                                      icon: (
+                                                        <NotebookFolderIcon
+                                                          variant="closed"
+                                                          size={16}
+                                                        />
+                                                      ),
                                                       onSelect: () => {
                                                         void createFolderFromTree()
                                                       }
@@ -9793,10 +10185,17 @@ function App(): ReactElement {
                                         pendingEditId={pendingNoteTreeEditId}
                                         onPendingEditHandled={handlePendingNoteTreeEditHandled}
                                         onSelectionChange={handleNoteTreeSelectionChange}
-                                        onOpenNote={(relPath) => {
+                                        onOpenNote={(relPath, options) => {
+                                          if (options?.openInNewTab) {
+                                            void openNotebookPath(relPath, options)
+                                            return
+                                          }
                                           setSearchQuery('')
                                           setSearchResults([])
                                           void openNotebookPath(relPath)
+                                        }}
+                                        onOpenFolder={(folderPath, options) => {
+                                          void openNotebookFolder(folderPath, options)
                                         }}
                                         onCreateNote={(parentDir) => {
                                           setSelectedNoteTreeEntries(
@@ -9864,8 +10263,8 @@ function App(): ReactElement {
                                       >
                                         <NoteBacklinksPanel
                                           backlinks={currentNoteBacklinks}
-                                          onOpenBacklink={(relPath) => {
-                                            void openNote(relPath)
+                                          onOpenBacklink={(relPath, options) => {
+                                            void openNotebookPath(relPath, options)
                                           }}
                                         />
                                       </CollapsibleWorkspacePanelSection>
@@ -9892,8 +10291,8 @@ function App(): ReactElement {
                                     selectedDate={selectedCalendarDate}
                                     newTaskValue={calendarHeaderNewTask}
                                     onNewTaskValueChange={setCalendarHeaderNewTask}
-                                    onOpenTask={(taskId) => {
-                                      openTaskDialog(taskId, { source: 'calendar' })
+                                    onOpenTask={(taskId, options) => {
+                                      void openTaskTarget(taskId, { source: 'calendar' }, options)
                                     }}
                                     onDuplicateTask={(taskId) =>
                                       duplicateTaskInDialog(taskId, { source: 'calendar' })
@@ -9982,12 +10381,9 @@ function App(): ReactElement {
       />
       {taskDialogTask ? (
         <TaskEditDialog
-          key={`${activeWorkspaceTabId}:${taskDialogTask.id}`}
+          key={taskDialogTask.id}
           task={taskDialogTask}
           isNewTask={taskDialogIsNewTask}
-          draft={taskDialogDraft ?? undefined}
-          onDraftChange={setTaskDialogDraftSession}
-          onRegisterFlush={registerTaskDialogFlush}
           projects={projects}
           tasks={calendarTasks}
           availableTags={calendarTaskTagValues}
@@ -9997,7 +10393,6 @@ function App(): ReactElement {
             setOpenTaskDialogId(null)
             setTaskDialogOrigin(null)
             setTaskDialogIsNewTask(false)
-            clearTaskDialogDraft()
           }}
           onSave={updateProjectTask}
           onDuplicate={(taskId) =>
@@ -10008,7 +10403,6 @@ function App(): ReactElement {
             setOpenTaskDialogId(null)
             setTaskDialogOrigin(null)
             setTaskDialogIsNewTask(false)
-            clearTaskDialogDraft()
             void removeCalendarTask(taskId)
           }}
           onOpenFullPage={() => {
@@ -10054,7 +10448,7 @@ function App(): ReactElement {
           }
           onOpenTask={(taskId, options) => {
             closeMilestoneDialog()
-            openTaskDialog(
+            void openTaskTarget(
               taskId,
               {
                 source: 'projects',
@@ -10097,10 +10491,10 @@ function App(): ReactElement {
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog
-        open={Boolean(noteConflict)}
+        open={Boolean(noteConflict && noteConflict.workspaceTabId === activeWorkspaceTabId)}
         onOpenChange={(open) => {
-          if (!open) {
-            setNoteConflict(null)
+          if (!open && noteConflict) {
+            dismissNoteConflict(noteConflict.workspaceTabId)
           }
         }}
       >
@@ -10119,12 +10513,24 @@ function App(): ReactElement {
                 if (!noteConflict) {
                   return
                 }
+                const workspaceTabId = noteConflict.workspaceTabId
                 const relPath = noteConflict.path.replace(/^notebooks\//, '')
                 const nextBaseHash = noteConflict.actualRevision?.contentHash ?? null
+                const workspaceSession = getWorkspaceTabSession(workspaceTabId)
+                const baseline = workspaceSession.noteEditorBaselines[relPath] ?? {
+                  fingerprint: persistedNoteFingerprintsRef.current[relPath] ?? null,
+                  revision: null
+                }
+                workspaceSession.noteEditorBaselines[relPath] = {
+                  ...baseline,
+                  revision: nextBaseHash
+                }
                 persistedNoteRevisionsRef.current[relPath] = nextBaseHash
-                noteSaveCoordinator?.setBaseRevision(relPath, nextBaseHash)
-                syncCurrentNoteDirtyState(relPath)
-                setNoteConflict(null)
+                noteSaveCoordinator?.setBaseRevision(relPath, nextBaseHash, workspaceTabId)
+                if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+                  syncCurrentNoteDirtyState(relPath)
+                }
+                dismissNoteConflict(workspaceTabId)
               }}
             >
               Keep local draft
@@ -10187,6 +10593,8 @@ function App(): ReactElement {
         open={hasVault && commandPaletteOpen}
         initialQuery={commandPaletteInitialQuery}
         notes={notes}
+        noteSearchIndex={commandPaletteNoteSearchIndex}
+        folderColors={folderColors}
         searchResults={commandPaletteResults}
         searchLoading={commandPaletteLoading}
         aiLoading={commandPaletteAiLoading}
@@ -10197,24 +10605,20 @@ function App(): ReactElement {
         }}
         onQueryChange={runCommandPaletteSearch}
         onRunAiPrompt={runCommandPaletteAi}
-        onOpenNote={(relPath) => {
+        onOpenNote={(relPath, options) => {
+          if (options?.openInNewTab) {
+            void openNotebookPath(relPath, options)
+            return
+          }
           setSearchQuery('')
           setSearchResults([])
           void navigateToPage('notes')
           void openNote(relPath)
         }}
-        onOpenProject={(projectId) => {
-          selectProject(projectId)
-          void navigateToPage('projects')
+        onOpenProject={(projectId, options) => {
+          void openProjectTarget(projectId, options)
         }}
-        onOpenPage={(page) => {
-          if (page === 'settings') {
-            openSettingsTab('profile')
-            return
-          }
-
-          void navigateToPage(page)
-        }}
+        onOpenPage={(page, options) => handleSidebarPageChange(page, options)}
         onOpenSyncHealth={
           platform.kind === 'desktop' && vaultApi ? () => openSettingsTab('sync') : undefined
         }
@@ -10308,19 +10712,6 @@ function formatCalendarTabPeriodTitle(dateIso: string, viewMode: CalendarViewMod
   })
 }
 
-type RankedCommandPaletteNote = {
-  relPath: string
-  title: string
-  fileName: string
-  tags: string[]
-  aliases: string[]
-  pathSegments: string[]
-  bodyPreview: string
-  updatedAt: string
-}
-
-type CommandPaletteSearchMode = 'name' | 'body'
-
 function parseCommandPaletteSearchInput(input: string): {
   mode: CommandPaletteSearchMode
   query: string
@@ -10337,199 +10728,6 @@ function parseCommandPaletteSearchInput(input: string): {
     mode: 'name',
     query: trimmedInput
   }
-}
-
-function rankCommandPaletteNotes(
-  notes: NoteListItem[],
-  query: string,
-  mode: CommandPaletteSearchMode = 'name'
-): RankedCommandPaletteNote[] {
-  const terms = tokenizeSearchQuery(query)
-
-  return notes
-    .map((note) => {
-      const title = stripNoteExtension(note.name)
-      const aliases = note.mentionTargets ?? []
-      const pathSegments = getSearchPathSegments(note.relPath)
-      const score = scoreSearchDocument(
-        terms,
-        mode === 'body'
-          ? [{ text: note.bodyPreview ?? '', weight: 7 }]
-          : [
-              { text: title, weight: 7 },
-              { text: note.name, weight: 6 },
-              { text: aliases.join(' '), weight: 5 },
-              { text: pathSegments.join(' '), weight: 4 },
-              { text: note.relPath, weight: 3 }
-            ]
-      )
-
-      if (score === 0) {
-        return null
-      }
-
-      return {
-        score,
-        note: {
-          relPath: note.relPath,
-          title,
-          fileName: note.name,
-          tags: note.tags,
-          aliases,
-          pathSegments,
-          bodyPreview: note.bodyPreview ?? '',
-          updatedAt: note.updatedAt
-        }
-      }
-    })
-    .filter(
-      (
-        result
-      ): result is {
-        score: number
-        note: RankedCommandPaletteNote
-      } => result !== null
-    )
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score
-      }
-
-      return right.note.updatedAt.localeCompare(left.note.updatedAt)
-    })
-    .map((result) => result.note)
-}
-
-function rankCommandPaletteProjects(projects: Project[], query: string): Project[] {
-  const terms = tokenizeSearchQuery(query)
-
-  return projects
-    .map((project) => {
-      const folderPath = project.folderPath ?? ''
-      const score = scoreSearchDocument(terms, [
-        { text: project.name, weight: 7 },
-        { text: folderPath, weight: 4 },
-        { text: getSearchPathSegments(folderPath).join(' '), weight: 4 }
-      ])
-
-      return score > 0 ? { score, project } : null
-    })
-    .filter((result): result is { score: number; project: Project } => result !== null)
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score
-      }
-
-      return right.project.updatedAt.localeCompare(left.project.updatedAt)
-    })
-    .map((result) => result.project)
-}
-
-function tokenizeSearchQuery(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/[\s/_.-]+/)
-    .map((term) => term.trim())
-    .filter(Boolean)
-}
-
-function getSearchPathSegments(input: string): string[] {
-  if (!input) {
-    return []
-  }
-
-  return input
-    .split('/')
-    .flatMap((segment) => stripNoteExtension(segment).split(/[\s_.-]+/))
-    .map((segment) => segment.trim().toLowerCase())
-    .filter(Boolean)
-}
-
-function scoreSearchDocument(
-  terms: string[],
-  fields: Array<{
-    text: string
-    weight: number
-  }>
-): number {
-  if (terms.length === 0) {
-    return 0
-  }
-
-  let totalScore = 0
-
-  for (const term of terms) {
-    let bestTermScore = 0
-
-    for (const field of fields) {
-      const fieldScore = scoreSearchField(term, field.text) * field.weight
-      if (fieldScore > bestTermScore) {
-        bestTermScore = fieldScore
-      }
-    }
-
-    if (bestTermScore === 0) {
-      return 0
-    }
-
-    totalScore += bestTermScore
-  }
-
-  return totalScore
-}
-
-function scoreSearchField(term: string, rawFieldText: string): number {
-  const fieldText = rawFieldText.toLowerCase().trim()
-  if (!term || !fieldText) {
-    return 0
-  }
-
-  if (fieldText === term) {
-    return 140
-  }
-
-  if (fieldText.startsWith(term)) {
-    return 110
-  }
-
-  const words = fieldText.split(/[\s/_.-]+/).filter(Boolean)
-  if (words.some((word) => word === term)) {
-    return 95
-  }
-
-  if (words.some((word) => word.startsWith(term))) {
-    return 78
-  }
-
-  const includesIndex = fieldText.indexOf(term)
-  if (includesIndex >= 0) {
-    return Math.max(52 - includesIndex, 28)
-  }
-
-  return scoreSubsequenceMatch(term, fieldText)
-}
-
-function scoreSubsequenceMatch(term: string, fieldText: string): number {
-  let searchIndex = 0
-  let firstMatchIndex = -1
-  let lastMatchIndex = -1
-
-  for (const char of term) {
-    const nextIndex = fieldText.indexOf(char, searchIndex)
-    if (nextIndex === -1) {
-      return 0
-    }
-
-    if (firstMatchIndex === -1) {
-      firstMatchIndex = nextIndex
-    }
-
-    lastMatchIndex = nextIndex
-    searchIndex = nextIndex + 1
-  }
-
-  const span = lastMatchIndex - firstMatchIndex + 1
-  return Math.max(26 - (span - term.length) - Math.floor(firstMatchIndex / 2), 8)
 }
 
 function isNestedPath(candidate: string | null, parentPath: string): boolean {

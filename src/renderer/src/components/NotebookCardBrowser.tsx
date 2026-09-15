@@ -5,6 +5,11 @@ import type { NoteTreeNode } from '../../../shared/types'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import { normalizeNoteTreeSelection, type NoteTreeSelection } from '../lib/noteTreeSelection'
 import { getNotebookFolderContents } from '../lib/notebookFolderContents'
+import {
+  isMiddleMouseButton,
+  isModifiedNotebookOpen,
+  type NotebookOpenOptions
+} from '../lib/notebookOpen'
 import { createFolderColorMenuItem } from '../lib/folderColorMenu'
 import { cn } from '../lib/utils'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
@@ -14,7 +19,7 @@ import { DragSource } from './ui/drag-source'
 import { DropZone } from './ui/drop-zone'
 import { EmptyState } from './ui/empty-state'
 import { Button } from './ui/button'
-import { WorkspaceTextFade } from './ui/workspace-text-fade'
+import { WorkspaceTextEllipsis } from './ui/workspace-text-ellipsis'
 import { NotebookFolderIcon } from './ui/notebook-folder-icon'
 import {
   clearActiveNoteTreeDrag,
@@ -29,7 +34,8 @@ interface NotebookCardBrowserProps {
   selectedEntries: NoteTreeSelection
   onBrowseFolder: (folderPath: string | null) => void
   onSelectionChange: (entries: NoteTreeSelection) => void
-  onOpenPath: (relPath: string) => void
+  onOpenPath: (relPath: string, options?: NotebookOpenOptions) => void
+  onOpenFolder: (relPath: string, options?: NotebookOpenOptions) => void
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -49,6 +55,7 @@ export function NotebookCardBrowser({
   onBrowseFolder,
   onSelectionChange,
   onOpenPath,
+  onOpenFolder,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
@@ -119,6 +126,7 @@ export function NotebookCardBrowser({
                       onBrowseFolder={handleBrowseFolder}
                       onSelectionChange={onSelectionChange}
                       onOpenPath={onOpenPath}
+                      onOpenFolder={onOpenFolder}
                       onCreateNote={onCreateNote}
                       onCreateExcalidraw={onCreateExcalidraw}
                       onCreateFolder={onCreateFolder}
@@ -210,7 +218,8 @@ interface NotebookCardProps {
   selectedEntries: NoteTreeSelection
   onBrowseFolder: (folderPath: string | null) => void
   onSelectionChange: (entries: NoteTreeSelection) => void
-  onOpenPath: (relPath: string) => void
+  onOpenPath: (relPath: string, options?: NotebookOpenOptions) => void
+  onOpenFolder: (relPath: string, options?: NotebookOpenOptions) => void
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -229,6 +238,7 @@ function NotebookCard({
   onBrowseFolder,
   onSelectionChange,
   onOpenPath,
+  onOpenFolder,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
@@ -271,6 +281,14 @@ function NotebookCard({
   }, [isEditing])
 
   const selectEntry = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    if (isModifiedNotebookOpen(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      const open = isFolder ? onOpenFolder : onOpenPath
+      open(node.relPath, { openInNewTab: true })
+      return
+    }
+
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       const alreadySelected = selectedEntries.some(
         (selectedEntry) =>
@@ -518,7 +536,7 @@ function NotebookCard({
             {isEditing ? (
               <div className="flex min-h-24 flex-1 flex-col items-center gap-1.5 rounded-xl p-1.5 text-center">
                 <NotebookCardIcon node={node} isSelected={isSelected} folderColor={folderColor} />
-                <span className="min-w-0 max-w-full">
+                <span className="block min-w-0 max-w-full">
                   <input
                     ref={renameInputRef}
                     autoFocus
@@ -542,9 +560,12 @@ function NotebookCard({
                     }}
                     onBlur={commitRename}
                   />
-                  <WorkspaceTextFade className="mt-0.5 text-xs text-muted-foreground">
+                  <WorkspaceTextEllipsis
+                    className="mt-0.5 text-xs text-muted-foreground"
+                    title={getNotebookCardSubtitle(node)}
+                  >
                     {getNotebookCardSubtitle(node)}
-                  </WorkspaceTextFade>
+                  </WorkspaceTextEllipsis>
                 </span>
               </div>
             ) : (
@@ -554,21 +575,36 @@ function NotebookCard({
                 aria-label={`${node.kind === 'folder' ? 'Open folder' : 'Open'} ${displayName}`}
                 aria-pressed={isSelected}
                 onClick={selectEntry}
+                onAuxClick={(event) => {
+                  if (isEditing || !isMiddleMouseButton(event)) {
+                    return
+                  }
+
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const open = isFolder ? onOpenFolder : onOpenPath
+                  open(node.relPath, { openInNewTab: true })
+                }}
               >
                 <NotebookCardIcon node={node} isSelected={isSelected} folderColor={folderColor} />
-                <span className="min-w-0 max-w-full">
-                  <WorkspaceTextFade
+                <span className="block w-full min-w-0 max-w-full">
+                  <WorkspaceTextEllipsis
                     lines={2}
+                    data-testid={`notebook-card-title:${node.relPath}`}
+                    title={displayName}
                     className={cn(
                       'text-sm font-semibold',
                       isSelected ? 'text-primary' : 'text-foreground'
                     )}
                   >
                     {displayName}
-                  </WorkspaceTextFade>
-                  <WorkspaceTextFade className="mt-0.5 text-xs text-muted-foreground">
+                  </WorkspaceTextEllipsis>
+                  <WorkspaceTextEllipsis
+                    className="mt-0.5 text-xs text-muted-foreground"
+                    title={getNotebookCardSubtitle(node)}
+                  >
                     {getNotebookCardSubtitle(node)}
-                  </WorkspaceTextFade>
+                  </WorkspaceTextEllipsis>
                 </span>
               </button>
             )}

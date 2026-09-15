@@ -22,7 +22,6 @@ import {
 } from '../shared/calendarDomain'
 import {
   evaluateScheduleCapabilities,
-  normalizeScheduleOutputMode,
   normalizeSchedulePermissions
 } from '../shared/schedulePolicy'
 
@@ -145,7 +144,7 @@ export class ScheduleService {
       code: input.code,
       permissions,
       secretRefs,
-      outputMode: normalizeScheduleOutputMode(input.outputMode, capabilityDecision),
+      outputMode: input.outputMode,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       lastRunAt: existing?.lastRunAt,

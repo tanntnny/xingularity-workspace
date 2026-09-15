@@ -133,6 +133,7 @@ import { ProjectMilestonesPanel } from '../components/ProjectMilestonesPanel'
 import { ProjectResourcesTable } from '../components/ProjectResourcesPanel'
 import { WorkspaceReadingWidth } from '../components/workspace'
 import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
 import { useReorderMotion } from '../hooks/useReorderMotion'
 import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 
@@ -164,7 +165,7 @@ interface ProjectsWorkspacePageProps {
   filterMode: ProjectsWorkspaceFilterMode
   onFilterModeChange: (mode: ProjectsWorkspaceFilterMode) => void
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
-  onOpenProject: (projectId: string) => void
+  onOpenProject: (projectId: string, options?: WorkspaceOpenOptions) => void
   onToggleProjectFavorite: (projectId: string) => void
   onToggleProjectArchive: (projectId: string) => void
   onExportProjectContext: (project: Project) => void
@@ -202,7 +203,7 @@ interface ProjectsWorkspacePageProps {
   onUpdateResource: (input: ResourceUpdateInput) => Promise<void>
   onDetachResource: (projectId: string, resourceId: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
-  onOpenNotebookResource: (resourceId: string) => void
+  onOpenNotebookResource: (resourceId: string, options?: WorkspaceOpenOptions) => void
   onLocateResource?: (resourceId: string) => Promise<void>
   onRevealResource?: (resourceId: string) => Promise<void>
   onRefreshResource?: (resourceId: string) => Promise<void>
@@ -214,7 +215,7 @@ interface ProjectsWorkspacePageProps {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onCreateTask: (
     projectId: string | undefined,
     title: string,
@@ -719,8 +720,8 @@ export function ProjectsWorkspaceBreadcrumb({
 }: {
   project: Project | null
   view: ProjectsWorkspaceView
-  onOpenAllProjects: () => void
-  onOpenProjectHome: () => void
+  onOpenAllProjects: (options?: WorkspaceOpenOptions) => void
+  onOpenProjectHome: (options?: WorkspaceOpenOptions) => void
 }): ReactElement {
   const viewLabel =
     view === 'pulse'
@@ -745,7 +746,15 @@ export function ProjectsWorkspaceBreadcrumb({
             </BreadcrumbPage>
           ) : (
             <BreadcrumbButton
-              onClick={onOpenAllProjects}
+              onClick={(event) => onOpenAllProjects(getWorkspaceOpenOptions(event))}
+              onAuxClick={(event) => {
+                if (event.button !== 1) {
+                  return
+                }
+                event.preventDefault()
+                event.stopPropagation()
+                onOpenAllProjects({ openInNewTab: true })
+              }}
               className="text-sm text-muted-foreground"
               data-testid="projects-breadcrumb:all"
             >
@@ -769,7 +778,15 @@ export function ProjectsWorkspaceBreadcrumb({
                 </BreadcrumbPage>
               ) : (
                 <BreadcrumbButton
-                  onClick={onOpenProjectHome}
+                  onClick={(event) => onOpenProjectHome(getWorkspaceOpenOptions(event))}
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) {
+                      return
+                    }
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenProjectHome({ openInNewTab: true })
+                  }}
                   className="max-w-[180px] text-sm text-muted-foreground"
                   data-testid="projects-breadcrumb:project"
                 >
@@ -812,7 +829,7 @@ function AllProjectsTable({
   tasks: CalendarTask[]
   favoriteProjectIds: string[]
   onUpdateProjectProperties: (projectId: string, patch: ProjectPropertiesPatch) => void
-  onOpenProject: (projectId: string) => void
+  onOpenProject: (projectId: string, options?: WorkspaceOpenOptions) => void
   onToggleProjectFavorite: (projectId: string) => void
   onToggleProjectArchive: (projectId: string) => void
   onExportProjectContext: (project: Project) => void
@@ -875,7 +892,15 @@ function AllProjectsTable({
             variant="ghost"
             onClick={(event) => {
               event.stopPropagation()
-              onOpenProject(project.id)
+              onOpenProject(project.id, getWorkspaceOpenOptions(event))
+            }}
+            onAuxClick={(event) => {
+              if (event.button !== 1) {
+                return
+              }
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenProject(project.id, { openInNewTab: true })
             }}
             className="h-auto w-full min-w-0 max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
             aria-label={`Open project ${project.name}`}
@@ -1099,7 +1124,15 @@ function AllProjectsTable({
           getRowKey={({ project }) => project.id}
           getRowProps={({ project }) => ({
             'data-testid': `all-project-row:${project.id}`,
-            onClick: () => onOpenProject(project.id)
+            onClick: (event) => onOpenProject(project.id, getWorkspaceOpenOptions(event)),
+            onAuxClick: (event) => {
+              if (event.button !== 1) {
+                return
+              }
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenProject(project.id, { openInNewTab: true })
+            }
           })}
           rowWrapper={({ project }, tableRow) => (
             <ProjectContextMenu
@@ -2047,7 +2080,7 @@ export function TaskDetailRow({
   onUpdateTask: (taskId: string, patch: Partial<CalendarTask>) => void
   onDeleteTask: (taskId: string) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   isParentDropActive?: boolean
 }): ReactElement {
   const status = getTaskStatus(task.status, task.completed)
@@ -2100,7 +2133,15 @@ export function TaskDetailRow({
             isParentDropActive ? 'bg-[var(--drop-zone-active-bg)]' : 'group-hover:bg-muted',
             'focus-visible:border-border focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring'
           )}
-          onClick={() => onOpenTask(task.id)}
+          onClick={(event) => onOpenTask(task.id, getWorkspaceOpenOptions(event))}
+          onAuxClick={(event) => {
+            if (event.button !== 1) {
+              return
+            }
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenTask(task.id, { openInNewTab: true })
+          }}
           aria-label={`Open task: ${task.title}`}
           data-testid={`project-task-open:${task.id}`}
         >

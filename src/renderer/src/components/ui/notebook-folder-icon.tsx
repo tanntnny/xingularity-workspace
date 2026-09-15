@@ -50,7 +50,7 @@ function getNotebookFolderIconColors(color?: string | null): FolderIconColors {
 }
 
 export const NotebookFolderIcon = React.forwardRef<SVGSVGElement, NotebookFolderIconProps>(
-  ({ variant = 'closed', size = 24, color, className, ...props }, ref) => {
+  ({ variant = 'closed', size = 24, color, className, style, ...props }, ref) => {
     const colors = getNotebookFolderIconColors(color)
     const gradientId = `notebook-folder-front-${React.useId().replace(/:/g, '')}`
 
@@ -59,6 +59,7 @@ export const NotebookFolderIcon = React.forwardRef<SVGSVGElement, NotebookFolder
         ref={ref}
         width={size}
         height={size}
+        style={{ width: size, height: size, ...style }}
         viewBox="0 0 36 36"
         xmlns="http://www.w3.org/2000/svg"
         preserveAspectRatio="xMidYMid meet"

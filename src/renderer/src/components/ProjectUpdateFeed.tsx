@@ -11,7 +11,7 @@ interface ProjectUpdateFeedProps {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onEdit: (update: ProjectUpdate) => void
   onDelete: (updateId: string) => Promise<void>
 }

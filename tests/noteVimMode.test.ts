@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Schema } from 'prosemirror-model'
-import { EditorState } from 'prosemirror-state'
-import { __noteVimModeTestUtils } from '../src/renderer/src/lib/noteVimMode'
+import { EditorState, TextSelection } from 'prosemirror-state'
+import type { EditorView } from '@milkdown/kit/prose/view'
+import {
+  __noteVimModeTestUtils,
+  createNoteVimModePlugin
+} from '../src/renderer/src/lib/noteVimMode'
 
 function createState(text: string): EditorState {
   return createStateFromParagraphs([text])
@@ -34,7 +38,80 @@ function createStateFromParagraphs(paragraphs: string[]): EditorState {
   })
 }
 
+function createVimCodeBlockView(selectionPosition = 9): {
+  view: EditorView
+  getState: () => EditorState
+} {
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: {
+        content: 'text*',
+        group: 'block',
+        toDOM() {
+          return ['p', 0]
+        }
+      },
+      code_block: {
+        content: 'text*',
+        group: 'block',
+        code: true,
+        marks: '',
+        toDOM() {
+          return ['pre', ['code', 0]]
+        }
+      },
+      text: { group: 'inline' }
+    }
+  })
+  const doc = schema.node('doc', null, [
+    schema.node('paragraph', null, schema.text('Before')),
+    schema.node('code_block', null, schema.text('alpha\nbeta')),
+    schema.node('paragraph', null, schema.text('After'))
+  ])
+  const plugin = createNoteVimModePlugin({ isEnabled: () => true })
+  let state = EditorState.create({
+    schema,
+    doc,
+    selection: TextSelection.create(doc, selectionPosition),
+    plugins: [plugin]
+  })
+  const view = {
+    get state() {
+      return state
+    },
+    dispatch(transaction: Parameters<EditorView['dispatch']>[0]) {
+      state = state.apply(transaction)
+    }
+  } as unknown as EditorView
+
+  return { view, getState: () => state }
+}
+
+function createVimKeyEvent(key: string, onPreventDefault?: () => void): KeyboardEvent {
+  return {
+    key,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    preventDefault: () => onPreventDefault?.()
+  } as KeyboardEvent
+}
+
 describe('noteVimMode word motions', () => {
+  it('resolves logical line boundaries inside multiline text', () => {
+    const getLogicalLineBounds = (
+      __noteVimModeTestUtils as typeof __noteVimModeTestUtils & {
+        getLogicalLineBounds?: (text: string, offset: number) => { start: number; end: number }
+      }
+    ).getLogicalLineBounds
+
+    expect(getLogicalLineBounds).toEqual(expect.any(Function))
+    expect(getLogicalLineBounds?.('alpha\nbeta', 2)).toEqual({ start: 0, end: 5 })
+    expect(getLogicalLineBounds?.('alpha\nbeta', 7)).toEqual({ start: 6, end: 10 })
+  })
+
   it('indexes text using document character positions', () => {
     const state = createState('map sun wax')
 
@@ -79,6 +156,48 @@ describe('noteVimMode word motions', () => {
     expect(__noteVimModeTestUtils.wordStartAfter(state, 11)).toBe(18)
     expect(__noteVimModeTestUtils.wordEndAfter(state, 3)).toBe(8)
     expect(__noteVimModeTestUtils.wordStartBefore(state, 23)).toBe(18)
+  })
+
+  it('moves by logical lines inside a multiline code block', () => {
+    const { view, getState } = createVimCodeBlockView()
+    const plugin = createNoteVimModePlugin({ isEnabled: () => true })
+    const handler = plugin.props.handleKeyDown
+
+    expect(handler).toBeTypeOf('function')
+    handler?.call(plugin, view, createVimKeyEvent('Escape'))
+    handler?.call(plugin, view, createVimKeyEvent('j'))
+
+    expect(getState().selection.$from.parent.type.name).toBe('code_block')
+    expect(getState().selection.$from.parentOffset).toBe(6)
+  })
+
+  it('consumes normal-mode Enter without mutating and yields unsupported special keys', () => {
+    const { view, getState } = createVimCodeBlockView(11)
+    const plugin = createNoteVimModePlugin({ isEnabled: () => true })
+    const handler = plugin.props.handleKeyDown
+    const before = getState().doc.toJSON()
+    let enterPrevented = false
+
+    handler?.call(plugin, view, createVimKeyEvent('Escape'))
+    expect(
+      handler?.call(
+        plugin,
+        view,
+        createVimKeyEvent('Enter', () => (enterPrevented = true))
+      )
+    ).toBe(true)
+    expect(enterPrevented).toBe(true)
+    expect(getState().doc.toJSON()).toEqual(before)
+
+    let arrowPrevented = false
+    expect(
+      handler?.call(
+        plugin,
+        view,
+        createVimKeyEvent('ArrowLeft', () => (arrowPrevented = true))
+      )
+    ).toBe(false)
+    expect(arrowPrevented).toBe(false)
   })
 
   it('moves one character left when leaving insert mode', () => {

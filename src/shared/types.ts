@@ -1086,6 +1086,34 @@ export interface GridBoardState {
   items: GridBoardItem[]
 }
 
+export type StickyNoteColor = 'yellow' | 'pink' | 'blue' | 'green' | 'orange' | 'purple'
+
+export interface StickyNoteBoardViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+export interface StickyNoteItem {
+  id: string
+  text: string
+  color: StickyNoteColor
+  position: {
+    x: number
+    y: number
+  }
+  size: {
+    width: number
+    height: number
+  }
+  zIndex: number
+}
+
+export interface StickyNoteBoardState {
+  viewport: StickyNoteBoardViewport
+  notes: StickyNoteItem[]
+}
+
 export interface ExcalidrawSessionScene {
   type?: string
   version?: number
@@ -1179,6 +1207,7 @@ export interface AppSettings {
   projectIcons: Record<string, ProjectIconStyle>
   projects: Project[]
   gridBoard: GridBoardState
+  stickyNoteBoard: StickyNoteBoardState
   featureFlags?: Partial<WorkspaceFeatureFlags>
 }
 
@@ -1204,6 +1233,7 @@ export interface AppSettingsUpdate {
   projectIcons?: Record<string, ProjectIconStyle>
   projects?: Project[]
   gridBoard?: GridBoardState
+  stickyNoteBoard?: StickyNoteBoardState
   lastOpenedNotePath?: Maybe<string>
   recentNotebookPaths?: string[]
   recentPageTargets?: RecentPageTarget[]

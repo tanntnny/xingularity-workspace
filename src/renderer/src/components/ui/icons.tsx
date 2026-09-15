@@ -77,6 +77,7 @@ import {
   IconFolderOpenFilled,
   IconGripVertical,
   IconGitBranch,
+  IconHourglassEmpty,
   IconHourglassFilled,
   IconHeartFilled,
   IconHexagon,
@@ -157,7 +158,7 @@ export const MarkdownFileIcon = forwardRef<SVGSVGElement, FilledIconProps>(
             gradientUnits="userSpaceOnUse"
           >
             <stop offset="0" stopColor="#f8f8f8" />
-            <stop offset="1" stopColor="#d9d9d9" />
+            <stop offset="1" stopColor="#ababab" />
           </linearGradient>
           <linearGradient
             id={`markdown-file-fold-gradient-${gradientId}`}
@@ -168,7 +169,7 @@ export const MarkdownFileIcon = forwardRef<SVGSVGElement, FilledIconProps>(
             gradientUnits="userSpaceOnUse"
           >
             <stop offset="0" stopColor="#eeeeee" />
-            <stop offset="1" stopColor="#c8c8c8" />
+            <stop offset="1" stopColor="#999999" />
           </linearGradient>
         </defs>
         <path
@@ -280,6 +281,7 @@ export const Link2 = IconLinkFilled
 export const ListTodo = IconListCheckFilled
 export const Loader2 = IconHourglassFilled
 export const LoaderCircle = IconHourglassFilled
+export const HourglassEmpty = IconHourglassEmpty
 export const Mail = IconMail
 export const Maximize = IconMaximize
 export const Megaphone = IconDeviceSpeakerFilled

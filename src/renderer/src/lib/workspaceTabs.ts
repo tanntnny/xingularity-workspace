@@ -1,27 +1,12 @@
-import type { ExcalidrawSessionScene, SearchResult } from '../../../shared/types'
-import type { CalendarContentFilter } from './calendarTasks'
+import type { SearchResult } from '../../../shared/types'
 import type { NoteEditorSessionSnapshot } from './noteEditorSession'
 import type { NoteTreeSelection } from './noteTreeSelection'
-import type { ProjectsWorkspaceFilterMode } from './projectTaskRows'
-import type { ResourceWorkspaceViewState, TaskWorkspaceViewState } from './workspaceViewState'
-import type { TaskDialogSession, TaskPageSession } from './taskDialogSession'
-import {
-  createEmptySubscriptionWorkspaceSession,
-  type SubscriptionWorkspaceSession
-} from './subscriptionSession'
-import type { SchedulingView } from '../components/scheduling/types'
 
-export type CalendarViewMode = 'month' | 'week' | 'day'
+export type WorkspaceTabNoteScrollPositions = Record<string, Record<string, number>>
 
-export interface WorkspaceScrollPosition {
-  top: number
-  left: number
-}
-
-export interface WorkspaceViewport {
-  x: number
-  y: number
-  zoom: number
+export interface NotebookNoteBaseline {
+  fingerprint: string | null
+  revision: string | null
 }
 
 export interface NotebookWorkspaceSession {
@@ -35,26 +20,7 @@ export interface NotebookWorkspaceSession {
   searchResults: SearchResult[]
   selectedNoteTreeEntries: NoteTreeSelection
   noteEditorSessions: Record<string, NoteEditorSessionSnapshot>
-}
-
-export interface WorkspaceTabSession extends NotebookWorkspaceSession {
-  calendarDate: string
-  calendarViewMode: CalendarViewMode
-  calendarContentFilter: CalendarContentFilter
-  calendarTaskTagSettings: string[]
-  calendarHeaderNewTask: string
-  taskViewState: TaskWorkspaceViewState
-  resourceViewState: ResourceWorkspaceViewState
-  projectFilterMode: ProjectsWorkspaceFilterMode
-  captureDraft: string
-  captureResourceDraft: string
-  schedulingView: SchedulingView
-  taskDialog: TaskDialogSession | null
-  taskPage: TaskPageSession | null
-  subscriptions: SubscriptionWorkspaceSession
-  excalidrawScenes: Record<string, ExcalidrawSessionScene>
-  knowledgeViewport: WorkspaceViewport | null
-  scrollPositions: Record<string, WorkspaceScrollPosition>
+  noteEditorBaselines: Record<string, NotebookNoteBaseline>
 }
 
 export function createEmptyNotebookWorkspaceSession(): NotebookWorkspaceSession {
@@ -68,44 +34,8 @@ export function createEmptyNotebookWorkspaceSession(): NotebookWorkspaceSession 
     searchQuery: '',
     searchResults: [],
     selectedNoteTreeEntries: [],
-    noteEditorSessions: {}
-  }
-}
-
-export function createEmptyWorkspaceTabSession(
-  defaults: Partial<
-    Pick<
-      WorkspaceTabSession,
-      'calendarDate' | 'calendarViewMode' | 'calendarContentFilter' | 'calendarTaskTagSettings'
-    >
-  > = {}
-): WorkspaceTabSession {
-  return {
-    ...createEmptyNotebookWorkspaceSession(),
-    calendarDate: defaults.calendarDate ?? new Date().toISOString().slice(0, 10),
-    calendarViewMode: defaults.calendarViewMode ?? 'month',
-    calendarContentFilter: defaults.calendarContentFilter ?? 'all',
-    calendarTaskTagSettings: [...(defaults.calendarTaskTagSettings ?? [])],
-    calendarHeaderNewTask: '',
-    taskViewState: {
-      filters: {},
-      groupBy: 'none',
-      sortState: { columnId: 'start-date', direction: 'asc' }
-    },
-    resourceViewState: {
-      filters: {},
-      sortState: null
-    },
-    projectFilterMode: 'all',
-    captureDraft: '',
-    captureResourceDraft: '',
-    schedulingView: 'list',
-    taskDialog: null,
-    taskPage: null,
-    subscriptions: createEmptySubscriptionWorkspaceSession(),
-    excalidrawScenes: {},
-    knowledgeViewport: null,
-    scrollPositions: {}
+    noteEditorSessions: {},
+    noteEditorBaselines: {}
   }
 }
 
@@ -152,20 +82,13 @@ export function remapNotebookWorkspaceSessionPaths(
     remappedEditorSessions[nextPath] = editorSession
   })
   session.noteEditorSessions = remappedEditorSessions
-}
 
-export function remapWorkspaceTabSessionPaths(
-  session: WorkspaceTabSession,
-  sourcePath: string,
-  targetPath: string
-): void {
-  remapNotebookWorkspaceSessionPaths(session, sourcePath, targetPath)
-
-  const remappedScenes: Record<string, ExcalidrawSessionScene> = {}
-  Object.entries(session.excalidrawScenes).forEach(([path, scene]) => {
-    remappedScenes[remapPath(path, sourcePath, targetPath) ?? path] = scene
+  const remappedBaselines: Record<string, NotebookNoteBaseline> = {}
+  Object.entries(session.noteEditorBaselines).forEach(([path, baseline]) => {
+    const nextPath = remapPath(path, sourcePath, targetPath) ?? path
+    remappedBaselines[nextPath] = baseline
   })
-  session.excalidrawScenes = remappedScenes
+  session.noteEditorBaselines = remappedBaselines
 }
 
 export function removeNotebookWorkspaceSessionPaths(
@@ -195,18 +118,44 @@ export function removeNotebookWorkspaceSessionPaths(
   session.noteEditorSessions = Object.fromEntries(
     Object.entries(session.noteEditorSessions).filter(([path]) => !isRemoved(path))
   )
+  session.noteEditorBaselines = Object.fromEntries(
+    Object.entries(session.noteEditorBaselines).filter(([path]) => !isRemoved(path))
+  )
 }
 
-export function removeWorkspaceTabSessionPaths(
-  session: WorkspaceTabSession,
+export function remapWorkspaceTabNoteScrollPositions(
+  positions: WorkspaceTabNoteScrollPositions,
+  sourcePath: string,
+  targetPath: string
+): void {
+  Object.entries(positions).forEach(([tabId, tabPositions]) => {
+    const remappedPositions: Record<string, number> = {}
+    Object.entries(tabPositions).forEach(([path, scrollTop]) => {
+      const nextPath = remapPath(path, sourcePath, targetPath) ?? path
+      remappedPositions[nextPath] = scrollTop
+    })
+    positions[tabId] = remappedPositions
+  })
+}
+
+export function removeWorkspaceTabNoteScrollPositions(
+  positions: WorkspaceTabNoteScrollPositions,
   removedPaths: readonly string[]
 ): void {
-  removeNotebookWorkspaceSessionPaths(session, removedPaths)
-  session.excalidrawScenes = Object.fromEntries(
-    Object.entries(session.excalidrawScenes).filter(
-      ([path]) => !removedPaths.some((removedPath) => isPathAffected(path, removedPath))
+  Object.entries(positions).forEach(([tabId, tabPositions]) => {
+    const remainingPositions = Object.fromEntries(
+      Object.entries(tabPositions).filter(
+        ([path]) => !removedPaths.some((removedPath) => isPathAffected(path, removedPath))
+      )
     )
-  )
+
+    if (Object.keys(remainingPositions).length === 0) {
+      delete positions[tabId]
+      return
+    }
+
+    positions[tabId] = remainingPositions
+  })
 }
 
 export function getNextActiveWorkspaceTabId(

@@ -7,18 +7,10 @@ import {
   useRef,
   useState
 } from 'react'
-import {
-  CircleAlert,
-  Clock,
-  Download,
-  FileText,
-  FolderOpen,
-  Plus,
-  RefreshCw,
-  Terminal
-} from './ui/icons'
+import { CircleAlert, Download, FileText, FolderOpen, Plus, RefreshCw, Terminal } from './ui/icons'
 import { APP_PAGE_ICONS, VaultIcon } from '../lib/pageIcons'
 import type { AppPage } from '../navigation'
+import type { FolderColorMap } from '../../../shared/folderColors'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem } from '../../../shared/types'
 import warpLogo from '../assets/warp-logo.png'
@@ -32,27 +24,49 @@ import {
   CommandSeparator,
   CommandShortcut
 } from './ui/command'
+import { CommandPaletteNoteItem } from './CommandPaletteNoteItem'
+import { CommandPaletteMatchText } from './CommandPaletteMatchText'
 import { Pallete, PalleteSearchBar } from './ui/pallete'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
-import { filterCommandPaletteCommands } from '../lib/commandPaletteCommands'
+import {
+  createCommandPaletteCommandSearchIndex,
+  searchCommandPaletteCommands,
+  searchCommandPaletteNotes,
+  type CommandPaletteNoteSearchIndex,
+  type CommandPaletteSearchResult
+} from '../lib/commandPaletteSearch'
+import {
+  isMiddleMouseButton,
+  isModifiedNotebookOpen,
+  type NotebookOpenOptions
+} from '../lib/notebookOpen'
+import type { WorkspaceOpenOptions } from '../lib/workspaceOpen'
 
-export interface CommandPaletteSearchResult {
-  id: string
-  kind: 'note' | 'project'
-  title: string
-  subtitle: string
-  value: string
-  keywords?: string[]
-  tags?: string[]
-  updatedAt?: string
-}
+export type { CommandPaletteSearchResult } from '../lib/commandPaletteSearch'
 
 type CommandPalettePage = Exclude<AppPage, 'schedulingGuide'>
+
+const COMMAND_PAGE_BY_VALUE: Partial<Record<string, CommandPalettePage>> = {
+  '>go capture': 'capture',
+  '>go sticky note': 'stickyNote',
+  '>go knowledge': 'knowledge',
+  '>go notes': 'notes',
+  '>go projects': 'projects',
+  '>go tasks': 'tasks',
+  '>go resources': 'resources',
+  '>go subscriptions': 'subscriptions',
+  '>go calendar': 'calendar',
+  '>go scheduling': 'schedules',
+  '>go design audit': 'designAudit',
+  '>go settings': 'settings'
+}
 
 interface CommandPaletteProps {
   open: boolean
   initialQuery?: string
   notes: NoteListItem[]
+  noteSearchIndex: CommandPaletteNoteSearchIndex
+  folderColors: FolderColorMap
   searchResults: CommandPaletteSearchResult[]
   searchLoading?: boolean
   aiLoading?: boolean
@@ -62,9 +76,9 @@ interface CommandPaletteProps {
   onCreate: () => void
   onQueryChange: (query: string) => void
   onRunAiPrompt: (prompt: string) => Promise<boolean>
-  onOpenNote: (relPath: string) => void
-  onOpenProject: (projectId: string) => void
-  onOpenPage: (page: CommandPalettePage) => void
+  onOpenNote: (relPath: string, options?: NotebookOpenOptions) => void
+  onOpenProject: (projectId: string, options?: WorkspaceOpenOptions) => void
+  onOpenPage: (page: CommandPalettePage, options?: WorkspaceOpenOptions) => void
   onOpenWarpAtNoteFolder: () => Promise<void>
   onManageVaults?: () => void
   onOpenVaultFinder?: () => Promise<void>
@@ -80,6 +94,8 @@ export function CommandPalette({
   open,
   initialQuery = '',
   notes,
+  noteSearchIndex,
+  folderColors,
   searchResults,
   searchLoading = false,
   aiLoading = false,
@@ -106,6 +122,8 @@ export function CommandPalette({
   const [hoveredResult, setHoveredResult] = useState<CommandPaletteSearchResult | null>(null)
   const [isWaitingForSearch, setIsWaitingForSearch] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const modifiedNoteSelectionRef = useRef<string | null>(null)
+  const modifiedTargetSelectionRef = useRef<string | null>(null)
   const deferredQuery = useDeferredValue(query)
   const trimmedQuery = query.trim()
   const deferredTrimmedQuery = deferredQuery.trim()
@@ -138,6 +156,8 @@ export function CommandPalette({
   // Reset state when closing
   useEffect(() => {
     if (!open) {
+      modifiedNoteSelectionRef.current = null
+      modifiedTargetSelectionRef.current = null
       const frameId = window.requestAnimationFrame(() => {
         setQuery('')
         setHoveredResult(null)
@@ -234,27 +254,7 @@ export function CommandPalette({
     return [...notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5)
   }, [notes, recentNotePaths])
 
-  // Filter notes based on query
-  const filteredNotes = useMemo(() => {
-    const q = deferredMode === 'search' ? deferredSearchableQuery.toLowerCase() : ''
-    if (!q) {
-      return notes.slice(0, 15)
-    }
-    return notes
-      .filter((note) => {
-        if (isDeferredBodySearch) {
-          return (note.bodyPreview ?? '').toLowerCase().includes(q)
-        }
-
-        const aliases = note.mentionTargets ?? []
-        return (
-          note.relPath.toLowerCase().includes(q) ||
-          note.name.toLowerCase().includes(q) ||
-          aliases.some((alias) => alias.toLowerCase().includes(q))
-        )
-      })
-      .slice(0, 15)
-  }, [deferredMode, deferredSearchableQuery, isDeferredBodySearch, notes])
+  const allNotes = useMemo(() => notes.slice(0, 15), [notes])
 
   const noteResults = useMemo(
     () => searchResults.filter((result) => result.kind === 'note'),
@@ -266,12 +266,17 @@ export function CommandPalette({
     [searchResults]
   )
   const fallbackSearchNotes = useMemo(() => {
-    if (!searchableQuery || noteResults.length > 0) {
+    if (!deferredSearchableQuery || noteResults.length > 0) {
       return []
     }
 
-    return filteredNotes
-  }, [filteredNotes, noteResults.length, searchableQuery])
+    return searchCommandPaletteNotes(
+      noteSearchIndex,
+      deferredSearchableQuery,
+      isDeferredBodySearch ? 'body' : 'name',
+      15
+    )
+  }, [deferredSearchableQuery, isDeferredBodySearch, noteResults.length, noteSearchIndex])
 
   const commandItems = useMemo(
     () => [
@@ -281,6 +286,13 @@ export function CommandPalette({
         onSelect: () => onOpenPage('capture'),
         keywords: ['inbox', 'fleeting', 'quick capture'],
         icon: APP_PAGE_ICONS.capture
+      },
+      {
+        value: '>go sticky note',
+        label: 'Go to Sticky Note',
+        onSelect: () => onOpenPage('stickyNote'),
+        keywords: ['sticky', 'sticky note', 'post-it', 'board', 'canvas'],
+        icon: APP_PAGE_ICONS.stickyNote
       },
       {
         value: '>new note',
@@ -486,22 +498,28 @@ export function CommandPalette({
     ]
   )
 
-  const filteredCommandItems = useMemo(
-    () => filterCommandPaletteCommands(commandItems, searchQuery),
-    [commandItems, searchQuery]
+  const commandSearchIndex = useMemo(
+    () => createCommandPaletteCommandSearchIndex(commandItems),
+    [commandItems]
+  )
+  const filteredCommandResults = useMemo(
+    () => searchCommandPaletteCommands(commandSearchIndex, searchQuery),
+    [commandSearchIndex, searchQuery]
   )
 
   const allSelectableResults = useMemo(() => {
-    const noteItems = filteredNotes.map((note) => ({
-      id: `note:${note.relPath}`,
-      value: `note:${note.relPath}`,
-      title: stripNoteExtension(note.name),
-      subtitle: note.relPath,
-      keywords: [note.name, note.relPath, ...note.tags],
-      tags: note.tags,
-      updatedAt: note.updatedAt,
-      kind: 'note' as const
-    }))
+    const noteItems: CommandPaletteSearchResult[] = searchableQuery
+      ? fallbackSearchNotes
+      : allNotes.map((note) => ({
+          id: `note:${note.relPath}`,
+          value: `note:${note.relPath}`,
+          title: stripNoteExtension(note.name),
+          subtitle: note.relPath,
+          keywords: [note.name, note.relPath, ...note.tags],
+          tags: note.tags,
+          updatedAt: note.updatedAt,
+          kind: 'note' as const
+        }))
 
     const recentNoteItems = recentNotes.map((note) => ({
       id: `recent:${note.relPath}`,
@@ -514,7 +532,7 @@ export function CommandPalette({
       kind: 'note' as const
     }))
 
-    const commandResults = filteredCommandItems.map((item) => ({
+    const commandResults = filteredCommandResults.map(({ command: item }) => ({
       id: item.value,
       kind: 'project' as const,
       title: item.label,
@@ -523,7 +541,14 @@ export function CommandPalette({
     }))
 
     return [...searchResults, ...recentNoteItems, ...noteItems, ...commandResults]
-  }, [filteredCommandItems, filteredNotes, recentNotes, searchResults])
+  }, [
+    allNotes,
+    fallbackSearchNotes,
+    filteredCommandResults,
+    recentNotes,
+    searchResults,
+    searchableQuery
+  ])
 
   const handleSelect = useCallback(
     (value: string) => {
@@ -531,6 +556,10 @@ export function CommandPalette({
         onCreate()
         onClose()
       } else if (value.startsWith('>')) {
+        if (modifiedTargetSelectionRef.current === value) {
+          modifiedTargetSelectionRef.current = null
+          return
+        }
         const command = commandItems.find((item) => item.value === value)
         command?.onSelect()
         onClose()
@@ -543,15 +572,127 @@ export function CommandPalette({
         })()
       } else if (value.startsWith('note:') || value.startsWith('recent:')) {
         const relPath = value.replace(/^note:|^recent:/, '')
+        if (modifiedNoteSelectionRef.current === relPath) {
+          modifiedNoteSelectionRef.current = null
+          return
+        }
         onOpenNote(relPath)
         onClose()
       } else if (value.startsWith('project:')) {
+        if (modifiedTargetSelectionRef.current === value) {
+          modifiedTargetSelectionRef.current = null
+          return
+        }
         const projectId = value.replace('project:', '')
         onOpenProject(projectId)
         onClose()
+      } else if (modifiedTargetSelectionRef.current === value) {
+        modifiedTargetSelectionRef.current = null
+        return
       }
     },
     [commandItems, onCreate, onOpenNote, onOpenProject, onClose, onRunAiPrompt, searchQuery]
+  )
+
+  const getNoteOpenInteractionProps = useCallback(
+    (
+      relPath: string
+    ): {
+      onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
+      onAuxClick: (event: React.MouseEvent<HTMLDivElement>) => void
+    } => ({
+      onPointerDown: (event) => {
+        if (!isModifiedNotebookOpen(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedNoteSelectionRef.current = relPath
+        onOpenNote(relPath, { openInNewTab: true })
+        onClose()
+      },
+      onAuxClick: (event) => {
+        if (!isMiddleMouseButton(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedNoteSelectionRef.current = relPath
+        onOpenNote(relPath, { openInNewTab: true })
+        onClose()
+      }
+    }),
+    [onClose, onOpenNote]
+  )
+
+  const getProjectOpenInteractionProps = useCallback(
+    (
+      projectId: string,
+      value: string
+    ): {
+      onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
+      onAuxClick: (event: React.MouseEvent<HTMLDivElement>) => void
+    } => ({
+      onPointerDown: (event) => {
+        if (!isModifiedNotebookOpen(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedTargetSelectionRef.current = value
+        onOpenProject(projectId, { openInNewTab: true })
+        onClose()
+      },
+      onAuxClick: (event) => {
+        if (!isMiddleMouseButton(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedTargetSelectionRef.current = value
+        onOpenProject(projectId, { openInNewTab: true })
+        onClose()
+      }
+    }),
+    [onClose, onOpenProject]
+  )
+
+  const getPageOpenInteractionProps = useCallback(
+    (
+      page: CommandPalettePage,
+      value: string
+    ): {
+      onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
+      onAuxClick: (event: React.MouseEvent<HTMLDivElement>) => void
+    } => ({
+      onPointerDown: (event) => {
+        if (!isModifiedNotebookOpen(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedTargetSelectionRef.current = value
+        onOpenPage(page, { openInNewTab: true })
+        onClose()
+      },
+      onAuxClick: (event) => {
+        if (!isMiddleMouseButton(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        modifiedTargetSelectionRef.current = value
+        onOpenPage(page, { openInNewTab: true })
+        onClose()
+      }
+    }),
+    [onClose, onOpenPage]
   )
 
   const passthroughCommandFilter = useCallback(() => 1, [])
@@ -609,16 +750,23 @@ export function CommandPalette({
 
             {isCommandMode ? (
               <CommandGroup heading="Commands">
-                {filteredCommandItems.map((item) => {
+                {filteredCommandResults.map(({ command: item, highlights }) => {
                   const Icon = item.icon
                   return (
                     <CommandItem
                       key={item.value}
+                      variant="palette"
                       className="group"
                       value={item.value}
                       keywords={item.keywords}
                       disabled={item.disabled}
                       onSelect={handleSelect}
+                      {...(COMMAND_PAGE_BY_VALUE[item.value]
+                        ? getPageOpenInteractionProps(
+                            COMMAND_PAGE_BY_VALUE[item.value] as CommandPalettePage,
+                            item.value
+                          )
+                        : {})}
                     >
                       <div className={paletteItemIconClass}>
                         {item.logo ? (
@@ -627,7 +775,9 @@ export function CommandPalette({
                           <Icon className="h-4 w-4" />
                         )}
                       </div>
-                      <WorkspaceTextFade className="min-w-0 flex-1">{item.label}</WorkspaceTextFade>
+                      <WorkspaceTextFade className="min-w-0 flex-1" observeMutations={false}>
+                        <CommandPaletteMatchText text={item.label} ranges={highlights?.title} />
+                      </WorkspaceTextFade>
                       {item.shortcutKeys ? <CommandShortcut keys={item.shortcutKeys} /> : null}
                     </CommandItem>
                   )
@@ -639,6 +789,7 @@ export function CommandPalette({
                   return (
                     <CommandItem
                       className="group"
+                      variant="palette"
                       value={aiActionValue}
                       onSelect={handleSelect}
                       disabled={!activeNotePath || !searchQuery || aiLoading}
@@ -669,7 +820,12 @@ export function CommandPalette({
               <CommandGroup heading="Quick Actions">
                 {(() => {
                   return (
-                    <CommandItem className="group" value="new-note" onSelect={handleSelect}>
+                    <CommandItem
+                      className="group"
+                      variant="palette"
+                      value="new-note"
+                      onSelect={handleSelect}
+                    >
                       <div className={paletteItemIconClass}>
                         <Plus className="h-4 w-4" />
                       </div>
@@ -687,18 +843,16 @@ export function CommandPalette({
                 <CommandGroup heading="Recent Notes">
                   {recentNotes.map((note) => {
                     return (
-                      <CommandItem
+                      <CommandPaletteNoteItem
                         key={`recent:${note.relPath}`}
-                        className="group"
+                        title={stripNoteExtension(note.name)}
+                        relPath={note.relPath}
+                        folderColors={folderColors}
                         value={`recent:${note.relPath}`}
                         keywords={[note.name, note.relPath, ...note.tags]}
                         onSelect={handleSelect}
-                      >
-                        <div className={paletteItemIconClass}>
-                          <Clock className="h-4 w-4" />
-                        </div>
-                        <WorkspaceTextFade>{note.relPath}</WorkspaceTextFade>
-                      </CommandItem>
+                        {...getNoteOpenInteractionProps(note.relPath)}
+                      />
                     )
                   })}
                 </CommandGroup>
@@ -713,49 +867,38 @@ export function CommandPalette({
                     <CommandGroup heading="Notes">
                       {noteResults.map((result) => {
                         return (
-                          <CommandItem
+                          <CommandPaletteNoteItem
                             key={result.id}
-                            className="group"
+                            title={result.title}
+                            relPath={result.subtitle}
+                            folderColors={folderColors}
+                            highlights={result.highlights}
+                            snippet={result.searchMode === 'body' ? result.snippet : undefined}
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
-                          >
-                            <div className={paletteItemIconClass}>
-                              <FileText className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <WorkspaceTextFade>{result.title}</WorkspaceTextFade>
-                              <WorkspaceTextFade className="text-xs text-muted-foreground">
-                                {result.subtitle}
-                              </WorkspaceTextFade>
-                            </div>
-                          </CommandItem>
+                            {...getProjectOpenInteractionProps(
+                              result.value.replace('project:', ''),
+                              result.value
+                            )}
+                            {...getNoteOpenInteractionProps(result.value.replace(/^note:/, ''))}
+                          />
                         )
                       })}
-                      {fallbackSearchNotes.map((note) => {
+                      {fallbackSearchNotes.map((result) => {
                         return (
-                          <CommandItem
-                            key={`fallback:${note.relPath}`}
-                            className="group"
-                            value={`note:${note.relPath}`}
-                            keywords={[
-                              note.name,
-                              note.relPath,
-                              note.bodyPreview ?? '',
-                              ...note.tags
-                            ]}
+                          <CommandPaletteNoteItem
+                            key={`fallback:${result.value}`}
+                            title={result.title}
+                            relPath={result.subtitle}
+                            folderColors={folderColors}
+                            highlights={result.highlights}
+                            snippet={result.searchMode === 'body' ? result.snippet : undefined}
+                            value={result.value}
+                            keywords={result.keywords}
                             onSelect={handleSelect}
-                          >
-                            <div className={paletteItemIconClass}>
-                              <FileText className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <WorkspaceTextFade>{stripNoteExtension(note.name)}</WorkspaceTextFade>
-                              <WorkspaceTextFade className="text-xs text-muted-foreground">
-                                {note.relPath}
-                              </WorkspaceTextFade>
-                            </div>
-                          </CommandItem>
+                            {...getNoteOpenInteractionProps(result.subtitle)}
+                          />
                         )
                       })}
                     </CommandGroup>
@@ -766,6 +909,7 @@ export function CommandPalette({
                           <CommandItem
                             key={result.id}
                             className="group"
+                            variant="palette"
                             value={result.value}
                             keywords={result.keywords}
                             onSelect={handleSelect}
@@ -774,9 +918,20 @@ export function CommandPalette({
                               <APP_PAGE_ICONS.projects className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <WorkspaceTextFade>{result.title}</WorkspaceTextFade>
-                              <WorkspaceTextFade className="text-xs text-muted-foreground">
-                                {result.subtitle}
+                              <WorkspaceTextFade observeMutations={false}>
+                                <CommandPaletteMatchText
+                                  text={result.title}
+                                  ranges={result.highlights?.title}
+                                />
+                              </WorkspaceTextFade>
+                              <WorkspaceTextFade
+                                className="text-xs text-muted-foreground"
+                                observeMutations={false}
+                              >
+                                <CommandPaletteMatchText
+                                  text={result.subtitle}
+                                  ranges={result.highlights?.subtitle}
+                                />
                               </WorkspaceTextFade>
                             </div>
                           </CommandItem>
@@ -788,20 +943,18 @@ export function CommandPalette({
               </>
             ) : !isCommandMode && !isAiMode && !searchQuery ? (
               <CommandGroup heading="All Notes">
-                {filteredNotes.map((note) => {
+                {allNotes.map((note) => {
                   return (
-                    <CommandItem
+                    <CommandPaletteNoteItem
                       key={note.relPath}
-                      className="group"
+                      title={stripNoteExtension(note.name)}
+                      relPath={note.relPath}
+                      folderColors={folderColors}
                       value={`note:${note.relPath}`}
                       keywords={[note.name, note.relPath, ...note.tags]}
                       onSelect={handleSelect}
-                    >
-                      <div className={paletteItemIconClass}>
-                        <FileText className="h-4 w-4" />
-                      </div>
-                      <WorkspaceTextFade>{note.relPath}</WorkspaceTextFade>
-                    </CommandItem>
+                      {...getNoteOpenInteractionProps(note.relPath)}
+                    />
                   )
                 })}
               </CommandGroup>

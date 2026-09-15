@@ -3,6 +3,8 @@ import type { CalendarTask } from '../../../shared/types'
 import { isTaskDone, isTaskStatusDone } from '../../../shared/taskStatus'
 import { formatCalendarTaskTimeLabel } from '../lib/calendarTaskTimeLabel'
 import { getTaskStatus } from '../lib/taskStatus'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { getWorkspaceOpenOptions } from '../lib/workspaceOpen'
 import { TaskContextMenu } from './TaskContextMenu'
 import { ChevronLeft, ChevronRight, WorkspaceIconButton, WorkspaceTextFade } from './ui'
 
@@ -11,7 +13,7 @@ interface CalendarDayViewProps {
   tasks: CalendarTask[]
   onSelectDate: (date: string) => void
   onRescheduleTask?: (taskId: string, newDate: string | undefined) => void
-  onOpenTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
   onDeleteTask?: (taskId: string) => void
   onUpdateTask?: (taskId: string, patch: Partial<CalendarTask>) => void
@@ -151,7 +153,15 @@ export function CalendarDayView({
                 <button
                   type="button"
                   key={task.id}
-                  onClick={() => onOpenTask?.(task.id)}
+                  onClick={(event) => onOpenTask?.(task.id, getWorkspaceOpenOptions(event))}
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) {
+                      return
+                    }
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenTask?.(task.id, { openInNewTab: true })
+                  }}
                   className={`inline-flex items-center rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
                 >
                   <WorkspaceTextFade className="text-base font-semibold text-foreground">
@@ -212,7 +222,15 @@ export function CalendarDayView({
                       <button
                         type="button"
                         key={task.id}
-                        onClick={() => onOpenTask?.(task.id)}
+                        onClick={(event) => onOpenTask?.(task.id, getWorkspaceOpenOptions(event))}
+                        onAuxClick={(event) => {
+                          if (event.button !== 1) {
+                            return
+                          }
+                          event.preventDefault()
+                          event.stopPropagation()
+                          onOpenTask?.(task.id, { openInNewTab: true })
+                        }}
                         className={`mb-1 inline-flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm ${getTaskStatus(task.status, task.completed) !== 'pending' ? 'opacity-60' : ''} ${isTaskDone(task) ? 'line-through' : ''}`}
                       >
                         <WorkspaceTextFade className="text-base font-semibold text-foreground">

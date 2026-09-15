@@ -91,6 +91,7 @@ import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { usePersistentTableSort } from '../hooks/usePersistentTableSort'
 import type { TableSortState } from '../lib/tableSort'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
 import {
   CalendarCheck,
   Check,
@@ -161,7 +162,7 @@ export interface ProjectResourcesTableProps {
   onDetachResource: (projectId: string, resourceId: string) => Promise<void>
   onRemoveResource?: (resourceId: string) => Promise<void>
   onOpenResource: (resourceId: string) => Promise<void>
-  onOpenNotebookResource: (resourceId: string) => void
+  onOpenNotebookResource: (resourceId: string, options?: WorkspaceOpenOptions) => void
   onLocateResource?: (resourceId: string) => Promise<void>
   onRevealResource?: (resourceId: string) => Promise<void>
   onRefreshResource?: (resourceId: string) => Promise<void>
@@ -477,9 +478,9 @@ export function ProjectResourcesTable({
     }
   }
 
-  const openResource = (row: ProjectResourceRow): void => {
+  const openResource = (row: ProjectResourceRow, options: WorkspaceOpenOptions = {}): void => {
     if (row.resource.type === 'notebook') {
-      onOpenNotebookResource(row.resource.id)
+      onOpenNotebookResource(row.resource.id, options)
       return
     }
 
@@ -543,7 +544,15 @@ export function ProjectResourcesTable({
           variant="ghost"
           onClick={(event) => {
             event.stopPropagation()
-            openResource(row)
+            openResource(row, getWorkspaceOpenOptions(event))
+          }}
+          onAuxClick={(event) => {
+            if (event.button !== 1) {
+              return
+            }
+            event.preventDefault()
+            event.stopPropagation()
+            openResource(row, { openInNewTab: true })
           }}
           className="h-auto max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
           aria-label={`Open ${row.resource.title}`}
@@ -730,7 +739,15 @@ export function ProjectResourcesTable({
             getRowProps={(row) => ({
               'data-testid': `${scope === 'global' ? 'resource' : 'project-resource'}-row:${row.resource.id}`,
               className: cn('group', busyId === row.resource.id && 'opacity-60'),
-              onClick: () => openResource(row)
+              onClick: (event) => openResource(row, getWorkspaceOpenOptions(event)),
+              onAuxClick: (event) => {
+                if (event.button !== 1) {
+                  return
+                }
+                event.preventDefault()
+                event.stopPropagation()
+                openResource(row, { openInNewTab: true })
+              }
             })}
             rowWrapper={(row, tableRow) => (
               <ProjectResourceContextMenu

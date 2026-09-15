@@ -7,6 +7,7 @@ export interface NoteSaveRequest {
   document: StoredNoteDocument
   baseHash?: string | null
   clientMutationId?: string
+  workspaceTabId?: string
 }
 
 export class NoteSaveConflictError extends Error {
@@ -26,7 +27,7 @@ interface CreateNoteSaveCoordinatorOptions {
 
 export interface NoteSaveCoordinator {
   enqueue: (request: NoteSaveRequest) => Promise<void>
-  setBaseRevision: (relPath: string, revision: string | null) => void
+  setBaseRevision: (relPath: string, revision: string | null, workspaceTabId?: string) => void
 }
 
 export function createNoteSaveCoordinator(
@@ -34,17 +35,19 @@ export function createNoteSaveCoordinator(
 ): NoteSaveCoordinator {
   let queue = Promise.resolve()
   let latestVersion = 0
-  const latestRevisions = new Map<string, string | null>()
+  const latestRevisions = new Map<string, { revision: string | null; workspaceTabId?: string }>()
 
   return {
     enqueue(request) {
       const requestVersion = ++latestVersion
       const run = async (): Promise<void> => {
         const executionRequest =
-          latestRevisions.has(request.relPath) && request.baseHash !== undefined
+          latestRevisions.has(request.relPath) &&
+          request.baseHash !== undefined &&
+          latestRevisions.get(request.relPath)?.workspaceTabId === request.workspaceTabId
             ? {
                 ...request,
-                baseHash: latestRevisions.get(request.relPath) ?? null
+                baseHash: latestRevisions.get(request.relPath)?.revision ?? null
               }
             : request
         const result = await options.writeNote(executionRequest)
@@ -52,7 +55,10 @@ export function createNoteSaveCoordinator(
           throw new NoteSaveConflictError(result)
         }
         if (result?.ok) {
-          latestRevisions.set(request.relPath, result.revision.contentHash)
+          latestRevisions.set(request.relPath, {
+            revision: result.revision.contentHash,
+            workspaceTabId: request.workspaceTabId
+          })
         }
 
         if (requestVersion === latestVersion) {
@@ -64,8 +70,8 @@ export function createNoteSaveCoordinator(
       queue = next
       return next
     },
-    setBaseRevision(relPath, revision) {
-      latestRevisions.set(relPath, revision)
+    setBaseRevision(relPath, revision, workspaceTabId) {
+      latestRevisions.set(relPath, { revision, workspaceTabId })
     }
   }
 }

@@ -217,7 +217,7 @@ async function openProjectHome(page: Page, projectId = 'project-1'): Promise<voi
 }
 
 test.describe('projects workspace', () => {
-  test('opens All Projects first and keeps project view context per workspace tab', async () => {
+  test('opens All Projects first and shares project view context across workspace tabs', async () => {
     const vaultRoot = await createFixtureVault([
       createFixtureProject('project-1', 'Alpha Project'),
       createFixtureProject('project-2', 'Beta Project')
@@ -266,7 +266,7 @@ test.describe('projects workspace', () => {
       await expect(page.getByTestId('project-properties-panel')).toBeVisible()
       await page.getByTestId('workspace-page-context-menu-trigger').click()
       await expect(
-        page.getByTestId('workspace-page-context-menu-item:delete-project')
+        page.getByRole('menuitem', { name: 'Delete project', exact: true })
       ).toBeVisible()
       await page.keyboard.press('Escape')
       const projectViewTabs = page.getByTestId('project-view-tabs')
@@ -300,8 +300,8 @@ test.describe('projects workspace', () => {
       await expect(secondWorkspaceTab).toContainText('Beta Project')
 
       await workspaceTab.click()
-      await expect(page.getByLabel('Project name')).toHaveValue('Alpha Project')
-      await expect(workspaceTab).toContainText('Alpha Project')
+      await expect(page.getByLabel('Project name')).toHaveValue('Beta Project')
+      await expect(workspaceTab).toContainText('Beta Project')
 
       await page.getByTestId('projects-breadcrumb:all').click()
       await page.getByTestId('all-projects-page').getByTestId('all-project-row:project-2').click()
@@ -2346,6 +2346,14 @@ test.describe('projects workspace', () => {
       await page.getByRole('button', { name: 'Add new task', exact: true }).click()
       await fillNewTaskTitle(page, 'Close saved task')
       await openTaskPageFromCenterDialog(page)
+      await expect(page.getByTestId('task-page').getByTestId('note-block-editor')).toHaveAttribute(
+        'data-editor-density',
+        'default'
+      )
+      await expect(page.getByTestId('task-page').locator('.ProseMirror p').first()).toHaveCSS(
+        'line-height',
+        '22px'
+      )
 
       const afterClose = await page.evaluate(() => window.vaultApi.settings.get())
       expect(afterClose.calendarTasks.some((task) => task.title === 'Close saved task')).toBe(true)

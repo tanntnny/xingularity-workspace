@@ -79,6 +79,14 @@ export const useVaultStore = create<VaultState>((set) => ({
       },
       items: []
     },
+    stickyNoteBoard: {
+      viewport: {
+        x: 0,
+        y: 0,
+        zoom: 1
+      },
+      notes: []
+    },
     featureFlags: {
       resources: true,
       filesystemResources: true,

@@ -100,14 +100,20 @@ const CommandSeparator = React.forwardRef<
 ))
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName
 
+type CommandItemVariant = 'default' | 'palette'
+
 const CommandItem = React.forwardRef<
   React.ComponentRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item> & {
+    variant?: CommandItemVariant
+  }
+>(({ className, variant = 'default', ...props }, ref) => (
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex min-w-0 max-w-full cursor-default gap-2 select-none items-center overflow-hidden rounded-sm px-2 py-1.5 text-sm outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected='true']:bg-muted data-[selected=true]:text-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      variant === 'palette' &&
+        'rounded-md bg-transparent hover:bg-muted focus-visible:bg-muted data-[selected=true]:bg-muted',
       className
     )}
     {...props}

@@ -56,6 +56,11 @@ import {
   type NoteTreeSelection
 } from '../lib/noteTreeSelection'
 import {
+  isMiddleMouseButton,
+  isModifiedNotebookOpen,
+  type NotebookOpenOptions
+} from '../lib/notebookOpen'
+import {
   clearActiveNoteTreeDrag,
   readNoteTreeDragEntries,
   setActiveNoteTreeDrag,
@@ -111,7 +116,8 @@ interface NotesTreeViewProps {
   pendingEditId: string | null
   onPendingEditHandled: () => void
   onSelectionChange: (entries: NoteTreeSelection) => void
-  onOpenNote: (relPath: string) => void
+  onOpenNote: (relPath: string, options?: NotebookOpenOptions) => void
+  onOpenFolder: (relPath: string, options?: NotebookOpenOptions) => void
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -137,6 +143,8 @@ interface TreeNodeRenderState {
 type TreeNodeProps = NodeRendererProps<NoteTreeNode> & {
   renderState: TreeNodeRenderState
   isEditing: boolean
+  onOpenNote: (relPath: string, options?: NotebookOpenOptions) => void
+  onOpenFolder: (relPath: string, options?: NotebookOpenOptions) => void
   onCreateNote: (parentDir: string) => void
   onCreateExcalidraw: (parentDir: string) => void
   onCreateFolder: (parentDir: string) => void
@@ -164,6 +172,7 @@ export function NotesTreeView({
   onPendingEditHandled,
   onSelectionChange,
   onOpenNote,
+  onOpenFolder,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
@@ -640,6 +649,8 @@ export function NotesTreeView({
           willReceiveDrop: props.node.willReceiveDrop
         }}
         isEditing={editingId === props.node.id}
+        onOpenNote={onOpenNote}
+        onOpenFolder={onOpenFolder}
         onCreateNote={onCreateNote}
         onCreateExcalidraw={onCreateExcalidraw}
         onCreateFolder={onCreateFolder}
@@ -661,6 +672,8 @@ export function NotesTreeView({
     [
       editingId,
       finishEditing,
+      onOpenFolder,
+      onOpenNote,
       onCreateExcalidraw,
       onCreateFolder,
       onCreateNote,
@@ -764,6 +777,8 @@ function TreeNode({
   dragHandle,
   renderState,
   isEditing,
+  onOpenNote,
+  onOpenFolder,
   onCreateNote,
   onCreateExcalidraw,
   onCreateFolder,
@@ -1064,7 +1079,30 @@ function TreeNode({
       return
     }
 
+    if (isModifiedNotebookOpen(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      const open = node.data.kind === 'folder' ? onOpenFolder : onOpenNote
+      open(node.data.relPath, { openInNewTab: true })
+      return
+    }
+
     node.handleClick(event)
+  }
+
+  const handleRowAuxClick = (event: MouseEvent<HTMLDivElement>): void => {
+    if (
+      isEditing ||
+      isTreeRowControl(event.target) ||
+      !isMiddleMouseButton(event)
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    const open = node.data.kind === 'folder' ? onOpenFolder : onOpenNote
+    open(node.data.relPath, { openInNewTab: true })
   }
 
   const handleNativeDragStart = (event: React.DragEvent<HTMLDivElement>): void => {
@@ -1143,6 +1181,7 @@ function TreeNode({
       data-testid={`note-tree-row:${nodeData.relPath}`}
       ref={handleRowDragRef}
       onClick={handleRowClick}
+      onAuxClick={handleRowAuxClick}
       onDragStart={handleNativeDragStart}
       onDragOver={handleNativeDragOver}
       onDragLeave={handleNativeDragLeave}
@@ -1330,6 +1369,8 @@ function areTreeNodePropsEqual(previous: TreeNodeProps, next: TreeNodeProps): bo
     previous.renderState.isDragging === next.renderState.isDragging &&
     previous.renderState.willReceiveDrop === next.renderState.willReceiveDrop &&
     previous.isEditing === next.isEditing &&
+    previous.onOpenNote === next.onOpenNote &&
+    previous.onOpenFolder === next.onOpenFolder &&
     previous.onCreateNote === next.onCreateNote &&
     previous.onCreateExcalidraw === next.onCreateExcalidraw &&
     previous.onCreateFolder === next.onCreateFolder &&

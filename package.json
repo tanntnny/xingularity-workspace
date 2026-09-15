@@ -4,7 +4,8 @@
   "private": true,
   "description": "Xingularity — local-first desktop workspace for notes, projects, and automations",
   "bin": {
-    "xingularity": "./bin/xingularity"
+    "xingularity": "./bin/xingularity",
+    "x-workspace": "./bin/x-workspace"
   },
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -47,9 +48,12 @@
     "typecheck:workspace-template": "npm --workspace @xingularity/workspace-template run typecheck",
     "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:workspace-template",
     "xingularity": "vite-node src/cli/xingularity.ts",
+    "x-workspace": "vite-node src/cli/xWorkspace.ts",
+    "build:cli": "vite build --config vite.cli.config.ts",
+    "install:x-workspace-skill": "node scripts/install-x-workspace-skill.cjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build": "npm run sync:icons && npm run typecheck && electron-vite build",
+    "build": "npm run sync:icons && npm run typecheck && npm run build:cli && electron-vite build",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "npm run sync:icons && electron-vite build && playwright test",

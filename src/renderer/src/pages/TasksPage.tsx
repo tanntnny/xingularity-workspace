@@ -18,6 +18,7 @@ import {
 } from '../lib/taskRows'
 import type { TableSortState } from '../lib/tableSort'
 import type { TaskWorkspaceViewState } from '../lib/workspaceViewState'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 
 export interface TaskSearchInputProps {
   value: string
@@ -49,7 +50,7 @@ export function TaskSearchInput({ value, onChange }: TaskSearchInputProps): Reac
 export interface TasksPageProps {
   projects: Project[]
   tasks: CalendarTask[]
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
   viewState?: TaskWorkspaceViewState
   onViewStateChange?: (state: TaskWorkspaceViewState) => void

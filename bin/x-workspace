@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
+
+const projectRoot = path.resolve(__dirname, '..')
+const entryPoint = path.join(projectRoot, 'out', 'cli', 'xWorkspace.js')
+const viteNode = path.join(projectRoot, 'node_modules', 'vite-node', 'vite-node.mjs')
+const entry = require('node:fs').existsSync(entryPoint) ? entryPoint : path.join(projectRoot, 'src', 'cli', 'xWorkspace.ts')
+const runner = entry.endsWith('.ts') ? viteNode : process.execPath
+const args = entry.endsWith('.ts') ? [runner, entry, ...process.argv.slice(2)] : [entry, ...process.argv.slice(2)]
+const result = spawnSync(process.execPath, args, {
+  cwd: projectRoot,
+  stdio: 'inherit'
+})
+
+if (result.error) {
+  console.error(`Unable to start X Workspace CLI: ${result.error.message}`)
+  process.exitCode = 1
+} else if (typeof result.status === 'number') {
+  process.exitCode = result.status
+} else {
+  process.exitCode = 1
+}

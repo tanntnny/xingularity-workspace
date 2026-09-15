@@ -228,6 +228,11 @@ export type {
 } from './workspace-text-fade'
 export { WorkspaceTextClip } from './workspace-text-clip'
 export type { WorkspaceTextClipProps } from './workspace-text-clip'
+export { WorkspaceTextEllipsis } from './workspace-text-ellipsis'
+export type {
+  WorkspaceTextEllipsisLines,
+  WorkspaceTextEllipsisProps
+} from './workspace-text-ellipsis'
 export type { TableSortDirection, TableSortState, TableSortValue } from '../../lib/tableSort'
 
 export { Toaster } from './sonner'

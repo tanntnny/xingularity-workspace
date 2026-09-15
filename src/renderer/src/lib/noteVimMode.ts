@@ -208,6 +208,64 @@ function getTextblockBoundsAtPos(state: EditorState, pos: number): { from: numbe
   }
 }
 
+interface NoteVimLogicalLineBounds {
+  start: number
+  end: number
+}
+
+function getLogicalLineBounds(text: string, offset: number): NoteVimLogicalLineBounds {
+  const boundedOffset = Math.max(0, Math.min(Math.floor(offset), text.length))
+  const start = text.lastIndexOf('\n', Math.max(0, boundedOffset - 1)) + 1
+  const nextLineBreak = text.indexOf('\n', boundedOffset)
+
+  return {
+    start,
+    end: nextLineBreak < 0 ? text.length : nextLineBreak
+  }
+}
+
+function getLogicalLineCharacterBoundsAtPos(
+  state: EditorState,
+  pos: number
+): { from: number; to: number; contentEnd: number; isEmpty: boolean } {
+  const resolvedPos = state.doc.resolve(boundedDocPos(state, pos))
+  const blockBounds = getTextblockBoundsAtPos(state, pos)
+
+  if (!resolvedPos.parent.isTextblock || resolvedPos.parent.type.spec.code !== true) {
+    return {
+      from: blockBounds.from,
+      to: blockBounds.to > blockBounds.from ? blockBounds.to - 1 : blockBounds.from,
+      contentEnd: blockBounds.to,
+      isEmpty: blockBounds.to <= blockBounds.from
+    }
+  }
+
+  const line = getLogicalLineBounds(resolvedPos.parent.textContent, resolvedPos.parentOffset)
+  const from = resolvedPos.start() + line.start
+  const contentEnd = resolvedPos.start() + line.end
+
+  return {
+    from,
+    to: contentEnd > from ? contentEnd - 1 : from,
+    contentEnd,
+    isEmpty: contentEnd <= from
+  }
+}
+
+function getLogicalLineRangeAtPos(state: EditorState, pos: number): TextblockRange {
+  const bounds = getLogicalLineCharacterBoundsAtPos(state, pos)
+  return {
+    from: bounds.from,
+    to: bounds.to,
+    contentEnd: bounds.contentEnd,
+    isEmpty: bounds.isEmpty
+  }
+}
+
+function isCodeBlockAtPos(state: EditorState, pos: number): boolean {
+  return state.doc.resolve(boundedDocPos(state, pos)).parent.type.spec.code === true
+}
+
 function getVisualSelectionRange(
   state: EditorState,
   mode: Extract<NoteVimMode, 'visual' | 'visualLine'>,
@@ -218,11 +276,11 @@ function getVisualSelectionRange(
   const boundedHead = boundedDocPos(state, head)
 
   if (mode === 'visualLine') {
-    const anchorBounds = getTextblockBoundsAtPos(state, boundedAnchor)
-    const headBounds = getTextblockBoundsAtPos(state, boundedHead)
+    const anchorBounds = getLogicalLineCharacterBoundsAtPos(state, boundedAnchor)
+    const headBounds = getLogicalLineCharacterBoundsAtPos(state, boundedHead)
     return {
       from: Math.min(anchorBounds.from, headBounds.from),
-      to: Math.max(anchorBounds.to, headBounds.to)
+      to: Math.max(anchorBounds.contentEnd, headBounds.contentEnd)
     }
   }
 
@@ -277,11 +335,11 @@ function getTextblockCharacterBoundsAtPos(
   state: EditorState,
   pos: number
 ): { from: number; to: number; isEmpty: boolean } {
-  const bounds = getTextblockBoundsAtPos(state, pos)
+  const bounds = getLogicalLineCharacterBoundsAtPos(state, pos)
   return {
     from: bounds.from,
-    to: bounds.to > bounds.from ? bounds.to - 1 : bounds.from,
-    isEmpty: bounds.to <= bounds.from
+    to: bounds.to,
+    isEmpty: bounds.isEmpty
   }
 }
 
@@ -354,32 +412,43 @@ function selectNormalModePosition(view: EditorView, pos: number): boolean {
 }
 
 function lineStart(view: EditorView): boolean {
-  return safeSelect(view, getCurrentTextblockBounds(view.state).from, -1)
+  return safeSelect(
+    view,
+    getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).from,
+    -1
+  )
 }
 
 function lineEnd(view: EditorView): boolean {
-  return safeSelect(view, getCurrentTextblockBounds(view.state).to, 1)
+  return safeSelect(
+    view,
+    getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).contentEnd,
+    1
+  )
 }
 
 function normalLineEnd(view: EditorView): boolean {
-  return selectNormalModePosition(view, getCurrentTextblockBounds(view.state).to)
+  return selectNormalModePosition(
+    view,
+    getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).to
+  )
 }
 
 function lineStartPos(state: EditorState, pos: number): number {
-  return getTextblockBoundsAtPos(state, pos).from
+  return getLogicalLineCharacterBoundsAtPos(state, pos).from
 }
 
 function lineEndPos(state: EditorState, pos: number): number {
-  return getTextblockCharacterBoundsAtPos(state, pos).to
+  return getLogicalLineCharacterBoundsAtPos(state, pos).to
 }
 
 function appendAfterCursorPos(state: EditorState, pos: number): number {
-  const bounds = getCurrentTextblockBounds(state)
-  if (bounds.to <= bounds.from) {
+  const bounds = getLogicalLineCharacterBoundsAtPos(state, pos)
+  if (bounds.contentEnd <= bounds.from) {
     return bounds.from
   }
 
-  return Math.min(pos + 1, bounds.to)
+  return Math.min(pos + 1, bounds.contentEnd)
 }
 
 function buildTextIndex(state: EditorState): IndexedText {
@@ -587,8 +656,47 @@ function resolvePreferredColumnOffset(state: EditorState, pos: number): number {
     return vimState.preferredColumnOffset
   }
 
-  const currentRange = getTextblockRangeAtPos(state, currentPos)
+  const currentRange = isCodeBlockAtPos(state, currentPos)
+    ? getLogicalLineRangeAtPos(state, currentPos)
+    : getTextblockRangeAtPos(state, currentPos)
   return Math.max(0, currentPos - currentRange.from)
+}
+
+function resolveCodeBlockVerticalTarget(
+  state: EditorState,
+  pos: number,
+  direction: 'up' | 'down'
+): { target: number; preferredColumnOffset: number } | null | undefined {
+  const boundedPos = boundedDocPos(state, pos)
+  const resolvedPos = state.doc.resolve(boundedPos)
+  if (resolvedPos.parent.type.spec.code !== true) {
+    return undefined
+  }
+
+  const codeText = resolvedPos.parent.textContent
+  const currentLine = getLogicalLineCharacterBoundsAtPos(state, boundedPos)
+  const currentLineStartOffset = currentLine.from - resolvedPos.start()
+  const currentLineEndOffset = currentLine.contentEnd - resolvedPos.start()
+  const hasAdjacentLine =
+    direction === 'up' ? currentLineStartOffset > 0 : currentLineEndOffset < codeText.length
+
+  if (!hasAdjacentLine) {
+    return null
+  }
+
+  const preferredColumnOffset = resolvePreferredColumnOffset(state, boundedPos)
+  const targetOffset = direction === 'up' ? currentLineStartOffset - 1 : currentLineEndOffset + 1
+  const targetLine = getLogicalLineBounds(codeText, targetOffset)
+  const targetFrom = resolvedPos.start() + targetLine.start
+  const targetEnd = resolvedPos.start() + targetLine.end
+
+  return {
+    target:
+      targetEnd > targetFrom
+        ? targetFrom + Math.min(preferredColumnOffset, targetEnd - targetFrom - 1)
+        : targetFrom,
+    preferredColumnOffset
+  }
 }
 
 function resolveVerticalTarget(
@@ -597,6 +705,11 @@ function resolveVerticalTarget(
   direction: 'up' | 'down'
 ): { target: number; preferredColumnOffset: number } | null {
   const currentPos = normalizeNormalModePosition(view.state, pos).pos
+  const codeBlockTarget = resolveCodeBlockVerticalTarget(view.state, currentPos, direction)
+  if (codeBlockTarget !== undefined) {
+    return codeBlockTarget
+  }
+
   const ranges = getTextblockRanges(view.state)
   const currentRange = getTextblockRangeAtPos(view.state, currentPos)
   const currentIndex = findTextblockRangeIndex(ranges, currentRange)
@@ -831,12 +944,48 @@ function pasteClipboardText(
   return true
 }
 
+function getCurrentLogicalLinewiseRange(state: EditorState): { from: number; to: number } {
+  if (!isCodeBlockAtPos(state, state.selection.from)) {
+    return getCurrentTextblockNodeBounds(state)
+  }
+
+  const line = getLogicalLineCharacterBoundsAtPos(state, state.selection.from)
+  const resolvedPos = state.doc.resolve(state.selection.from)
+  const blockStart = resolvedPos.start()
+  const blockEnd = resolvedPos.end()
+
+  if (line.contentEnd < blockEnd) {
+    return { from: line.from, to: line.contentEnd + 1 }
+  }
+
+  if (line.from > blockStart) {
+    return { from: line.from - 1, to: line.contentEnd }
+  }
+
+  return { from: line.from, to: line.contentEnd }
+}
+
 function deleteCurrentTextblock(view: EditorView): boolean {
-  const bounds = getCurrentTextblockNodeBounds(view.state)
+  const bounds = getCurrentLogicalLinewiseRange(view.state)
+  const deletedText = view.state.doc.textBetween(bounds.from, bounds.to, '\n')
+  if (deletedText) {
+    setVimRegister(view, {
+      plainText: deletedText,
+      markdown: null
+    })
+    void navigator.clipboard.writeText(deletedText).catch((error: unknown) => {
+      console.warn('Failed to delete note editor textblock to clipboard:', error)
+    })
+  }
   return deleteRangeAndSetMode(view, bounds.from, bounds.to, 'normal')
 }
 
 function changeCurrentTextblock(view: EditorView): boolean {
+  if (isCodeBlockAtPos(view.state, view.state.selection.from)) {
+    const bounds = getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from)
+    return deleteRangeAndSetMode(view, bounds.from, bounds.contentEnd, 'insert')
+  }
+
   const bounds = getCurrentTextblockNodeBounds(view.state)
   return deleteRangeAndSetMode(view, bounds.from, bounds.to, 'insert')
 }
@@ -846,6 +995,15 @@ function splitAtSelection(view: EditorView): boolean {
 }
 
 function openLineBelow(view: EditorView): boolean {
+  if (isCodeBlockAtPos(view.state, view.state.selection.from)) {
+    const insertAt = getLogicalLineCharacterBoundsAtPos(
+      view.state,
+      view.state.selection.from
+    ).contentEnd
+    view.dispatch(view.state.tr.insertText('\n', insertAt).scrollIntoView())
+    return enterInsertMode(view, insertAt + 1)
+  }
+
   lineEnd(view)
   if (!splitAtSelection(view)) {
     return false
@@ -855,6 +1013,12 @@ function openLineBelow(view: EditorView): boolean {
 }
 
 function openLineAbove(view: EditorView): boolean {
+  if (isCodeBlockAtPos(view.state, view.state.selection.from)) {
+    const insertAt = getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).from
+    view.dispatch(view.state.tr.insertText('\n', insertAt).scrollIntoView())
+    return enterInsertMode(view, insertAt)
+  }
+
   const insertAt = getCurrentTextblockBounds(view.state).from
   lineStart(view)
   if (!splitAtSelection(view)) {
@@ -867,6 +1031,10 @@ function openLineAbove(view: EditorView): boolean {
 
 function isPrintableMappingInput(value: string): boolean {
   return value.length > 0 && /^[\x20-\x7E]+$/.test(value)
+}
+
+function isPrintableVimKey(value: string): boolean {
+  return [...value].length === 1 && !/[\p{Cc}\p{Cf}]/u.test(value)
 }
 
 function getMappingsForMode(
@@ -943,6 +1111,15 @@ function handleInsertModeKey(view: EditorView, event: KeyboardEvent): boolean {
   return enterNormalMode(view, resolveInsertModeExitPos(view.state, view.state.selection.from))
 }
 
+function finishVimKey(event: KeyboardEvent, key: string, handled: boolean): boolean {
+  const consumePrintable = isPrintableVimKey(key)
+  if (handled || consumePrintable) {
+    event.preventDefault()
+  }
+
+  return handled || consumePrintable
+}
+
 function handlePendingKey(
   view: EditorView,
   key: string,
@@ -986,7 +1163,7 @@ function handlePendingKey(
       didHandle = deleteRangeAndSetMode(
         view,
         fromPos,
-        getCurrentTextblockBounds(view.state).to,
+        getLogicalLineCharacterBoundsAtPos(view.state, fromPos).contentEnd,
         operator === 'c' ? 'insert' : 'normal'
       )
     }
@@ -1015,96 +1192,104 @@ function handleNormalModeKey(
     return false
   }
 
-  event.preventDefault()
-
   if (key !== 'j' && key !== 'k') {
     resetPreferredColumn(view)
   }
 
   if (handlePendingKey(view, key, vimState.pendingCommand)) {
-    return true
+    return finishVimKey(event, key, true)
   }
 
-  switch (key) {
-    case 'Escape':
-      dispatchVimState(view, { pendingCommand: null })
-      return true
-    case 'i':
-      setMode(view, 'insert')
-      return true
-    case 'a':
-      safeSelect(view, appendAfterCursorPos(view.state, view.state.selection.from), 1)
-      setMode(view, 'insert')
-      return true
-    case 'A':
-      lineEnd(view)
-      setMode(view, 'insert')
-      return true
-    case 'o':
-      return openLineBelow(view)
-    case 'O':
-      return openLineAbove(view)
-    case 'v':
-      return enterVisualMode(view, 'visual')
-    case 'V':
-      return enterVisualMode(view, 'visualLine')
-    case 'h':
-      return selectNormalModePosition(view, view.state.selection.from - 1)
-    case 'l':
-      return selectNormalModePosition(view, view.state.selection.from + 1)
-    case 'j':
-      return moveVertically(view, 'down')
-    case 'k':
-      return moveVertically(view, 'up')
-    case 'w': {
-      const pos = wordStartAfter(view.state, view.state.selection.from)
-      return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
+  const handled = (() => {
+    switch (key) {
+      case 'Escape':
+        dispatchVimState(view, { pendingCommand: null })
+        return true
+      case 'i':
+        setMode(view, 'insert')
+        return true
+      case 'a':
+        safeSelect(view, appendAfterCursorPos(view.state, view.state.selection.from), 1)
+        setMode(view, 'insert')
+        return true
+      case 'A':
+        lineEnd(view)
+        setMode(view, 'insert')
+        return true
+      case 'o':
+        return openLineBelow(view)
+      case 'O':
+        return openLineAbove(view)
+      case 'v':
+        return enterVisualMode(view, 'visual')
+      case 'V':
+        return enterVisualMode(view, 'visualLine')
+      case 'h':
+        return selectNormalModePosition(view, view.state.selection.from - 1)
+      case 'l':
+        return selectNormalModePosition(view, view.state.selection.from + 1)
+      case 'j':
+        return moveVertically(view, 'down')
+      case 'k':
+        return moveVertically(view, 'up')
+      case 'w': {
+        const pos = wordStartAfter(view.state, view.state.selection.from)
+        return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
+      }
+      case 'b': {
+        const pos = wordStartBefore(view.state, view.state.selection.from)
+        return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
+      }
+      case 'e': {
+        const pos = wordEndAfter(view.state, view.state.selection.from)
+        return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
+      }
+      case '0':
+      case '^':
+        return selectNormalModePosition(view, lineStartPos(view.state, view.state.selection.from))
+      case '$':
+        return normalLineEnd(view)
+      case 'G':
+        return selectNormalModePosition(view, lastTextPosition(view.state))
+      case 'g':
+        dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
+        return true
+      case 'd':
+        dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'd' } })
+        return true
+      case 'c':
+        dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'c' } })
+        return true
+      case 'x':
+        return deleteRange(view, view.state.selection.from, view.state.selection.from + 1)
+      case 'D':
+        return deleteRange(
+          view,
+          view.state.selection.from,
+          getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).contentEnd
+        )
+      case 'C':
+        return deleteRangeAndSetMode(
+          view,
+          view.state.selection.from,
+          getLogicalLineCharacterBoundsAtPos(view.state, view.state.selection.from).contentEnd,
+          'insert'
+        )
+      case 'p':
+        return pasteClipboardText(view, 'after', tools)
+      case 'P':
+        return pasteClipboardText(view, 'before', tools)
+      case 'u':
+        undo(view.state, (transaction) => view.dispatch(transaction), view)
+        return true
+      case 'Enter':
+        return true
+      default:
+        return false
     }
-    case 'b': {
-      const pos = wordStartBefore(view.state, view.state.selection.from)
-      return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
-    }
-    case 'e': {
-      const pos = wordEndAfter(view.state, view.state.selection.from)
-      return typeof pos === 'number' ? selectNormalModePosition(view, pos) : true
-    }
-    case '0':
-    case '^':
-      return selectNormalModePosition(view, lineStartPos(view.state, view.state.selection.from))
-    case '$':
-      return normalLineEnd(view)
-    case 'G':
-      return selectNormalModePosition(view, lastTextPosition(view.state))
-    case 'g':
-      dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
-      return true
-    case 'd':
-      dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'd' } })
-      return true
-    case 'c':
-      dispatchVimState(view, { pendingCommand: { kind: 'operator', operator: 'c' } })
-      return true
-    case 'x':
-      return deleteRange(view, view.state.selection.from, view.state.selection.from + 1)
-    case 'D':
-      return deleteRange(view, view.state.selection.from, getCurrentTextblockBounds(view.state).to)
-    case 'C':
-      return deleteRangeAndSetMode(
-        view,
-        view.state.selection.from,
-        getCurrentTextblockBounds(view.state).to,
-        'insert'
-      )
-    case 'p':
-      return pasteClipboardText(view, 'after', tools)
-    case 'P':
-      return pasteClipboardText(view, 'before', tools)
-    case 'u':
-      undo(view.state, (transaction) => view.dispatch(transaction), view)
-      return true
-    default:
-      return key.length === 1
-  }
+  })()
+
+  return finishVimKey(event, key, handled)
 }
 
 function handleVisualModeKey(
@@ -1120,8 +1305,6 @@ function handleVisualModeKey(
     return false
   }
 
-  event.preventDefault()
-
   if (key !== 'j' && key !== 'k') {
     resetPreferredColumn(view)
   }
@@ -1129,59 +1312,69 @@ function handleVisualModeKey(
   if (vimState.pendingCommand?.kind === 'prefix' && vimState.pendingCommand.key === 'g') {
     if (key === 'g') {
       const anchor = vimState.visualAnchor ?? view.state.selection.from
-      return setVisualSelection(view, mode, anchor, firstTextPosition(view.state))
+      return finishVimKey(
+        event,
+        key,
+        setVisualSelection(view, mode, anchor, firstTextPosition(view.state))
+      )
     }
 
     dispatchVimState(view, { pendingCommand: null })
-    return true
+    return finishVimKey(event, key, true)
   }
 
-  switch (key) {
-    case 'Escape':
-      return enterNormalMode(view, view.state.selection.from)
-    case 'i':
-      return enterInsertMode(view, view.state.selection.from)
-    case 'v':
-      return mode === 'visual'
-        ? enterNormalMode(view, view.state.selection.from)
-        : enterVisualMode(view, 'visual')
-    case 'V':
-      return mode === 'visualLine'
-        ? enterNormalMode(view, view.state.selection.from)
-        : enterVisualMode(view, 'visualLine')
-    case 'g':
-      dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
-      return true
-    case 'd':
-    case 'x':
-      return deleteSelectionAndEnterNormal(view)
-    case 'c':
-      return deleteSelectionAndEnterInsert(view)
-    case 'y':
-      return yankSelectionAndEnterNormal(view, tools)
-    default: {
-      const anchor = vimState.visualAnchor ?? view.state.selection.from
-      const head = vimState.visualHead ?? view.state.selection.to
-      const target = getMotionTarget(view, key, head)
-      if (typeof target !== 'number') {
-        return key.length === 1
-      }
+  const handled = (() => {
+    switch (key) {
+      case 'Escape':
+        return enterNormalMode(view, view.state.selection.from)
+      case 'i':
+        return enterInsertMode(view, view.state.selection.from)
+      case 'v':
+        return mode === 'visual'
+          ? enterNormalMode(view, view.state.selection.from)
+          : enterVisualMode(view, 'visual')
+      case 'V':
+        return mode === 'visualLine'
+          ? enterNormalMode(view, view.state.selection.from)
+          : enterVisualMode(view, 'visualLine')
+      case 'g':
+        dispatchVimState(view, { pendingCommand: { kind: 'prefix', key: 'g' } })
+        return true
+      case 'd':
+      case 'x':
+        return deleteSelectionAndEnterNormal(view)
+      case 'c':
+        return deleteSelectionAndEnterInsert(view)
+      case 'y':
+        return yankSelectionAndEnterNormal(view, tools)
+      case 'Enter':
+        return true
+      default: {
+        const anchor = vimState.visualAnchor ?? view.state.selection.from
+        const head = vimState.visualHead ?? view.state.selection.to
+        const target = getMotionTarget(view, key, head)
+        if (typeof target !== 'number') {
+          return false
+        }
 
-      const didSetSelection = setVisualSelection(view, mode, anchor, target)
-      if (!didSetSelection) {
-        return false
-      }
+        const didSetSelection = setVisualSelection(view, mode, anchor, target)
+        if (!didSetSelection) {
+          return false
+        }
 
-      if (key === 'j' || key === 'k') {
-        dispatchVimState(view, {
-          preferredColumnOffset: resolvePreferredColumnOffset(view.state, head),
-          preferredColumnAnchorPos: target
-        })
-      }
+        if (key === 'j' || key === 'k') {
+          dispatchVimState(view, {
+            preferredColumnOffset: resolvePreferredColumnOffset(view.state, head),
+            preferredColumnAnchorPos: target
+          })
+        }
 
-      return true
+        return true
+      }
     }
-  }
+  })()
+
+  return finishVimKey(event, key, handled)
 }
 
 function createBlockCursorWidget(): HTMLSpanElement {
@@ -1444,7 +1637,7 @@ export function createNoteVimModePlugin({
           !event.metaKey &&
           !event.ctrlKey &&
           !event.altKey &&
-          isPrintableMappingInput(event.key)
+          isPrintableVimKey(event.key)
         ) {
           const mode = vimState.mode
           const mappings = getMappingsForMode(getKeyMappings?.(), mode)
@@ -1491,6 +1684,7 @@ export function createNoteVimModePlugin({
 }
 
 export const __noteVimModeTestUtils = {
+  getLogicalLineBounds,
   buildTextIndex,
   textIndexAtPos,
   resolveInsertModeExitPos,

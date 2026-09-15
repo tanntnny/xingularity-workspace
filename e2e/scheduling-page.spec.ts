@@ -54,6 +54,46 @@ async function createFixtureVault(): Promise<string> {
   return rootPath
 }
 
+async function createAutoApplyFixtureVault(): Promise<string> {
+  const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-auto-apply-e2e-vault-'))
+  const now = new Date().toISOString()
+
+  await Promise.all([
+    fs.mkdir(path.join(rootPath, 'notebooks'), { recursive: true }),
+    fs.mkdir(path.join(rootPath, 'attachments'), { recursive: true }),
+    fs.mkdir(path.join(rootPath, 'schedules'), { recursive: true })
+  ])
+  await fs.writeFile(
+    path.join(rootPath, 'schedules', 'jobs.json'),
+    JSON.stringify(
+      [
+        {
+          id: 'job-auto-apply',
+          name: 'Auto apply automation',
+          enabled: false,
+          trigger: { type: 'manual' },
+          runtime: 'javascript',
+          code: `beacon.emit({
+  type: 'task.create',
+  title: 'Auto-applied scheduling task',
+  automationSource: 'scheduling-e2e',
+  automationSourceKey: 'auto-apply-task'
+})`,
+          permissions: ['createTasks'],
+          outputMode: 'review_before_apply',
+          createdAt: now,
+          updatedAt: now
+        }
+      ],
+      null,
+      2
+    ),
+    'utf8'
+  )
+
+  return rootPath
+}
+
 async function launchWithFixture(vaultRoot: string): Promise<{
   electronApp: ElectronApplication
   page: Page
@@ -154,6 +194,49 @@ test('keeps a long automation properties panel in the shared scrollport', async 
     await expect
       .poll(() => panelStack.evaluate((element) => element.scrollHeight > element.clientHeight))
       .toBe(true)
+  } finally {
+    await electronApp.close()
+    await fs.rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test('saves and executes an automation in auto-apply mode', async () => {
+  const rootPath = await createAutoApplyFixtureVault()
+  const { electronApp, page } = await launchWithFixture(rootPath)
+
+  try {
+    await page.getByTestId('sidebar-page:schedules').click()
+    await page.getByTestId('scheduling-job:job-auto-apply').click()
+
+    const outputMode = page.getByTestId('scheduling-output-mode')
+    await outputMode.click()
+    const autoApplyOption = page.getByRole('option', { name: 'auto_apply' })
+    await expect(autoApplyOption).toBeVisible()
+    await autoApplyOption.click()
+    await expect(outputMode).toContainText('Auto apply')
+
+    await page.getByTestId('scheduling-topbar-save').click()
+    await expect
+      .poll(async () => {
+        const jobs = await page.evaluate(() => window.vaultApi.schedules.listJobs())
+        return jobs.find((job) => job.id === 'job-auto-apply')?.outputMode
+      })
+      .toBe('auto_apply')
+
+    await page.getByTestId('scheduling-topbar-run').click()
+    await expect
+      .poll(async () => {
+        const runs = await page.evaluate(() => window.vaultApi.schedules.listRuns('job-auto-apply'))
+        return runs[0]?.status
+      })
+      .toBe('success')
+
+    await expect
+      .poll(async () => {
+        const settings = await page.evaluate(() => window.vaultApi.settings.get())
+        return settings.calendarTasks.find((task) => task.automationSourceKey === 'auto-apply-task')
+      })
+      .toMatchObject({ title: 'Auto-applied scheduling task' })
   } finally {
     await electronApp.close()
     await fs.rm(rootPath, { recursive: true, force: true })

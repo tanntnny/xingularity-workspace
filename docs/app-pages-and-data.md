@@ -66,6 +66,7 @@ Main app-managed domains:
 - schedule jobs and run records
 - agent chat sessions
 - agent run history
+- sticky note board state
 
 All app-managed vault data uses standalone root-level files, except notebook content which stays under `notebooks/`.
 
@@ -99,6 +100,7 @@ Key fields:
 - `projectIcons`: icon overrides keyed by project id
 - `projects`: persisted project collection
 - `gridBoard`: saved spatial board state
+- `stickyNoteBoard`: standalone desktop-only notes canvas with viewport, note text, colors, positions, sizes, and z-order
 
 ### `AppSettingsUpdate`
 
@@ -449,6 +451,27 @@ Board item kinds:
 - `textAlign`
 - `color`
 
+## Sticky Note Domain Models
+
+### `StickyNoteBoardState`
+
+- `viewport`
+- `notes`
+
+### `StickyNoteItem`
+
+- `id`
+- `text`
+- `color`
+- `position`
+- `size`
+- `zIndex`
+
+Sticky Note is a standalone desktop-only notes canvas under Inbox. It persists
+through `AppSettings.stickyNoteBoard`, uses the shared React Flow dependency for
+pan/zoom, free dragging, and resize handles, and uses a fixed 24px note font
+size with medium (500) weight rather than storing typography settings per note.
+
 ## Search And Knowledge Models
 
 ### `SearchResult`
@@ -693,6 +716,13 @@ Reads and mutates:
 
 - `GridBoardState`
 - note and project references used by board items
+
+### Sticky Note
+
+Reads and mutates:
+
+- `StickyNoteBoardState`
+- standalone sticky note text, color, position, size, z-order, and viewport
 
 ### Calendar
 

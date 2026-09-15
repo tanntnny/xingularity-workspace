@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEmptyNotebookWorkspaceSession,
-  createEmptyWorkspaceTabSession,
   getNextActiveWorkspaceTabId,
+  remapWorkspaceTabNoteScrollPositions,
   remapNotebookWorkspaceSessionPaths,
-  remapWorkspaceTabSessionPaths,
-  removeNotebookWorkspaceSessionPaths
+  removeNotebookWorkspaceSessionPaths,
+  removeWorkspaceTabNoteScrollPositions,
+  type WorkspaceTabNoteScrollPositions
 } from '../src/renderer/src/lib/workspaceTabs'
 
 describe('getNextActiveWorkspaceTabId', () => {
@@ -36,7 +37,8 @@ describe('NotebookWorkspaceSession', () => {
       searchQuery: '',
       searchResults: [],
       selectedNoteTreeEntries: [],
-      noteEditorSessions: {}
+      noteEditorSessions: {},
+      noteEditorBaselines: {}
     })
   })
 
@@ -59,6 +61,10 @@ describe('NotebookWorkspaceSession', () => {
       }
     ]
     session.noteEditorSessions['archive/alpha.md'] = { content: 'Alpha', tags: [] }
+    session.noteEditorBaselines['archive/alpha.md'] = {
+      fingerprint: 'alpha-baseline',
+      revision: 'revision-1'
+    }
 
     remapNotebookWorkspaceSessionPaths(session, 'archive', 'work')
 
@@ -68,6 +74,10 @@ describe('NotebookWorkspaceSession', () => {
     expect(session.selectedNoteTreeEntries).toEqual([{ kind: 'folder', relPath: 'work' }])
     expect(session.searchResults[0]?.relPath).toBe('work/alpha.md')
     expect(session.noteEditorSessions['work/alpha.md']).toEqual({ content: 'Alpha', tags: [] })
+    expect(session.noteEditorBaselines['work/alpha.md']).toEqual({
+      fingerprint: 'alpha-baseline',
+      revision: 'revision-1'
+    })
   })
 
   it('removes deleted paths without affecting unrelated notebook state', () => {
@@ -77,6 +87,14 @@ describe('NotebookWorkspaceSession', () => {
     session.currentNoteContent = 'draft'
     session.noteEditorSessions['archive/alpha.md'] = { content: 'draft', tags: [] }
     session.noteEditorSessions['beta.md'] = { content: 'beta', tags: [] }
+    session.noteEditorBaselines['archive/alpha.md'] = {
+      fingerprint: 'draft-baseline',
+      revision: 'revision-1'
+    }
+    session.noteEditorBaselines['beta.md'] = {
+      fingerprint: 'beta-baseline',
+      revision: 'revision-2'
+    }
     session.selectedNoteTreeEntries = [
       { kind: 'note', relPath: 'archive/alpha.md' },
       { kind: 'note', relPath: 'beta.md' }
@@ -90,59 +108,55 @@ describe('NotebookWorkspaceSession', () => {
     expect(session.noteEditorSessions).toEqual({
       'beta.md': { content: 'beta', tags: [] }
     })
+    expect(session.noteEditorBaselines).toEqual({
+      'beta.md': { fingerprint: 'beta-baseline', revision: 'revision-2' }
+    })
     expect(session.selectedNoteTreeEntries).toEqual([{ kind: 'note', relPath: 'beta.md' }])
   })
 })
 
-describe('WorkspaceTabSession', () => {
-  it('starts with isolated defaults for page work state', () => {
-    const first = createEmptyWorkspaceTabSession()
-    const second = createEmptyWorkspaceTabSession()
-
-    first.captureDraft = 'first draft'
-    first.taskViewState.filters = { searchQuery: 'first' }
-    first.calendarTaskTagSettings.push('first-tag')
-    first.subscriptions.draft.tags.push('first-tag')
-
-    expect(second.captureDraft).toBe('')
-    expect(second.taskViewState.filters).toEqual({})
-    expect(second.calendarTaskTagSettings).toEqual([])
-    expect(second.subscriptions.draft.tags).toEqual([])
-    expect(first.calendarHeaderNewTask).toBe('')
-    expect(first.calendarViewMode).toBe('month')
-    expect(first.schedulingView).toBe('list')
-  })
-
-  it('accepts session-specific defaults without sharing mutable values', () => {
-    const session = createEmptyWorkspaceTabSession({
-      calendarDate: '2025-05-12',
-      calendarViewMode: 'week',
-      calendarContentFilter: 'projectTasks',
-      calendarTaskTagSettings: ['important']
-    })
-
-    session.calendarTaskTagSettings.push('later')
-
-    expect(session.calendarDate).toBe('2025-05-12')
-    expect(session.calendarViewMode).toBe('week')
-    expect(session.calendarContentFilter).toBe('projectTasks')
-    expect(session.calendarTaskTagSettings).toEqual(['important', 'later'])
-  })
-
-  it('remaps drawing scene state alongside notebook paths', () => {
-    const session = createEmptyWorkspaceTabSession()
-    session.excalidrawScenes['archive/diagram.excalidraw'] = {
-      type: 'excalidraw',
-      version: 2,
-      source: 'test',
-      elements: [],
-      appState: {},
-      files: {}
+describe('WorkspaceTabNoteScrollPositions', () => {
+  it('remaps note paths independently in every workspace tab', () => {
+    const positions: WorkspaceTabNoteScrollPositions = {
+      'workspace-tab-1': {
+        'archive/alpha.md': 120,
+        'beta.md': 40
+      },
+      'workspace-tab-2': {
+        'archive/alpha.md': 360
+      }
     }
 
-    remapWorkspaceTabSessionPaths(session, 'archive', 'work')
+    remapWorkspaceTabNoteScrollPositions(positions, 'archive', 'work')
 
-    expect(session.excalidrawScenes['work/diagram.excalidraw']).toBeDefined()
-    expect(session.excalidrawScenes['archive/diagram.excalidraw']).toBeUndefined()
+    expect(positions).toEqual({
+      'workspace-tab-1': {
+        'work/alpha.md': 120,
+        'beta.md': 40
+      },
+      'workspace-tab-2': {
+        'work/alpha.md': 360
+      }
+    })
+  })
+
+  it('removes deleted note paths without affecting other tab positions', () => {
+    const positions: WorkspaceTabNoteScrollPositions = {
+      'workspace-tab-1': {
+        'archive/alpha.md': 120,
+        'beta.md': 40
+      },
+      'workspace-tab-2': {
+        'archive/nested/gamma.md': 360
+      }
+    }
+
+    removeWorkspaceTabNoteScrollPositions(positions, ['archive'])
+
+    expect(positions).toEqual({
+      'workspace-tab-1': {
+        'beta.md': 40
+      }
+    })
   })
 })

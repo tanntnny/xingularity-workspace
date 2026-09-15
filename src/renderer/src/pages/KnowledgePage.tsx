@@ -12,19 +12,18 @@ import {
   type KnowledgeEntityKind
 } from '../lib/knowledgeGraph'
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
-import type { WorkspaceViewport } from '../lib/workspaceTabs'
+import { getWorkspaceOpenOptions, isMiddleMouseButton, isModifiedNotebookOpen } from '../lib/notebookOpen'
+import type { WorkspaceOpenOptions } from '../lib/workspaceOpen'
 
 interface KnowledgePageProps {
   notes: NoteListItem[]
-  onOpenNote: (relPath: string) => void
+  onOpenNote: (relPath: string, options?: { openInNewTab?: boolean }) => void
   projects?: Project[]
   tasks?: CalendarTask[]
   resources?: ResourceRef[]
-  onOpenEntity?: (kind: KnowledgeEntityKind, id: string) => void
+  onOpenEntity?: (kind: KnowledgeEntityKind, id: string, options?: WorkspaceOpenOptions) => void
   orphanRingRadiusPx?: number | null
   showOrphans?: boolean
-  initialViewport?: WorkspaceViewport | null
-  onViewportChange?: (viewport: WorkspaceViewport) => void
 }
 
 interface GraphNodeDatum extends SimulationNodeDatum {
@@ -56,9 +55,7 @@ export function KnowledgePage({
   resources = [],
   onOpenEntity,
   orphanRingRadiusPx = null,
-  showOrphans = true,
-  initialViewport = null,
-  onViewportChange
+  showOrphans = true
 }: KnowledgePageProps): ReactElement {
   return (
     <ReactFlowProvider>
@@ -71,8 +68,6 @@ export function KnowledgePage({
         onOpenEntity={onOpenEntity}
         orphanRingRadiusPx={orphanRingRadiusPx}
         showOrphans={showOrphans}
-        initialViewport={initialViewport}
-        onViewportChange={onViewportChange}
       />
     </ReactFlowProvider>
   )
@@ -86,9 +81,7 @@ function KnowledgeCanvas({
   resources = [],
   onOpenEntity,
   orphanRingRadiusPx = null,
-  showOrphans = true,
-  initialViewport = null,
-  onViewportChange
+  showOrphans = true
 }: KnowledgePageProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -189,11 +182,29 @@ function KnowledgeCanvas({
       .attr('fill-opacity', (node) => (node.isOrphan ? 0.72 : 0.92))
       .style('cursor', 'pointer')
       .style('pointer-events', 'all')
-      .on('click', (_event, node) => {
+      .on('click', (event, node) => {
         if (node.kind && node.entityId) {
-          onOpenEntity?.(node.kind, node.entityId)
+          onOpenEntity?.(node.kind, node.entityId, getWorkspaceOpenOptions(event))
         } else {
-          onOpenNote(node.relPath)
+          const openInNewTab = isModifiedNotebookOpen(event)
+          if (openInNewTab) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+          onOpenNote(node.relPath, { openInNewTab })
+        }
+      })
+      .on('auxclick', (event, node) => {
+        if (!isMiddleMouseButton(event)) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        if (node.kind && node.entityId) {
+          onOpenEntity?.(node.kind, node.entityId, { openInNewTab: true })
+        } else {
+          onOpenNote(node.relPath, { openInNewTab: true })
         }
       })
 
@@ -308,7 +319,6 @@ function KnowledgeCanvas({
         nodes={[]}
         edges={[]}
         fitView={false}
-        defaultViewport={initialViewport ?? undefined}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -316,7 +326,6 @@ function KnowledgeCanvas({
         zoomOnScroll
         panOnScroll
         panOnDrag
-        onMoveEnd={(_event, viewport) => onViewportChange?.(viewport)}
         proOptions={{ hideAttribution: true }}
       />
       {hasGraphNodes ? (

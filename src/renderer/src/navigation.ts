@@ -1,5 +1,6 @@
 export type AppPage =
   | 'capture'
+  | 'stickyNote'
   | 'knowledge'
   | 'notes'
   | 'projects'
@@ -14,6 +15,7 @@ export type AppPage =
 
 export const ALL_APP_PAGES: AppPage[] = [
   'capture',
+  'stickyNote',
   'knowledge',
   'notes',
   'projects',

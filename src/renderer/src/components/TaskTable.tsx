@@ -21,6 +21,8 @@ import { StatusChip } from './ui/status-chip'
 import { TableRowList, type TableRowListColumn } from './ui/table-row-list'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import type { TableSortState } from '../lib/tableSort'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { getWorkspaceOpenOptions } from '../lib/workspaceOpen'
 
 export const TASK_TABLE_SORTABLE_COLUMNS = [
   'name',
@@ -39,7 +41,7 @@ export interface TaskTableProps {
   groupBy: TaskGroupBy
   sortState: TableSortState | null
   onSortChange: (sortState: TableSortState) => void
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
 }
 
@@ -63,7 +65,15 @@ export function TaskTable({
           variant="ghost"
           onClick={(event) => {
             event.stopPropagation()
-            onOpenTask(row.task.id)
+            onOpenTask(row.task.id, getWorkspaceOpenOptions(event))
+          }}
+          onAuxClick={(event) => {
+            if (event.button !== 1) {
+              return
+            }
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenTask(row.task.id, { openInNewTab: true })
           }}
           className="h-auto max-w-full justify-start rounded-none px-0 text-left font-semibold text-foreground hover:bg-transparent hover:text-foreground"
           aria-label={`Open task: ${row.task.title}`}
@@ -235,7 +245,15 @@ export function TaskTable({
       getRowProps={(row) => ({
         'data-testid': `task-row:${row.task.id}`,
         className: 'group',
-        onClick: () => onOpenTask(row.task.id)
+        onClick: (event) => onOpenTask(row.task.id, getWorkspaceOpenOptions(event)),
+        onAuxClick: (event) => {
+          if (event.button !== 1) {
+            return
+          }
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenTask(row.task.id, { openInNewTab: true })
+        }
       })}
     />
   )

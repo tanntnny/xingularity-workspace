@@ -35,6 +35,8 @@ import { normalizeRecentPageTargets, type RecentPageTarget } from '../shared/rec
 import { migrateProjectResources, normalizeResourceRef } from '../shared/resourceDomain'
 import { DEFAULT_CODE_FONT_ID, normalizeCodeFontId } from '../shared/fontCatalog'
 import { normalizeFolderColors } from '../shared/folderColors'
+import { createDefaultStickyNoteBoard, normalizeStickyNoteBoard } from '../shared/stickyNotes'
+import { withWorkspaceMutationLock } from './workspaceMutationLock'
 
 interface GlobalSettings {
   lastVaultPath: string | null
@@ -202,6 +204,7 @@ export function createDefaultAppSettings(): AppSettings {
       },
       items: []
     },
+    stickyNoteBoard: createDefaultStickyNoteBoard(),
     featureFlags: {
       resources: true,
       filesystemResources: true,
@@ -218,6 +221,7 @@ export function createDefaultAppSettings(): AppSettings {
 function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
   const defaults = createDefaultAppSettings()
   const parsedGridBoard = parsed.gridBoard
+  const parsedStickyNoteBoard = parsed.stickyNoteBoard
   const sanitizedParsed = { ...(parsed as Partial<AppSettings> & Record<string, unknown>) }
   delete sanitizedParsed.performanceModeEnabled
   delete sanitizedParsed.workspaceVibrancyEnabled
@@ -348,6 +352,10 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
             })
           }
         : defaults.gridBoard,
+    stickyNoteBoard:
+      parsedStickyNoteBoard === undefined
+        ? defaults.stickyNoteBoard
+        : normalizeStickyNoteBoard(parsedStickyNoteBoard),
     lastVaultPath: parsed.lastVaultPath ?? defaults.lastVaultPath,
     lastOpenedNotePath: parsed.lastOpenedNotePath ?? defaults.lastOpenedNotePath,
     recentNotebookPaths: normalizeRecentNotebookPaths(parsed.recentNotebookPaths),
@@ -792,6 +800,10 @@ function hasMaterialCoreSettingsData(settings: VaultCoreSettings | null): boolea
     return true
   }
 
+  if (Array.isArray(settings.stickyNoteBoard?.notes) && settings.stickyNoteBoard.notes.length > 0) {
+    return true
+  }
+
   if (settings.folderColors && Object.keys(settings.folderColors).length > 0) {
     return true
   }
@@ -845,9 +857,11 @@ function resolveLegacyTasksData(
 
 export class SettingsStore {
   private readonly globalSettingsPath: string
+  private readonly lockWaitMs: number
 
-  constructor() {
+  constructor(options: { lockWaitMs?: number } = {}) {
     this.globalSettingsPath = path.join(app.getPath('userData'), 'settings.json')
+    this.lockWaitMs = options.lockWaitMs ?? 5_000
   }
 
   // ── Global settings (last opened vault) ───────────────────────────────────
@@ -1011,21 +1025,27 @@ export class SettingsStore {
   }
 
   async updateVault(vaultRoot: string, next: AppSettingsUpdate): Promise<AppSettings> {
-    const current = await this.readVault(vaultRoot)
-    const nextTasks = next.tasks ?? next.calendarTasks
-    const merged = normalizeSettings({
-      ...current,
-      ...next,
-      ...(nextTasks ? { tasks: nextTasks, calendarTasks: nextTasks } : {}),
-      profile: next.profile ? { ...current.profile, ...next.profile } : current.profile,
-      featureFlags: next.featureFlags
-        ? { ...current.featureFlags, ...next.featureFlags }
-        : current.featureFlags,
-      ai: {},
-      lastVaultPath: vaultRoot
-    })
-    await this.persistVaultUpdate(vaultRoot, merged, next)
-    return merged
+    return withWorkspaceMutationLock(
+      vaultRoot,
+      async () => {
+        const current = await this.readVault(vaultRoot)
+        const nextTasks = next.tasks ?? next.calendarTasks
+        const merged = normalizeSettings({
+          ...current,
+          ...next,
+          ...(nextTasks ? { tasks: nextTasks, calendarTasks: nextTasks } : {}),
+          profile: next.profile ? { ...current.profile, ...next.profile } : current.profile,
+          featureFlags: next.featureFlags
+            ? { ...current.featureFlags, ...next.featureFlags }
+            : current.featureFlags,
+          ai: {},
+          lastVaultPath: vaultRoot
+        })
+        await this.persistVaultUpdate(vaultRoot, merged, next)
+        return merged
+      },
+      { waitMs: this.lockWaitMs }
+    )
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1101,7 +1121,8 @@ export class SettingsStore {
       workspaceViews: settings.workspaceViews,
       folderColors: settings.folderColors,
       featureFlags: settings.featureFlags,
-      gridBoard: settings.gridBoard
+      gridBoard: settings.gridBoard,
+      stickyNoteBoard: settings.stickyNoteBoard
     }
     await this.writeJsonFile(getVaultSettingsPath(vaultRoot), coreSettings)
   }

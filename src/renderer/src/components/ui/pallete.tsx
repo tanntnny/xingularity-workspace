@@ -6,7 +6,7 @@ import { Search } from './icons'
 import { cn } from '../../lib/utils'
 
 export const palleteInputClassName =
-  'flex h-10 w-full rounded-[var(--radius-control)] bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-8 w-full rounded-[var(--radius-control)] bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
 
 type PalleteProps = DialogProps &
   Omit<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>, 'children'> & {
@@ -47,7 +47,7 @@ const Pallete = ({
 
 const PalleteSearchBar = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
-    <div ref={ref} className={cn('flex items-center border-b px-3', className)} {...props}>
+    <div ref={ref} className={cn('flex items-center border-b px-3 pb-2', className)} {...props}>
       <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
       {children}
     </div>

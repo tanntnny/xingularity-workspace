@@ -14,7 +14,7 @@ interface ProjectPulsePageProps {
   notes: NoteListItem[]
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
-  onOpenNoteLink: (target: string) => void
+  onOpenNoteLink: (target: string, options?: { openInNewTab?: boolean }) => void
   onCreateUpdate: (input: { markdown: string; status: ProjectUpdateStatus }) => Promise<void>
   onUpdateUpdate: (
     updateId: string,

@@ -41,11 +41,12 @@ import {
 } from './ui'
 import { NoteShapeIcon } from './NoteShapeIcon'
 import { Shortcut, type ShortcutKey } from './ui/kbd'
+import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
 import appLogo from '../../../../assets/logo.png'
 
 interface AppSidebarProps {
   activePage: AppPage
-  onChange: (page: AppPage) => void
+  onChange: (page: AppPage, options?: WorkspaceOpenOptions) => void
   onOpenSearchPalette: () => void
   onOpenVaultManager: () => void
   onSidebarInteract?: () => void
@@ -61,13 +62,13 @@ interface AppSidebarProps {
   macosTrafficLightInset?: boolean
   workspaceViews?: readonly WorkspaceView[]
   activeWorkspaceViewId?: string | null
-  onOpenWorkspaceView?: (viewId: string) => void
+  onOpenWorkspaceView?: (viewId: string, options?: WorkspaceOpenOptions) => void
   onCreateWorkspaceView?: (source: WorkspaceViewSource) => void
   onDeleteWorkspaceView?: (viewId: string) => void
   resourceViewsEnabled?: boolean
   recentPages?: readonly SidebarRecentPage[]
   activeRecentPageId?: string | null
-  onOpenRecentPage?: (pageId: string) => void
+  onOpenRecentPage?: (pageId: string, options?: WorkspaceOpenOptions) => void
 }
 
 type SidebarPageItem = {
@@ -98,7 +99,10 @@ const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   {
     id: 'inbox',
     label: 'Inbox',
-    items: [{ id: 'capture', label: 'Capture', icon: APP_PAGE_ICONS.capture }]
+    items: [
+      { id: 'capture', label: 'Capture', icon: APP_PAGE_ICONS.capture },
+      { id: 'stickyNote', label: 'Sticky Note', icon: APP_PAGE_ICONS.stickyNote }
+    ]
   },
   {
     id: 'workspace',
@@ -210,7 +214,23 @@ export function AppSidebar({
       <SidebarMenuItem key={page.id}>
         <SidebarMenuButton
           isActive={activePage === page.id && activeWorkspaceViewSource !== page.id}
-          onClick={disabled ? undefined : () => onChange(page.id)}
+          onClick={
+            disabled
+              ? undefined
+              : (event) => onChange(page.id, getWorkspaceOpenOptions(event))
+          }
+          onAuxClick={
+            disabled
+              ? undefined
+              : (event) => {
+                  if (event.button !== 1) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onChange(page.id, { openInNewTab: true })
+                }
+          }
           disabled={disabled}
           tooltip={page.label}
           aria-label={page.label}
@@ -239,7 +259,23 @@ export function AppSidebar({
         <SidebarMenuButton
           isActive={activeRecentPageId === page.id}
           labelOverflow="fade"
-          onClick={disabled ? undefined : () => onOpenRecentPage?.(page.id)}
+          onClick={
+            disabled
+              ? undefined
+              : (event) => onOpenRecentPage?.(page.id, getWorkspaceOpenOptions(event))
+          }
+          onAuxClick={
+            disabled
+              ? undefined
+              : (event) => {
+                  if (event.button !== 1) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onOpenRecentPage?.(page.id, { openInNewTab: true })
+                }
+          }
           disabled={disabled}
           tooltip={page.label}
           aria-label={page.label}
@@ -262,7 +298,23 @@ export function AppSidebar({
         <SidebarMenuButton
           isActive={activeWorkspaceViewId === view.id}
           labelOverflow="fade"
-          onClick={disabled ? undefined : () => onOpenWorkspaceView?.(view.id)}
+          onClick={
+            disabled
+              ? undefined
+              : (event) => onOpenWorkspaceView?.(view.id, getWorkspaceOpenOptions(event))
+          }
+          onAuxClick={
+            disabled
+              ? undefined
+              : (event) => {
+                  if (event.button !== 1) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onOpenWorkspaceView?.(view.id, { openInNewTab: true })
+                }
+          }
           disabled={disabled}
           tooltip={view.name}
           aria-label={view.name}

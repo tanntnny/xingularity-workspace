@@ -15,6 +15,7 @@ export function getAvailablePages(platform: AppPlatform): AppPage[] {
   if (platform.kind === 'desktop') {
     return [
       'capture',
+      'stickyNote',
       'knowledge',
       'notes',
       'projects',

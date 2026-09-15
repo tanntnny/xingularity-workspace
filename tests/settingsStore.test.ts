@@ -117,6 +117,32 @@ describe('SettingsStore', () => {
     )
   })
 
+  it('round-trips the standalone sticky note board in the vault core settings file', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const store = new SettingsStore()
+    const stickyNoteBoard = {
+      viewport: { x: 24, y: -12, zoom: 1.25 },
+      notes: [
+        {
+          id: 'sticky-note-1',
+          text: 'Planning',
+          color: 'yellow' as const,
+          position: { x: 80, y: 120 },
+          size: { width: 260, height: 220 },
+          zIndex: 1
+        }
+      ]
+    }
+
+    const updated = await store.updateVault(root, { stickyNoteBoard })
+
+    expect(updated.stickyNoteBoard).toEqual(stickyNoteBoard)
+    await expect(store.readVault(root)).resolves.toEqual(expect.objectContaining({ stickyNoteBoard }))
+    await expect(fs.readFile(path.join(root, 'settings.json'), 'utf-8')).resolves.toContain(
+      '"stickyNoteBoard"'
+    )
+  })
+
   it('migrates legacy vault settings files into root-level canonical paths', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const legacyDir = path.join(root, '.xingularity')

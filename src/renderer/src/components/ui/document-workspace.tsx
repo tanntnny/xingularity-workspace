@@ -176,7 +176,19 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                   data-active={tab.id === activeTabId ? 'true' : 'false'}
                   data-has-shortcut={tab.shortcut ? 'true' : 'false'}
                   data-toggle-group-indicator-target="true"
-                  className="workspace-tab-card group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 items-center overflow-hidden rounded-sm bg-workspace data-[active=true]:bg-transparent"
+                  data-testid={`workspace-tab-card:${tab.id}`}
+                  className="workspace-tab-card group app-no-drag relative z-10 flex h-[var(--workspace-tab-control-height)] w-52 shrink-0 cursor-pointer items-center overflow-hidden rounded-sm bg-workspace data-[active=true]:bg-transparent"
+                  onClick={(event) => {
+                    const target = event.target
+                    if (
+                      target instanceof Element &&
+                      target.closest('[role="tab"], [data-workspace-tab-close="true"]')
+                    ) {
+                      return
+                    }
+
+                    onSelectTab(tab.id)
+                  }}
                   onAuxClick={(event) => {
                     if (event.button !== 1) {
                       return
@@ -192,11 +204,11 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     id={`workspace-tab:${tab.id}`}
                     aria-label={tab.label}
                     title={tab.label}
-                    tooltipWrapperClassName="min-w-0 flex-1"
+                    tooltipWrapperClassName="min-w-0 w-full flex-1"
                     aria-selected={tab.id === activeTabId}
                     role="tab"
                     data-testid={`workspace-tab:${tab.id}`}
-                    className="workspace-tab-trigger relative h-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-semibold text-muted-foreground transition-none hover:bg-surface-subtle-hover hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
+                    className="workspace-tab-trigger relative h-full w-full min-w-0 flex-1 justify-start rounded-none border-0 px-2 text-left text-xs font-semibold text-muted-foreground transition-none hover:bg-surface-subtle-hover hover:text-foreground data-[state=on]:border-0 data-[state=on]:bg-transparent data-[state=on]:text-foreground"
                   >
                     {tab.icon ? (
                       <span
@@ -227,6 +239,7 @@ const WorkspaceTabManager = React.forwardRef<HTMLElement, WorkspaceTabManagerPro
                     aria-label={`Close ${tab.label} tab`}
                     title={`Close ${tab.label} tab`}
                     data-testid={`workspace-tab-close:${tab.id}`}
+                    data-workspace-tab-close="true"
                     borderless
                     className="workspace-tab-close-overlay absolute right-0 top-0 z-20 h-[var(--workspace-tab-control-height)] w-[var(--workspace-tab-control-height)] rounded-[var(--radius-button-pill)] opacity-0 transition-opacity motion-reduce:transition-none group-hover:opacity-100 group-focus-within:opacity-100 [&>svg]:size-3.5"
                     icon={<X size={14} aria-hidden="true" />}
@@ -469,7 +482,7 @@ const WorkspaceRightPanel = React.forwardRef<HTMLDivElement, WorkspaceRightPanel
       ref={ref}
       data-workspace-scrollport="true"
       className={cn(
-        'flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col gap-3 overflow-y-auto scrollbar-none',
+        'flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col gap-3 overflow-y-auto',
         className
       )}
       {...props}
@@ -917,7 +930,7 @@ const WorkspacePanelStack = React.forwardRef<HTMLDivElement, React.HTMLAttribute
       ref={ref}
       data-workspace-scrollport="true"
       className={cn(
-        'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto scrollbar-none',
+        'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto',
         className
       )}
       {...props}
@@ -1255,8 +1268,9 @@ const DocumentWorkspaceMainContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <main
     ref={ref}
+    data-workspace-scrollport="true"
     className={cn(
-      'document-workspace-main-content h-full min-h-0 min-w-0 w-full max-w-none flex-1 overflow-auto scrollbar-none px-2',
+      'document-workspace-main-content h-full min-h-0 min-w-0 w-full max-w-none flex-1 overflow-auto px-2',
       className
     )}
     {...props}
@@ -1270,7 +1284,7 @@ const DocumentWorkspacePanelContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex min-h-0 flex-1 flex-col overflow-hidden scrollbar-none', className)}
+    className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}
     {...props}
   />
 ))

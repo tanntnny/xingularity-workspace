@@ -13,6 +13,11 @@ import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
 import { buildNoteNativeMenuItems, getNoteMenuGroups } from '../lib/noteMenu'
 import { canUseNativeMenus, getMouseMenuPosition, showNativeMenu } from '../lib/nativeMenu'
+import {
+  isMiddleMouseButton,
+  isModifiedNotebookOpen,
+  type NotebookOpenOptions
+} from '../lib/notebookOpen'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 
 export type NoteFilterMode = 'all' | 'tagged' | 'untagged'
@@ -27,7 +32,7 @@ interface NotePreviewListProps {
   filterMode: NoteFilterMode
   sortField: NoteSortField
   sortDirection: NoteSortDirection
-  onOpen: (relPath: string) => void
+  onOpen: (relPath: string, options?: NotebookOpenOptions) => void
   onDelete: (relPath: string) => void
   onRename?: (relPath: string) => void
   onDuplicate?: (relPath: string) => void
@@ -184,7 +189,7 @@ function NoteSection({
   emptyLabel: string
   notes: NoteListItem[]
   selectedPath: string | null
-  onOpen: (relPath: string) => void
+  onOpen: (relPath: string, options?: NotebookOpenOptions) => void
   onDelete: (relPath: string) => void
   onRename?: (relPath: string) => void
   onDuplicate?: (relPath: string) => void
@@ -273,7 +278,25 @@ function NoteSection({
               data-active={isSelected}
               className={`${revealProps.className} rounded-lg border bg-card text-card-foreground h-auto items-start justify-start gap-2 px-3 py-2 text-left`}
               style={revealProps.style}
-              onClick={() => onOpen(note.relPath)}
+              onClick={(event) => {
+                if (isModifiedNotebookOpen(event)) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onOpen(note.relPath, { openInNewTab: true })
+                  return
+                }
+
+                onOpen(note.relPath)
+              }}
+              onAuxClick={(event) => {
+                if (!isMiddleMouseButton(event)) {
+                  return
+                }
+
+                event.preventDefault()
+                event.stopPropagation()
+                onOpen(note.relPath, { openInNewTab: true })
+              }}
               onContextMenu={
                 useNativeMenus ? (event) => void handleNativeContextMenu(event) : undefined
               }
@@ -290,7 +313,9 @@ function NoteSection({
                 <WorkspaceTextFade className="text-sm font-semibold">
                   {stripNoteExtension(note.name)}
                 </WorkspaceTextFade>
-                <WorkspaceTextFade className="text-xs text-muted-foreground">{note.relPath}</WorkspaceTextFade>
+                <WorkspaceTextFade className="text-xs text-muted-foreground">
+                  {note.relPath}
+                </WorkspaceTextFade>
                 <span className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
                   <Badge variant="neutral" tone="subtle">
                     <Pencil size={12} aria-hidden="true" />

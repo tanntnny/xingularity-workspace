@@ -21,6 +21,12 @@ import {
 } from '../shared/resourceDomain'
 import { ResourceStore } from './resourceStore'
 import type { ResourceStoreSnapshot } from './resourceStore'
+import { withWorkspaceMutationLock } from './workspaceMutationLock'
+
+export interface ResourceServiceOptions {
+  mutationLock?: boolean
+  lockWaitMs?: number
+}
 
 const TEXT_MIME_TYPES = new Set([
   'text/plain',
@@ -33,11 +39,17 @@ const TEXT_MIME_TYPES = new Set([
 const MAX_PREVIEW_BYTES = 200_000
 
 export class ResourceService {
+  private readonly vaultRoot: string
   private readonly deviceId = `mac-${os.hostname()}`
   private readonly store: ResourceStore
+  private readonly mutationLockEnabled: boolean
+  private readonly lockWaitMs: number
 
-  constructor(vaultRoot: string) {
+  constructor(vaultRoot: string, options: ResourceServiceOptions = {}) {
+    this.vaultRoot = path.resolve(vaultRoot)
     this.store = new ResourceStore(vaultRoot)
+    this.mutationLockEnabled = options.mutationLock ?? true
+    this.lockWaitMs = options.lockWaitMs ?? 5_000
   }
 
   list(): Promise<ResourceStoreSnapshot> {
@@ -47,10 +59,14 @@ export class ResourceService {
   async migrateProjects(
     projects: readonly Project[]
   ): Promise<import('../shared/resourceDomain').ResourceMigrationResult> {
-    return this.store.migrateProjects(projects)
+    return this.withMutationLock(() => this.store.migrateProjects(projects))
   }
 
   async add(input: ResourceInput): Promise<ResourceRef> {
+    return this.withMutationLock(() => this.addUnlocked(input))
+  }
+
+  private async addUnlocked(input: ResourceInput): Promise<ResourceRef> {
     const resource = normalizeResourceInput(input)
     if (resource.provider === 'filesystem') {
       const filePath = filePathFromUri(resource.canonicalUri)
@@ -107,6 +123,18 @@ export class ResourceService {
       projectIds?: string[]
     }
   ): Promise<ResourceRef> {
+    return this.withMutationLock(() => this.updateUnlocked(resourceId, input))
+  }
+
+  private async updateUnlocked(
+    resourceId: string,
+    input: {
+      canonicalUri?: string
+      title?: string
+      labels?: ResourceLabel[]
+      projectIds?: string[]
+    }
+  ): Promise<ResourceRef> {
     const snapshot = await this.store.read()
     const existing = snapshot.resources.find((resource) => resource.id === resourceId)
     if (!existing) throw new Error(`Resource not found: ${resourceId}`)
@@ -144,6 +172,10 @@ export class ResourceService {
   }
 
   async setProjectLinks(input: ResourceProjectLinksInput): Promise<ResourceRef> {
+    return this.withMutationLock(() => this.setProjectLinksUnlocked(input))
+  }
+
+  private async setProjectLinksUnlocked(input: ResourceProjectLinksInput): Promise<ResourceRef> {
     const snapshot = await this.store.read()
     const existing = snapshot.resources.find((resource) => resource.id === input.resourceId)
     if (!existing) throw new Error(`Resource not found: ${input.resourceId}`)
@@ -160,12 +192,12 @@ export class ResourceService {
 
     for (const projectId of relationIds) {
       if (projectIds.includes(projectId)) continue
-      await this.detachFromProject(projectId, input.resourceId)
+      await this.detachFromProjectUnlocked(projectId, input.resourceId)
     }
 
     for (const projectId of projectIds) {
       if (relationIds.has(projectId)) continue
-      await this.relate({
+      await this.relateUnlocked({
         type: 'project_contains_resource',
         fromId: projectId,
         fromKind: 'project',
@@ -178,6 +210,10 @@ export class ResourceService {
   }
 
   async refresh(resourceId: string): Promise<ResourceHealth> {
+    return this.withMutationLock(() => this.refreshUnlocked(resourceId))
+  }
+
+  private async refreshUnlocked(resourceId: string): Promise<ResourceHealth> {
     const snapshot = await this.store.read()
     const resource = snapshot.resources.find((candidate) => candidate.id === resourceId)
     if (!resource) throw new Error(`Resource not found: ${resourceId}`)
@@ -255,6 +291,10 @@ export class ResourceService {
   }
 
   async locate(resourceId: string, nextPath: string): Promise<ResourceRef> {
+    return this.withMutationLock(() => this.locateUnlocked(resourceId, nextPath))
+  }
+
+  private async locateUnlocked(resourceId: string, nextPath: string): Promise<ResourceRef> {
     const snapshot = await this.store.read()
     const existing = snapshot.resources.find((resource) => resource.id === resourceId)
     if (!existing) throw new Error(`Resource not found: ${resourceId}`)
@@ -344,6 +384,20 @@ export class ResourceService {
     toKind: string
     confidence?: ResourceRelation['confidence']
     createdBy?: ResourceRelation['createdBy']
+    note?: string
+  }): Promise<ResourceRelation> {
+    return this.withMutationLock(() => this.relateUnlocked(input))
+  }
+
+  private async relateUnlocked(input: {
+    type: ResourceRelationType
+    fromId: string
+    fromKind: string
+    toId: string
+    toKind: string
+    confidence?: ResourceRelation['confidence']
+    createdBy?: ResourceRelation['createdBy']
+    note?: string
   }): Promise<ResourceRelation> {
     const relation = await this.store.relate({
       ...input,
@@ -367,6 +421,10 @@ export class ResourceService {
   }
 
   async detachFromProject(projectId: string, resourceId: string): Promise<void> {
+    return this.withMutationLock(() => this.detachFromProjectUnlocked(projectId, resourceId))
+  }
+
+  private async detachFromProjectUnlocked(projectId: string, resourceId: string): Promise<void> {
     const snapshot = await this.store.read()
     const relationIds = snapshot.relations
       .filter(
@@ -390,7 +448,7 @@ export class ResourceService {
   }
 
   async remove(resourceId: string): Promise<void> {
-    await this.store.remove(resourceId)
+    return this.withMutationLock(() => this.store.remove(resourceId))
   }
 
   async contextForProject(
@@ -426,6 +484,13 @@ export class ResourceService {
       })),
       allowedActions: ['open', 'reveal', 'refresh', 'create-task', 'create-note']
     }
+  }
+
+  private withMutationLock<T>(action: () => Promise<T>): Promise<T> {
+    if (!this.mutationLockEnabled) return action()
+    return withWorkspaceMutationLock(this.vaultRoot, () => action(), {
+      waitMs: this.lockWaitMs
+    })
   }
 }
 

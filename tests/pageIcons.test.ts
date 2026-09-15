@@ -6,6 +6,7 @@ import { APP_PAGE_ICONS, VaultIcon } from '../src/renderer/src/lib/pageIcons'
 
 const expectedIconClasses: Record<AppPage, string> = {
   capture: 'mail',
+  stickyNote: 'palette-filled',
   knowledge: 'chart-dots-3',
   notes: 'files',
   projects: 'box',

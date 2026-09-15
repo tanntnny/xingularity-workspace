@@ -52,3 +52,46 @@ Stdout always contains one JSON envelope:
 Exit codes are stable: `0` success, `2` usage error, `3` validation or recovery issue, and `4` operational failure. Errors are returned in the same envelope instead of being printed as a second, non-JSON stream.
 
 The shared `$x-workspace` agent skill at `~/.xcodex/shared/skills/x-workspace` documents the trust and privacy rules for consuming this contract across repositories.
+
+## Standalone `x-workspace` CLI
+
+The standalone `x-workspace` executable is the agent-facing interface for one
+explicitly bound vault. It works while the desktop app is closed and shares the
+same canonical notes, projects, tasks, updates, meetings, resources, context,
+validation, and recovery boundaries. It does not replace the compatibility CLI
+above and it never accepts a vault root override.
+
+Install the repository executable after building it:
+
+```bash
+npm run build:cli
+npm install -g .
+```
+
+Bind exactly one vault:
+
+```bash
+x-workspace vault init "/path/to/new-vault" --confirm
+x-workspace vault set "/path/to/existing-vault" --confirm
+x-workspace vault current
+x-workspace vault status
+x-workspace vault reset --confirm
+```
+
+The binding is stored in the per-user OS configuration directory, not in the
+vault. A second vault is rejected until the current binding is explicitly
+reset.
+
+Mutating commands are preview-first. The preview returns a short-lived token;
+only the matching apply command commits it:
+
+```bash
+x-workspace project create --input '{"name":"Launch"}' --pretty
+x-workspace apply <approval-token>
+x-workspace project task create --input '{"projectId":"project-id","title":"Draft brief"}'
+x-workspace note search "launch review" --limit 20
+x-workspace context --project "project-id" --max-chars 16000
+```
+
+See [`docs/x-workspace-cli.md`](x-workspace-cli.md) for the complete command
+surface, result envelope, exit codes, concurrency behavior, and agent workflow.

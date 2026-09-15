@@ -18,6 +18,7 @@ import {
 } from '../lib/workspaceViewState'
 import { ResourcesPage, type ResourcesPageProps } from './ResourcesPage'
 import { TasksPage } from './TasksPage'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
 
 export type WorkspaceViewUpdate = {
   name?: string
@@ -29,7 +30,7 @@ export interface WorkspaceViewPageProps {
   view: WorkspaceView
   projects: Project[]
   tasks: CalendarTask[]
-  onOpenTask: (taskId: string) => void
+  onOpenTask: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
   onUpdateView: (update: WorkspaceViewUpdate) => void
   resourcePageProps: Omit<ResourcesPageProps, 'viewState' | 'onViewStateChange'>

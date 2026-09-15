@@ -29,6 +29,8 @@ import {
 import { getCalendarTaskHoverPosition } from '../lib/calendarTaskHoverPosition'
 import { useStaggeredScrollReveal } from '../hooks/useStaggeredScrollReveal'
 import { isDeleteShortcut } from '../lib/isDeleteShortcut'
+import type { TaskOpenOptions } from '../lib/taskOpenOptions'
+import { getWorkspaceOpenOptions } from '../lib/workspaceOpen'
 
 export interface UnscheduledTaskListProps {
   tasks: CalendarTask[]
@@ -38,7 +40,7 @@ export interface UnscheduledTaskListProps {
   selectedDate: string
   newTaskValue: string
   onNewTaskValueChange: (value: string) => void
-  onOpenTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
   onCopyTaskToSchedule?: (taskId: string, schedule: TaskScheduleOverride) => void | Promise<void>
   onDelete: (taskId: string) => void
@@ -244,9 +246,17 @@ export function UnscheduledTaskList({
                     onDragEnd={() => {
                       clearCalendarTaskDragSession()
                     }}
-                    onClick={() => {
+                    onClick={(event) => {
                       setHoveredTaskCard(null)
-                      onOpenTask?.(task.id)
+                      onOpenTask?.(task.id, getWorkspaceOpenOptions(event))
+                    }}
+                    onAuxClick={(event) => {
+                      if (event.button !== 1) {
+                        return
+                      }
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onOpenTask?.(task.id, { openInNewTab: true })
                     }}
                     onMouseMove={(event) => {
                       const { x, y } = getCalendarTaskHoverPosition(event.clientX, event.clientY)
