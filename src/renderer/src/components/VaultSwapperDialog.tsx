@@ -16,6 +16,7 @@ interface VaultSwapperDialogProps {
   vaultApi: RendererVaultApi | undefined
   activeVaultPath: string | null
   onOpenChange: (open: boolean) => void
+  onBeforeVaultChange: () => Promise<void>
   onVaultActivated: (result: VaultOpenResult, successMessage?: string) => Promise<void>
   onVaultClosed: () => void
   pushToast: (kind: 'info' | 'error' | 'success', message: string) => void
@@ -47,6 +48,7 @@ export function VaultSwapperDialog({
   vaultApi,
   activeVaultPath,
   onOpenChange,
+  onBeforeVaultChange,
   onVaultActivated,
   onVaultClosed,
   pushToast
@@ -111,6 +113,7 @@ export function VaultSwapperDialog({
 
       setBusyKey(mode)
       try {
+        await onBeforeVaultChange()
         const result = mode === 'open' ? await vaultApi.vault.open() : await vaultApi.vault.create()
         if (!result) {
           return
@@ -124,7 +127,7 @@ export function VaultSwapperDialog({
         setBusyKey(null)
       }
     },
-    [onOpenChange, onVaultActivated, pushToast, vaultApi]
+    [onBeforeVaultChange, onOpenChange, onVaultActivated, pushToast, vaultApi]
   )
 
   const handleSwitch = useCallback(
@@ -135,6 +138,7 @@ export function VaultSwapperDialog({
 
       setBusyKey(`switch:${rootPath}`)
       try {
+        await onBeforeVaultChange()
         const result = await vaultApi.vault.switchSaved(rootPath)
         await onVaultActivated(result, `Switched vault to ${result.info.rootPath}`)
         onOpenChange(false)
@@ -144,7 +148,7 @@ export function VaultSwapperDialog({
         setBusyKey(null)
       }
     },
-    [onOpenChange, onVaultActivated, pushToast, vaultApi]
+    [onBeforeVaultChange, onOpenChange, onVaultActivated, pushToast, vaultApi]
   )
 
   const handleRemove = async (rootPath: string): Promise<void> => {
@@ -154,6 +158,9 @@ export function VaultSwapperDialog({
 
     setBusyKey(`remove:${rootPath}`)
     try {
+      if (activeVaultPath === rootPath) {
+        await onBeforeVaultChange()
+      }
       const result = await vaultApi.vault.removeSaved(rootPath)
       if (result.activation) {
         await onVaultActivated(

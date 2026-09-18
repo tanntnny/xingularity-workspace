@@ -1,13 +1,18 @@
-import type { NoteListItem, Project } from '../../../shared/types'
+import type { NoteListItem, Project, ProjectIconStyle } from '../../../shared/types'
 import { stripNoteExtension } from '../../../shared/noteDocument'
+import {
+  createSearchTextIndex,
+  findSearchMatchRanges,
+  mergeSearchMatchRanges,
+  normalizeSearchText,
+  type SearchMatchRange,
+  type SearchTextIndex
+} from '../../../shared/searchText'
 import { getCommandPaletteFolderBreadcrumbs } from './commandPaletteNoteRows'
 
 export type CommandPaletteSearchMode = 'name' | 'body'
 
-export interface CommandPaletteMatchRange {
-  start: number
-  end: number
-}
+export type CommandPaletteMatchRange = SearchMatchRange
 
 export interface CommandPaletteSearchHighlights {
   title?: readonly CommandPaletteMatchRange[]
@@ -22,6 +27,7 @@ export interface CommandPaletteSearchResult {
   title: string
   subtitle: string
   value: string
+  icon?: ProjectIconStyle
   keywords?: string[]
   tags?: string[]
   updatedAt?: string
@@ -42,12 +48,7 @@ export interface CommandPaletteCommandSearchResult<T extends CommandPaletteComma
   highlights?: CommandPaletteSearchHighlights
 }
 
-interface IndexedText {
-  text: string
-  normalized: string
-  searchable: string
-  words: readonly CommandPaletteMatchRange[]
-}
+type IndexedText = SearchTextIndex
 
 interface WeightedIndexedText {
   field: IndexedText
@@ -97,11 +98,9 @@ export interface CommandPaletteProjectSearchIndex {
 type SearchFuzzyProfile = 'command' | 'document'
 
 const SEARCH_TOKEN_SEPARATOR = /[\s/_.-]+/
-const SEARCH_WORD = /[^\s/_.-]+/g
 
 export function tokenizeCommandPaletteQuery(query: string): string[] {
-  return query
-    .toLowerCase()
+  return normalizeSearchText(query)
     .split(SEARCH_TOKEN_SEPARATOR)
     .map((term) => term.trim())
     .filter(Boolean)
@@ -312,6 +311,7 @@ export function searchCommandPaletteProjects(
       title: entry.name.text,
       subtitle: entry.project.summary || 'Project',
       value: `project:${entry.project.id}`,
+      icon: entry.project.icon,
       keywords: [
         entry.name.text,
         entry.summary.text,
@@ -361,10 +361,14 @@ export function createCommandPaletteBodyExcerpt(
   }
 
   const indexedText = indexText(normalizedText)
-  const firstMatchIndex = terms
+  const firstNormalizedMatchIndex = terms
     .map((term) => indexedText.normalized.indexOf(term))
     .filter((index) => index >= 0)
     .sort((left, right) => left - right)[0]
+  const firstMatchIndex =
+    firstNormalizedMatchIndex === undefined
+      ? -1
+      : (indexedText.sourceRanges[firstNormalizedMatchIndex]?.start ?? -1)
 
   const boundedLength = Math.max(40, maxLength)
   const matchOffset = Math.floor(boundedLength / 3)
@@ -399,36 +403,11 @@ export function createCommandPaletteBodyExcerpt(
 export function mergeCommandPaletteMatchRanges(
   ranges: readonly CommandPaletteMatchRange[]
 ): CommandPaletteMatchRange[] {
-  return ranges
-    .filter(({ start, end }) => end > start)
-    .sort((left, right) => left.start - right.start || left.end - right.end)
-    .reduce<CommandPaletteMatchRange[]>((merged, range) => {
-      const previous = merged[merged.length - 1]
-      if (!previous || range.start > previous.end) {
-        merged.push({ ...range })
-      } else {
-        previous.end = Math.max(previous.end, range.end)
-      }
-      return merged
-    }, [])
+  return mergeSearchMatchRanges(ranges)
 }
 
 function indexText(text: string): IndexedText {
-  const normalized = text.toLowerCase()
-  const words: CommandPaletteMatchRange[] = []
-  for (const match of normalized.matchAll(SEARCH_WORD)) {
-    if (match.index === undefined) {
-      continue
-    }
-    words.push({ start: match.index, end: match.index + match[0].length })
-  }
-
-  return {
-    text,
-    normalized,
-    searchable: normalized.trim(),
-    words
-  }
+  return createSearchTextIndex(text)
 }
 
 function scoreSearchDocument(
@@ -528,46 +507,7 @@ function collectMatchRanges(
   field: IndexedText,
   terms: readonly string[]
 ): CommandPaletteMatchRange[] {
-  const ranges = terms.flatMap((term) => {
-    const contiguousRanges = findContiguousRanges(field.normalized, term)
-    return contiguousRanges.length > 0 ? contiguousRanges : findFuzzyRanges(field.normalized, term)
-  })
-
-  return mergeCommandPaletteMatchRanges(ranges)
-}
-
-function findContiguousRanges(text: string, term: string): CommandPaletteMatchRange[] {
-  if (!term) {
-    return []
-  }
-
-  const ranges: CommandPaletteMatchRange[] = []
-  let searchIndex = 0
-  while (searchIndex < text.length) {
-    const matchIndex = text.indexOf(term, searchIndex)
-    if (matchIndex < 0) {
-      break
-    }
-    ranges.push({ start: matchIndex, end: matchIndex + term.length })
-    searchIndex = matchIndex + term.length
-  }
-  return ranges
-}
-
-function findFuzzyRanges(text: string, term: string): CommandPaletteMatchRange[] {
-  const ranges: CommandPaletteMatchRange[] = []
-  let searchIndex = 0
-
-  for (const char of term) {
-    const matchIndex = text.indexOf(char, searchIndex)
-    if (matchIndex < 0) {
-      return []
-    }
-    ranges.push({ start: matchIndex, end: matchIndex + char.length })
-    searchIndex = matchIndex + char.length
-  }
-
-  return ranges
+  return findSearchMatchRanges(field, terms, { fuzzy: true })
 }
 
 function createHighlights(

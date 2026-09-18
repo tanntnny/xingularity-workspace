@@ -98,6 +98,10 @@ change, verify the renderer/package parity with:
 - npm run test:run runs the Vitest suite once.
 - npm run test:e2e builds the app and runs Playwright; use it only for changed
   workflows or when explicitly requested.
+- npm run perf:audit builds the app and runs the macOS-first Electron performance
+  audit against a generated representative vault. Use `npm run perf:audit:smoke`
+  for a short validation run; raw traces and JSON reports stay in the system
+  temporary directory.
 
 Follow AGENTS.md and the shared command-wrapper instructions when running
 commands. Prefer targeted inspection and verification over reading the whole
@@ -121,6 +125,12 @@ repository.
   context-layer product and architecture proposal
 - [revamp/README.md](revamp/README.md): vault reconciliation and sync
   architecture set
+- [revamp/NOTE-DRAFT-DURABILITY-AUDIT.md](revamp/NOTE-DRAFT-DURABILITY-AUDIT.md):
+  note draft loss audit, lifecycle barriers, recovery, and regression coverage
+- [performance-review.md](performance-review.md): performance findings,
+  historical renderer measurements, and the current remediation policy
+- [performance-audit-log.md](performance-audit-log.md): append-only measured
+  runs from the Electron performance audit harness
 - [more-feature-backlog/README.md](more-feature-backlog/README.md): tracked
   gaps, risks, and follow-up work
 

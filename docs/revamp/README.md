@@ -39,6 +39,8 @@ The first is immediately valuable and currently incomplete. The second is partia
 
 * [Current-state audit](./CURRENT-STATE-AUDIT.md) — observed flows, storage boundaries, risks, and evidence in the codebase.
 
+* [Note draft durability audit](./NOTE-DRAFT-DURABILITY-AUDIT.md) — note-specific draft loss paths, lifecycle evidence, regression coverage, and the implemented P0 transition barrier.
+
 * [Data ownership matrix](./DATA-OWNERSHIP-MATRIX.md) — what is canonical, derived, device-local, secret, recovery-only, or legacy, and whether external edits are supported.
 
 * [Target vault architecture](./TARGET-VAULT-ARCHITECTURE.md) — the aggressive end state, contracts, event model, write protocol, and renderer behavior.

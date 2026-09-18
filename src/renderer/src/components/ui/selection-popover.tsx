@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { normalizeSearchQueryText, searchTextIncludes } from '../../../../shared/searchText'
 import { cn } from '../../lib/utils'
 import { Button } from './button'
 import { ChevronDown, Plus } from './icons'
@@ -77,7 +78,7 @@ function getOptionSearchText(option: SelectionPopoverOption): string {
   const labelText =
     typeof option.label === 'string' || typeof option.label === 'number' ? String(option.label) : ''
 
-  return `${option.value} ${option.searchText ?? ''} ${labelText}`.toLowerCase()
+  return `${option.value} ${option.searchText ?? ''} ${labelText}`
 }
 
 export function SelectionPopover(props: SelectionPopoverProps): React.ReactElement {
@@ -109,7 +110,7 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
   const multiple = isMultipleSelection(props)
   const value = props.value
   const selectedValues = React.useMemo(() => new Set(multiple ? value : [value]), [multiple, value])
-  const normalizedQuery = query.trim().toLowerCase()
+  const normalizedQuery = normalizeSearchQueryText(query)
 
   const usePopoverLayoutEffect =
     typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect
@@ -135,9 +136,9 @@ export function SelectionPopover(props: SelectionPopoverProps): React.ReactEleme
     }
 
     return options.filter((option) => {
-      return getOptionSearchText(option).includes(normalizedQuery)
+      return searchTextIncludes(getOptionSearchText(option), query)
     })
-  }, [normalizedQuery, options])
+  }, [normalizedQuery, options, query])
 
   const onCreate = props.onCreate
   const getCreateValue = props.getCreateValue

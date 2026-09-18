@@ -2732,10 +2732,10 @@ function App(): ReactElement {
     scheduleCurrentNoteAutosave()
   }, [scheduleCurrentNoteAutosave])
 
-  const persistCurrentNoteForPageLeave = useCallback(
-    async (page: AppPage): Promise<void> => {
+  const prepareToDiscardCurrentNote = useCallback(
+    async (requestedPage?: AppPage): Promise<void> => {
       const relPath = currentNotePathRef.current
-      pageLeaveSaveDebugState.requestedPage = page
+      pageLeaveSaveDebugState.requestedPage = requestedPage ?? null
       pageLeaveSaveDebugState.notePath = relPath
       pageLeaveSaveDebugState.snapshotContent = ''
       pageLeaveSaveDebugState.fingerprint = null
@@ -2747,7 +2747,7 @@ function App(): ReactElement {
       if (!relPath || !noteSaveCoordinator) {
         pageLeaveSaveDebugState.skippedReason = 'no-open-note'
         pushNoteSaveTrace('page-leave:skip-no-note', {
-          requestedPage: page,
+          requestedPage: requestedPage ?? null,
           relPath
         })
         return
@@ -2755,7 +2755,7 @@ function App(): ReactElement {
 
       try {
         pushNoteSaveTrace('page-leave:start', {
-          requestedPage: page,
+          requestedPage: requestedPage ?? null,
           relPath,
           dirty: currentNoteEditorDirtyRef.current,
           pendingSaveRelPath: pendingNoteSaveRef.current?.relPath ?? null,
@@ -2793,7 +2793,7 @@ function App(): ReactElement {
           pageLeaveSaveDebugState.skippedReason = 'unchanged'
           pageLeaveSaveDebugState.writeCompleted = true
           pushNoteSaveTrace('page-leave:skip-unchanged', {
-            requestedPage: page,
+            requestedPage: requestedPage ?? null,
             relPath,
             contentPreview: summarizeTraceContent(session.content)
           })
@@ -2801,7 +2801,7 @@ function App(): ReactElement {
         }
 
         pushNoteSaveTrace('page-leave:enqueue', {
-          requestedPage: page,
+          requestedPage: requestedPage ?? null,
           relPath,
           contentPreview: summarizeTraceContent(session.content),
           tagCount: session.tags.length
@@ -2813,7 +2813,7 @@ function App(): ReactElement {
           await savePromise
           pageLeaveSaveDebugState.writeCompleted = true
           pushNoteSaveTrace('page-leave:done', {
-            requestedPage: page,
+            requestedPage: requestedPage ?? null,
             relPath,
             contentPreview: summarizeTraceContent(currentNoteContentRef.current)
           })
@@ -2825,7 +2825,7 @@ function App(): ReactElement {
       } catch (error) {
         pageLeaveSaveDebugState.lastError = String(error)
         pushNoteSaveTrace('page-leave:error', {
-          requestedPage: page,
+          requestedPage: requestedPage ?? null,
           relPath,
           error: String(error)
         })
@@ -2841,6 +2841,12 @@ function App(): ReactElement {
       settleCurrentNoteEditor
     ]
   )
+
+  const prepareToDiscardWorkspace = useCallback(async (): Promise<void> => {
+    stickyNoteTextFlushRef.current?.()
+    await stickyNoteSaveCoordinator.flush()
+    await prepareToDiscardCurrentNote()
+  }, [prepareToDiscardCurrentNote, stickyNoteSaveCoordinator])
 
   const navigateToPage = useCallback(
     async (page: AppPage, workspaceViewId: string | null = null): Promise<void> => {
@@ -2877,7 +2883,7 @@ function App(): ReactElement {
         })
 
         if (currentPage === 'notes' && currentNotePathRef.current) {
-          await persistCurrentNoteForPageLeave(targetPage)
+          await prepareToDiscardCurrentNote(targetPage)
         }
 
         await captureActiveWorkspaceSession()
@@ -2924,7 +2930,7 @@ function App(): ReactElement {
       captureActiveWorkspacePageContext,
       getWorkspaceTabPageContext,
       hasVault,
-      persistCurrentNoteForPageLeave,
+      prepareToDiscardCurrentNote,
       platform,
       restoreTaskOrigin
     ]
@@ -3593,6 +3599,27 @@ function App(): ReactElement {
   }, [activePage, flushCurrentNote, hasPendingCurrentNoteSave, pushToast])
 
   useEffect(() => {
+    if (!vaultApi) {
+      return
+    }
+
+    const unsubscribe = vaultApi.app.onPrepareToClose(({ requestId }) => {
+      void prepareToDiscardWorkspace()
+        .then(() => {
+          vaultApi.app.respondToPrepareToClose({ requestId, ok: true })
+        })
+        .catch((error: unknown) => {
+          const message = String(error)
+          pushToast('error', `Could not save pending changes: ${message}`)
+          vaultApi.app.respondToPrepareToClose({ requestId, ok: false, error: message })
+        })
+    })
+    vaultApi.app.signalRendererReady()
+
+    return unsubscribe
+  }, [prepareToDiscardWorkspace, pushToast, vaultApi])
+
+  useEffect(() => {
     const flushPendingWorkspaceSaves = (): void => {
       stickyNoteTextFlushRef.current?.()
       void stickyNoteSaveCoordinator.flush()
@@ -3605,13 +3632,9 @@ function App(): ReactElement {
       }
     }
 
-    window.addEventListener('beforeunload', flushPendingWorkspaceSaves)
-    window.addEventListener('pagehide', flushPendingWorkspaceSaves)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      window.removeEventListener('beforeunload', flushPendingWorkspaceSaves)
-      window.removeEventListener('pagehide', flushPendingWorkspaceSaves)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [flushCurrentNote, stickyNoteSaveCoordinator])
@@ -9495,6 +9518,7 @@ function App(): ReactElement {
                               searchQuery.trim() ? (
                                 <SearchPage
                                   results={searchResults}
+                                  query={searchQuery}
                                   onOpen={(result, options) => {
                                     if (result.entityType === 'resource' && result.resourceId) {
                                       if (!options?.openInNewTab) {
@@ -10637,6 +10661,7 @@ function App(): ReactElement {
         vaultApi={vaultApi}
         activeVaultPath={vault?.rootPath ?? null}
         onOpenChange={setIsVaultSwapperOpen}
+        onBeforeVaultChange={prepareToDiscardWorkspace}
         onVaultActivated={async (result, successMessage) => {
           await applyVaultActivationResult(result, successMessage)
         }}

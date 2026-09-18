@@ -504,6 +504,16 @@ export interface AppErrorEvent {
   channel?: string
 }
 
+export interface AppPrepareToCloseRequest {
+  requestId: string
+}
+
+export interface AppPrepareToCloseResponse {
+  requestId: string
+  ok: boolean
+  error?: string
+}
+
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type TaskStatus =
   | 'pending'
@@ -1949,6 +1959,9 @@ export interface RendererVaultApi {
   }
   app: {
     onError: (listener: (event: AppErrorEvent) => void) => () => void
+    onPrepareToClose: (listener: (request: AppPrepareToCloseRequest) => void) => () => void
+    respondToPrepareToClose: (response: AppPrepareToCloseResponse) => void
+    signalRendererReady: () => void
   }
   vault: {
     open: () => Promise<Maybe<VaultOpenResult>>

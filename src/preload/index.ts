@@ -10,6 +10,8 @@ import {
 import {
   AgentChatEvent,
   AppErrorEvent,
+  AppPrepareToCloseRequest,
+  AppPrepareToCloseResponse,
   ReminderClickTarget,
   RendererVaultApi
 } from '../shared/types'
@@ -37,6 +39,22 @@ const api: RendererVaultApi = {
       }
       ipcRenderer.on(IPC_CHANNELS.appErrorEvent, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.appErrorEvent, wrapped)
+    },
+    onPrepareToClose: (listener): (() => void) => {
+      const wrapped = (
+        _event: Electron.IpcRendererEvent,
+        payload: AppPrepareToCloseRequest
+      ): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.appPrepareToClose, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.appPrepareToClose, wrapped)
+    },
+    respondToPrepareToClose: (response: AppPrepareToCloseResponse): void => {
+      ipcRenderer.send(IPC_CHANNELS.appPrepareToCloseResponse, response)
+    },
+    signalRendererReady: (): void => {
+      ipcRenderer.send(IPC_CHANNELS.appRendererReady)
     }
   },
   vault: {

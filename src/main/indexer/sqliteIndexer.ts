@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createDirectoryAncestors, getDirectoryTraversal } from '../directoryTraversal'
 import { sha256 } from '../../shared/hash'
 import { isNotePath } from '../../shared/noteDocument'
+import { tokenizeSearchQuery } from '../../shared/searchText'
 import { FileMap, SearchResult } from '../../shared/types'
 import { ParsedNote, parseNoteContent } from './noteParser'
 
@@ -308,12 +309,12 @@ function parseSearchInput(input: string): {
 }
 
 function toFtsQuery(input: string, scope: 'all' | 'body'): string {
-  const terms = input
-    .trim()
-    .split(/\s+/)
-    .map((term) => term.replace(/[^a-zA-Z0-9_-]/g, ''))
+  const terms = tokenizeSearchQuery(input)
     .filter((term) => term.length > 1)
-    .map((term) => (scope === 'body' ? `body_text:${term}*` : `${term}*`))
+    .map((term) => {
+      const safeTerm = `"${term.replaceAll('"', '""')}"`
+      return scope === 'body' ? `body_text:${safeTerm}*` : `${safeTerm}*`
+    })
 
   return terms.join(' AND ')
 }

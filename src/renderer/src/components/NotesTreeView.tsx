@@ -35,6 +35,7 @@ import {
 import { createPortal } from 'react-dom'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import type { FolderColorMap } from '../../../shared/folderColors'
+import { normalizeSearchQueryText, searchTextIncludes } from '../../../shared/searchText'
 import type { NativeMenuItemDescriptor, NoteTreeNode } from '../../../shared/types'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from './ui/context-menu'
 import { ActionMenuItems, type ActionMenuGroup } from './ui/action-menu'
@@ -194,7 +195,7 @@ export function NotesTreeView({
   const dragClientYRef = useRef<number | null>(null)
   const stepAutoScrollRef = useRef<() => void>(() => {})
   const useNativeMenus = canUseNativeMenus()
-  const deferredSearchTerm = useDeferredValue(searchTerm.trim().toLowerCase())
+  const deferredSearchTerm = useDeferredValue(normalizeSearchQueryText(searchTerm))
 
   const syncTreeHeight = useCallback((): void => {
     const instance = treeRef.current
@@ -260,7 +261,7 @@ export function NotesTreeView({
 
   const matchSearchTerm = useCallback(
     (node: NodeApi<NoteTreeNode>, term: string): boolean =>
-      node.data.name.toLowerCase().includes(term) || node.data.relPath.toLowerCase().includes(term),
+      searchTextIncludes(node.data.name, term) || searchTextIncludes(node.data.relPath, term),
     []
   )
 

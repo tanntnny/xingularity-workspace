@@ -143,6 +143,17 @@ describe('unified workspace search', () => {
     expect(index.search('project title')[0]?.id).toBe('project:1')
   })
 
+  it('matches normalized accents while preserving the original document fields', () => {
+    const index = new UnifiedSearchIndex({
+      documents: [document({ id: 'note:cafe', entityType: 'note', title: 'Café roadmap' })]
+    })
+
+    const [result] = index.search('cafe')
+
+    expect(result?.title).toBe('Café roadmap')
+    expect(result?.matchedFields).toContain('title')
+  })
+
   it('deduplicates recent searches while preserving filter context and recency', () => {
     const store = new RecentSearchStore([], {
       limit: 2,

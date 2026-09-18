@@ -26,6 +26,7 @@ import {
 } from './ui/command'
 import { CommandPaletteNoteItem } from './CommandPaletteNoteItem'
 import { CommandPaletteMatchText } from './CommandPaletteMatchText'
+import { NoteShapeIcon } from './NoteShapeIcon'
 import { Pallete, PalleteSearchBar } from './ui/pallete'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import {
@@ -915,7 +916,11 @@ export function CommandPalette({
                             onSelect={handleSelect}
                           >
                             <div className={paletteItemIconClass}>
-                              <APP_PAGE_ICONS.projects className="h-4 w-4" />
+                              {result.icon ? (
+                                <NoteShapeIcon icon={result.icon} size={18} />
+                              ) : (
+                                <APP_PAGE_ICONS.projects className="h-4 w-4" />
+                              )}
                             </div>
                             <div className="min-w-0 flex-1">
                               <WorkspaceTextFade observeMutations={false}>

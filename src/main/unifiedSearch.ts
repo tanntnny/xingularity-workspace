@@ -1,5 +1,11 @@
 import type { SearchResult as LegacySearchResult } from '../shared/types'
 import {
+  createSearchTextIndex,
+  normalizeSearchText,
+  normalizeSearchQueryText,
+  tokenizeSearchQuery
+} from '../shared/searchText'
+import {
   createSearchDocumentFromEntity,
   DEFAULT_RECENT_SEARCH_LIMIT,
   normalizeRecentSearches,
@@ -80,15 +86,11 @@ function normalizeNow(value: Date | string | number | undefined): number {
 }
 
 function tokenize(value: string): string[] {
-  return value
-    .toLocaleLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0)
+  return tokenizeSearchQuery(value)
 }
 
 function containsToken(text: string, token: string): boolean {
-  return text.includes(token)
+  return normalizeSearchText(text).includes(token)
 }
 
 function countTokenMatches(text: string, token: string): number {
@@ -97,9 +99,10 @@ function countTokenMatches(text: string, token: string): number {
   }
 
   let count = 0
+  const normalizedText = normalizeSearchText(text)
   let offset = 0
-  while (offset < text.length) {
-    const index = text.indexOf(token, offset)
+  while (offset < normalizedText.length) {
+    const index = normalizedText.indexOf(token, offset)
     if (index < 0) {
       break
     }
@@ -217,7 +220,7 @@ function scoreText(
   tokens: readonly string[],
   weights: { phrase: number; token: number; prefix: number }
 ): number {
-  const normalized = text.toLocaleLowerCase()
+  const normalized = normalizeSearchText(text)
   let score = 0
   if (phrase && normalized.includes(phrase)) {
     score += weights.phrase
@@ -253,9 +256,14 @@ function buildSnippet(document: SearchDocument, phrase: string, tokens: readonly
     return ''
   }
 
-  const normalized = source.toLocaleLowerCase()
+  const indexedSource = createSearchTextIndex(source)
+  const normalized = indexedSource.normalized
   const searchTerm = phrase || tokens[0] || ''
-  const matchIndex = searchTerm ? normalized.indexOf(searchTerm) : -1
+  const normalizedMatchIndex = searchTerm ? normalized.indexOf(searchTerm) : -1
+  const matchIndex =
+    normalizedMatchIndex < 0
+      ? -1
+      : (indexedSource.sourceRanges[normalizedMatchIndex]?.start ?? -1)
   if (matchIndex < 0) {
     return source.slice(0, 180)
   }
@@ -272,7 +280,7 @@ function rankDocument(
   now: number
 ): UnifiedSearchResult | null {
   const fields = documentSearchText(document)
-  const combinedText = Object.values(fields).join(' ').toLocaleLowerCase()
+  const combinedText = normalizeSearchText(Object.values(fields).join(' '))
   if (tokens.some((token) => !combinedText.includes(token))) {
     return null
   }
@@ -320,7 +328,7 @@ export function rankSearchDocuments(
     return []
   }
 
-  const phrase = normalizedQuery.toLocaleLowerCase()
+  const phrase = normalizeSearchQueryText(normalizedQuery)
   const tokens = tokenize(normalizedQuery)
   const normalizedFilters = normalizeSearchFilters(filters)
   const now = normalizeNow(options.now)

@@ -28,7 +28,7 @@ describe('sqlite index incremental updates', () => {
     await fs.writeFile(
       firstNotePath,
       serializeStoredNoteDocument(
-        createStoredNoteDocumentFromText('# First\nBody text', ['alpha', 'beta'])
+        createStoredNoteDocumentFromText('# Café First\nBody text', ['alpha', 'beta'])
       ),
       'utf-8'
     )
@@ -59,6 +59,9 @@ describe('sqlite index incremental updates', () => {
 
     const initialResults = indexer.query('alpha')
     expect(initialResults.some((r) => r.relPath === 'first.md')).toBe(true)
+
+    const normalizedResults = indexer.query('cafe')
+    expect(normalizedResults.some((r) => r.relPath === 'first.md')).toBe(true)
 
     const linkedResults = indexer.query('linked')
     expect(linkedResults.some((r) => r.relPath === 'Docs/linked.md')).toBe(true)

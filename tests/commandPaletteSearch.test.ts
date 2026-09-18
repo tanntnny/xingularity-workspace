@@ -101,8 +101,25 @@ describe('command palette search metadata', () => {
 
     expect(result.title).toBe('Apollo Launch')
     expect(result.subtitle).toBe('Coordinate the launch plan')
+    expect(result.icon).toEqual(PROJECT.icon)
     expect(result.highlights?.title).toEqual([{ start: 7, end: 13 }])
     expect(result.highlights?.subtitle).toEqual([{ start: 15, end: 21 }])
+  })
+
+  it('highlights diacritic-insensitive matches against the original title', () => {
+    const index = createCommandPaletteNoteSearchIndex([
+      {
+        ...NOTE,
+        name: 'Café Roadmap.md',
+        relPath: 'Café Roadmap.md',
+        dir: ''
+      }
+    ])
+
+    const [result] = searchCommandPaletteNotes(index, 'cafe', 'name', 10)
+
+    expect(result.title).toBe('Café Roadmap')
+    expect(result.highlights?.title).toEqual([{ start: 0, end: 4 }])
   })
 
   it('renders highlighted text as safe semantic markup', () => {

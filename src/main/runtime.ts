@@ -76,6 +76,7 @@ import { buildFolderMarkdown } from './noteMarkdownExport'
 import { buildProjectMarkdown, type ProjectMarkdownExternalDocument } from './projectMarkdownExport'
 import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
 import { normalizeProjectIcon } from '../shared/projectIcons'
+import { searchTextIncludes } from '../shared/searchText'
 import {
   normalizeFolderPath,
   remapFolderColors,
@@ -1743,12 +1744,12 @@ export class VaultRuntime {
   search(query: string): SearchResult[] {
     this.assertReady()
     const localResults = this.indexer!.query(query)
-    const normalized = query.trim().toLocaleLowerCase()
-    if (!normalized) return localResults
+    if (!query.trim()) return localResults
     const resourceResults = this.resourceSearchCache.filter((result) =>
-      `${result.title} ${result.snippet} ${result.provider ?? ''} ${result.state ?? ''}`
-        .toLocaleLowerCase()
-        .includes(normalized)
+      searchTextIncludes(
+        `${result.title} ${result.snippet} ${result.provider ?? ''} ${result.state ?? ''}`,
+        query
+      )
     )
     return [...localResults, ...resourceResults].slice(0, 100)
   }

@@ -1,17 +1,32 @@
-import { ReactElement } from 'react'
+import { Fragment, ReactElement } from 'react'
 import { SearchResult } from '../../../shared/types'
+import {
+  createSearchTextIndex,
+  findSearchMatchRanges,
+  tokenizeSearchQuery
+} from '../../../shared/searchText'
 import { Search } from './ui/icons'
 import { Button } from './ui/button'
 import { EmptyState } from './ui/empty-state'
 import { WorkspaceTextFade } from './ui/workspace-text-fade'
 import { getWorkspaceOpenOptions, type WorkspaceOpenOptions } from '../lib/workspaceOpen'
+import { SearchMatchText } from './SearchMatchText'
 
 interface SearchResultsProps {
   results: SearchResult[]
+  query: string
   onOpen: (result: SearchResult, options?: WorkspaceOpenOptions) => void
 }
 
-export function SearchResults({ results, onOpen }: SearchResultsProps): ReactElement {
+export function SearchResults({ results, query, onOpen }: SearchResultsProps): ReactElement {
+  const terms = tokenizeSearchQuery(query.replace(/^@/, ''))
+  const highlight = (text: string): ReactElement => (
+    <SearchMatchText
+      text={text}
+      ranges={findSearchMatchRanges(createSearchTextIndex(text), terms)}
+    />
+  )
+
   if (results.length === 0) {
     return (
       <EmptyState
@@ -52,19 +67,24 @@ export function SearchResults({ results, onOpen }: SearchResultsProps): ReactEle
           }}
         >
           <WorkspaceTextFade className="mb-0.5 max-w-full text-base font-semibold">
-            {result.title}
+            {highlight(result.title)}
           </WorkspaceTextFade>
           <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
-            {result.provider ?? result.entityType} · {result.state ?? 'available'}
+            {highlight(`${result.provider ?? result.entityType} · ${result.state ?? 'available'}`)}
           </WorkspaceTextFade>
           <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
-            {result.relPath}
+            {highlight(result.relPath)}
           </WorkspaceTextFade>
           <WorkspaceTextFade lines={2} className="max-w-full text-xs text-muted-foreground">
-            {result.snippet}
+            {highlight(result.snippet)}
           </WorkspaceTextFade>
           <WorkspaceTextFade className="max-w-full text-xs text-muted-foreground">
-            {result.tags.map((tag) => `#${tag}`).join(' ')}
+            {result.tags.map((tag, index) => (
+              <Fragment key={`${tag}-${index}`}>
+                {index > 0 ? ' ' : null}
+                {highlight(`#${tag}`)}
+              </Fragment>
+            ))}
           </WorkspaceTextFade>
         </Button>
       ))}

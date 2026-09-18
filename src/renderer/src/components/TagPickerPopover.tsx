@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { normalizeSearchQueryText, searchTextIncludes } from '../../../shared/searchText'
 import { cn } from '../lib/utils'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
@@ -59,7 +60,7 @@ export interface TagPickerPopoverProps extends TagPickerContentProps {
 }
 
 function getOptionSearchText(option: TagPickerOption): string {
-  return `${option.value} ${option.searchText ?? ''}`.toLowerCase()
+  return `${option.value} ${option.searchText ?? ''}`
 }
 
 function getOptionAccessibleName(option: TagPickerOption, selected: boolean): string {
@@ -100,12 +101,12 @@ export function TagPickerContent({
   const [query, setQuery] = React.useState('')
   const [highlightedValue, setHighlightedValue] = React.useState('')
   const selectedValues = React.useMemo(() => new Set(value), [value])
-  const normalizedQuery = query.trim().toLowerCase()
+  const normalizedQuery = normalizeSearchQueryText(query)
 
   const filteredOptions = React.useMemo(() => {
     if (!normalizedQuery) return options
-    return options.filter((option) => getOptionSearchText(option).includes(normalizedQuery))
-  }, [normalizedQuery, options])
+    return options.filter((option) => searchTextIncludes(getOptionSearchText(option), query))
+  }, [normalizedQuery, options, query])
 
   const createValue = React.useMemo(() => {
     if (!onCreate || !normalizedQuery) return null
