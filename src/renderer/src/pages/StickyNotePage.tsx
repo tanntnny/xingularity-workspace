@@ -110,13 +110,14 @@ function areStickyNoteItemsEqual(left: StickyNoteItem, right: StickyNoteItem): b
 const StickyNoteCard = memo(function StickyNoteCard(
   props: NodeProps<StickyNoteNode>
 ): ReactElement {
-  return <StickyNoteCardContent key={`${props.data.note.id}:${props.data.note.text}`} {...props} />
+  return <StickyNoteCardContent {...props} />
 })
 
 function StickyNoteCardContent({ data, selected }: NodeProps<StickyNoteNode>): ReactElement {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [draftText, setDraftText] = useState(data.note.text)
   const draftTextRef = useRef(data.note.text)
+  const lastSyncedTextRef = useRef(data.note.text)
   const noteId = data.note.id
   const onTextDraftFlush = data.onTextDraftFlush
   const surface = STICKY_NOTE_SURFACES[data.note.color]
@@ -126,6 +127,26 @@ function StickyNoteCardContent({ data, selected }: NodeProps<StickyNoteNode>): R
       textareaRef.current.focus()
     }
   }, [draftText, selected])
+
+  useEffect(() => {
+    const externalText = data.note.text
+    const localText = draftTextRef.current
+
+    if (externalText === localText) {
+      lastSyncedTextRef.current = externalText
+      return
+    }
+
+    if (localText !== lastSyncedTextRef.current) {
+      return
+    }
+
+    draftTextRef.current = externalText
+    lastSyncedTextRef.current = externalText
+    // Mirror external board changes without remounting the focused editor.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraftText(externalText)
+  }, [data.note.text])
 
   useEffect(() => {
     return () => {
@@ -155,7 +176,7 @@ function StickyNoteCardContent({ data, selected }: NodeProps<StickyNoteNode>): R
       <div
         data-testid={`sticky-note:${data.note.id}`}
         data-color={data.note.color}
-        className={`sticky-note-card relative flex h-full w-full flex-col overflow-hidden rounded-none border-0 shadow-sm transition-shadow ${selected ? 'shadow-[0_0_0_2px_var(--ring)]' : ''}`}
+        className={`sticky-note-card relative flex h-full w-full cursor-grab flex-col overflow-hidden rounded-none border-0 shadow-sm transition-shadow active:cursor-grabbing ${selected ? 'shadow-[0_0_0_2px_var(--ring)]' : ''}`}
         style={{
           backgroundColor: surface.background,
           color: surface.foreground
@@ -172,7 +193,7 @@ function StickyNoteCardContent({ data, selected }: NodeProps<StickyNoteNode>): R
           value={draftText}
           aria-label="Sticky note text"
           placeholder="Type a note…"
-          className="nodrag nopan block min-h-0 flex-1 resize-none border-0 bg-transparent px-5 pb-4 pt-1 outline-none placeholder:opacity-60"
+          className="block min-h-0 flex-1 cursor-text resize-none border-0 bg-transparent px-5 pb-4 pt-1 outline-none placeholder:opacity-60"
           style={{
             fontSize: STICKY_NOTE_FONT_SIZE,
             fontWeight: STICKY_NOTE_FONT_WEIGHT,
@@ -184,7 +205,6 @@ function StickyNoteCardContent({ data, selected }: NodeProps<StickyNoteNode>): R
             event.stopPropagation()
             data.onSelect(data.note.id)
           }}
-          onPointerDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         />
       </div>
@@ -377,7 +397,6 @@ function StickyNoteCanvas({
       position: note.position,
       zIndex: note.zIndex,
       draggable: true,
-      dragHandle: '.sticky-note-drag-handle',
       selected: note.id === selectedNoteId,
       data: {
         note,

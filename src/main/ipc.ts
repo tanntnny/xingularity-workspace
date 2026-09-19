@@ -195,8 +195,20 @@ const noteDocumentSchema = z.object({
 const noteDocumentWriteRequestSchema = z.object({
   path: notePathSchema,
   document: noteDocumentSchema,
+  baseDocument: noteDocumentSchema.optional(),
   baseHash: z.string().min(1).max(256).nullable(),
   clientMutationId: z.string().min(1).max(200)
+})
+const vaultConflictResolutionSchema = z.object({
+  conflictId: z.string().min(1).max(128),
+  resolution: z.enum([
+    'keep-local',
+    'keep-external',
+    'merge',
+    'keep-both',
+    'discard-local',
+    'discard-external'
+  ])
 })
 const aiCompletionInputSchema = z.object({
   notePath: z.string().min(1).max(512),
@@ -814,6 +826,18 @@ export function registerIpcHandlers(runtime: VaultRuntime): void {
 
   handleIpc(IPC_CHANNELS.vaultCreateBackup, async () => {
     return runtime.createVaultBackup()
+  })
+
+  handleIpc(IPC_CHANNELS.vaultConflictDetails, async (_event, conflictId: unknown) => {
+    return runtime.getVaultConflictDetails(genericPathSchema.parse(conflictId))
+  })
+
+  handleIpc(IPC_CHANNELS.vaultResolveConflict, async (_event, request: unknown) => {
+    return runtime.resolveVaultConflict(vaultConflictResolutionSchema.parse(request))
+  })
+
+  handleIpc(IPC_CHANNELS.vaultDiscardConflictRecovery, async (_event, conflictId: unknown) => {
+    return runtime.discardVaultConflictRecovery(genericPathSchema.parse(conflictId))
   })
 
   handleIpc(IPC_CHANNELS.desktopChooseDirectory, async (_event, title: unknown) => {

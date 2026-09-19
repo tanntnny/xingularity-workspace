@@ -56,6 +56,7 @@ export interface NoteDocumentReadResult {
 export interface WriteNoteDocumentRequest {
   path: string
   document: StoredNoteDocument
+  baseDocument?: StoredNoteDocument
   baseHash: string | null
   clientMutationId: string
 }
@@ -115,6 +116,7 @@ export interface WriteNoteSuccess {
 export interface WriteNoteFailure {
   ok: false
   path: string
+  conflictId?: string
   error: VaultProtocolErrorPayload
 }
 
@@ -158,6 +160,26 @@ export type VaultConflictResolution =
   | 'keep-both'
   | 'discard-local'
   | 'discard-external'
+
+export interface VaultConflictDetails {
+  conflict: VaultConflict
+  baseContent: string | null
+  localContent: string | null
+  externalContent: string | null
+}
+
+export interface VaultConflictResolutionRequest {
+  conflictId: string
+  resolution: VaultConflictResolution
+}
+
+export interface VaultConflictResolutionResult {
+  conflictId: string
+  path: string
+  resolution: VaultConflictResolution
+  recoveryRetained: boolean
+  revision: VaultFileRevision | null
+}
 
 export interface VaultConflict {
   id: string

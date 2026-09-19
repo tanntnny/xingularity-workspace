@@ -18,6 +18,9 @@ import {
 import type { VaultBackupResult } from '../shared/types'
 import type {
   NoteDocumentReadResult,
+  VaultConflictDetails,
+  VaultConflictResolutionRequest,
+  VaultConflictResolutionResult,
   VaultChangeEvent,
   VaultReconcileResult,
   VaultSyncSnapshot,
@@ -72,7 +75,15 @@ const api: RendererVaultApi = {
       ipcRenderer.invoke(IPC_CHANNELS.vaultSyncSnapshot),
     reconcile: (): Promise<VaultReconcileResult> => ipcRenderer.invoke(IPC_CHANNELS.vaultReconcile),
     createBackup: (): Promise<VaultBackupResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.vaultCreateBackup)
+      ipcRenderer.invoke(IPC_CHANNELS.vaultCreateBackup),
+    getConflictDetails: (conflictId: string): Promise<VaultConflictDetails | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultConflictDetails, conflictId),
+    resolveConflict: (
+      request: VaultConflictResolutionRequest
+    ): Promise<VaultConflictResolutionResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultResolveConflict, request),
+    discardConflictRecovery: (conflictId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.vaultDiscardConflictRecovery, conflictId)
   },
   desktop: {
     chooseDirectory: (title) => ipcRenderer.invoke(IPC_CHANNELS.desktopChooseDirectory, title),

@@ -1,5 +1,8 @@
 import type {
   VaultChangeEvent,
+  VaultConflictDetails,
+  VaultConflictResolutionRequest,
+  VaultConflictResolutionResult,
   NoteDocumentReadResult,
   VaultReconcileResult,
   VaultSyncSnapshot,
@@ -1976,6 +1979,11 @@ export interface RendererVaultApi {
     getSyncSnapshot: () => Promise<VaultSyncSnapshot>
     reconcile: () => Promise<VaultReconcileResult>
     createBackup: () => Promise<VaultBackupResult>
+    getConflictDetails: (conflictId: string) => Promise<VaultConflictDetails | null>
+    resolveConflict: (
+      request: VaultConflictResolutionRequest
+    ) => Promise<VaultConflictResolutionResult>
+    discardConflictRecovery: (conflictId: string) => Promise<boolean>
   }
   desktop: {
     chooseDirectory: (title: string) => Promise<Maybe<string>>

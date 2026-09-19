@@ -128,6 +128,53 @@ describe('VaultRecoveryStore', () => {
     )
   })
 
+  it('reads payloads and marks resolved conflicts without deleting recovery bytes', async () => {
+    const recoveryRoot = await makeRecoveryRoot()
+    const store = new VaultRecoveryStore(recoveryRoot)
+    const local = await store.writePayload('conflicts/conflict-1.local.md', '# Local\n')
+
+    await store.upsertConflict({
+      id: 'conflict-1',
+      path: 'notebooks/meeting.md',
+      detectedAt: '2026-08-29T08:00:00.000Z',
+      payloads: { local },
+      reason: 'concurrent edit'
+    })
+
+    await expect(store.getConflict('conflict-1')).resolves.toMatchObject({
+      id: 'conflict-1',
+      status: 'unresolved'
+    })
+    await expect(store.readPayload(local)).resolves.toBe('# Local\n')
+    await expect(
+      store.markConflictResolved('conflict-1', 'keep-both', '2026-08-29T08:05:00.000Z')
+    ).resolves.toBe(true)
+    await expect(store.getConflict('conflict-1')).resolves.toMatchObject({
+      status: 'resolved',
+      resolution: 'keep-both',
+      resolvedAt: '2026-08-29T08:05:00.000Z'
+    })
+    await expect(fs.readFile(path.join(recoveryRoot, local.path), 'utf8')).resolves.toBe(
+      '# Local\n'
+    )
+  })
+
+  it('purges a conflict record and all referenced payloads together', async () => {
+    const recoveryRoot = await makeRecoveryRoot()
+    const store = new VaultRecoveryStore(recoveryRoot)
+    const local = await store.writePayload('conflicts/conflict-2.local.md', '# Local\n')
+    await store.upsertConflict({
+      id: 'conflict-2',
+      path: 'notebooks/meeting.md',
+      detectedAt: '2026-08-29T08:00:00.000Z',
+      payloads: { local }
+    })
+
+    await expect(store.purgeConflict('conflict-2')).resolves.toBe(true)
+    await expect(store.getConflict('conflict-2')).resolves.toBeNull()
+    await expect(fs.access(path.join(recoveryRoot, local.path))).rejects.toThrow()
+  })
+
   it('rejects payload references whose declared hash or size does not match the bytes', async () => {
     const recoveryRoot = await makeRecoveryRoot()
     const store = new VaultRecoveryStore(recoveryRoot)

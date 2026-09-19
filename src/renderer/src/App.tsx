@@ -383,6 +383,7 @@ function toVaultSyncPageSnapshot(snapshot: VaultProtocolSnapshot): VaultSyncPage
 
 interface NoteConflictState {
   workspaceTabId: string
+  conflictId?: string
   path: string
   message: string
   actualRevision: VaultFileRevision | null
@@ -2349,7 +2350,14 @@ function App(): ReactElement {
     }
 
     return createNoteSaveCoordinator({
-      writeNote: async ({ relPath, document, baseHash, clientMutationId, workspaceTabId }) => {
+      writeNote: async ({
+        relPath,
+        document,
+        baseDocument,
+        baseHash,
+        clientMutationId,
+        workspaceTabId
+      }) => {
         pushNoteSaveTrace('coordinator:write-start', {
           relPath,
           tagCount: document.tags.length,
@@ -2358,6 +2366,7 @@ function App(): ReactElement {
         const result = await vaultApi.files.writeNoteDocumentWithRevision({
           path: relPath,
           document,
+          baseDocument,
           baseHash: baseHash ?? null,
           clientMutationId: clientMutationId ?? `${Date.now()}-${Math.random()}`
         })
@@ -2421,6 +2430,11 @@ function App(): ReactElement {
         relPath,
         content: session.content,
         document,
+        baseDocument: baseline?.fingerprint
+          ? parseStoredNoteDocument(baseline.fingerprint)
+          : persistedNoteFingerprintsRef.current[relPath]
+            ? parseStoredNoteDocument(persistedNoteFingerprintsRef.current[relPath])
+            : undefined,
         baseHash: baseline?.revision ?? persistedNoteRevisionsRef.current[relPath] ?? null,
         clientMutationId: `${Date.now()}-${Math.random()}`,
         workspaceTabId
@@ -2447,6 +2461,7 @@ function App(): ReactElement {
         if (error instanceof NoteSaveConflictError) {
           queueNoteConflict({
             workspaceTabId,
+            conflictId: error.result.conflictId,
             path: error.result.path.startsWith('notebooks/')
               ? error.result.path
               : `notebooks/${error.result.path}`,
@@ -2699,7 +2714,11 @@ function App(): ReactElement {
   )
 
   const scheduleCurrentNoteAutosave = useCallback((): void => {
-    if (!noteSaveCoordinator || !currentNotePathRef.current) {
+    if (
+      !noteSaveCoordinator ||
+      !currentNotePathRef.current ||
+      noteConflictsRef.current[activeWorkspaceTabIdRef.current]
+    ) {
       return
     }
 
@@ -2735,6 +2754,10 @@ function App(): ReactElement {
   const prepareToDiscardCurrentNote = useCallback(
     async (requestedPage?: AppPage): Promise<void> => {
       const relPath = currentNotePathRef.current
+      if (noteConflictsRef.current[activeWorkspaceTabIdRef.current]) {
+        pushToast('warning', 'Resolve the note conflict before leaving this note.')
+        throw new Error('Unresolved note conflict blocks this transition')
+      }
       pageLeaveSaveDebugState.requestedPage = requestedPage ?? null
       pageLeaveSaveDebugState.notePath = relPath
       pageLeaveSaveDebugState.snapshotContent = ''
@@ -2838,6 +2861,7 @@ function App(): ReactElement {
       getWorkspaceTabSession,
       noteSaveCoordinator,
       persistNoteSession,
+      pushToast,
       settleCurrentNoteEditor
     ]
   )
@@ -3417,11 +3441,20 @@ function App(): ReactElement {
       const nextTabId = getNextActiveWorkspaceTabId(tabIds, tabId)
 
       if (tabId !== activeWorkspaceTabIdRef.current) {
+        if (noteConflictsRef.current[tabId]) {
+          pushToast('warning', 'Resolve the note conflict before closing this tab.')
+          return
+        }
         delete workspaceTabSessionsRef.current[tabId]
         delete workspaceTabPageContextsRef.current[tabId]
         delete noteConflictsRef.current[tabId]
         clearWorkspaceTabNoteScrollPositions(tabId)
         setWorkspaceTabs((tabs) => tabs.filter((tab) => tab.id !== tabId))
+        return
+      }
+
+      if (noteConflictsRef.current[tabId]) {
+        pushToast('warning', 'Resolve the note conflict before closing this tab.')
         return
       }
 
@@ -3452,6 +3485,7 @@ function App(): ReactElement {
       activateWorkspaceTab,
       clearWorkspaceTabNoteScrollPositions,
       createWorkspaceTabId,
+      pushToast,
       workspaceTabs
     ]
   )
@@ -5761,6 +5795,11 @@ function App(): ReactElement {
       return
     }
 
+    if (noteConflictsRef.current[activeWorkspaceTabIdRef.current]) {
+      pushToast('warning', 'Resolve the note conflict before renaming this note.')
+      return
+    }
+
     try {
       const oldPath = currentNotePath
       const dir = currentNotePath.includes('/')
@@ -5813,6 +5852,14 @@ function App(): ReactElement {
 
   const deleteNoteByPath = async (relPath: string): Promise<void> => {
     if (!vaultApi) {
+      return
+    }
+
+    if (
+      relPath === currentNotePathRef.current &&
+      noteConflictsRef.current[activeWorkspaceTabIdRef.current]
+    ) {
+      pushToast('warning', 'Resolve the note conflict before deleting this note.')
       return
     }
 
@@ -8793,6 +8840,99 @@ function App(): ReactElement {
     updateNoteListEntryFromDocument,
     vaultApi
   ])
+  const resolveCurrentNoteConflict = useCallback(
+    async (resolution: 'keep-local' | 'keep-external' | 'merge' | 'keep-both'): Promise<void> => {
+      if (!noteConflict || !vaultApi) {
+        return
+      }
+
+      if (noteConflict.conflictId) {
+        await vaultApi.vault.resolveConflict({
+          conflictId: noteConflict.conflictId,
+          resolution
+        })
+        await reloadNoteConflictFromDisk()
+        const nextSnapshot = await vaultApi.vault.getSyncSnapshot()
+        setVaultSyncSnapshot(toVaultSyncPageSnapshot(nextSnapshot))
+        pushToast(
+          'success',
+          resolution === 'keep-both'
+            ? 'The external note is active. Your local draft remains in recovery.'
+            : resolution === 'keep-local'
+              ? 'The local draft replaced the canonical note.'
+              : resolution === 'merge'
+                ? 'The merged note is now canonical.'
+                : 'The external note is now active.'
+        )
+        return
+      }
+
+      if (resolution === 'merge') {
+        await mergeNoteConflictFromDisk()
+        return
+      }
+      if (resolution === 'keep-local') {
+        const workspaceTabId = noteConflict.workspaceTabId
+        const relPath = noteConflict.path.replace(/^notebooks\//, '')
+        const workspaceSession = getWorkspaceTabSession(workspaceTabId)
+        const baseline = workspaceSession.noteEditorBaselines[relPath] ?? {
+          fingerprint: persistedNoteFingerprintsRef.current[relPath] ?? null,
+          revision: null
+        }
+        const nextBaseHash = noteConflict.actualRevision?.contentHash ?? null
+        workspaceSession.noteEditorBaselines[relPath] = {
+          ...baseline,
+          revision: nextBaseHash
+        }
+        persistedNoteRevisionsRef.current[relPath] = nextBaseHash
+        noteSaveCoordinator?.setBaseRevision(relPath, nextBaseHash, workspaceTabId)
+        if (activeWorkspaceTabIdRef.current === workspaceTabId) {
+          syncCurrentNoteDirtyState(relPath)
+        }
+        dismissNoteConflict(workspaceTabId)
+        return
+      }
+
+      await reloadNoteConflictFromDisk()
+    },
+    [
+      dismissNoteConflict,
+      getWorkspaceTabSession,
+      mergeNoteConflictFromDisk,
+      noteConflict,
+      noteSaveCoordinator,
+      pushToast,
+      reloadNoteConflictFromDisk,
+      syncCurrentNoteDirtyState,
+      vaultApi
+    ]
+  )
+  const exportCurrentNoteConflict = useCallback(async (): Promise<void> => {
+    if (!noteConflict || !vaultApi || !noteConflict.conflictId) {
+      return
+    }
+    const details = await vaultApi.vault.getConflictDetails(noteConflict.conflictId)
+    if (!details?.localContent) {
+      throw new Error('The preserved local draft is unavailable')
+    }
+    const exportedPath = await vaultApi.files.exportNote(
+      noteConflict.path.replace(/^notebooks\//, ''),
+      details.localContent
+    )
+    if (exportedPath) {
+      pushToast('success', 'The local draft was exported.')
+    }
+  }, [noteConflict, pushToast, vaultApi])
+  const discardCurrentNoteConflictRecovery = useCallback(async (): Promise<void> => {
+    if (!noteConflict || !vaultApi || !noteConflict.conflictId) {
+      return
+    }
+    await vaultApi.vault.discardConflictRecovery(noteConflict.conflictId)
+    await reloadNoteConflictFromDisk()
+    const nextSnapshot = await vaultApi.vault.getSyncSnapshot()
+    setVaultSyncSnapshot(toVaultSyncPageSnapshot(nextSnapshot))
+    pushToast('success', 'The preserved local draft was discarded.')
+  }, [noteConflict, pushToast, reloadNoteConflictFromDisk, vaultApi])
   const vaultSyncActions: VaultSyncPageActions = {
     onReconcile: reconcileVaultSync,
     onValidate: reconcileVaultSync,
@@ -8817,8 +8957,21 @@ function App(): ReactElement {
     onReviewConflict: async (conflict) => {
       const notePath = conflict.path.replace(/^notebooks\//, '')
       if (notePath.endsWith('.md')) {
+        const details = vaultApi ? await vaultApi.vault.getConflictDetails(conflict.id) : null
         await navigateToPage('notes')
         await openNote(notePath)
+        if (details) {
+          queueNoteConflict({
+            workspaceTabId: activeWorkspaceTabIdRef.current,
+            conflictId: conflict.id,
+            path: conflict.path,
+            message:
+              details.conflict.kind === 'compare-and-swap'
+                ? 'The local draft and the external note changed independently.'
+                : 'This note has competing versions that need a decision.',
+            actualRevision: details.conflict.external
+          })
+        }
       } else {
         pushToast('info', `Review ${conflict.path} in the vault folder.`)
       }
@@ -10496,7 +10649,6 @@ function App(): ReactElement {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -10516,53 +10668,33 @@ function App(): ReactElement {
       </AlertDialog>
       <AlertDialog
         open={Boolean(noteConflict && noteConflict.workspaceTabId === activeWorkspaceTabId)}
-        onOpenChange={(open) => {
-          if (!open && noteConflict) {
-            dismissNoteConflict(noteConflict.workspaceTabId)
-          }
-        }}
+        onOpenChange={() => undefined}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Note changed outside Xingularity</AlertDialogTitle>
             <AlertDialogDescription>
               {noteConflict?.message ?? 'The disk version changed after this note was opened.'} Your
-              draft is still kept in the editor; choose whether to reload the disk version or keep
-              editing locally.
+              local draft is preserved. The external version remains canonical until you choose an
+              action.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                if (!noteConflict) {
-                  return
-                }
-                const workspaceTabId = noteConflict.workspaceTabId
-                const relPath = noteConflict.path.replace(/^notebooks\//, '')
-                const nextBaseHash = noteConflict.actualRevision?.contentHash ?? null
-                const workspaceSession = getWorkspaceTabSession(workspaceTabId)
-                const baseline = workspaceSession.noteEditorBaselines[relPath] ?? {
-                  fingerprint: persistedNoteFingerprintsRef.current[relPath] ?? null,
-                  revision: null
-                }
-                workspaceSession.noteEditorBaselines[relPath] = {
-                  ...baseline,
-                  revision: nextBaseHash
-                }
-                persistedNoteRevisionsRef.current[relPath] = nextBaseHash
-                noteSaveCoordinator?.setBaseRevision(relPath, nextBaseHash, workspaceTabId)
-                if (activeWorkspaceTabIdRef.current === workspaceTabId) {
-                  syncCurrentNoteDirtyState(relPath)
-                }
-                dismissNoteConflict(workspaceTabId)
-              }}
-            >
-              Keep local draft
-            </AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault()
-                void mergeNoteConflictFromDisk().catch((error) => {
+                void resolveCurrentNoteConflict('keep-both').catch((error) => {
+                  pushToast('error', String(error))
+                })
+              }}
+            >
+              Keep both
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void resolveCurrentNoteConflict('merge').catch((error) => {
                   pushToast('error', String(error))
                 })
               }}
@@ -10570,14 +10702,50 @@ function App(): ReactElement {
               Merge edits
             </AlertDialogAction>
             <AlertDialogAction
-              onClick={() => {
-                void reloadNoteConflictFromDisk().catch((error) => {
+              onClick={(event) => {
+                event.preventDefault()
+                void resolveCurrentNoteConflict('keep-local').catch((error) => {
                   pushToast('error', String(error))
                 })
               }}
             >
-              Reload disk version
+              Replace canonical with local
             </AlertDialogAction>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void resolveCurrentNoteConflict('keep-external').catch((error) => {
+                  pushToast('error', String(error))
+                })
+              }}
+            >
+              Reload external
+            </AlertDialogAction>
+            {noteConflict?.conflictId ? (
+              <>
+                <AlertDialogAction
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void exportCurrentNoteConflict().catch((error) => {
+                      pushToast('error', String(error))
+                    })
+                  }}
+                >
+                  Export local draft
+                </AlertDialogAction>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void discardCurrentNoteConflictRecovery().catch((error) => {
+                      pushToast('error', String(error))
+                    })
+                  }}
+                >
+                  Discard recovery
+                </AlertDialogAction>
+              </>
+            ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

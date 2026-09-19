@@ -5,6 +5,7 @@ export interface NoteSaveRequest {
   relPath: string
   content: string
   document: StoredNoteDocument
+  baseDocument?: StoredNoteDocument
   baseHash?: string | null
   clientMutationId?: string
   workspaceTabId?: string

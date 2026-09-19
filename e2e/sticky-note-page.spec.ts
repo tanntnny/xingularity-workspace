@@ -238,14 +238,26 @@ test.describe('sticky note page', () => {
       await expect(noteCard).toBeVisible()
       await expect(noteCard).toHaveCSS('border-top-left-radius', '0px')
       await expect(noteCard).toHaveCSS('border-top-width', '0px')
-      await expect(noteCard.getByRole('textbox')).toHaveCSS('font-size', '24px')
-      await expect(noteCard.getByRole('textbox')).toHaveCSS('font-weight', '500')
+      const textarea = noteCard.getByRole('textbox')
+      await expect(textarea).toHaveCSS('font-size', '24px')
+      await expect(textarea).toHaveCSS('font-weight', '500')
 
       const noteText = 'First line\nSecond line'
-      await noteCard.getByRole('textbox').fill(noteText)
+      await textarea.fill(noteText)
+      const focusSnapshot = await textarea.evaluate((element) =>
+        `${document.activeElement === element}:${element.selectionStart}:${element.selectionEnd}`
+      )
       await expect
         .poll(async () => (await readVaultSettings(vaultRoot)).stickyNoteBoard.notes[0]?.text)
         .toBe(noteText)
+      await expect
+        .poll(async () =>
+          textarea.evaluate(
+            (element) =>
+              `${document.activeElement === element}:${element.selectionStart}:${element.selectionEnd}`
+          )
+        )
+        .toBe(focusSnapshot)
 
       await page.getByTestId('sticky-note-color-menu').click()
       await page.getByTestId('sticky-note-color-pink').click()
@@ -254,20 +266,19 @@ test.describe('sticky note page', () => {
         .toBe('pink')
       await expect(noteCard).toHaveAttribute('data-color', 'pink')
 
-      const dragHandle = page.getByTestId(`sticky-note-drag-handle:${createdNote.id}`)
-      const initialHandleBox = await dragHandle.boundingBox()
-      expect(initialHandleBox).not.toBeNull()
-      if (!initialHandleBox) {
-        throw new Error('Sticky note drag handle is not measurable')
+      const initialCardBox = await noteCard.boundingBox()
+      expect(initialCardBox).not.toBeNull()
+      if (!initialCardBox) {
+        throw new Error('Sticky note card is not measurable')
       }
       await page.mouse.move(
-        initialHandleBox.x + initialHandleBox.width / 2,
-        initialHandleBox.y + initialHandleBox.height / 2
+        initialCardBox.x + initialCardBox.width * 0.75,
+        initialCardBox.y + initialCardBox.height - 32
       )
       await page.mouse.down()
       await page.mouse.move(
-        initialHandleBox.x + initialHandleBox.width / 2 + 120,
-        initialHandleBox.y + initialHandleBox.height / 2 + 70,
+        initialCardBox.x + initialCardBox.width * 0.75 + 120,
+        initialCardBox.y + initialCardBox.height - 32 + 70,
         { steps: 8 }
       )
       await page.mouse.up()

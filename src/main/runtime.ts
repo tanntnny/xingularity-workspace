@@ -26,7 +26,12 @@ import {
   isExcalidrawPath,
   withExcalidrawExtension
 } from '../shared/excalidrawFile'
-import { isNotePath, serializeStoredNoteDocument, stripNoteExtension } from '../shared/noteDocument'
+import {
+  isNotePath,
+  parseStoredNoteDocument,
+  serializeStoredNoteDocument,
+  stripNoteExtension
+} from '../shared/noteDocument'
 import {
   assertPathInVault,
   chooseVaultFolder,
@@ -88,6 +93,8 @@ import { getVaultDomainForPath, isDerivedVaultPath } from './vaultDomainCatalog'
 import { isDerivedVaultPath as isDerivedPortableVaultPath } from './vaultPortablePolicy'
 import { getProjectNotebookPath } from '../shared/projectNotebook'
 import { notebookPathFromResource, notebookResourceUri } from '../shared/resourceDomain'
+import { mergeMarkdownThreeWay } from '../shared/markdownMerge'
+import { replaceNoteBody, splitNoteContent } from '../shared/noteContent'
 import { applyProjectMilestoneOrder, validateTaskRelationships } from '../shared/projectPlanning'
 import { resolveTaskPriority } from '../shared/taskDefaults'
 import { duplicateTaskRecord } from '../shared/taskDuplication'
@@ -175,6 +182,9 @@ import type {
   VaultChangeKind,
   VaultChangeEvent,
   VaultConflict,
+  VaultConflictDetails,
+  VaultConflictResolutionRequest,
+  VaultConflictResolutionResult,
   VaultFileRevision,
   VaultReconcileResult,
   VaultSyncSnapshot,
@@ -391,6 +401,164 @@ export class VaultRuntime {
     }
   }
 
+  async getVaultConflictDetails(conflictId: string): Promise<VaultConflictDetails | null> {
+    this.assertReady()
+    const durable = await this.recoveryStore?.getConflict(conflictId)
+    const active = this.changeCoordinator
+      ?.getConflicts()
+      .find((conflict) => conflict.id === conflictId)
+    if (!durable && !active) {
+      return null
+    }
+
+    const conflict = active ?? toProtocolConflict(durable!, this.changeCoordinator!.id)
+    const payloads = durable?.payloads
+    const readPayload = async (
+      payload: DurableVaultConflictRecord['payloads'][keyof DurableVaultConflictRecord['payloads']]
+    ): Promise<string | null> => {
+      if (!payload || !this.recoveryStore) {
+        return null
+      }
+      return this.recoveryStore.readPayload(payload)
+    }
+
+    return {
+      conflict,
+      baseContent: await readPayload(payloads?.base),
+      localContent: await readPayload(payloads?.local),
+      externalContent: await readPayload(payloads?.external ?? payloads?.disk)
+    }
+  }
+
+  async resolveVaultConflict(
+    request: VaultConflictResolutionRequest
+  ): Promise<VaultConflictResolutionResult> {
+    return this.enqueueNotebookMutation(async () => {
+      this.assertReady()
+      const details = await this.getVaultConflictDetails(request.conflictId)
+      if (!details) {
+        throw new Error('The conflict is no longer available')
+      }
+
+      const { conflict } = details
+      let revision = conflict.external
+      let recoveryRetained = false
+      const localDocument = details.localContent
+        ? parseStoredNoteDocument(details.localContent)
+        : null
+
+      if (request.resolution === 'keep-local' || request.resolution === 'discard-external') {
+        if (!localDocument) {
+          throw new Error('The preserved local note is unavailable')
+        }
+        const result = await this.writeResolvedNote(
+          conflict.path,
+          localDocument,
+          conflict.external?.contentHash ?? null
+        )
+        revision = result.revision
+      } else if (request.resolution === 'merge') {
+        if (!details.baseContent || !details.localContent || !details.externalContent) {
+          throw new Error('The base, local, or external note version is unavailable for merging')
+        }
+        const baseDocument = parseStoredNoteDocument(details.baseContent)
+        const externalDocument = parseStoredNoteDocument(details.externalContent)
+        const mergeResult = mergeMarkdownThreeWay(
+          splitNoteContent(baseDocument.markdown).body,
+          splitNoteContent(localDocument?.markdown ?? '').body,
+          splitNoteContent(externalDocument.markdown).body
+        )
+        if (mergeResult.status === 'conflict') {
+          throw new Error('The note has overlapping edits. Review the merge hunks manually.')
+        }
+        const result = await this.writeResolvedNote(
+          conflict.path,
+          {
+            version: 1,
+            tags: localDocument?.tags ?? externalDocument.tags,
+            markdown: replaceNoteBody(externalDocument.markdown, mergeResult.content)
+          },
+          conflict.external?.contentHash ?? null
+        )
+        revision = result.revision
+      } else if (request.resolution === 'keep-both') {
+        recoveryRetained = true
+      }
+
+      if (request.resolution === 'keep-external' || request.resolution === 'discard-local') {
+        const diskRelPath = conflict.path.replace(/^notebooks\//, '')
+        try {
+          await this.indexExternalNote(
+            diskRelPath,
+            assertPathInVault(this.currentPaths!, diskRelPath, 'notes')
+          )
+          this.notifyTreeChange()
+        } catch (error) {
+          if (!isMissingPathError(error)) {
+            throw error
+          }
+        }
+      }
+
+      if (recoveryRetained) {
+        // Keep the active conflict visible until the preserved local draft is
+        // explicitly exported or discarded.
+      } else {
+        await this.recoveryStore?.purgeConflict(request.conflictId)
+        this.changeCoordinator?.resolveConflict(request.conflictId)
+      }
+      return {
+        conflictId: request.conflictId,
+        path: conflict.path,
+        resolution: request.resolution,
+        recoveryRetained,
+        revision
+      }
+    })
+  }
+
+  async discardVaultConflictRecovery(conflictId: string): Promise<boolean> {
+    this.assertReady()
+    const removed = await this.recoveryStore?.purgeConflict(conflictId)
+    if (removed) {
+      this.changeCoordinator?.resolveConflict(conflictId)
+    }
+    return removed ?? false
+  }
+
+  private async writeResolvedNote(
+    canonicalPath: string,
+    document: StoredNoteDocument,
+    baseHash: string | null
+  ): Promise<{ revision: VaultFileRevision }> {
+    const relPath = canonicalPath.replace(/^notebooks\//, '')
+    const result = await this.fileService!.writeNoteDocumentWithRevision({
+      path: relPath,
+      document,
+      baseHash,
+      clientMutationId: randomUUID()
+    })
+    if (!result.ok) {
+      throw new Error(result.error.message)
+    }
+
+    await this.indexer!.upsertFromRaw({
+      id: createStableId(result.path),
+      relPath: sanitizeNotePath(result.path),
+      content: serializeStoredNoteDocument(document),
+      updatedAt: new Date().toISOString()
+    })
+    await this.recordVaultFileChange(
+      result.path,
+      'change',
+      'app',
+      baseHash ?? undefined,
+      result.transactionId
+    )
+    this.notifyTreeChange()
+    return { revision: result.revision }
+  }
+
   async reconcileVault(): Promise<VaultReconcileResult> {
     return this.enqueueNotebookMutation(async () => {
       this.assertReady()
@@ -576,8 +744,8 @@ export class VaultRuntime {
       this.assertReady()
       const result = await this.fileService!.writeNoteDocumentWithRevision(request)
       if (!result.ok) {
-        await this.recordNoteConflict(request, result)
-        return result
+        const conflictId = await this.recordNoteConflict(request, result)
+        return { ...result, conflictId }
       }
 
       await this.indexer!.upsertFromRaw({
@@ -3145,6 +3313,9 @@ export class VaultRuntime {
       this.recoveryStore.listQuarantine()
     ])
     for (const conflict of conflicts) {
+      if (conflict.status === 'resolved') {
+        continue
+      }
       this.changeCoordinator.recordConflict(toProtocolConflict(conflict, this.changeCoordinator.id))
     }
     for (const quarantine of quarantines) {
@@ -3445,7 +3616,7 @@ export class VaultRuntime {
   private async recordNoteConflict(
     request: WriteNoteDocumentRequest,
     result: Extract<WriteNoteResult, { ok: false }>
-  ): Promise<void> {
+  ): Promise<string> {
     const conflictId = randomUUID()
     const localContent = serializeStoredNoteDocument(request.document)
     const localRevision = {
@@ -3474,6 +3645,7 @@ export class VaultRuntime {
       }
     }
 
+    let basePayload: VaultRecoveryPayloadReference | null = null
     let localPayload: VaultRecoveryPayloadReference | null = null
     let externalPayload: VaultRecoveryPayloadReference | null = null
     if (this.recoveryStore) {
@@ -3482,6 +3654,12 @@ export class VaultRuntime {
           { path: `conflicts/${conflictId}.local`, mediaType: 'text/markdown' },
           localContent
         )
+        if (request.baseDocument) {
+          basePayload = await this.recoveryStore.writePayload(
+            { path: `conflicts/${conflictId}.base`, mediaType: 'text/markdown' },
+            serializeStoredNoteDocument(request.baseDocument)
+          )
+        }
         if (externalContent) {
           externalPayload = await this.recoveryStore.writePayload(
             { path: `conflicts/${conflictId}.external`, mediaType: 'text/markdown' },
@@ -3526,6 +3704,7 @@ export class VaultRuntime {
           path: canonicalPath,
           detectedAt: conflict.detectedAt,
           payloads: {
+            base: basePayload,
             local: localPayload,
             external: externalPayload
           },
@@ -3539,6 +3718,7 @@ export class VaultRuntime {
         console.error('[VaultRuntime] failed to persist note conflict metadata', error)
       }
     }
+    return conflictId
   }
 
   private async indexExternalNote(relPath: string, absPath: string): Promise<void> {

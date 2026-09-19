@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { writeFileAtomically } from './atomicFile'
 import { hashVaultBytes } from './vaultRevision'
 import { assertSafeRelativePath, ensureWithinBase, joinSafe } from '../shared/pathSafety'
+import type { VaultConflictResolution } from '../shared/vaultProtocol'
 
 const RECOVERY_FORMAT_VERSION = 1 as const
 const CONFLICTS_DIRECTORY = 'conflicts'
@@ -38,6 +39,9 @@ export interface VaultConflictRecord {
   payloads: VaultConflictPayloads
   reason?: string
   metadata?: Record<string, unknown>
+  status?: 'unresolved' | 'resolved'
+  resolution?: VaultConflictResolution
+  resolvedAt?: string
 }
 
 export type VaultConflictRecordInput = Omit<VaultConflictRecord, 'id'> & {
@@ -106,6 +110,32 @@ export class VaultRecoveryStore {
     return records.map((record) => cloneJson(record))
   }
 
+  async getConflict(conflictId: string): Promise<VaultConflictRecord | null> {
+    await this.mutationQueue
+    const id = assertRecoveryId(conflictId)
+    const recordPath = await this.getRecordPath('conflict', id, false)
+    try {
+      const stored = await this.readRecord(recordPath, 'conflict')
+      return cloneJson({
+        ...(stored.record as VaultConflictRecord),
+        status: (stored.record as VaultConflictRecord).status ?? 'unresolved'
+      })
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  async readPayload(input: VaultRecoveryPayloadInput): Promise<string> {
+    await this.mutationQueue
+    const reference = normalizePayloadReference(input, this.recoveryRoot, 'Recovery payload')
+    const targetPath = joinSafe(this.recoveryRoot, reference.path)
+    await assertReadableRecoveryPayload(targetPath)
+    return fs.readFile(targetPath, 'utf8')
+  }
+
   async writePayload(
     input: VaultRecoveryPayloadInput,
     content: string | Uint8Array
@@ -149,8 +179,78 @@ export class VaultRecoveryStore {
     return this.removeRecord('conflict', conflictId)
   }
 
+  async markConflictResolved(
+    conflictId: string,
+    resolution: VaultConflictResolution,
+    resolvedAt = new Date().toISOString()
+  ): Promise<boolean> {
+    return this.enqueueMutation(async () => {
+      const id = assertRecoveryId(conflictId)
+      const recordPath = await this.getRecordPath('conflict', id, false)
+      let stored: StoredRecoveryRecord
+      try {
+        stored = await this.readRecord(recordPath, 'conflict')
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          return false
+        }
+        throw error
+      }
+
+      const current = stored.record as VaultConflictRecord
+      const record = normalizeConflictRecord(
+        {
+          ...current,
+          status: 'resolved',
+          resolution,
+          resolvedAt
+        },
+        this.recoveryRoot,
+        true
+      )
+      await this.writeRecord(recordPath, record)
+      return true
+    })
+  }
+
   async removeConflict(conflictId: string): Promise<boolean> {
     return this.resolveConflict(conflictId)
+  }
+
+  async purgeConflict(conflictId: string): Promise<boolean> {
+    return this.enqueueMutation(async () => {
+      const id = assertRecoveryId(conflictId)
+      const recordPath = await this.getRecordPath('conflict', id, false)
+      let stored: StoredRecoveryRecord
+      try {
+        stored = await this.readRecord(recordPath, 'conflict')
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          return false
+        }
+        throw error
+      }
+
+      const payloadPaths = new Set(
+        Object.values((stored.record as VaultConflictRecord).payloads)
+          .filter((payload): payload is VaultRecoveryPayloadReference => Boolean(payload))
+          .map((payload) => payload.path)
+      )
+      for (const payloadPath of payloadPaths) {
+        const absolutePath = joinSafe(this.recoveryRoot, payloadPath)
+        try {
+          await assertReadableRecoveryPayload(absolutePath)
+          await fs.unlink(absolutePath)
+        } catch (error) {
+          if (!isMissingPathError(error)) {
+            throw error
+          }
+        }
+      }
+
+      await fs.unlink(recordPath)
+      return true
+    })
   }
 
   async listQuarantine(): Promise<VaultQuarantineRecord[]> {
@@ -239,7 +339,7 @@ export class VaultRecoveryStore {
       raw = await fs.readFile(recordPath, 'utf-8')
     } catch (error) {
       if (isMissingPathError(error)) {
-        throw new Error(`Recovery ${kind} record disappeared while it was being read`)
+        throw error
       }
       throw error
     }
@@ -346,6 +446,13 @@ function normalizeConflictRecord(
       : {}),
     ...(input.metadata !== undefined
       ? { metadata: normalizeMetadata(input.metadata, 'Conflict metadata') }
+      : {}),
+    ...(input.status !== undefined ? { status: normalizeConflictStatus(input.status) } : {}),
+    ...(input.resolution !== undefined
+      ? { resolution: normalizeConflictResolution(input.resolution) }
+      : {}),
+    ...(input.resolvedAt !== undefined
+      ? { resolvedAt: normalizeRequiredString(input.resolvedAt, 'Conflict resolvedAt') }
       : {})
   }
 }
@@ -497,6 +604,28 @@ function normalizeRequiredString(value: unknown, label: string): string {
   return value
 }
 
+function normalizeConflictStatus(value: unknown): VaultConflictRecord['status'] {
+  if (value !== 'unresolved' && value !== 'resolved') {
+    throw new Error('Conflict status must be unresolved or resolved')
+  }
+  return value
+}
+
+function normalizeConflictResolution(value: unknown): VaultConflictResolution {
+  const resolutions: VaultConflictResolution[] = [
+    'keep-local',
+    'keep-external',
+    'merge',
+    'keep-both',
+    'discard-local',
+    'discard-external'
+  ]
+  if (typeof value !== 'string' || !resolutions.includes(value as VaultConflictResolution)) {
+    throw new Error('Conflict resolution is unsupported')
+  }
+  return value as VaultConflictResolution
+}
+
 function normalizeSize(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative safe integer`)
@@ -602,5 +731,15 @@ async function assertWritableRecoveryPayload(filePath: string): Promise<void> {
       return
     }
     throw error
+  }
+}
+
+async function assertReadableRecoveryPayload(filePath: string): Promise<void> {
+  const stats = await fs.lstat(filePath)
+  if (stats.isSymbolicLink()) {
+    throw new Error(`Recovery payload must not be a symbolic link: ${filePath}`)
+  }
+  if (!stats.isFile()) {
+    throw new Error(`Recovery payload path is not a file: ${filePath}`)
   }
 }
