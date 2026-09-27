@@ -79,7 +79,7 @@ import type {
 import { createWarpNewTabUri } from './warp'
 import { buildFolderMarkdown } from './noteMarkdownExport'
 import { buildProjectMarkdown, type ProjectMarkdownExternalDocument } from './projectMarkdownExport'
-import { buildFolderPdfHtml, buildNotePdfHtml } from './notePdfExport'
+import { buildFolderPdfHtml, buildNotePdfHtmlFromMarkdown } from './notePdfExport'
 import { normalizeProjectIcon } from '../shared/projectIcons'
 import { searchTextIncludes } from '../shared/searchText'
 import {
@@ -995,14 +995,7 @@ export class VaultRuntime {
         'Remap folder colors'
       )
       await this.indexer!.rebuild(this.currentPaths!.notebooksPath)
-      await this.recordVaultFileChange(
-        safeNewPath,
-        'rename',
-        'app',
-        null,
-        undefined,
-        safeOldPath
-      )
+      await this.recordVaultFileChange(safeNewPath, 'rename', 'app', null, undefined, safeOldPath)
       this.notifyTreeChange()
     })
   }
@@ -1035,9 +1028,11 @@ export class VaultRuntime {
         (colors) => removeFolderColors(colors, [safeRelPath]),
         'Remove deleted folder colors'
       )
-      this.pushFileDeleteHistory(trashed.kind === 'folder' ? 'Delete folder' : 'Delete note', [
-        trashed
-      ], folderColorSnapshots)
+      this.pushFileDeleteHistory(
+        trashed.kind === 'folder' ? 'Delete folder' : 'Delete note',
+        [trashed],
+        folderColorSnapshots
+      )
       this.notifyTreeChange()
     })
   }
@@ -1056,10 +1051,7 @@ export class VaultRuntime {
 
       const safeRelPaths = uniqueRelPaths.map((relPath) => sanitizeEntryPath(relPath))
       const settings = await this.settings.readVault(this.getCurrentVaultRoot())
-      const folderColorSnapshots = captureFolderColorSnapshots(
-        settings.folderColors,
-        safeRelPaths
-      )
+      const folderColorSnapshots = captureFolderColorSnapshots(settings.folderColors, safeRelPaths)
       const trash = this.createTrashService()
       const trashedEntries: TrashedEntry[] = []
       for (const safeRelPath of safeRelPaths) {
@@ -1114,10 +1106,10 @@ export class VaultRuntime {
       return { path: null, warnings: [] }
     }
 
-    const printable = await buildNotePdfHtml(
-      input.title,
-      input.html,
-      input.images,
+    const document = await this.fileService!.readNoteDocument(safeRelPath)
+    const printable = await buildNotePdfHtmlFromMarkdown(
+      safeRelPath,
+      document.markdown,
       this.currentPaths!.rootPath
     )
     const imageWarnings = await this.writePdfExport(result.filePath, printable.html)
@@ -1217,6 +1209,7 @@ export class VaultRuntime {
         }
       })
       await printWindow.loadFile(documentPath)
+      await printWindow.webContents.executeJavaScript('document.fonts.ready')
       const imageWarnings = await waitForPdfImages(printWindow)
       const pdf = await printWindow.webContents.printToPDF({
         printBackground: true,
@@ -4190,7 +4183,11 @@ export class VaultRuntime {
         }
         if (folderColorSnapshots.length > 0) {
           await this.updateFolderColors(
-            (colors) => removeFolderColors(colors, entries.map((entry) => entry.activeRelPath)),
+            (colors) =>
+              removeFolderColors(
+                colors,
+                entries.map((entry) => entry.activeRelPath)
+              ),
             'Remove deleted folder colors'
           )
         }
@@ -5304,6 +5301,7 @@ function settingsSnapshotToUpdate(settings: AppSettings): AppSettingsUpdate {
     ai: settings.ai,
     fontFamily: settings.fontFamily,
     codeFontFamily: settings.codeFontFamily,
+    calendarWeeklyHourHeightPx: settings.calendarWeeklyHourHeightPx,
     pythonCondaEnvironmentPath: settings.pythonCondaEnvironmentPath,
     pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
     calendarTasks: settings.calendarTasks,
@@ -5330,9 +5328,7 @@ function captureFolderColorSnapshots(
   )
   const topLevelRoots = roots.filter(
     (relPath) =>
-      !roots.some(
-        (candidate) => candidate !== relPath && relPath.startsWith(`${candidate}/`)
-      )
+      !roots.some((candidate) => candidate !== relPath && relPath.startsWith(`${candidate}/`))
   )
 
   return topLevelRoots.flatMap((rootPath) => {

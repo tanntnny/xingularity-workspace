@@ -19,7 +19,7 @@ import {
   FileText,
   Link,
   MoreHorizontal,
-  PenTool,
+  ExcalidrawFileIcon,
   Pencil,
   Trash2
 } from './ui/icons'
@@ -516,7 +516,7 @@ export function NotesTreeView({
                   className="h-4 w-4"
                 />
               ) : previewEntry.kind === 'excalidraw' ? (
-                <PenTool className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
+                <ExcalidrawFileIcon className="h-4 w-4 shrink-0" />
               ) : (
                 <FileText className="h-4 w-4 shrink-0 text-foreground" strokeWidth={1.9} />
               )}
@@ -967,7 +967,7 @@ function TreeNode({
             {
               id: 'create-excalidraw',
               label: 'New drawing',
-              icon: <PenTool aria-hidden="true" />,
+              icon: <ExcalidrawFileIcon aria-hidden="true" />,
               onSelect: () => handleMenuAction('create-excalidraw')
             },
             {
@@ -1637,7 +1637,7 @@ function buildNotesTreeMenuItems(
 
 function renderTreeFileIcon(kind: NoteTreeNode['kind']): ReactElement {
   if (kind === 'excalidraw') {
-    return <PenTool className={cn(TREE_ICON_CLASS, 'text-foreground')} strokeWidth={1.9} />
+    return <ExcalidrawFileIcon className={TREE_ICON_CLASS} />
   }
 
   return <FileText className={cn(TREE_ICON_CLASS, 'text-foreground')} strokeWidth={1.9} />

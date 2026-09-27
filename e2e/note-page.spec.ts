@@ -440,19 +440,23 @@ async function insertCodeBlockFromSlash(page: Page): Promise<void> {
   await page.keyboard.type('/code')
   await expect(page.getByTestId('note-slash-completion')).toBeVisible({ timeout: 10_000 })
   await page.keyboard.press('Enter')
-  await expect(
-    page.locator('[data-testid="note-block-editor"] .milkdown-code-block').first()
-  ).toBeVisible({
-    timeout: 10_000
-  })
+  await expect
+    .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 10_000 })
+    .toBe('```\n\n```')
 }
 
 async function focusFirstCodeBlock(page: Page): Promise<void> {
   const codeContent = page
-    .locator('[data-testid="note-block-editor"] .milkdown-code-block .note-code-block-content')
+    .locator('[data-testid="note-block-editor"] .note-live-code-block .note-live-code-preview')
     .first()
   await expect(codeContent).toBeVisible({ timeout: 10_000 })
   await codeContent.click({ position: { x: 6, y: 10 } })
+  await expect(page.locator('[data-testid="note-block-editor"] .note-live-code-block')).toHaveCount(
+    0
+  )
+  await expect(
+    page.locator('[data-testid="note-block-editor"] .cm-line.note-live-code-source-line')
+  ).not.toHaveCount(0)
 }
 
 async function renameCurrentOpenNote(page: Page, nextName: string): Promise<void> {
@@ -571,6 +575,763 @@ async function sampleEditorInstanceCounts(
 }
 
 test.describe('note page block editor switching', () => {
+  test('keeps the caret on a clicked heading character while revealing its source prefix', async () => {
+    const vaultRoot = await createFixtureVault('# Alpha heading\n\nPlain paragraph')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const editorLines = page.locator('[data-testid="note-block-editor"] .cm-line')
+      const headingLine = editorLines.first()
+      await editorLines.last().click()
+      await expect(headingLine).toHaveClass(/note-live-heading-1/)
+
+      const clickPoint = await headingLine.evaluate((line) => {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        let textNode: Text | null = null
+        while (walker.nextNode()) {
+          const candidate = walker.currentNode as Text
+          if (candidate.data.includes('Alpha heading')) {
+            textNode = candidate
+            break
+          }
+        }
+        if (!textNode) throw new Error('Rendered heading text was not found')
+
+        const characterIndex = textNode.data.indexOf('heading') + 2
+        const range = document.createRange()
+        range.setStart(textNode, characterIndex)
+        range.setEnd(textNode, characterIndex + 1)
+        const rect = range.getBoundingClientRect()
+        return { x: rect.left + 1, y: rect.top + rect.height / 2 }
+      })
+
+      await page.mouse.click(clickPoint.x, clickPoint.y)
+      await expect(headingLine).toHaveClass(/note-live-heading-1/)
+      const headingMarker = headingLine.locator('.note-live-leading-source-marker')
+      await expect(headingMarker).toHaveText('# ')
+      await expect(headingMarker).toBeVisible()
+      const headingTypography = await headingLine.evaluate((line) => {
+        const marker = line.querySelector<HTMLElement>('.note-live-leading-source-marker')
+        if (!marker) throw new Error('Heading source marker was not found')
+        const childStyles = Array.from(line.querySelectorAll<HTMLElement>('*')).map((node) => {
+          const style = getComputedStyle(node)
+          return {
+            decoration: style.textDecorationLine,
+            borderBottom: style.borderBottomStyle
+          }
+        })
+        return {
+          headingFontSize: getComputedStyle(line).fontSize,
+          markerFontSize: getComputedStyle(marker).fontSize,
+          headingDecoration: getComputedStyle(line).textDecorationLine,
+          markerDecoration: getComputedStyle(marker).textDecorationLine,
+          childStyles
+        }
+      })
+      expect(headingTypography.markerFontSize).toBe(headingTypography.headingFontSize)
+      expect(headingTypography.headingDecoration).toBe('none')
+      expect(headingTypography.markerDecoration).toBe('none')
+      expect(
+        headingTypography.childStyles.every(
+          ({ decoration, borderBottom }) => decoration === 'none' && borderBottom === 'none'
+        )
+      ).toBe(true)
+      const headingMarkerRect = await headingMarker.boundingBox()
+      const activeCharacterRect = await headingLine.evaluate((line) => {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        let textNode: Text | null = null
+        while (walker.nextNode()) {
+          const candidate = walker.currentNode as Text
+          if (candidate.data.includes('Alpha heading')) {
+            textNode = candidate
+            break
+          }
+        }
+        if (!textNode) throw new Error('Active heading text was not found')
+
+        const characterIndex = textNode.data.indexOf('heading') + 2
+        const range = document.createRange()
+        range.setStart(textNode, characterIndex)
+        range.setEnd(textNode, characterIndex + 1)
+        const rect = range.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, height: rect.height }
+      })
+      expect(headingMarkerRect).not.toBeNull()
+      expect((headingMarkerRect?.x ?? 0) + (headingMarkerRect?.width ?? 0)).toBeLessThanOrEqual(
+        activeCharacterRect.left
+      )
+      const cursorRect = await page
+        .locator('[data-testid="note-block-editor"] .cm-cursor-primary')
+        .boundingBox()
+      expect(cursorRect).not.toBeNull()
+      expect(Math.abs((cursorRect?.x ?? 0) - activeCharacterRect.left)).toBeLessThan(16)
+      expect(
+        Math.abs(
+          (cursorRect?.y ?? 0) +
+            (cursorRect?.height ?? 0) / 2 -
+            (activeCharacterRect.top + activeCharacterRect.height / 2)
+        )
+      ).toBeLessThan(5)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('reveals raw source on every line covered by a selection', async () => {
+    const vaultRoot = await createFixtureVault('# First\n# Middle\n# Last')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const lines = editor.locator('.cm-line')
+      await expect(lines).toHaveCount(3)
+
+      await lines.first().click()
+      await page.keyboard.press('Home')
+      await page.keyboard.press('Shift+ArrowDown')
+      await page.keyboard.press('Shift+ArrowDown')
+
+      const markers = await lines.evaluateAll((lineNodes) =>
+        lineNodes.map(
+          (line) => line.querySelector('.note-live-leading-source-marker')?.textContent ?? null
+        )
+      )
+      expect(markers).toEqual(['# ', '# ', '# '])
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps one exact source document across live preview, Vim, and table edits', async () => {
+    const initialContent = [
+      'alpha bravo',
+      '',
+      '| Name | Value |',
+      '| --- | --- |',
+      '| first | one |',
+      '',
+      'last line'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const editor = page.getByTestId('note-block-editor')
+      const content = editor.locator('.cm-content')
+      await expect(editor).toHaveAttribute('data-vim-mode', 'normal')
+      await expect(content).toHaveCount(1)
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toBe(initialContent)
+
+      await content.locator('.cm-line').first().click()
+      await page.keyboard.press('0')
+      await page.keyboard.press('e')
+      await page.keyboard.press('i')
+      await page.keyboard.type('X')
+      await page.keyboard.press('Escape')
+
+      const vimEditedContent = initialContent.replace('alpha bravo', 'alphXa bravo')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toBe(vimEditedContent)
+
+      await page.getByTestId('note-editor-mode-tab:source').click()
+      await expect(editor).toHaveAttribute('data-editor-mode', 'source')
+      await expect(content).toHaveCount(1)
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toBe(vimEditedContent)
+
+      await page.getByTestId('note-editor-mode-tab:live').click()
+      await expect(editor).toHaveAttribute('data-editor-mode', 'live')
+      const table = editor.locator('.note-live-table')
+      await expect(table).toBeVisible()
+
+      const firstCell = table.locator('[data-table-row="1"][data-table-column="0"]')
+      await firstCell.focus()
+      await page.keyboard.press('l')
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (document.activeElement as HTMLElement | null)?.dataset.tableColumn ?? null
+          )
+        )
+        .toBe('1')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type(' updated')
+      await page.keyboard.press('Escape')
+
+      await firstCell.click({ button: 'right' })
+      const tableMenu = page.getByTestId('note-live-table-context-menu')
+      await expect(tableMenu).toBeVisible()
+      await tableMenu.getByTestId('note-live-table-menu-add-row-after').click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain('| first | one updated |\n|  |  |')
+
+      await page.getByTestId('note-editor-mode-tab:source').click()
+      const finalSnapshot = await getCurrentNoteSnapshot(page)
+      expect(finalSnapshot.content.split('\n')).toEqual([
+        'alphXa bravo',
+        '',
+        '| Name | Value |',
+        '| --- | --- |',
+        '| first | one updated |',
+        '|  |  |',
+        '',
+        'last line'
+      ])
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('supports rectangular cell selection, native text editing, TSV clipboard, and table menus', async () => {
+    const wrappedOwner = 'A long owner description that wraps across the selected table row'
+    const initialContent = [
+      'Table demo',
+      '',
+      '| Name | Value | Owner |',
+      '| --- | --- | --- |',
+      `| first | one | ${wrappedOwner} |`,
+      '| second | two | B |',
+      '| third | three | C |'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      const editor = page.getByTestId('note-block-editor')
+      const table = editor.locator('.note-live-table')
+      const tableSurface = table.locator('.note-live-table-surface')
+      await expect(table).toBeVisible()
+
+      const firstCell = table.locator('[data-table-row="1"][data-table-column="0"]')
+      const secondRowSecondCell = table.locator('[data-table-row="2"][data-table-column="1"]')
+      await firstCell.click()
+      await expect(table.locator('[data-selected="true"]')).toHaveCount(1)
+      await expect(tableSurface).toHaveAttribute('data-selection-mode', 'cell')
+
+      await secondRowSecondCell.click({ modifiers: ['Shift'] })
+      await expect(table.locator('[data-selected="true"]')).toHaveCount(4)
+      const selectionRectangle = table.getByTestId('note-live-table-selection-rectangle')
+      await expect(selectionRectangle).toBeVisible()
+      const selectionGeometry = await page.evaluate(() => {
+        const rectangle = document.querySelector<HTMLElement>(
+          '[data-testid="note-live-table-selection-rectangle"]'
+        )
+        const selectedCells = Array.from(
+          document.querySelectorAll<HTMLElement>('.note-live-table-cell[data-selected="true"]')
+        )
+          .map((cell) => cell.closest('th,td')?.getBoundingClientRect())
+          .filter((rect): rect is DOMRect => Boolean(rect))
+        if (!rectangle || selectedCells.length === 0) return null
+        const rectangleRect = rectangle.getBoundingClientRect()
+        return {
+          rectangle: {
+            left: rectangleRect.left,
+            top: rectangleRect.top,
+            right: rectangleRect.right,
+            bottom: rectangleRect.bottom
+          },
+          selected: {
+            left: Math.min(...selectedCells.map((rect) => rect.left)),
+            top: Math.min(...selectedCells.map((rect) => rect.top)),
+            right: Math.max(...selectedCells.map((rect) => rect.right)),
+            bottom: Math.max(...selectedCells.map((rect) => rect.bottom))
+          }
+        }
+      })
+      expect(selectionGeometry).not.toBeNull()
+      expect(
+        Math.abs(selectionGeometry!.rectangle.left - selectionGeometry!.selected.left)
+      ).toBeLessThanOrEqual(1)
+      expect(
+        Math.abs(selectionGeometry!.rectangle.top - selectionGeometry!.selected.top)
+      ).toBeLessThanOrEqual(1)
+      expect(
+        Math.abs(selectionGeometry!.rectangle.right - selectionGeometry!.selected.right)
+      ).toBeLessThanOrEqual(1)
+      expect(
+        Math.abs(selectionGeometry!.rectangle.bottom - selectionGeometry!.selected.bottom)
+      ).toBeLessThanOrEqual(1)
+      const selectedCellBackgrounds = await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '.note-live-table :is(th, td)[aria-selected="true"]'
+          )
+        ).map((cell) => getComputedStyle(cell).backgroundColor)
+      )
+      expect(selectedCellBackgrounds).toHaveLength(4)
+      expect(new Set(selectedCellBackgrounds).size).toBe(1)
+      expect(selectedCellBackgrounds[0]).not.toBe('rgba(0, 0, 0, 0)')
+      const selectedCellAlpha = await page.evaluate(() => {
+        const background = getComputedStyle(
+          document.querySelector<HTMLElement>('.note-live-table :is(th, td)[aria-selected="true"]')!
+        ).backgroundColor
+        const match = background.match(/\/\s*([0-9.]+)\)?$/)
+        return match ? Number(match[1]) : 1
+      })
+      expect(selectedCellAlpha).toBeLessThanOrEqual(0.3)
+
+      await page.keyboard.press('ControlOrMeta+c')
+      await page.keyboard.press('Delete')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain(`|  |  | ${wrappedOwner} |\n|  |  | B |`)
+
+      await firstCell.click()
+      await page.keyboard.press('ControlOrMeta+v')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain(`| first | one | ${wrappedOwner} |\n| second | two | B |`)
+
+      const textCell = table.locator('[data-table-row="3"][data-table-column="1"]')
+      await textCell.dblclick()
+      await expect(textCell).toHaveAttribute('data-editing', 'true')
+      await expect(tableSurface).toHaveAttribute('data-selection-mode', 'text')
+      await expect(textCell).toHaveCSS('user-select', 'text')
+      expect(
+        await page.evaluate(() => {
+          const cell = document.querySelector(
+            '.note-live-table-cell[data-table-row="3"][data-table-column="1"]'
+          )
+          if (!cell) return ''
+          const range = document.createRange()
+          range.selectNodeContents(cell)
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+          return selection?.toString() ?? ''
+        })
+      ).toBe('three')
+      await page.keyboard.press('Escape')
+
+      await firstCell.click({ button: 'right' })
+      const menu = page.getByTestId('note-live-table-context-menu')
+      await expect(menu).toBeVisible()
+      for (const action of [
+        'copy',
+        'cut',
+        'clear',
+        'add-row-before',
+        'add-row-after',
+        'delete-rows',
+        'add-column-before',
+        'add-column-after',
+        'delete-columns',
+        'remove-table'
+      ]) {
+        await expect(menu.getByTestId(`note-live-table-menu-${action}`).locator('svg')).toHaveCount(
+          1
+        )
+      }
+      await menu.getByTestId('note-live-table-menu-add-row-before').click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain(`| --- | --- | --- |\n|  |  |  |\n| first | one | ${wrappedOwner} |`)
+
+      const headerCell = table.locator('[data-table-row="0"][data-table-column="0"]')
+      await headerCell.click({ button: 'right' })
+      await expect(menu).toBeVisible()
+      await expect(menu.getByTestId('note-live-table-menu-delete-rows')).toBeDisabled()
+
+      await page.keyboard.press('Escape')
+      const bodyCell = table.locator('[data-table-row="2"][data-table-column="0"]')
+      await bodyCell.click({ button: 'right' })
+      await expect(menu).toBeVisible()
+      await menu.getByTestId('note-live-table-menu-add-column-before').click()
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toContain('|  | Name | Value | Owner |')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps preview tables within the readable width and scrolls dense columns internally', async () => {
+    const longText =
+      'This is a deliberately long table value that should wrap inside its cell instead of widening the notebook page. '.repeat(
+        8
+      )
+    const denseColumnCount = 12
+    const denseHeader = Array.from(
+      { length: denseColumnCount },
+      (_, index) => `Column ${index + 1}`
+    )
+    const denseSeparator = Array.from({ length: denseColumnCount }, () => '---')
+    const denseRow = Array.from({ length: denseColumnCount }, (_, index) => `Value ${index + 1}`)
+    const initialContent = [
+      'Table width demo',
+      '',
+      '| Description | Status |',
+      '| --- | --- |',
+      `| ${longText} | Ready |`,
+      '',
+      `| ${denseHeader.join(' | ')} |`,
+      `| ${denseSeparator.join(' | ')} |`,
+      `| ${denseRow.join(' | ')} |`
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+      await page.setViewportSize({ width: 820, height: 800 })
+
+      const editor = page.getByTestId('note-block-editor')
+      const tables = editor.locator('.note-live-table')
+      await expect(tables).toHaveCount(2)
+
+      const metrics = await page.evaluate(() => {
+        const editorPage = document.querySelector<HTMLElement>(
+          '[data-testid="note-editor-page-content"]'
+        )
+        const noteScroll = document.querySelector<HTMLElement>('[data-testid="note-editor-scroll"]')
+        const tableElements = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '[data-testid="note-block-editor"] .note-live-table'
+          )
+        )
+
+        return {
+          editorWidth: editorPage?.getBoundingClientRect().width ?? 0,
+          noteScrollWidth: noteScroll?.scrollWidth ?? 0,
+          noteClientWidth: noteScroll?.clientWidth ?? 0,
+          tables: tableElements.map((table) => ({
+            width: table.getBoundingClientRect().width,
+            clientWidth: table.clientWidth,
+            scrollWidth: table.scrollWidth
+          })),
+          longCellHeight:
+            tableElements[0]
+              ?.querySelector<HTMLElement>('[data-table-row="1"][data-table-column="0"]')
+              ?.getBoundingClientRect().height ?? 0
+        }
+      })
+
+      expect(metrics.tables).toHaveLength(2)
+      expect(metrics.tables[0].width).toBeLessThanOrEqual(metrics.editorWidth + 1)
+      expect(metrics.tables[1].width).toBeLessThanOrEqual(metrics.editorWidth + 1)
+      expect(metrics.tables[0].scrollWidth).toBeLessThanOrEqual(metrics.tables[0].clientWidth + 1)
+      expect(metrics.tables[1].scrollWidth).toBeGreaterThan(metrics.tables[1].clientWidth)
+      expect(metrics.noteScrollWidth).toBeLessThanOrEqual(metrics.noteClientWidth + 1)
+      expect(metrics.longCellHeight).toBeGreaterThan(32)
+
+      await page.setViewportSize({ width: 1200, height: 800 })
+      await expect(tables).toHaveCount(2)
+      const wideMetrics = await page.evaluate(() => {
+        const editorPage = document.querySelector<HTMLElement>(
+          '[data-testid="note-editor-page-content"]'
+        )
+        const noteScroll = document.querySelector<HTMLElement>('[data-testid="note-editor-scroll"]')
+        const tableElements = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '[data-testid="note-block-editor"] .note-live-table'
+          )
+        )
+        return {
+          editorWidth: editorPage?.getBoundingClientRect().width ?? 0,
+          noteScrollWidth: noteScroll?.scrollWidth ?? 0,
+          noteClientWidth: noteScroll?.clientWidth ?? 0,
+          tables: tableElements.map((table) => ({
+            width: table.getBoundingClientRect().width,
+            clientWidth: table.clientWidth,
+            scrollWidth: table.scrollWidth
+          }))
+        }
+      })
+
+      expect(wideMetrics.tables[0].width).toBeLessThanOrEqual(wideMetrics.editorWidth + 1)
+      expect(wideMetrics.tables[1].width).toBeLessThanOrEqual(wideMetrics.editorWidth + 1)
+      expect(wideMetrics.tables[0].scrollWidth).toBeLessThanOrEqual(
+        wideMetrics.tables[0].clientWidth + 1
+      )
+      expect(wideMetrics.tables[1].scrollWidth).toBeGreaterThan(wideMetrics.tables[1].clientWidth)
+      expect(wideMetrics.noteScrollWidth).toBeLessThanOrEqual(wideMetrics.noteClientWidth + 1)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('renders fenced code blocks as full-width widgets with copy feedback', async () => {
+    const initialContent = [
+      'Before',
+      '',
+      '```ts',
+      'const value = 42',
+      'console.log(value)',
+      '```',
+      '',
+      'After'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const codeBlock = editor.getByTestId('note-live-code-block')
+      const codePreview = codeBlock.getByTestId('note-live-code-preview')
+      const copyButton = codeBlock.getByTestId('note-live-code-copy-button')
+
+      await expect(codeBlock).toHaveCount(1)
+      await expect(codePreview).toHaveText('const value = 42\nconsole.log(value)')
+      await expect(codeBlock).toHaveCSS('width', /px/)
+      await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
+      await expect(codeBlock).toHaveCSS('border-radius', /[1-9]/)
+      await expect(codePreview).toHaveCSS('font-family', /JetBrains Mono/)
+
+      await expect(copyButton).toHaveAttribute('aria-label', 'Copy code block')
+      await expect(copyButton).toHaveAttribute('title', 'Copy code block')
+      await expect(copyButton).toHaveAttribute('data-state', 'idle')
+      await expect(copyButton.locator('svg')).toHaveAttribute('data-icon', 'copy')
+      await expect(copyButton).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+
+      await copyButton.click()
+      await expect(copyButton).toHaveAttribute('data-state', 'copied')
+      await expect(copyButton).toHaveAttribute('aria-label', 'Code block copied')
+      await expect(copyButton.locator('svg')).toHaveAttribute('data-icon', 'check')
+      await expect(codePreview).toHaveText('const value = 42\nconsole.log(value)')
+
+      await page.waitForTimeout(2_100)
+      await expect(copyButton).toHaveAttribute('data-state', 'idle')
+      await expect(copyButton.locator('svg')).toHaveAttribute('data-icon', 'copy')
+
+      await codePreview.click({ position: { x: 8, y: 10 } })
+      await expect(codeBlock).toHaveCount(0)
+      const activeCodeLines = editor.locator('.cm-line.note-live-code-source-line')
+      const activeCopyButton = editor.getByTestId('note-live-code-copy-button')
+      await expect(activeCodeLines).toHaveCount(4)
+      await expect(activeCodeLines.nth(0)).toHaveText('```ts')
+      await expect(activeCodeLines.nth(1)).toHaveText('const value = 42')
+      await expect(activeCodeLines.nth(2)).toHaveText('console.log(value)')
+      await expect(activeCodeLines.nth(3)).toHaveText('```')
+      await expect(activeCodeLines.nth(0)).toHaveCSS('border-top-style', 'solid')
+      await expect(activeCodeLines.nth(3)).toHaveCSS('border-bottom-style', 'solid')
+      await expect(activeCodeLines.nth(0)).toHaveCSS('padding-top', '8px')
+      await expect(activeCodeLines.nth(3)).toHaveCSS('padding-bottom', '8px')
+      await expect(activeCopyButton).toBeVisible()
+      await activeCopyButton.click()
+      await expect(activeCopyButton).toHaveAttribute('data-state', 'copied')
+
+      await editor.locator('.cm-line').filter({ hasText: 'After' }).click()
+      await expect(codeBlock).toHaveCount(1)
+
+      await page.getByTestId('note-editor-mode-tab:source').click()
+      await expect(editor).toHaveAttribute('data-editor-mode', 'source')
+      await expect(editor.getByTestId('note-live-code-copy-button')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps a trailing empty code line visible in preview and source shell', async () => {
+    const initialContent = ['Before', '', '```ts', 'const value = 42', '', '```', '', 'After'].join(
+      '\n'
+    )
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const codeBlock = editor.getByTestId('note-live-code-block')
+      const codePreview = codeBlock.getByTestId('note-live-code-preview')
+      const previewLines = codePreview.getByTestId('note-live-code-line')
+
+      await expect(previewLines).toHaveCount(2)
+      await expect(codePreview.locator('[data-empty="true"]')).toHaveCount(1)
+      await expect(codePreview.locator('[data-empty="true"]')).toHaveCSS('min-height', '20px')
+      await expect(codePreview).toHaveCSS('padding-top', '8px')
+      await expect(codePreview).toHaveCSS('padding-bottom', '8px')
+
+      await codePreview.click({ position: { x: 8, y: 10 } })
+      const activeCodeLines = editor.locator('.cm-line.note-live-code-source-line')
+      await expect(activeCodeLines).toHaveCount(4)
+      await expect(activeCodeLines.nth(0)).toHaveText('```ts')
+      await expect(activeCodeLines.nth(1)).toHaveText('const value = 42')
+      await expect(activeCodeLines.nth(2)).toHaveText('')
+      await expect(activeCodeLines.nth(3)).toHaveText('```')
+      await expect(activeCodeLines.nth(2)).toHaveCSS('min-height', '20px')
+      await expect(editor.getByTestId('note-live-code-copy-button')).toBeVisible()
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('renders an empty fenced code block with a static preview', async () => {
+    const vaultRoot = await createFixtureVault(['Before', '', '```', '```', '', 'After'].join('\n'))
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const codeBlock = editor.getByTestId('note-live-code-block')
+      const codePreview = codeBlock.getByTestId('note-live-code-preview')
+      const copyButton = codeBlock.getByTestId('note-live-code-copy-button')
+
+      await expect(codeBlock).toHaveCount(1)
+      await expect(codePreview).toBeVisible()
+      await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
+      await expect(codeBlock).toHaveCSS('border-bottom-style', 'solid')
+      await expect(codeBlock).toHaveCSS('border-radius', /[1-9]/)
+      await expect(copyButton).toBeVisible()
+      await copyButton.click()
+      await expect(copyButton).toHaveAttribute('data-state', 'copied')
+      await expect.poll(async () => page.evaluate(() => navigator.clipboard.readText())).toBe('')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('auto-completes backtick fences and removes an empty block on Backspace', async () => {
+    const vaultRoot = await createFixtureVault('')
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const outerContent = editor.locator('.cm-content').first()
+      await outerContent.click()
+      await page.keyboard.type('```')
+
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('```\n\n```')
+      await expect(editor.getByTestId('note-live-code-block')).toHaveCount(0)
+      await expect(editor.locator('.cm-line')).toHaveCount(3)
+      await expect(editor.locator('.cm-line').nth(0)).toHaveText('```')
+      await expect(editor.locator('.cm-line').nth(1)).toHaveText('')
+      await expect(editor.locator('.cm-line').nth(2)).toHaveText('```')
+
+      await page.keyboard.press('Backspace')
+      await expect(editor.getByTestId('note-live-code-block')).toHaveCount(0)
+      await expect.poll(async () => (await getCurrentNoteSnapshot(page)).content).toBe('')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('fits long fenced code blocks to the row and scrolls their preview', async () => {
+    const longCodeLine = `const result = ${'value + '.repeat(40)}value`
+    const vaultRoot = await createFixtureVault(
+      ['Before', '', '```ts', longCodeLine, '```', '', 'After'].join('\n')
+    )
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const codeBlock = editor.getByTestId('note-live-code-block')
+      await expect(codeBlock).toHaveCount(1)
+
+      const codeBlockGeometry = await editor.evaluate((root) => {
+        const pageContent = document.querySelector<HTMLElement>(
+          '[data-testid="note-editor-page-content"]'
+        )
+        const block = root.querySelector<HTMLElement>('[data-testid="note-live-code-block"]')
+        const scroller = root.querySelector<HTMLElement>('.note-live-code-block-scroll')
+        const content = root.querySelector<HTMLElement>('.note-live-code-block-preview')
+        const editorContent = root.querySelector<HTMLElement>('.cm-content')
+        const copyButton = root.querySelector<HTMLElement>(
+          '[data-testid="note-live-code-copy-button"]'
+        )
+        if (!pageContent || !block || !scroller || !content || !editorContent || !copyButton)
+          throw new Error('Long code block geometry elements were not found')
+
+        const blockBounds = block.getBoundingClientRect()
+        const pageBounds = pageContent.getBoundingClientRect()
+        const scrollerStyles = getComputedStyle(scroller)
+        const contentBounds = content.getBoundingClientRect()
+        const copyButtonBounds = copyButton.getBoundingClientRect()
+
+        return {
+          blockWidth: blockBounds.width,
+          pageWidth: pageBounds.width,
+          editorContentWidth: editorContent.getBoundingClientRect().width,
+          contentWidth: contentBounds.width,
+          clientWidth: scroller.clientWidth,
+          scrollWidth: scroller.scrollWidth,
+          overflowX: scrollerStyles.overflowX,
+          copyButtonLeft: copyButtonBounds.left,
+          copyButtonRight: copyButtonBounds.right,
+          blockLeft: blockBounds.left,
+          blockRight: blockBounds.right
+        }
+      })
+
+      expect(codeBlockGeometry.blockWidth).toBeCloseTo(codeBlockGeometry.editorContentWidth, 0)
+      expect(codeBlockGeometry.blockWidth).toBeLessThanOrEqual(codeBlockGeometry.pageWidth + 1)
+      expect(codeBlockGeometry.contentWidth).toBeGreaterThan(codeBlockGeometry.clientWidth)
+      expect(codeBlockGeometry.scrollWidth).toBeGreaterThan(codeBlockGeometry.clientWidth)
+      expect(codeBlockGeometry.overflowX).toBe('auto')
+      expect(codeBlockGeometry.copyButtonLeft).toBeGreaterThanOrEqual(
+        codeBlockGeometry.blockLeft - 1
+      )
+      expect(codeBlockGeometry.copyButtonRight).toBeLessThanOrEqual(
+        codeBlockGeometry.blockRight + 1
+      )
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('moves into fenced code blocks with the outer editor cursor', async () => {
+    const initialContent = ['Before', '', '```ts', 'alpha', 'beta', '```', '', 'After'].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const codeBlock = editor.getByTestId('note-live-code-block')
+      await editor
+        .locator('.cm-line')
+        .filter({ hasText: 'Before' })
+        .click({ position: { x: 8, y: 8 } })
+      await page.keyboard.press('End')
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('ArrowDown')
+
+      await expect(codeBlock).toHaveCount(0)
+      await expect(editor.locator('.cm-line').filter({ hasText: '```ts' })).toHaveCount(1)
+
+      await page.keyboard.type('x')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
+        .toContain('```ts\nxalpha\nbeta\n```')
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
   test('shows notebook cards in the center browser', async () => {
     const vaultRoot = await createFixtureVault('Alpha note\n')
     await fs.mkdir(path.join(vaultRoot, 'notes', 'archive'), { recursive: true })
@@ -2813,81 +3574,361 @@ test.describe('note page block editor switching', () => {
     }
   })
 
-  test('renders standard list markers aligned with the first content row', async () => {
-    const vaultRoot = await createFixtureVault(
-      '- Bullet item\n\n  Bullet detail paragraph\n\n1. Numbered item\n2. Second item\n'
+  test('renders list markers in a centered tab-width slot', async () => {
+    const initialContent = [
+      '- Bullet item',
+      '\tBullet continuation',
+      '* Asterisk item',
+      '+ Plus item',
+      '  * Nested item',
+      '3) Numbered item',
+      '4. Second item',
+      '',
+      '* * *'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const editable = editor.locator('[contenteditable="true"]').first()
+      const lines = editor.locator('.cm-line')
+      const markerWidgets = editor.locator(
+        '.note-live-list-marker:not(.note-live-list-marker-source)'
+      )
+      const sourceMarkers = editor.locator('.note-live-list-marker-source')
+      const bulletLine = lines.filter({ hasText: 'Bullet item' }).first()
+      const tabContinuationLine = lines.filter({ hasText: 'Bullet continuation' }).first()
+      const nestedLine = lines.filter({ hasText: 'Nested item' }).first()
+      const orderedLine = lines.filter({ hasText: 'Numbered item' }).first()
+      const getMarkerGeometry = async (
+        line: Locator,
+        sourceText: string,
+        markerSelector: string
+      ): Promise<{
+        markerWidth: number
+        markerRight: number
+        textLeft: number
+        markerCenter: number
+        glyphCenter: number
+      }> =>
+        line.evaluate(
+          (element, { markerSelector, sourceText }) => {
+            const marker = element.querySelector<HTMLElement>(markerSelector)
+            if (!marker) throw new Error(`List marker was not found: ${markerSelector}`)
+
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+            let textNode: Text | null = null
+            while (walker.nextNode()) {
+              const candidate = walker.currentNode as Text
+              if (candidate.data.includes(sourceText)) {
+                textNode = candidate
+                break
+              }
+            }
+            if (!textNode) throw new Error(`List text was not found: ${sourceText}`)
+
+            const textStart = textNode.data.indexOf(sourceText)
+            const textRange = document.createRange()
+            textRange.setStart(textNode, textStart)
+            textRange.setEnd(textNode, textStart + 1)
+            const markerBounds = marker.getBoundingClientRect()
+            const glyphBounds = document.createRange()
+            glyphBounds.selectNodeContents(marker)
+            const glyphRect = glyphBounds.getBoundingClientRect()
+            const textBounds = textRange.getBoundingClientRect()
+
+            return {
+              markerWidth: markerBounds.width,
+              markerRight: markerBounds.right,
+              textLeft: textBounds.left,
+              markerCenter: markerBounds.left + markerBounds.width / 2,
+              glyphCenter: glyphRect.left + glyphRect.width / 2
+            }
+          },
+          { markerSelector, sourceText }
+        )
+      const getTextLeft = async (line: Locator, sourceText: string): Promise<number> =>
+        line.evaluate((element, text) => {
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+          while (walker.nextNode()) {
+            const node = walker.currentNode as Text
+            const index = node.data.indexOf(text)
+            if (index < 0) continue
+            const range = document.createRange()
+            range.setStart(node, index)
+            range.setEnd(node, index + 1)
+            return range.getBoundingClientRect().left
+          }
+          throw new Error(`List text was not found: ${text}`)
+        }, sourceText)
+
+      await orderedLine.click({ position: { x: 80, y: 8 } })
+      await expect(markerWidgets).toHaveCount(6)
+      await expect(sourceMarkers).toHaveCount(0)
+      await expect(markerWidgets.nth(0)).toHaveText('•')
+      await expect(markerWidgets.nth(1)).toHaveText('•')
+      await expect(markerWidgets.nth(2)).toHaveText('•')
+      await expect(markerWidgets.nth(3)).toHaveText('•')
+      await expect(markerWidgets.nth(4)).toHaveText('3.')
+      await expect(markerWidgets.nth(5)).toHaveText('4.')
+      await expect(bulletLine).not.toContainText('- Bullet item')
+      await expect(nestedLine).not.toContainText('* Nested item')
+      await expect(editor.locator('.note-live-horizontal-rule')).toHaveCount(1)
+      const renderedBulletGeometry = await getMarkerGeometry(
+        bulletLine,
+        'Bullet item',
+        '.note-live-list-marker:not(.note-live-list-marker-source)'
+      )
+      const renderedNestedGeometry = await getMarkerGeometry(
+        nestedLine,
+        'Nested item',
+        '.note-live-list-marker:not(.note-live-list-marker-source)'
+      )
+      const renderedOrderedGeometry = await getMarkerGeometry(
+        orderedLine,
+        'Numbered item',
+        '.note-live-list-marker:not(.note-live-list-marker-source)'
+      )
+      const tabContinuationTextLeft = await getTextLeft(tabContinuationLine, 'Bullet continuation')
+      expect(Math.abs(renderedBulletGeometry.textLeft - tabContinuationTextLeft)).toBeLessThan(1)
+      expect(
+        Math.abs(renderedBulletGeometry.markerRight - renderedBulletGeometry.textLeft)
+      ).toBeLessThan(1)
+      expect(
+        Math.abs(renderedBulletGeometry.markerCenter - renderedBulletGeometry.glyphCenter)
+      ).toBeLessThan(1)
+      expect(
+        Math.abs(renderedOrderedGeometry.markerRight - renderedOrderedGeometry.textLeft)
+      ).toBeLessThan(1)
+      expect(
+        Math.abs(renderedOrderedGeometry.markerCenter - renderedOrderedGeometry.glyphCenter)
+      ).toBeLessThan(1)
+
+      await bulletLine.click({ position: { x: 80, y: 8 } })
+      await editable.press('Home')
+      await expect(markerWidgets).toHaveCount(5)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(sourceMarkers).toHaveText('-')
+      await expect(bulletLine).toContainText('- Bullet item')
+      const rawBulletGeometry = await getMarkerGeometry(
+        bulletLine,
+        'Bullet item',
+        '.note-live-list-marker-source'
+      )
+      expect(
+        Math.abs(rawBulletGeometry.markerWidth - renderedBulletGeometry.markerWidth)
+      ).toBeLessThan(1)
+      expect(Math.abs(rawBulletGeometry.textLeft - renderedBulletGeometry.textLeft)).toBeLessThan(1)
+      expect(Math.abs(rawBulletGeometry.markerRight - rawBulletGeometry.textLeft)).toBeLessThan(1)
+      expect(Math.abs(rawBulletGeometry.markerCenter - rawBulletGeometry.glyphCenter)).toBeLessThan(
+        1
+      )
+
+      await editable.press('ArrowRight')
+      await expect(markerWidgets).toHaveCount(5)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(bulletLine).toContainText('- Bullet item')
+
+      await editable.press('ArrowRight')
+      await expect(markerWidgets).toHaveCount(6)
+      await expect(sourceMarkers).toHaveCount(0)
+      await expect(bulletLine).not.toContainText('- Bullet item')
+
+      await nestedLine.click({ position: { x: 80, y: 8 } })
+      await editable.press('Home')
+      await expect(markerWidgets).toHaveCount(5)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(sourceMarkers).toHaveText('*')
+      await expect(nestedLine).toContainText('* Nested item')
+      const rawNestedGeometry = await getMarkerGeometry(
+        nestedLine,
+        'Nested item',
+        '.note-live-list-marker-source'
+      )
+      expect(
+        Math.abs(rawNestedGeometry.markerWidth - renderedNestedGeometry.markerWidth)
+      ).toBeLessThan(1)
+      expect(Math.abs(rawNestedGeometry.textLeft - renderedNestedGeometry.textLeft)).toBeLessThan(1)
+      expect(Math.abs(rawNestedGeometry.markerRight - rawNestedGeometry.textLeft)).toBeLessThan(1)
+      expect(Math.abs(rawNestedGeometry.markerCenter - rawNestedGeometry.glyphCenter)).toBeLessThan(
+        1
+      )
+
+      await orderedLine.click({ position: { x: 80, y: 8 } })
+      await editable.press('Home')
+      await expect(markerWidgets).toHaveCount(5)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(sourceMarkers).toHaveText('3)')
+      await expect(orderedLine).toContainText('3) Numbered item')
+      const rawOrderedGeometry = await getMarkerGeometry(
+        orderedLine,
+        'Numbered item',
+        '.note-live-list-marker-source'
+      )
+      expect(
+        Math.abs(rawOrderedGeometry.markerWidth - renderedOrderedGeometry.markerWidth)
+      ).toBeLessThan(1)
+      expect(Math.abs(rawOrderedGeometry.textLeft - renderedOrderedGeometry.textLeft)).toBeLessThan(
+        1
+      )
+      expect(Math.abs(rawOrderedGeometry.markerRight - rawOrderedGeometry.textLeft)).toBeLessThan(1)
+      expect(
+        Math.abs(rawOrderedGeometry.markerCenter - rawOrderedGeometry.glyphCenter)
+      ).toBeLessThan(1)
+      await editable.press('ArrowRight')
+      await editable.press('ArrowRight')
+      await editable.press('ArrowRight')
+      await expect(markerWidgets).toHaveCount(6)
+      await expect(sourceMarkers).toHaveCount(0)
+      await expect(markerWidgets.nth(4)).toHaveText('3.')
+      await expect(orderedLine).not.toContainText('3) Numbered item')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toBe(initialContent)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('uses normal color for raw Markdown syntax and muted list prefixes', async () => {
+    const initialContent = [
+      '# Heading',
+      '**bold** __double__ *italic* _under_ `code` ~~strike~~ **** ____',
+      '> quote',
+      '---',
+      '- bullet',
+      '3) ordered',
+      '- [ ] task',
+      '```ts',
+      'const value = 1',
+      '```'
+    ].join('\n')
+    const vaultRoot = await createFixtureVault(initialContent)
+    const { electronApp, page } = await launchWithFixture(vaultRoot)
+
+    try {
+      await openNote(page, 'alpha.md')
+
+      const editor = page.getByTestId('note-block-editor')
+      const editable = editor.locator('[contenteditable="true"]').first()
+      const lines = editor.locator('.cm-line')
+      const bodyColor = await editor.locator('.cm-content').evaluate((element) => {
+        return getComputedStyle(element).color
+      })
+      const getColors = async (locator: Locator): Promise<string[]> =>
+        locator.evaluateAll((elements) =>
+          elements.map((element) => getComputedStyle(element).color)
+        )
+
+      const expectNormalSourceColor = async (line: Locator): Promise<void> => {
+        await line.click({ position: { x: 80, y: 8 } })
+        const sourceSyntax = line.locator('.note-live-source-syntax')
+        await expect(sourceSyntax).not.toHaveCount(0)
+        const colors = await getColors(sourceSyntax)
+        expect(colors.every((color) => color === bodyColor)).toBe(true)
+      }
+
+      await expectNormalSourceColor(lines.filter({ hasText: 'Heading' }).first())
+      await expectNormalSourceColor(lines.filter({ hasText: 'bold' }).first())
+
+      const renderedMarker = editor
+        .locator('.note-live-list-marker:not(.note-live-list-marker-source)')
+        .first()
+      const renderedMarkerColor = await renderedMarker.evaluate((element) => {
+        return getComputedStyle(element).color
+      })
+      expect(renderedMarkerColor).not.toBe(bodyColor)
+
+      const bulletLine = lines.filter({ hasText: 'bullet' }).first()
+      await bulletLine.click({ position: { x: 80, y: 8 } })
+      await editable.press('Home')
+      const bulletSource = bulletLine.locator('.note-live-list-marker-source')
+      await expect(bulletSource).toHaveText('- ')
+      expect(await getColors(bulletSource)).toEqual([renderedMarkerColor])
+
+      const taskLine = lines.filter({ hasText: 'task' }).first()
+      await taskLine.click({ position: { x: 80, y: 8 } })
+      await editable.press('Home')
+      const taskSource = taskLine.locator('.note-live-list-marker-source')
+      await expect(taskSource).toHaveText('- [ ] ')
+      expect(await getColors(taskSource)).toEqual([renderedMarkerColor])
+
+      await editor.getByTestId('note-live-code-preview').click({ position: { x: 8, y: 8 } })
+      const fenceSource = editor.locator('.note-live-source-syntax')
+      await expect(fenceSource).toHaveCount(2)
+      expect((await getColors(fenceSource)).every((color) => color === bodyColor)).toBe(true)
+    } finally {
+      await electronApp.close()
+      await fs.rm(vaultRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps list marker rendering stable across Vim modes', async () => {
+    const initialContent = '- bullet item\n3) numbered item'
+    const vaultRoot = await createFixtureVault(initialContent)
+    await fs.writeFile(
+      path.join(vaultRoot, 'settings.json'),
+      JSON.stringify({ editorVimModeEnabled: true }, null, 2),
+      'utf-8'
     )
     const { electronApp, page } = await launchWithFixture(vaultRoot)
 
     try {
       await openNote(page, 'alpha.md')
 
-      const styles = await page.evaluate(() => {
-        const editorRoot = document.querySelector('[data-testid="note-block-editor"]')
-        const editable = editorRoot?.querySelector<HTMLElement>('[contenteditable="true"]')
-        const bulletItems = Array.from(
-          editable?.querySelectorAll<HTMLElement>('ul .milkdown-list-item-block li.list-item') ?? []
-        )
-        const bulletItem = bulletItems.find((item) => item.querySelector('.label.bullet'))
-        const bulletMarker = bulletItem?.querySelector<HTMLElement>('.label-wrapper')
-        const bulletParagraph = bulletItem?.querySelector<HTMLElement>('.children .content-dom > p')
-        const numberedItems = Array.from(
-          editable?.querySelectorAll<HTMLElement>('ol .milkdown-list-item-block li.list-item') ?? []
-        )
-        const numberedItem = numberedItems[0]
-        const numberedMarker = numberedItem?.querySelector<HTMLElement>('.label-wrapper')
-        const numberedParagraph = numberedItem?.querySelector<HTMLElement>(
-          '.children .content-dom > p'
-        )
+      const editor = page.getByTestId('note-block-editor')
+      const editable = editor.locator('[contenteditable="true"]').first()
+      const lines = editor.locator('.cm-line')
+      const markerWidgets = editor.locator(
+        '.note-live-list-marker:not(.note-live-list-marker-source)'
+      )
+      const sourceMarkers = editor.locator('.note-live-list-marker-source')
 
-        const getFirstRowCenter = (paragraph: HTMLElement): number => {
-          const rect = paragraph.getBoundingClientRect()
-          const computedStyle = window.getComputedStyle(paragraph)
-          return (
-            rect.top +
-            Number.parseFloat(computedStyle.paddingTop) +
-            Number.parseFloat(computedStyle.lineHeight) / 2
-          )
-        }
+      await lines.nth(0).click({ position: { x: 80, y: 8 } })
+      await page.keyboard.press('Escape')
+      await expect(editor).toHaveAttribute('data-vim-mode', 'normal')
 
-        const getCenter = (element: HTMLElement): number => {
-          const rect = element.getBoundingClientRect()
-          return rect.top + rect.height / 2
-        }
+      await page.keyboard.press('0')
+      await expect(markerWidgets).toHaveCount(1)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(lines.nth(0)).toContainText('- bullet item')
 
-        return {
-          bulletMarkerText: bulletItem?.querySelector('.label.bullet')?.textContent?.trim() ?? null,
-          bulletMarkerColor: bulletMarker ? window.getComputedStyle(bulletMarker).color : null,
-          bulletCenterDelta:
-            bulletMarker && bulletParagraph
-              ? Math.abs(getCenter(bulletMarker) - getFirstRowCenter(bulletParagraph))
-              : null,
-          bulletItemHeight: bulletItem?.getBoundingClientRect().height ?? null,
-          bulletMarkerHeight: bulletMarker?.getBoundingClientRect().height ?? null,
-          numberedMarkerText:
-            numberedItem?.querySelector('.label.ordered')?.textContent?.trim() ?? null,
-          secondNumberedMarkerText:
-            numberedItems[1]?.querySelector('.label.ordered')?.textContent?.trim() ?? null,
-          numberedMarkerColor: numberedMarker
-            ? window.getComputedStyle(numberedMarker).color
-            : null,
-          numberedCenterDelta:
-            numberedMarker && numberedParagraph
-              ? Math.abs(getCenter(numberedMarker) - getFirstRowCenter(numberedParagraph))
-              : null
-        }
-      })
+      await page.keyboard.press('l')
+      await expect(markerWidgets).toHaveCount(1)
+      await expect(sourceMarkers).toHaveCount(1)
+      await page.keyboard.press('l')
+      await expect(markerWidgets).toHaveCount(2)
+      await expect(sourceMarkers).toHaveCount(0)
+      await expect(lines.nth(0)).not.toContainText('- bullet item')
 
-      expect(styles.bulletMarkerText).toBe('•')
-      expect(styles.bulletMarkerColor).not.toBe('rgba(0, 0, 0, 0)')
-      expect(styles.bulletCenterDelta).not.toBeNull()
-      expect(styles.bulletCenterDelta ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1)
-      expect(styles.bulletItemHeight).toBeGreaterThan(styles.bulletMarkerHeight ?? 0)
-      expect(styles.numberedMarkerText).toBe('1.')
-      expect(styles.secondNumberedMarkerText).toBe('2.')
-      expect(styles.numberedMarkerColor).not.toBe('rgba(0, 0, 0, 0)')
-      expect(styles.numberedCenterDelta).not.toBeNull()
-      expect(styles.numberedCenterDelta ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1)
+      await page.keyboard.press('v')
+      await expect(editor).toHaveAttribute('data-vim-mode', 'visual')
+      await page.keyboard.press('h')
+      await expect(markerWidgets).toHaveCount(1)
+      await expect(sourceMarkers).toHaveCount(1)
+      await expect(lines.nth(0)).toContainText('- bullet item')
+      await page.keyboard.press('Escape')
+
+      await page.keyboard.press('i')
+      await expect(editor).toHaveAttribute('data-vim-mode', 'insert')
+      await expect(markerWidgets).toHaveCount(1)
+      await expect(sourceMarkers).toHaveCount(1)
+      await editable.press('ArrowRight')
+      await expect(markerWidgets).toHaveCount(2)
+      await expect(sourceMarkers).toHaveCount(0)
+      await page.keyboard.press('Escape')
+
+      await page.keyboard.press('l')
+      await expect(markerWidgets).toHaveCount(2)
+      await expect(sourceMarkers).toHaveCount(0)
+      await expect(markerWidgets.nth(1)).toHaveText('3.')
+      await expect
+        .poll(async () => (await getCurrentNoteSnapshot(page)).content)
+        .toBe(initialContent)
     } finally {
       await electronApp.close()
       await fs.rm(vaultRoot, { recursive: true, force: true })
@@ -3118,26 +4159,6 @@ test.describe('note page block editor switching', () => {
     try {
       await openNote(page, 'alpha.md')
       await insertCodeBlockFromSlash(page)
-      await focusFirstCodeBlock(page)
-
-      const codeBlockRoot = page
-        .locator('[data-testid="note-block-editor"] .milkdown-code-block')
-        .first()
-      const codeBlock = codeBlockRoot.locator('.note-code-block-body')
-      const expectedBorderWidth = await codeBlock.evaluate((element) =>
-        getComputedStyle(element).getPropertyValue('--border-width').trim()
-      )
-      await expect(codeBlock).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-      await expect(codeBlock).toHaveCSS('border-top-style', 'solid')
-      await expect(codeBlock).toHaveCSS('border-top-width', expectedBorderWidth)
-      await expect(codeBlock.locator('code')).toHaveCSS('font-family', /JetBrains Mono/)
-      await expect(codeBlockRoot.locator('.tools')).toHaveCount(0)
-
-      const copyButton = codeBlockRoot.locator('> .copy-button')
-      await expect(copyButton).toHaveCSS('position', 'absolute')
-      await expect(copyButton).toHaveCSS('width', '28px')
-      await expect(copyButton).toHaveCSS('height', '28px')
-
       await page.keyboard.type('const value = 42')
       await page.keyboard.press('Enter')
       await page.keyboard.type('console.log(value)')
@@ -3145,6 +4166,27 @@ test.describe('note page block editor switching', () => {
       await expect
         .poll(async () => (await getCurrentNoteSnapshot(page)).content, { timeout: 15_000 })
         .toContain('```\nconst value = 42\nconsole.log(value)\n```')
+
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('End')
+      await page.keyboard.press('Enter')
+
+      const codeBlockRoot = page
+        .locator('[data-testid="note-block-editor"] .note-live-code-block')
+        .first()
+      const codeBlock = codeBlockRoot.getByTestId('note-live-code-preview')
+      const expectedBorderWidth = await codeBlockRoot.evaluate((element) =>
+        getComputedStyle(element).getPropertyValue('--border-width').trim()
+      )
+      await expect(codeBlockRoot).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(codeBlockRoot).toHaveCSS('border-top-style', 'solid')
+      await expect(codeBlockRoot).toHaveCSS('border-top-width', expectedBorderWidth)
+      await expect(codeBlock).toHaveCSS('font-family', /JetBrains Mono/)
+
+      const copyButton = codeBlockRoot.getByTestId('note-live-code-copy-button')
+      await expect(copyButton).toHaveCSS('position', 'absolute')
+      await expect(copyButton).toHaveCSS('width', '28px')
+      await expect(copyButton).toHaveCSS('height', '28px')
 
       await expect(copyButton).toBeVisible()
       await expect(copyButton).toHaveAttribute('aria-label', 'Copy code block')
@@ -3154,11 +4196,12 @@ test.describe('note page block editor switching', () => {
 
       await expect(copyButton).toHaveAttribute('data-state', 'copied')
 
-      await expect
-        .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
-        .toBe('const value = 42\nconsole.log(value)')
+      await expect(codeBlock).toHaveText('const value = 42\nconsole.log(value)')
 
       await focusFirstCodeBlock(page)
+      await page.keyboard.press('End')
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('End')
       await page.keyboard.press('Enter')
       await page.keyboard.type('return value')
 
@@ -3173,6 +4216,8 @@ test.describe('note page block editor switching', () => {
 
   test('highlights Python and JavaScript fenced code blocks', async () => {
     const initialMarkdown = [
+      'Before',
+      '',
       '```py',
       '# python comment',
       'def greet(name):',
@@ -3185,7 +4230,9 @@ test.describe('note page block editor switching', () => {
       '  const message = "hello " + name',
       '  return message',
       '}',
-      '```'
+      '```',
+      '',
+      'After'
     ].join('\n')
     const vaultRoot = await createFixtureVault(initialMarkdown)
     const { electronApp, page } = await launchWithFixture(vaultRoot)
@@ -3194,8 +4241,8 @@ test.describe('note page block editor switching', () => {
       await openNote(page, 'alpha.md')
 
       const editor = page.getByTestId('note-block-editor')
-      const pythonBlock = editor.locator('.milkdown-code-block[data-language="py"]')
-      const javascriptBlock = editor.locator('.milkdown-code-block[data-language="js"]')
+      const pythonBlock = editor.locator('.note-live-code-block[data-language="py"]')
+      const javascriptBlock = editor.locator('.note-live-code-block[data-language="js"]')
 
       await expect(pythonBlock).toBeVisible({ timeout: 15_000 })
       await expect(javascriptBlock).toBeVisible({ timeout: 15_000 })

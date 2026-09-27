@@ -10,7 +10,12 @@ import {
 } from 'react'
 import { stripNoteExtension } from '../../../shared/noteDocument'
 import { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
-import { Editor, type NoteEditorHandle, type NoteEditorMode } from '../components/Editor'
+import {
+  Editor,
+  type NoteEditorHandle,
+  type NoteEditorMode,
+  type NoteVimMode
+} from '../components/Editor'
 import {
   DocumentWorkspaceFooterStatus,
   WorkspaceHeaderSecondaryActions
@@ -20,7 +25,6 @@ import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import { InlineEditableText } from '../components/InlineEditableText'
 import { TagEditor } from '../components/TagEditor'
 import { WorkspaceReadingWidth } from '../components/workspace'
-import type { NoteVimMode } from '../lib/noteVimMode'
 import type { NotebookOpenOptions } from '../lib/notebookOpen'
 
 interface EditorPageProps {
@@ -62,7 +66,7 @@ function NoteTitleArea({ children }: NoteTitleAreaProps): ReactElement {
       data-testid="note-title-area"
       data-scroll-state="visible"
       data-scroll-position="flow"
-      className="shrink-0 bg-workspace"
+      className="note-title-area shrink-0 border-b-0 bg-workspace"
     >
       <div data-testid="note-title-content" className="py-5">
         {children}
@@ -92,7 +96,7 @@ export function EditorPage({
   vimModeEnabled,
   vimKeyMappings
 }: EditorPageProps): ReactElement {
-  const [editorMode, setEditorMode] = useState<NoteEditorMode>('preview')
+  const [editorMode, setEditorMode] = useState<NoteEditorMode>('live')
   const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const noteScrollRef = useRef<HTMLDivElement | null>(null)
   const restoreScrollFrameRef = useRef<number | null>(null)
@@ -152,7 +156,7 @@ export function EditorPage({
           <TabToggleGroup
             value={editorMode}
             onValueChange={(value) => {
-              if (value === 'preview' || value === 'raw') {
+              if (value === 'live' || value === 'source') {
                 setEditorMode(value)
               }
             }}
@@ -161,20 +165,20 @@ export function EditorPage({
             className="max-w-none"
           >
             <TabToggleGroupItem
-              value="preview"
-              id="note-editor-mode-tab-preview"
+              value="live"
+              id="note-editor-mode-tab-live"
               aria-controls="note-editor-mode-panel"
-              data-testid="note-editor-mode-tab:preview"
+              data-testid="note-editor-mode-tab:live"
             >
-              Preview
+              Live Preview
             </TabToggleGroupItem>
             <TabToggleGroupItem
-              value="raw"
-              id="note-editor-mode-tab-raw"
+              value="source"
+              id="note-editor-mode-tab-source"
               aria-controls="note-editor-mode-panel"
-              data-testid="note-editor-mode-tab:raw"
+              data-testid="note-editor-mode-tab:source"
             >
-              Raw
+              Source
             </TabToggleGroupItem>
           </TabToggleGroup>
         </div>
@@ -202,13 +206,13 @@ export function EditorPage({
                         onCommit={onRename}
                         editToken={titleEditToken}
                         displayAs="h1"
-                        displayClassName="m-0 min-w-0 origin-left cursor-text text-3xl font-bold text-foreground transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
-                        inputClassName="m-0 h-auto min-w-0 flex-1 origin-left text-3xl font-bold text-foreground caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out focus-visible:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
+                        displayClassName="m-0 min-w-0 origin-left cursor-text text-3xl font-bold text-foreground no-underline transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out hover:text-primary"
+                        inputClassName="m-0 h-auto min-w-0 flex-1 origin-left text-3xl font-bold text-foreground no-underline caret-primary transition-[color,font-size,line-height,letter-spacing,transform] duration-200 ease-out focus-visible:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
                         inputVariant="ghost"
                         title="Click to rename"
                       />
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
+                    <div className="flex flex-wrap items-center gap-2 pb-5">
                       <TagEditor
                         value={tags}
                         availableTags={availableTags}

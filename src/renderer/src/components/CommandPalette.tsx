@@ -87,6 +87,7 @@ interface CommandPaletteProps {
   onOpenSyncHealth?: () => void
   onReconcileVault?: () => Promise<void>
   onCreateVaultBackup?: () => Promise<void>
+  onConvertIndentationToTabs?: () => Promise<void> | void
 }
 
 type CommandPaletteShortcutKey = 'cmd' | 'Enter' | string
@@ -115,7 +116,8 @@ export function CommandPalette({
   onOpenVaultTerminal,
   onOpenSyncHealth,
   onReconcileVault,
-  onCreateVaultBackup
+  onCreateVaultBackup,
+  onConvertIndentationToTabs
 }: CommandPaletteProps): ReactElement | null {
   const paletteItemIconClass =
     'mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-primary transition-colors group-data-[selected=true]:text-primary'
@@ -303,6 +305,20 @@ export function CommandPalette({
         keywords: ['create', 'add', 'note'],
         icon: Plus
       },
+      ...(onConvertIndentationToTabs
+        ? [
+            {
+              value: '>convert indentation to tabs',
+              label: 'Convert Indentation to Tabs',
+              onSelect: () => {
+                void onConvertIndentationToTabs()
+              },
+              keywords: ['indent', 'indentation', 'tabs', 'spaces', 'markdown', 'note'],
+              icon: FileText,
+              disabled: !activeNotePath
+            }
+          ]
+        : []),
       {
         value: '>go knowledge',
         label: 'Go to Knowledge',
@@ -489,6 +505,7 @@ export function CommandPalette({
       activeNotePath,
       onCreate,
       onCreateVaultBackup,
+      onConvertIndentationToTabs,
       onManageVaults,
       onOpenPage,
       onOpenSyncHealth,

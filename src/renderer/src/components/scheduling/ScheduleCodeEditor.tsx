@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, type ReactElement } from 'react'
 import type { RuntimeType } from '../../../../shared/scheduleTypes'
 import { githubCopilotHighlightStyle } from '../../lib/codeSyntaxHighlighting'
+import { sharedEditorIndentation } from '../../lib/editorIndentation'
 import { getScheduleCodeLanguage } from '../../lib/schedulingCodeEditor'
 
 export interface ScheduleCodeEditorProps {
@@ -62,6 +63,7 @@ export function ScheduleCodeEditor({
         drawSelection(),
         history(),
         bracketMatching(),
+        sharedEditorIndentation,
         indentOnInput(),
         syntaxHighlighting(githubCopilotHighlightStyle),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),

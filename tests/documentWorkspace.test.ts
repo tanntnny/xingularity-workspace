@@ -205,6 +205,8 @@ describe('document workspace right panel', () => {
     expect(primaryRow).toContain('[&amp;_button:not(.bg-accent)]:bg-transparent')
     expect(primaryRow).toContain('[&amp;_button:not(.bg-accent):hover]:bg-muted')
     expect(primaryRow).toContain('[&amp;_button:not(.bg-accent):focus-visible]:bg-muted')
+    expect(primaryRow).toContain('border-b-0')
+    expect(primaryRow).not.toContain('border-b border-panel-border')
     expect(contextTrigger).toContain('text-muted-foreground')
     expect(secondaryAction).toContain('border border-input')
 

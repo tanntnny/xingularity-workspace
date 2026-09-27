@@ -11,7 +11,7 @@ import {
   useRef,
   useState
 } from 'react'
-import { PenTool, Plus, Trash2 } from '../components/ui/icons'
+import { ExcalidrawFileIcon, Plus, Trash2 } from '../components/ui/icons'
 import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type {
@@ -592,7 +592,7 @@ export function ExcalidrawSidebar(): ReactElement {
               {sessions.length === 0 ? (
                 <EmptyState
                   className="border-0 bg-transparent px-3 py-6"
-                  icon={PenTool}
+                  icon={ExcalidrawFileIcon}
                   title="No saved drawings yet"
                   description="Create a drawing to get started."
                 />

@@ -43,6 +43,8 @@ describe('NotebookCardBrowser', () => {
     expect(markup).toContain('title="A very long notebook name"')
     expect(markup).toContain('title="A very long folder name"')
     expect(markup).toContain('title="A very long drawing name"')
+    expect(markup).toContain('icon-tabler-excalidraw-file')
+    expect(markup).not.toContain('tabler-icon-pencil-filled')
   })
 })
 

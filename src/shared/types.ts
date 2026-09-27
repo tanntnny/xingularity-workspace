@@ -82,9 +82,6 @@ export const NOTE_PDF_IMAGE_URI_PREFIX = 'xingularity-export-image://'
 
 export interface NotePdfExportInput {
   relPath: string
-  title: string
-  html: string
-  images: NotePdfExportImage[]
 }
 
 export interface NotePdfExportResult {
@@ -627,23 +624,25 @@ export interface WorkspaceViewResourceConfig {
   sortState: WorkspaceViewSortState | null
 }
 
-export type WorkspaceView = {
-  id: string
-  name: string
-  icon: ProjectIconStyle
-  source: 'tasks'
-  config: WorkspaceViewTaskConfig
-  createdAt: string
-  updatedAt: string
-} | {
-  id: string
-  name: string
-  icon: ProjectIconStyle
-  source: 'resources'
-  config: WorkspaceViewResourceConfig
-  createdAt: string
-  updatedAt: string
-}
+export type WorkspaceView =
+  | {
+      id: string
+      name: string
+      icon: ProjectIconStyle
+      source: 'tasks'
+      config: WorkspaceViewTaskConfig
+      createdAt: string
+      updatedAt: string
+    }
+  | {
+      id: string
+      name: string
+      icon: ProjectIconStyle
+      source: 'resources'
+      config: WorkspaceViewResourceConfig
+      createdAt: string
+      updatedAt: string
+    }
 
 export type WeeklyHeightMode = 'duration' | 'content'
 
@@ -1211,6 +1210,7 @@ export interface AppSettings {
   pythonCondaExecutablePath: Maybe<string>
   editorVimModeEnabled: boolean
   editorVimKeyMappings: NoteVimKeyMapping[]
+  calendarWeeklyHourHeightPx: number
   calendarTasks: CalendarTask[]
   // Canonical task projection. calendarTasks is retained for compatibility with
   // existing renderer consumers during the migration.
@@ -1239,6 +1239,7 @@ export interface AppSettingsUpdate {
   pythonCondaExecutablePath?: Maybe<string>
   editorVimModeEnabled?: boolean
   editorVimKeyMappings?: NoteVimKeyMapping[]
+  calendarWeeklyHourHeightPx?: number
   calendarTasks?: CalendarTask[]
   tasks?: CalendarTask[]
   workspaceViews?: WorkspaceView[]

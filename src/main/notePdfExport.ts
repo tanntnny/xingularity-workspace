@@ -5,6 +5,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { extractNoteTitleFromMarkdown } from '../shared/noteDocument'
 import { splitNoteContent } from '../shared/noteContent'
+import { remarkXingularityMarkdown } from '../shared/markdownDialect'
 import { NOTE_PDF_IMAGE_URI_PREFIX, NotePdfExportImage } from '../shared/types'
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -34,9 +35,35 @@ const FOLDER_PDF_STYLES = `
       blockquote { margin-left: 0; padding-left: 12px; border-left: 3px solid #000; }
 `
 
+const NOTE_PDF_STYLES = `
+      body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.55; }
+      h1, h2, h3, h4, h5, h6 { break-after: avoid; line-height: 1.25; }
+      h1 { font-size: 28px; }
+      h2 { font-size: 23px; }
+      h3 { font-size: 20px; }
+      p, li, blockquote { orphans: 3; widows: 3; }
+      pre { overflow-wrap: anywhere; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #000; padding: 6px; overflow-wrap: anywhere; vertical-align: top; }
+      blockquote { margin-left: 0; padding-left: 12px; border-left: 3px solid #000; }
+`
+
 export interface FolderPdfNote {
   relPath: string
   markdown: string
+}
+
+export async function buildNotePdfHtmlFromMarkdown(
+  relPath: string,
+  markdown: string,
+  vaultRoot: string
+): Promise<{ html: string; warnings: string[] }> {
+  const images: NotePdfExportImage[] = []
+  const title = extractNoteTitleFromMarkdown(markdown, relPath)
+  const body = splitNoteContent(markdown).body
+  const contentHtml = renderMarkdown(body, images)
+  return buildNotePdfHtml(title, contentHtml, images, vaultRoot, NOTE_PDF_STYLES)
 }
 
 export async function buildNotePdfHtml(
@@ -124,7 +151,7 @@ export async function buildFolderPdfHtml(
     .map((note) => {
       const title = extractNoteTitleFromMarkdown(note.markdown, note.relPath)
       const body = splitNoteContent(note.markdown).body
-      const contentHtml = renderFolderMarkdown(body, images)
+      const contentHtml = renderMarkdown(body, images)
 
       return `<section class="folder-pdf-note">
         <header class="folder-pdf-note-header">
@@ -145,12 +172,12 @@ export async function buildFolderPdfHtml(
   )
 }
 
-function renderFolderMarkdown(markdown: string, images: NotePdfExportImage[]): string {
+function renderMarkdown(markdown: string, images: NotePdfExportImage[]): string {
   return renderToStaticMarkup(
     createElement(
       ReactMarkdown,
       {
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, remarkXingularityMarkdown],
         urlTransform: transformFolderPdfUrl,
         components: {
           img: ({ alt, src }) => {

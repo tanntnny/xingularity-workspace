@@ -19,6 +19,7 @@ import { TASK_TAG_MAX_COUNT } from '../shared/taskTags'
 import { MAX_RECENT_PAGE_TARGETS } from '../shared/recentPages'
 import { isVaultRelativePath } from '../shared/projectFolders'
 import { FOLDER_COLOR_PALETTE } from '../shared/folderColors'
+import { isValidCalendarWeeklyHourHeight } from '../shared/calendarPreferences'
 import { handleIpc } from './errorReporting'
 import { VaultRuntime } from './runtime'
 import { loadMainWindowApp } from './window'
@@ -51,20 +52,7 @@ const fleetingUpdateSchema = z.object({
   triageState: z.enum(['inbox', 'in-progress', 'converted', 'archived']).optional()
 })
 const notePdfExportInputSchema = z.object({
-  relPath: notePathSchema,
-  title: z.string().trim().min(1).max(512),
-  html: z.string().min(1).max(5_000_000),
-  images: z
-    .array(
-      z.object({
-        id: z
-          .string()
-          .regex(/^[a-z0-9-]+$/i)
-          .max(120),
-        src: z.string().min(1).max(4096)
-      })
-    )
-    .max(200)
+  relPath: notePathSchema
 })
 const folderPdfExportInputSchema = z.object({
   folderPath: z.string().min(1).max(512)
@@ -474,10 +462,7 @@ const workspaceViewResourceSchema = workspaceViewBaseSchema.extend({
     types: z.array(z.enum(RESOURCE_TYPES)).max(10),
     providers: z.array(z.enum(RESOURCE_PROVIDERS)).max(10),
     states: z.array(z.enum(RESOURCE_STATES)).max(20),
-    labelFilters: z.record(
-      z.string().min(1).max(64),
-      z.array(z.string().max(500)).max(100)
-    ),
+    labelFilters: z.record(z.string().min(1).max(64), z.array(z.string().max(500)).max(100)),
     projectIds: z.array(z.string().min(1).max(120)).max(500),
     sortState: workspaceViewSortSchema.nullable()
   })
@@ -712,6 +697,10 @@ const settingsUpdateSchema = z.object({
   codeFontFamily: z.string().min(1).max(200).optional(),
   editorVimModeEnabled: z.boolean().optional(),
   editorVimKeyMappings: z.array(noteVimKeyMappingSchema).max(20).optional(),
+  calendarWeeklyHourHeightPx: z
+    .number()
+    .refine(isValidCalendarWeeklyHourHeight, 'Invalid weekly calendar hour height')
+    .optional(),
   calendarTasks: z.array(calendarTaskSchema).max(5000).optional(),
   tasks: z.array(calendarTaskSchema).max(5000).optional(),
   workspaceViews: z.array(workspaceViewSchema).max(100).optional(),

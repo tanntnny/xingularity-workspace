@@ -38,7 +38,6 @@ import {
   normalizeTimedRange,
   pixelsToMinutes,
   snapMinutes,
-  WEEKLY_HOUR_HEIGHT_PX,
   WEEKLY_HOUR_HEIGHT_STEP_PX,
   WEEKLY_MAX_END_MINUTES,
   WEEKLY_MIN_DURATION_MINUTES,
@@ -73,7 +72,9 @@ interface CalendarWeekViewProps {
   selectedDate: string
   tasks: CalendarTask[]
   projects?: Project[]
+  weeklyHourHeightPx: number
   onSelectDate: (date: string) => void
+  onWeeklyHourHeightChange: (heightPx: number) => void
   onCreateTask?: (schedule: WeeklyTimedCreateSchedule) => Promise<CalendarTask>
   onOpenTask?: (taskId: string, options?: TaskOpenOptions) => void
   onDuplicateTask?: (taskId: string) => void | Promise<void>
@@ -157,8 +158,10 @@ export function CalendarWeekView({
   selectedDate,
   tasks,
   projects = [],
+  weeklyHourHeightPx,
   onSelectDate,
   onCreateTask,
+  onWeeklyHourHeightChange,
   onOpenTask,
   onDuplicateTask,
   onCopyTaskToSchedule,
@@ -171,7 +174,7 @@ export function CalendarWeekView({
   const { start: startCalendarDragAutoScroll, stop: stopCalendarDragAutoScroll } =
     useCalendarDragAutoScroll({ rootRef: calendarRootRef })
   const [currentDateTime, setCurrentDateTime] = useState(() => new Date())
-  const [weeklyHourHeightPx, setWeeklyHourHeightPx] = useState(WEEKLY_HOUR_HEIGHT_PX)
+  const weeklyHourHeightPxRef = useRef(weeklyHourHeightPx)
   const weeklyDayHeightPx = getWeeklyDayHeightPx(weeklyHourHeightPx)
   const weeklyTimedSurfaceHeightPx = weeklyDayHeightPx + WEEKLY_CELL_PADDING_Y_PX * 2
   const [timeScaleMetrics, setTimeScaleMetrics] = useState<WeeklyTimeScaleMetrics>(() => ({
@@ -219,6 +222,10 @@ export function CalendarWeekView({
   const timedInteractionCleanupRef = useRef<(() => void) | null>(null)
   const dragStateRef = useRef<WeeklyTaskDragState | null>(null)
   const suppressTaskOpenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    weeklyHourHeightPxRef.current = weeklyHourHeightPx
+  }, [weeklyHourHeightPx])
 
   const previewTask = useMemo(() => {
     if (!timedInteraction) {
@@ -410,16 +417,18 @@ export function CalendarWeekView({
       setTimedDropIndicator(null)
 
       const direction = event.deltaY < 0 ? 1 : -1
-      setWeeklyHourHeightPx((current) =>
-        clampWeeklyHourHeight(current + direction * WEEKLY_HOUR_HEIGHT_STEP_PX)
+      const nextHeight = clampWeeklyHourHeight(
+        weeklyHourHeightPxRef.current + direction * WEEKLY_HOUR_HEIGHT_STEP_PX
       )
+      weeklyHourHeightPxRef.current = nextHeight
+      onWeeklyHourHeightChange(nextHeight)
     }
 
     node.addEventListener('wheel', handleWheel, { capture: true, passive: false })
     return () => {
       node.removeEventListener('wheel', handleWheel, true)
     }
-  }, [])
+  }, [onWeeklyHourHeightChange])
 
   useEffect(() => {
     return () => {

@@ -36,6 +36,10 @@ import { migrateProjectResources, normalizeResourceRef } from '../shared/resourc
 import { DEFAULT_CODE_FONT_ID, normalizeCodeFontId } from '../shared/fontCatalog'
 import { normalizeFolderColors } from '../shared/folderColors'
 import { createDefaultStickyNoteBoard, normalizeStickyNoteBoard } from '../shared/stickyNotes'
+import {
+  CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX,
+  normalizeCalendarWeeklyHourHeight
+} from '../shared/calendarPreferences'
 import { withWorkspaceMutationLock } from './workspaceMutationLock'
 
 interface GlobalSettings {
@@ -190,6 +194,7 @@ export function createDefaultAppSettings(): AppSettings {
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
+    calendarWeeklyHourHeightPx: CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX,
     calendarTasks: [],
     tasks: [],
     workspaceViews: [],
@@ -287,6 +292,9 @@ function normalizeSettings(parsed: Partial<AppSettings>): AppSettings {
         ? parsed.editorVimModeEnabled
         : defaults.editorVimModeEnabled,
     editorVimKeyMappings: normalizeEditorVimKeyMappings(parsed.editorVimKeyMappings),
+    calendarWeeklyHourHeightPx: normalizeCalendarWeeklyHourHeight(
+      parsed.calendarWeeklyHourHeightPx
+    ),
     calendarTasks: normalizedTaskLinks,
     tasks: normalizedTaskLinks,
     workspaceViews: normalizeWorkspaceViews(parsed.workspaceViews),
@@ -1118,6 +1126,7 @@ export class SettingsStore {
       pythonCondaExecutablePath: settings.pythonCondaExecutablePath,
       editorVimModeEnabled: settings.editorVimModeEnabled,
       editorVimKeyMappings: settings.editorVimKeyMappings,
+      calendarWeeklyHourHeightPx: settings.calendarWeeklyHourHeightPx,
       workspaceViews: settings.workspaceViews,
       folderColors: settings.folderColors,
       featureFlags: settings.featureFlags,

@@ -1017,7 +1017,7 @@ const DocumentWorkspaceMainHeader = React.forwardRef<HTMLElement, DocumentWorksp
           <div
             data-workspace-header-row="primary"
             className={cn(
-              'app-drag-region flex min-w-0 items-center gap-1.5 border-b border-panel-border px-3',
+              'app-drag-region flex min-w-0 items-center gap-1.5 border-b-0 px-3',
               workspacePrimaryHeaderControlClass
             )}
           >

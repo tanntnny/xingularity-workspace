@@ -3,7 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { NOTE_PDF_IMAGE_URI_PREFIX } from '../src/shared/types'
-import { buildFolderPdfHtml, buildNotePdfHtml } from '../src/main/notePdfExport'
+import {
+  buildFolderPdfHtml,
+  buildNotePdfHtml,
+  buildNotePdfHtmlFromMarkdown
+} from '../src/main/notePdfExport'
 
 const temporaryDirectories: string[] = []
 
@@ -91,5 +95,23 @@ describe('buildNotePdfHtml', () => {
     expect(result.html).toContain('<table>')
     expect(result.html).toContain('page-break-before: always')
     expect(result.html).not.toContain('tags: [alpha]')
+  })
+
+  it('renders a note PDF from canonical Markdown instead of editor DOM', async () => {
+    const result = await buildNotePdfHtmlFromMarkdown(
+      'notes/source.md',
+      '---\ntags: [source]\n---\n# Source\n\nParagraph with **bold** and _underlined_ text.\n\nTest\n-\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',
+      '/tmp/vault'
+    )
+
+    expect(result.warnings).toEqual([])
+    expect(result.html).toContain('<h1>Source</h1>')
+    expect(result.html).toContain('<strong>bold</strong>')
+    expect(result.html).toContain('<u>underlined</u>')
+    expect(result.html).toContain('<p>Test\n-</p>')
+    expect(result.html).not.toContain('<h2>Test</h2>')
+    expect(result.html).toContain('<table>')
+    expect(result.html).not.toContain('tags: [source]')
+    expect(result.html).toContain('table-layout: fixed')
   })
 })

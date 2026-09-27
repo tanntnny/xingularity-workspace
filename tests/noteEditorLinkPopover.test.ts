@@ -6,21 +6,12 @@ const editorSource = readFileSync(
   'utf8'
 )
 
-describe('note editor link popover', () => {
-  it('uses the shared selection popover for note mention completion', () => {
-    expect(editorSource).toContain('options={mentionOptions}')
-    expect(editorSource).toContain('onValueChange={handleMentionSelect}')
-    expect(editorSource).toContain('onSearchValueChange={handleMentionSearchValueChange}')
-    expect(editorSource).toContain('const href = noteMentionHref(targetRelPath)')
-    expect(editorSource).not.toContain('const href = noteMentionHref(fallbackLabel)')
-    expect(editorSource).toContain('testId="note-link-completion"')
-    expect(editorSource).toContain('selectOnTab')
-    expect(editorSource).toContain('hideTrigger')
-    expect(editorSource).toContain('dismissedMentionTriggerRef')
-    expect(editorSource).toContain('dismissedTrigger.from === triggerStart')
-    expect(editorSource).toContain(
-      'style={{ top: mentionPicker?.top ?? 0, left: mentionPicker?.left ?? 0 }}'
-    )
-    expect(editorSource).not.toContain('Link2')
+describe('note editor link completion', () => {
+  it('uses source-owned CodeMirror completion for note mentions', () => {
+    expect(editorSource).toContain('autocompletion({ override: [completionSource]')
+    expect(editorSource).toContain('context.matchBefore(/\\[\\[[^\\]\\n]*/')
+    expect(editorSource).toContain('const insert = `[[${note.relPath}]]`')
+    expect(editorSource).toContain('noteMentionHref(targetRelPath)')
+    expect(editorSource).toContain('noteResolverRef.current(explicitTarget)')
   })
 })

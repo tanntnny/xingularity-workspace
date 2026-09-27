@@ -1,94 +1,75 @@
 import {
   forwardRef,
-  ReactElement,
   useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
-  useState
+  useState,
+  type ReactElement
 } from 'react'
+import { autocompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete'
 import {
-  commandsCtx,
-  EditorStatus,
-  editorViewCtx,
-  parserCtx,
-  prosePluginsCtx,
-  schemaCtx,
-  serializerCtx
-} from '@milkdown/kit/core'
-import type { Node as ProseNode, ResolvedPos } from '@milkdown/prose/model'
-import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
-import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
+  defaultKeymap,
+  deleteCharBackward,
+  deleteCharForward,
+  history,
+  historyKeymap,
+  indentWithTab
+} from '@codemirror/commands'
+import { bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language'
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
+import { Compartment, EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state'
 import {
-  addBlockTypeCommand,
-  blockquoteSchema,
-  bulletListSchema,
-  clearTextInCurrentBlockCommand,
-  codeBlockSchema,
-  headingSchema,
-  hrSchema,
-  linkSchema,
-  listItemSchema,
-  orderedListSchema,
-  paragraphSchema,
-  selectTextNearPosCommand,
-  setBlockTypeCommand,
-  wrapInBlockTypeCommand
-} from '@milkdown/kit/preset/commonmark'
-import { Crepe, CrepeFeature } from '@milkdown/crepe'
-import { createTable } from '@milkdown/kit/preset/gfm'
-import { getMarkdown, insert, replaceAll } from '@milkdown/kit/utils'
-import '@milkdown/crepe/theme/common/style.css'
-import katex from 'katex'
-import { Check } from './ui/icons'
-import { NoteRawEditor, type NoteRawEditorHandle } from './NoteRawEditor'
-import { SelectionPopover, type SelectionPopoverOption } from './ui/selection-popover'
-import { WorkspaceTextFade } from './ui/workspace-text-fade'
+  crosshairCursor,
+  drawSelection,
+  dropCursor,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  placeholder,
+  rectangularSelection
+} from '@codemirror/view'
+import { getCM, vim, Vim } from '@replit/codemirror-vim'
 import { getNoteDisplayName, stripNoteExtension } from '../../../shared/noteDocument'
-import {
-  NOTE_PDF_IMAGE_URI_PREFIX,
-  type NoteListItem,
-  type NotePdfExportImage,
-  type NoteVimKeyMapping
-} from '../../../shared/types'
+import type { NoteListItem, NoteVimKeyMapping } from '../../../shared/types'
 import {
   createNoteMentionResolver,
-  normalizeNoteMentionMarkdown,
   noteMentionHref,
   parseNoteMentionHref
 } from '../../../shared/noteMentions'
 import type { NoteEditorSnapshot } from '../lib/noteEditorSession'
 import {
-  getNoteCalloutTitleRange,
-  hasNoteCalloutBodyText,
-  joinNoteCalloutTextblocks,
-  resolveNoteCallout
-} from '../lib/noteCallouts'
-import { findLatexTextMatches, normalizeLatexEscapes } from '../lib/noteLatex'
-import {
   createNoteEditorSnapshotScheduler,
   type NoteEditorSnapshotScheduler
 } from '../lib/noteEditorSnapshotScheduler'
-import { ensureEditorViewContext, hasReadyEditorView } from '../lib/milkdownEditorViewContext'
 import {
   isMiddleMouseButton,
   isModifiedNotebookOpen,
   type NotebookOpenOptions
 } from '../lib/notebookOpen'
+import { noteEditorTabWidth, sharedEditorIndentation } from '../lib/editorIndentation'
 import {
-  NOTE_SLASH_COMMANDS,
-  findNoteSlashTrigger,
-  type NoteSlashCommandId
-} from '../lib/noteSlashMenu'
-import { resolveArrowReplacementForTextInput } from '../lib/noteArrowInputRules'
-import { registerNoteCodeBlockView } from '../lib/noteCodeBlockView'
-import { createNoteCodeBlockNavigationPlugin } from '../lib/noteCodeBlockNavigation'
-import { createNoteCodeBlockSyntaxPlugin } from '../lib/noteCodeBlockSyntax'
-import { createNoteVimModePlugin, type NoteVimMode } from '../lib/noteVimMode'
+  migrateMarkdownIndentationToTabs,
+  type MarkdownIndentationMigrationResult
+} from '../lib/noteIndentationMigration'
+import { noteMarkdownHighlightStyle } from '../lib/noteMarkdownHighlightStyle'
+import { noteMarkdownLanguage } from '../lib/noteMarkdownLanguage'
+import { getMarkdownLineBreakText } from '../lib/noteMarkdownLineBreak'
+import {
+  expandMarkdownCodeBlockDeletion,
+  findMarkdownCodeBlockAt,
+  findMarkdownCodeBlocks,
+  getMarkdownCodeFencePairCompletion,
+  getMarkdownCodeFenceCompletion,
+  isMarkdownCodeBlockEmpty
+} from '../lib/noteMarkdownCodeBlock'
+import { noteLivePreview } from '../lib/noteLivePreview'
+import { NOTE_SLASH_COMMANDS, type NoteSlashCommandId } from '../lib/noteSlashMenu'
 import { cn } from '../lib/utils'
 
-export type NoteEditorMode = 'preview' | 'raw'
+export type NoteEditorMode = 'live' | 'source'
+export type NoteVimMode = 'insert' | 'normal' | 'visual' | 'visualLine'
 
 const NOTE_EDITOR_SNAPSHOT_DEBOUNCE_MS = 250
 const NOTE_EDITOR_SNAPSHOT_MAX_WAIT_MS = 1000
@@ -108,7 +89,6 @@ interface EditorProps {
   notes: NoteListItem[]
   currentNotePath?: string
   onOpenNoteLink?: (target: string, options?: NotebookOpenOptions) => void
-  onRawEditorElementChange?: (element: HTMLTextAreaElement | null) => void
   vimModeEnabled: boolean
   vimKeyMappings: NoteVimKeyMapping[]
   onVimModeChange?: (mode: NoteVimMode) => void
@@ -117,7 +97,7 @@ interface EditorProps {
 export interface NoteEditorHandle {
   captureSnapshot: () => Promise<NoteEditorSnapshot>
   flushPendingChanges: () => Promise<NoteEditorSnapshot>
-  capturePrintableDocument: () => { html: string; images: NotePdfExportImage[] } | null
+  migrateIndentationToTabs: () => MarkdownIndentationMigrationResult
   focus: () => void
   hasFocusIntent: () => boolean
   blur: () => void
@@ -130,869 +110,334 @@ export interface NoteEditorHandle {
   }) => void
 }
 
-interface MentionPickerState {
-  open: boolean
-  query: string
-  from: number
-  to: number
-  top: number
-  left: number
+const VIM_ACTION_KEYS: Record<NoteVimKeyMapping['action'], string> = {
+  enterNormalMode: '<Esc>',
+  enterInsertMode: 'i',
+  appendAfterCursor: 'a',
+  appendLineEnd: 'A',
+  openLineBelow: 'o',
+  openLineAbove: 'O',
+  pasteAfterCursor: 'p',
+  pasteBeforeCursor: 'P',
+  deleteSelection: 'd',
+  yankSelection: 'y'
 }
 
-interface SlashPickerState {
-  open: boolean
-  query: string
-  from: number
-  to: number
-  top: number
-  left: number
-}
+const installedVimMappings = new Map<
+  string,
+  { sequence: string; mode: string; action: NoteVimKeyMapping['action'] }
+>()
 
-const PRINT_STYLE_PROPERTIES = [
-  'align-items',
-  'background-color',
-  'border-bottom',
-  'border-collapse',
-  'border-left',
-  'border-radius',
-  'border-right',
-  'border-spacing',
-  'border-top',
-  'box-sizing',
-  'color',
-  'column-gap',
-  'display',
-  'flex',
-  'flex-direction',
-  'flex-grow',
-  'flex-shrink',
-  'flex-wrap',
-  'font-family',
-  'font-size',
-  'font-style',
-  'font-weight',
-  'gap',
-  'height',
-  'justify-content',
-  'letter-spacing',
-  'line-height',
-  'list-style-position',
-  'list-style-type',
-  'margin-bottom',
-  'margin-left',
-  'margin-right',
-  'margin-top',
-  'max-width',
-  'min-width',
-  'overflow-wrap',
-  'padding-bottom',
-  'padding-left',
-  'padding-right',
-  'padding-top',
-  'text-align',
-  'text-decoration',
-  'text-indent',
-  'vertical-align',
-  'white-space',
-  'width',
-  'word-break'
-] as const
-
-function buildMentionSuggestions(
-  notes: NoteListItem[],
-  currentNotePath: string | undefined,
-  mentionPicker: MentionPickerState | null
-): NoteListItem[] {
-  if (!mentionPicker?.open) {
-    return []
-  }
-
-  const query = mentionPicker.query.trim().toLowerCase()
-  return notes
-    .filter((note) => {
-      if (currentNotePath && note.relPath === currentNotePath) {
-        return false
-      }
-
-      if (!query) {
-        return true
-      }
-
-      const displayName = getNoteDisplayName(note.relPath).toLowerCase()
-      const relPath = stripNoteExtension(note.relPath).toLowerCase()
-      return displayName.includes(query) || relPath.includes(query)
+function installVimMappings(mappings: readonly NoteVimKeyMapping[]): void {
+  const requestedMappings = new Map<
+    string,
+    { sequence: string; mode: string; action: NoteVimKeyMapping['action'] }
+  >()
+  for (const mapping of mappings) {
+    const mode = mapping.mode === 'visualLine' ? 'visual' : mapping.mode
+    requestedMappings.set(`${mode}:${mapping.sequence}`, {
+      sequence: mapping.sequence,
+      mode,
+      action: mapping.action
     })
-    .slice()
-    .sort((left, right) => left.relPath.localeCompare(right.relPath))
-    .slice(0, 8)
-}
-
-function createInlineLatexPreview(value: string, displayMode: boolean): HTMLElement {
-  const preview = document.createElement('span')
-  preview.className = cn(
-    'note-latex-preview',
-    displayMode ? 'note-latex-preview-display' : 'note-latex-preview-inline'
-  )
-  preview.dataset.latex = value
-  preview.dataset.latexMode = displayMode ? 'display' : 'inline'
-  preview.contentEditable = 'false'
-
-  try {
-    katex.render(value, preview, {
-      displayMode,
-      throwOnError: true
-    })
-  } catch {
-    const delimiter = displayMode ? '$$' : '$'
-    preview.textContent = `${delimiter}${value}${delimiter}`
   }
 
-  return preview
-}
-
-function selectionTouchesTextblock(
-  selectionFrom: number,
-  selectionTo: number,
-  blockStart: number,
-  blockEnd: number
-): boolean {
-  if (selectionFrom === selectionTo) {
-    return selectionFrom >= blockStart && selectionFrom <= blockEnd
+  for (const [key, installed] of installedVimMappings) {
+    const requested = requestedMappings.get(key)
+    if (requested?.action === installed.action) continue
+    Vim.unmap(installed.sequence, installed.mode)
+    installedVimMappings.delete(key)
   }
 
-  return selectionFrom <= blockEnd && selectionTo >= blockStart
-}
-
-function getLogicalLineRange(text: string, from: number, to: number): { from: number; to: number } {
-  const lineStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1
-  const nextLineBreak = text.indexOf('\n', to)
-  const lineEnd = nextLineBreak < 0 ? text.length : nextLineBreak
-
-  return { from: lineStart, to: lineEnd }
-}
-
-const inlineLatexPreviewPluginKey = new PluginKey('note-inline-latex-preview')
-const noteCalloutPluginKey = new PluginKey('note-callout')
-const noteArrowInputPluginKey = new PluginKey('note-arrow-input')
-
-interface DecorationRange {
-  from: number
-  to: number
-}
-
-interface DecorationTarget {
-  node: ProseNode
-  range: DecorationRange
-}
-
-interface TransactionLike {
-  docChanged: boolean
-  mapping: {
-    maps: readonly {
-      forEach: (
-        callback: (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => void
-      ) => void
-      map: (position: number, assoc?: number) => number
-    }[]
+  for (const [key, requested] of requestedMappings) {
+    if (installedVimMappings.has(key)) continue
+    Vim.map(requested.sequence, VIM_ACTION_KEYS[requested.action], requested.mode)
+    installedVimMappings.set(key, requested)
   }
 }
 
-function getTransactionChangedRange(transaction: TransactionLike): DecorationRange | null {
-  if (!transaction.docChanged) {
-    return null
+function getImageFileExtension(file: File): string | null {
+  const byMime: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp'
   }
-
-  let from = Number.POSITIVE_INFINITY
-  let to = Number.NEGATIVE_INFINITY
-
-  transaction.mapping.maps.forEach((map, index) => {
-    if (index > 0) {
-      from = map.map(from, 1)
-      to = map.map(to, -1)
-    }
-
-    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
-      from = Math.min(from, newStart)
-      to = Math.max(to, newEnd)
-    })
-  })
-
-  return from === Number.POSITIVE_INFINITY ? null : { from, to }
+  const fromMime = byMime[file.type.trim().toLowerCase()]
+  if (fromMime) return fromMime
+  const extension = file.name.split('.').pop()?.trim().toLowerCase()
+  return extension && extension !== file.name ? extension : null
 }
 
-function getDecorationTarget(
-  position: ResolvedPos,
-  matches: (node: ProseNode) => boolean
-): DecorationTarget | null {
-  for (let depth = position.depth; depth > 0; depth -= 1) {
-    const node = position.node(depth)
-    if (matches(node)) {
-      return {
-        node,
-        range: {
-          from: position.before(depth),
-          to: position.after(depth)
-        }
-      }
-    }
-  }
-
-  return null
-}
-
-function rangesEqual(left: DecorationRange, right: DecorationRange): boolean {
-  return left.from === right.from && left.to === right.to
-}
-
-function isRangeWithin(inner: DecorationRange, outer: DecorationRange): boolean {
-  return inner.from >= outer.from && inner.to <= outer.to + 1
-}
-
-function refreshDecorationTarget(
-  decorationSet: DecorationSet,
-  doc: ProseNode,
-  target: DecorationTarget,
-  createDecorations: (node: ProseNode, pos: number) => Decoration[]
-): DecorationSet {
-  const staleDecorations = decorationSet.find(target.range.from, target.range.to)
-  return decorationSet
-    .remove(staleDecorations)
-    .add(doc, createDecorations(target.node, target.range.from))
-}
-
-interface PreviewMarkdownBlock {
-  node: ProseNode
-  pos: number
-}
-
-interface PreviewMarkdownSerialization {
-  content: string
-  cache: Map<ProseNode, string>
-}
-
-const PREVIEW_SERIALIZATION_CHUNK_BUDGET_MS = 4
-
-function getPreviewMarkdownBlocks(doc: ProseNode): PreviewMarkdownBlock[] {
-  const blocks: PreviewMarkdownBlock[] = []
-  doc.forEach((node, pos) => {
-    blocks.push({ node, pos })
-  })
-  return blocks
-}
-
-function joinPreviewMarkdownBlocks(blocks: readonly string[]): string {
-  if (blocks.length === 0) {
-    return ''
-  }
-
-  const hasTrailingLineBreak = blocks.some((block) => block.endsWith('\n'))
-  const normalizedBlocks = blocks.map((block) => block.replace(/\n+$/, ''))
-  return `${normalizedBlocks.join('\n\n')}${hasTrailingLineBreak ? '\n' : ''}`
-}
-
-function serializePreviewMarkdownInChunks(
-  editor: Crepe,
-  previousCache: ReadonlyMap<ProseNode, string>,
-  isCancelled: () => boolean
-): Promise<PreviewMarkdownSerialization | null> {
-  let blocks: PreviewMarkdownBlock[]
-  try {
-    const view = editor.editor.action((ctx) => ctx.get(editorViewCtx))
-    blocks = getPreviewMarkdownBlocks(view.state.doc)
-  } catch {
-    return Promise.resolve(null)
-  }
-
-  const cache = new Map<ProseNode, string>()
-  const serializedBlocks: string[] = []
-  let blockIndex = 0
-
-  return new Promise((resolve) => {
-    const serializeChunk = (): void => {
-      if (isCancelled()) {
-        resolve(null)
-        return
-      }
-
-      const chunkStartedAt = performance.now()
-      try {
-        while (
-          blockIndex < blocks.length &&
-          performance.now() - chunkStartedAt < PREVIEW_SERIALIZATION_CHUNK_BUDGET_MS
-        ) {
-          const block = blocks[blockIndex]
-          const cachedMarkdown = previousCache.get(block.node)
-          const markdown =
-            cachedMarkdown ??
-            editor.editor.action(
-              getMarkdown({ from: block.pos, to: block.pos + block.node.nodeSize })
-            )
-          cache.set(block.node, markdown)
-          serializedBlocks.push(markdown)
-          blockIndex += 1
-        }
-      } catch {
-        resolve(null)
-        return
-      }
-
-      if (blockIndex < blocks.length) {
-        window.requestAnimationFrame(serializeChunk)
-        return
-      }
-
-      resolve({ content: joinPreviewMarkdownBlocks(serializedBlocks), cache })
-    }
-
-    serializeChunk()
-  })
-}
-
-function isMissingEditorViewError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('Context "editorView" not found')
-}
-
-function inlinePrintableStyles(source: HTMLElement, target: HTMLElement): void {
-  const sourceElements = [source, ...Array.from(source.querySelectorAll<HTMLElement>('*'))]
-  const targetElements = [target, ...Array.from(target.querySelectorAll<HTMLElement>('*'))]
-
-  sourceElements.forEach((sourceElement, index) => {
-    const targetElement = targetElements[index]
-    if (!targetElement) {
-      return
-    }
-
-    const styles = window.getComputedStyle(sourceElement)
-    for (const property of PRINT_STYLE_PROPERTIES) {
-      targetElement.style.setProperty(property, styles.getPropertyValue(property))
+function insertHardBreak(view: EditorView): boolean {
+  const changes = view.state.changeByRange((range) => {
+    const insert = getMarkdownLineBreakText(view.state, range.from)
+    return {
+      changes: { from: range.from, to: range.to, insert },
+      range: EditorSelection.cursor(range.from + insert.length)
     }
   })
+  view.dispatch(changes)
+  return true
 }
 
-interface InlineLatexPluginState {
-  decorations: DecorationSet
-  isFocused: boolean
-}
-
-function appendInlineLatexDecorations(
-  decorations: Decoration[],
-  node: ProseNode,
-  pos: number,
-  selectionFrom: number,
-  selectionTo: number,
-  isFocused: boolean
-): void {
-  if (!node.isBlock || !node.inlineContent) {
-    return
-  }
-
-  const blockStart = pos + 1
-  const blockText = node.textBetween(0, node.content.size, '\n', '\0')
-
-  for (const match of findLatexTextMatches(blockText)) {
-    const from = blockStart + match.from
-    const to = blockStart + match.to
-
-    if (!match.valid) {
-      decorations.push(Decoration.inline(from, to, { class: 'note-inline-latex-error' }))
-      continue
-    }
-
-    const lineRange = getLogicalLineRange(blockText, match.from, match.to)
-    const isActiveLine =
-      isFocused &&
-      selectionTouchesTextblock(
-        selectionFrom,
-        selectionTo,
-        blockStart + lineRange.from,
-        blockStart + lineRange.to
-      )
-
-    if (isActiveLine) {
-      decorations.push(
-        Decoration.inline(from, to, {
-          class: cn('note-inline-latex-source', match.displayMode && 'note-display-latex-source')
-        })
-      )
-      continue
-    }
-
-    decorations.push(
-      Decoration.inline(from, to, {
-        class: cn(
-          'note-inline-latex-source-hidden',
-          match.displayMode && 'note-display-latex-source-hidden'
-        ),
-        'data-latex-source': 'true'
-      })
-    )
-    decorations.push(
-      Decoration.widget(
-        from,
-        (view) => {
-          const preview = createInlineLatexPreview(match.value, match.displayMode)
-          preview.addEventListener('mousedown', (event) => {
-            event.preventDefault()
-            view.dispatch(
-              view.state.tr.setSelection(
-                TextSelection.create(view.state.doc, from + match.delimiter.length)
-              )
-            )
-            view.focus()
-          })
-          return preview
-        },
-        {
-          key: `inline-latex-${from}-${to}-${match.value}`,
-          side: -1,
-          ignoreSelection: true
-        }
-      )
-    )
-  }
-}
-
-function createInlineLatexDecorations(
-  node: ProseNode,
-  pos: number,
-  selectionFrom: number,
-  selectionTo: number,
-  isFocused: boolean
-): Decoration[] {
-  const decorations: Decoration[] = []
-  appendInlineLatexDecorations(decorations, node, pos, selectionFrom, selectionTo, isFocused)
-  return decorations
-}
-
-function createInlineLatexDecorationSet(
-  doc: ProseNode,
-  selectionFrom: number,
-  selectionTo: number,
-  isFocused: boolean
-): DecorationSet {
-  const decorations: Decoration[] = []
-  doc.descendants((node, pos) => {
-    appendInlineLatexDecorations(decorations, node, pos, selectionFrom, selectionTo, isFocused)
-    return true
-  })
-  return DecorationSet.create(doc, decorations)
-}
-
-function inlineLatexPreviewPlugin(): Plugin {
-  return new Plugin({
-    key: inlineLatexPreviewPluginKey,
-    state: {
-      init: (_config, state): InlineLatexPluginState => ({
-        decorations: createInlineLatexDecorationSet(
-          state.doc,
-          state.selection.from,
-          state.selection.to,
-          false
-        ),
-        isFocused: false
-      }),
-      apply(transaction, previousState, oldState, newState): InlineLatexPluginState {
-        const nextFocusState = transaction.getMeta(inlineLatexPreviewPluginKey)
-        const isFocused =
-          typeof nextFocusState === 'boolean' ? nextFocusState : previousState.isFocused
-        const previousTarget = getDecorationTarget(oldState.selection.$from, (node) =>
-          Boolean(node.isBlock && node.inlineContent)
-        )
-        const nextTarget = getDecorationTarget(newState.selection.$from, (node) =>
-          Boolean(node.isBlock && node.inlineContent)
-        )
-        const selectionChanged = !oldState.selection.eq(newState.selection)
-        const focusChanged = isFocused !== previousState.isFocused
-
-        if (!transaction.docChanged && !selectionChanged && !focusChanged) {
-          return previousState
-        }
-
-        let decorations = previousState.decorations
-        if (transaction.docChanged) {
-          decorations = decorations.map(transaction.mapping, newState.doc)
-          const changedRange = getTransactionChangedRange(transaction)
-          if (!changedRange) {
-            return {
-              decorations: createInlineLatexDecorationSet(
-                newState.doc,
-                newState.selection.from,
-                newState.selection.to,
-                isFocused
-              ),
-              isFocused
-            }
-          }
-
-          if (!nextTarget) {
-            if (previousTarget) {
-              return {
-                decorations: createInlineLatexDecorationSet(
-                  newState.doc,
-                  newState.selection.from,
-                  newState.selection.to,
-                  isFocused
-                ),
-                isFocused
-              }
-            }
-
-            return { decorations, isFocused }
-          }
-
-          if (!isRangeWithin(changedRange, nextTarget.range)) {
-            return {
-              decorations: createInlineLatexDecorationSet(
-                newState.doc,
-                newState.selection.from,
-                newState.selection.to,
-                isFocused
-              ),
-              isFocused
-            }
-          }
-
-          decorations = refreshDecorationTarget(
-            decorations,
-            newState.doc,
-            nextTarget,
-            (node, pos) =>
-              createInlineLatexDecorations(
-                node,
-                pos,
-                newState.selection.from,
-                newState.selection.to,
-                isFocused
-              )
-          )
-        } else {
-          const targets: DecorationTarget[] = []
-          if (selectionChanged && previousTarget) {
-            targets.push(previousTarget)
-          }
-          if ((selectionChanged || focusChanged) && nextTarget) {
-            if (!targets.some((target) => rangesEqual(target.range, nextTarget.range))) {
-              targets.push(nextTarget)
-            }
-          }
-
-          for (const target of targets) {
-            decorations = refreshDecorationTarget(decorations, newState.doc, target, (node, pos) =>
-              createInlineLatexDecorations(
-                node,
-                pos,
-                newState.selection.from,
-                newState.selection.to,
-                isFocused
-              )
-            )
-          }
-        }
-
-        return { decorations, isFocused }
-      }
-    },
-    props: {
-      handleDOMEvents: {
-        focus(view) {
-          view.dispatch(view.state.tr.setMeta(inlineLatexPreviewPluginKey, true))
-          return false
-        },
-        blur(view) {
-          view.dispatch(view.state.tr.setMeta(inlineLatexPreviewPluginKey, false))
-          return false
-        }
+function insertMarkdownCodeFenceOnEnter(view: EditorView): boolean {
+  if (view.state.readOnly) return false
+  let inserted = false
+  const changes = view.state.changeByRange((range) => {
+    const completion = getMarkdownCodeFenceCompletion(view.state.doc, range.from)
+    if (range.from !== range.to || !completion) return { range }
+    inserted = true
+    return {
+      changes: {
+        from: completion.from,
+        to: completion.to,
+        insert: completion.insert
       },
-      decorations(state) {
-        return inlineLatexPreviewPluginKey.getState(state)?.decorations ?? DecorationSet.empty
-      }
+      range: EditorSelection.cursor(completion.cursor)
     }
   })
+  if (!inserted) return false
+  view.dispatch(changes)
+  return true
 }
 
-function appendNoteCalloutDecorations(
-  decorations: Decoration[],
-  node: ProseNode,
-  pos: number,
-  selectionFrom: number,
-  selectionTo: number
-): void {
-  if (node.type.name !== 'blockquote') {
-    return
-  }
+function insertTypedMarkdownCodeFencePair(view: EditorView): void {
+  if (view.state.readOnly) return
+  const range = view.state.selection.main
+  if (!range.empty) return
 
-  const blockquoteInfo = getBlockquoteCalloutInfo(node, pos)
-  if (!blockquoteInfo) {
-    return
-  }
+  const completion = getMarkdownCodeFencePairCompletion(view.state.doc, range.head)
+  if (!completion) return
 
-  const callout = resolveNoteCallout(blockquoteInfo.text)
-
-  decorations.push(
-    Decoration.node(pos, pos + node.nodeSize, {
-      class: cn('note-callout', `note-callout-${callout.variant}`)
-    })
-  )
-
-  const titleRange = getNoteCalloutTitleRange(blockquoteInfo.text, callout.marker)
-  if (titleRange) {
-    decorations.push(
-      Decoration.inline(
-        blockquoteInfo.contentStart + titleRange.start,
-        blockquoteInfo.contentStart + titleRange.end,
-        { class: 'note-callout-title' }
-      )
-    )
-  }
-
-  const shouldShowMarker = selectionTouchesTextblock(
-    selectionFrom,
-    selectionTo,
-    blockquoteInfo.contentStart,
-    blockquoteInfo.contentEnd
-  )
-  const shouldHideMarker =
-    callout.marker && hasNoteCalloutBodyText(blockquoteInfo.fullText, callout.marker)
-
-  if (shouldHideMarker && !shouldShowMarker) {
-    decorations.push(
-      Decoration.inline(
-        blockquoteInfo.contentStart,
-        blockquoteInfo.contentStart + callout.marker.length,
-        { class: 'note-callout-marker-hidden' }
-      )
-    )
-  }
-}
-
-function createNoteCalloutDecorations(
-  node: ProseNode,
-  pos: number,
-  selectionFrom: number,
-  selectionTo: number
-): Decoration[] {
-  const decorations: Decoration[] = []
-  appendNoteCalloutDecorations(decorations, node, pos, selectionFrom, selectionTo)
-  return decorations
-}
-
-function createNoteCalloutDecorationSet(
-  doc: ProseNode,
-  selectionFrom: number,
-  selectionTo: number
-): DecorationSet {
-  const decorations: Decoration[] = []
-  doc.descendants((node, pos) => {
-    appendNoteCalloutDecorations(decorations, node, pos, selectionFrom, selectionTo)
-    return node.type.name !== 'blockquote'
-  })
-  return DecorationSet.create(doc, decorations)
-}
-
-function noteCalloutPlugin(): Plugin {
-  return new Plugin({
-    key: noteCalloutPluginKey,
-    state: {
-      init: (_config, state) => ({
-        decorations: createNoteCalloutDecorationSet(
-          state.doc,
-          state.selection.from,
-          state.selection.to
-        )
-      }),
-      apply(transaction, previousState, oldState, newState) {
-        const previousTarget = getDecorationTarget(
-          oldState.selection.$from,
-          (node) => node.type.name === 'blockquote'
-        )
-        const nextTarget = getDecorationTarget(
-          newState.selection.$from,
-          (node) => node.type.name === 'blockquote'
-        )
-        const selectionChanged = !oldState.selection.eq(newState.selection)
-
-        if (!transaction.docChanged && !selectionChanged) {
-          return previousState
-        }
-
-        let decorations = previousState.decorations
-        if (transaction.docChanged) {
-          decorations = decorations.map(transaction.mapping, newState.doc)
-          const changedRange = getTransactionChangedRange(transaction)
-          if (!changedRange) {
-            return {
-              decorations: createNoteCalloutDecorationSet(
-                newState.doc,
-                newState.selection.from,
-                newState.selection.to
-              )
-            }
-          }
-
-          if (!nextTarget) {
-            if (previousTarget) {
-              return {
-                decorations: createNoteCalloutDecorationSet(
-                  newState.doc,
-                  newState.selection.from,
-                  newState.selection.to
-                )
-              }
-            }
-
-            return { decorations }
-          }
-
-          if (!isRangeWithin(changedRange, nextTarget.range)) {
-            return {
-              decorations: createNoteCalloutDecorationSet(
-                newState.doc,
-                newState.selection.from,
-                newState.selection.to
-              )
-            }
-          }
-
-          decorations = refreshDecorationTarget(
-            decorations,
-            newState.doc,
-            nextTarget,
-            (node, pos) =>
-              createNoteCalloutDecorations(
-                node,
-                pos,
-                newState.selection.from,
-                newState.selection.to
-              )
-          )
-        } else {
-          const targets: DecorationTarget[] = []
-          if (previousTarget) {
-            targets.push(previousTarget)
-          }
-          if (
-            nextTarget &&
-            !targets.some((target) => rangesEqual(target.range, nextTarget.range))
-          ) {
-            targets.push(nextTarget)
-          }
-
-          for (const target of targets) {
-            decorations = refreshDecorationTarget(decorations, newState.doc, target, (node, pos) =>
-              createNoteCalloutDecorations(
-                node,
-                pos,
-                newState.selection.from,
-                newState.selection.to
-              )
-            )
-          }
-        }
-
-        return { decorations }
-      }
+  view.dispatch({
+    changes: {
+      from: completion.from,
+      to: completion.to,
+      insert: completion.insert
     },
-    props: {
-      decorations(state) {
-        return noteCalloutPluginKey.getState(state)?.decorations ?? DecorationSet.empty
-      }
-    }
+    selection: { anchor: completion.cursor },
+    userEvent: 'input.code-fence',
+    scrollIntoView: true
   })
 }
 
-function noteArrowInputPlugin(options?: { shouldIgnoreInput?: () => boolean }): Plugin {
-  const { shouldIgnoreInput } = options ?? {}
+function enterAdjacentMarkdownCodeBlock(
+  view: EditorView,
+  direction: 'up' | 'down' | 'left' | 'right'
+): boolean {
+  const { state } = view
+  const selection = state.selection.main
+  if (!selection.empty || state.selection.ranges.length !== 1) return false
 
-  return new Plugin({
-    key: noteArrowInputPluginKey,
-    props: {
-      handleTextInput(view, from, to, text) {
-        if (shouldIgnoreInput?.() || text.length === 0) {
-          return false
-        }
+  const line = state.doc.lineAt(selection.head)
+  const blocks = findMarkdownCodeBlocks(state.doc)
 
-        const $from = view.state.doc.resolve(from)
-        const $to = view.state.doc.resolve(to)
-        if (!$from.sameParent($to) || !$from.parent.isTextblock) {
-          return false
-        }
+  for (const block of blocks) {
+    const blockIsAlreadyRevealed = state.selection.ranges.some(
+      (range) => range.from <= block.to && range.to >= block.from
+    )
+    if (blockIsAlreadyRevealed) continue
 
-        const blockStart = $from.start()
-        const replacementPlan = resolveArrowReplacementForTextInput({
-          textBeforeCursor: $from.parent.textBetween(0, from - blockStart, '\n', '\0'),
-          insertedText: text,
-          isCodeText: $from.parent.type.spec.code === true
-        })
-        if (!replacementPlan) {
-          return false
-        }
+    const openingLine = state.doc.lineAt(block.from)
+    const closingLine = state.doc.lineAt(block.to)
 
-        view.dispatch(
-          view.state.tr.insertText(
-            replacementPlan.replacement,
-            Math.max(blockStart, from - replacementPlan.deletePreviousTextLength),
-            to
-          )
-        )
-        return true
-      }
-    }
-  })
-}
-
-function getBlockquoteCalloutInfo(
-  node: ProseNode,
-  pos: number
-): {
-  contentEnd: number
-  contentStart: number
-  fullText: string
-  text: string
-} | null {
-  let firstTextblockInfo: {
-    contentEnd: number
-    contentStart: number
-    text: string
-  } | null = null
-  const textblocks: string[] = []
-
-  node.descendants((child, childPos) => {
-    if (!child.isTextblock) {
+    if (
+      (direction === 'down' && openingLine.number === line.number + 1) ||
+      (direction === 'right' && block.from === line.to + 1)
+    ) {
+      view.dispatch({ selection: { anchor: block.bodyFrom }, scrollIntoView: true })
       return true
     }
 
-    const text = child.textBetween(0, child.content.size, '\n', '\0')
-    textblocks.push(text)
+    if (
+      (direction === 'up' && closingLine.number === line.number - 1) ||
+      (direction === 'left' && block.to + 1 === line.from)
+    ) {
+      view.dispatch({ selection: { anchor: block.bodyTo }, scrollIntoView: true })
+      return true
+    }
+  }
 
-    const nodeStart = pos + childPos + 1
-    if (!firstTextblockInfo) {
-      firstTextblockInfo = {
-        contentStart: nodeStart + 1,
-        contentEnd: nodeStart + child.content.size + 1,
-        text
+  return false
+}
+
+function handleVimMarkdownCodeBlockNavigation(event: KeyboardEvent, view: EditorView): boolean {
+  const cm = getCM(view)
+  const vimState = cm?.state.vim
+  if (!vimState || vimState.insertMode || vimState.visualMode) return false
+  if (
+    event.defaultPrevented ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.shiftKey ||
+    vimState.inputState.operator ||
+    vimState.inputState.motion ||
+    vimState.inputState.prefixRepeat.length > 0 ||
+    vimState.inputState.motionRepeat.length > 0 ||
+    vimState.inputState.keyBuffer.length > 0
+  ) {
+    return false
+  }
+
+  const directionByKey: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+    j: 'down',
+    k: 'up',
+    h: 'left',
+    l: 'right'
+  }
+  const direction = directionByKey[event.key]
+  if (!direction || !enterAdjacentMarkdownCodeBlock(view, direction)) return false
+
+  event.preventDefault()
+  event.stopPropagation()
+  return true
+}
+
+function deleteMarkdownCodeBlock(view: EditorView, direction: 'backward' | 'forward'): boolean {
+  if (view.state.readOnly) return false
+  const blocks = findMarkdownCodeBlocks(view.state.doc)
+  const hasCodeBlockSelection = view.state.selection.ranges.some((range) => {
+    if (range.empty) {
+      const block = findMarkdownCodeBlockAt(blocks, range.from)
+      return Boolean(block && isMarkdownCodeBlockEmpty(block))
+    }
+    return blocks.some((block) => range.from < block.to && range.to > block.from)
+  })
+  if (!hasCodeBlockSelection) {
+    return direction === 'backward' ? deleteCharBackward(view) : deleteCharForward(view)
+  }
+
+  let handled = false
+  const changes = view.state.changeByRange((range) => {
+    if (!range.empty) {
+      const expanded = expandMarkdownCodeBlockDeletion(blocks, range.from, range.to)
+      const touchesCodeBlock = blocks.some(
+        (block) => range.from < block.to && range.to > block.from
+      )
+      if (touchesCodeBlock) {
+        handled = true
+        return {
+          changes: { from: expanded.from, to: expanded.to },
+          range: EditorSelection.cursor(expanded.from)
+        }
+      }
+      return {
+        changes: { from: range.from, to: range.to },
+        range: EditorSelection.cursor(range.from)
       }
     }
 
-    return false
+    const block = findMarkdownCodeBlockAt(blocks, range.from)
+    if (block && isMarkdownCodeBlockEmpty(block)) {
+      handled = true
+      return {
+        changes: { from: block.from, to: block.to },
+        range: EditorSelection.cursor(block.from)
+      }
+    }
+    return { range }
   })
 
-  if (!firstTextblockInfo) {
-    return null
-  }
-
-  const firstTextblock = firstTextblockInfo as {
-    contentEnd: number
-    contentStart: number
-    text: string
-  }
-
-  return {
-    contentEnd: firstTextblock.contentEnd,
-    contentStart: firstTextblock.contentStart,
-    text: firstTextblock.text,
-    fullText: joinNoteCalloutTextblocks(textblocks)
-  }
+  if (!handled) return direction === 'backward' ? deleteCharBackward(view) : deleteCharForward(view)
+  view.dispatch(changes)
+  return true
 }
+
+function slashCommandSource(command: NoteSlashCommandId): string {
+  const snippets: Record<NoteSlashCommandId, string> = {
+    text: '',
+    heading1: '# ',
+    heading2: '## ',
+    heading3: '### ',
+    bulletList: '- ',
+    numberedList: '1. ',
+    taskList: '- [ ] ',
+    quote: '> ',
+    codeBlock: '```\n\n```',
+    divider: '---',
+    table: '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |'
+  }
+  return snippets[command]
+}
+
+function getVimMode(view: EditorView, enabled: boolean): NoteVimMode {
+  if (!enabled) return 'insert'
+  const state = getCM(view)?.state.vim
+  if (!state) return 'normal'
+  if (state.insertMode) return 'insert'
+  if (state.visualMode && state.visualLine) return 'visualLine'
+  if (state.visualMode) return 'visual'
+  return 'normal'
+}
+
+const editorTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    backgroundColor: 'transparent',
+    color: 'var(--foreground)',
+    fontFamily: 'var(--app-font-family)',
+    fontSize: 'var(--note-editor-body-font-size)'
+  },
+  '.cm-scroller': {
+    overflow: 'visible',
+    fontFamily: 'inherit',
+    lineHeight: 'var(--note-editor-body-line-height)'
+  },
+  '.cm-content': {
+    minHeight: '10vh',
+    padding: '0.25rem 0 4rem',
+    caretColor: 'var(--note-editor-blinking-cursor)'
+  },
+  '.cm-line': {
+    minHeight: 'var(--note-editor-body-row-height)',
+    padding: '1px 0'
+  },
+  '.cm-cursor': {
+    borderLeftColor: 'var(--note-editor-blinking-cursor) !important'
+  },
+  '.cm-dropCursor': {
+    borderLeftColor: 'var(--note-editor-cursor) !important'
+  },
+  '.cm-fat-cursor': {
+    backgroundColor: 'var(--note-editor-cursor) !important',
+    color: 'var(--note-editor-cursor-foreground) !important'
+  },
+  '&:not(.cm-focused) .cm-fat-cursor': {
+    backgroundColor: 'transparent !important',
+    color: 'transparent !important',
+    outline: 'solid 1px var(--note-editor-cursor) !important'
+  },
+  '&.cm-focused': { outline: 'none' },
+  '&.cm-focused .cm-selectionBackground, ::selection': {
+    backgroundColor: 'var(--note-editor-selection) !important',
+    color: 'var(--note-editor-selection-foreground) !important'
+  },
+  '.cm-activeLine': { backgroundColor: 'transparent' },
+  '.cm-panels': {
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)'
+  },
+  '.cm-tooltip': {
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)',
+    overflow: 'hidden'
+  },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: 'var(--accent)',
+    color: 'var(--accent-foreground)'
+  }
+})
 
 export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
   {
@@ -1000,982 +445,461 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     density = 'default',
     background = 'transparent',
     className,
-    mode = 'preview',
+    mode = 'live',
     readOnly = false,
     onDirty,
     onReady,
     onSnapshotChange,
+    onDropFile,
     onPasteImage,
     notes,
     currentNotePath,
     onOpenNoteLink,
-    onRawEditorElementChange,
     vimModeEnabled,
     vimKeyMappings,
     onVimModeChange
-  }: EditorProps,
+  },
   ref
 ): ReactElement {
-  const contentRef = useRef(initialContent ?? '')
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const viewRef = useRef<EditorView | null>(null)
   const initialContentRef = useRef(initialContent ?? '')
+  const initialNotePathRef = useRef(currentNotePath)
+  const contentRef = useRef(initialContent ?? '')
   const loadedNotePathRef = useRef(currentNotePath)
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const editorRef = useRef<Crepe | null>(null)
-  const rawEditorRef = useRef<NoteRawEditorHandle | null>(null)
-  const editorReadyRef = useRef(false)
-  const currentNotePathRef = useRef(currentNotePath)
-  const modeRef = useRef(mode)
-  const mentionPickerRef = useRef<MentionPickerState | null>(null)
-  const slashPickerRef = useRef<SlashPickerState | null>(null)
-  const slashCommandSelectionRef = useRef(false)
-  const dismissedMentionTriggerRef = useRef<{
-    from: number
-    to: number
-    query: string
-  } | null>(null)
-  const vimModeEnabledRef = useRef(vimModeEnabled)
-  const vimKeyMappingsRef = useRef(vimKeyMappings)
-  const readOnlyRef = useRef(readOnly)
-  const onVimModeChangeRef = useRef(onVimModeChange)
-  const [isEditorVisible, setIsEditorVisible] = useState(false)
-  const [rawContent, setRawContent] = useState(initialContent ?? '')
-  const [mentionPicker, setMentionPicker] = useState<MentionPickerState | null>(null)
-  const [slashPicker, setSlashPicker] = useState<SlashPickerState | null>(null)
-  const [vimMode, setVimMode] = useState<NoteVimMode>('insert')
   const hasFocusIntentRef = useRef(false)
+  const suppressDirtyRef = useRef(false)
   const onDirtyRef = useRef(onDirty)
   const onReadyRef = useRef(onReady)
   const onSnapshotChangeRef = useRef(onSnapshotChange)
   const onPasteImageRef = useRef(onPasteImage)
+  const onDropFileRef = useRef(onDropFile)
   const onOpenNoteLinkRef = useRef(onOpenNoteLink)
-  const suppressNextDirtySyncRef = useRef(false)
-  const previousModeRef = useRef<NoteEditorMode>(mode)
+  const vimEnabledRef = useRef(vimModeEnabled)
+  const vimMappingsRef = useRef(vimKeyMappings)
+  const readOnlyRef = useRef(readOnly)
+  const modeRef = useRef(mode)
+  const onVimModeChangeRef = useRef(onVimModeChange)
+  const currentVimModeRef = useRef<NoteVimMode | null>(null)
   const snapshotSchedulerRef = useRef<NoteEditorSnapshotScheduler | null>(null)
-  const previewMarkdownCacheRef = useRef<Map<ProseNode, string>>(new Map())
-  const previewSerializationVersionRef = useRef(0)
+  const modeCompartmentRef = useRef(new Compartment())
+  const vimCompartmentRef = useRef(new Compartment())
+  const readOnlyCompartmentRef = useRef(new Compartment())
+  const [ready, setReady] = useState(false)
+  const [vimMode, setVimMode] = useState<NoteVimMode>(vimModeEnabled ? 'normal' : 'insert')
 
-  const resolveNoteMentionTarget = useMemo(() => createNoteMentionResolver(notes), [notes])
-  const mentionSuggestions = buildMentionSuggestions(notes, currentNotePath, mentionPicker)
-  const mentionOptions: SelectionPopoverOption[] = mentionSuggestions.map((note) => {
-    const alreadyLinked =
-      Boolean(mentionPicker?.query.trim()) &&
-      resolveNoteMentionTarget(mentionPicker?.query ?? '') === note.relPath
-
-    return {
-      value: note.relPath,
-      label: (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1">
-            <WorkspaceTextFade className="font-medium">
-              {getNoteDisplayName(note.relPath)}
-            </WorkspaceTextFade>
-            <WorkspaceTextFade className="text-xs opacity-75">
-              {stripNoteExtension(note.relPath)}
-            </WorkspaceTextFade>
-          </span>
-          {alreadyLinked ? <Check aria-hidden="true" size={14} /> : null}
-        </span>
-      ),
-      searchText: `${getNoteDisplayName(note.relPath)} ${stripNoteExtension(note.relPath)}`,
-      wrapLabel: true
-    }
-  })
-  const slashOptions = useMemo<SelectionPopoverOption[]>(
-    () =>
-      NOTE_SLASH_COMMANDS.map((command) => ({
-        value: command.id,
-        label: command.label,
-        searchText: command.keywords.join(' ')
-      })),
-    []
-  )
+  const noteResolver = useMemo(() => createNoteMentionResolver(notes), [notes])
+  const notesRef = useRef(notes)
+  const noteResolverRef = useRef(noteResolver)
 
   useEffect(() => {
     onDirtyRef.current = onDirty
-  }, [onDirty])
-
-  useEffect(() => {
     onReadyRef.current = onReady
-  }, [onReady])
-
-  useEffect(() => {
     onSnapshotChangeRef.current = onSnapshotChange
-  }, [onSnapshotChange])
-
-  useEffect(() => {
     onPasteImageRef.current = onPasteImage
-  }, [onPasteImage])
-
-  useEffect(() => {
-    currentNotePathRef.current = currentNotePath
-  }, [currentNotePath])
-
-  useEffect(() => {
+    onDropFileRef.current = onDropFile
     onOpenNoteLinkRef.current = onOpenNoteLink
-  }, [onOpenNoteLink])
-
-  useEffect(() => {
-    mentionPickerRef.current = mentionPicker
-  }, [mentionPicker])
-
-  useEffect(() => {
-    slashPickerRef.current = slashPicker
-  }, [slashPicker])
-
-  useEffect(() => {
-    vimModeEnabledRef.current = vimModeEnabled
-  }, [vimModeEnabled])
-
-  useEffect(() => {
-    vimKeyMappingsRef.current = vimKeyMappings
-  }, [vimKeyMappings])
-
-  useEffect(() => {
-    readOnlyRef.current = readOnly
-    editorRef.current?.setReadonly(readOnly)
-  }, [readOnly])
-
-  useEffect(() => {
     onVimModeChangeRef.current = onVimModeChange
-  }, [onVimModeChange])
+    notesRef.current = notes
+    noteResolverRef.current = noteResolver
+  }, [
+    noteResolver,
+    notes,
+    onDirty,
+    onDropFile,
+    onOpenNoteLink,
+    onPasteImage,
+    onReady,
+    onSnapshotChange,
+    onVimModeChange
+  ])
 
   const publishSnapshot = useCallback((content: string): void => {
     onSnapshotChangeRef.current?.({ content })
   }, [])
 
-  const publishScheduledSnapshot = useCallback(
-    (scheduledContent: string): void => {
-      if (modeRef.current === 'preview') {
-        const editor = editorRef.current
-        if (editor && editorReadyRef.current) {
-          const serializationVersion = previewSerializationVersionRef.current
-          void serializePreviewMarkdownInChunks(
-            editor,
-            previewMarkdownCacheRef.current,
-            () =>
-              serializationVersion !== previewSerializationVersionRef.current ||
-              modeRef.current !== 'preview'
-          ).then((serialization) => {
-            if (!serialization || serializationVersion !== previewSerializationVersionRef.current) {
-              return
-            }
-
-            previewMarkdownCacheRef.current = serialization.cache
-            const content = normalizeLatexEscapes(serialization.content)
-            contentRef.current = content
-            publishSnapshot(content)
-          })
-          return
-        }
-      }
-
-      contentRef.current = scheduledContent
-      publishSnapshot(scheduledContent)
-    },
-    [publishSnapshot]
-  )
-
   useEffect(() => {
-    const scheduler = createNoteEditorSnapshotScheduler({
+    snapshotSchedulerRef.current = createNoteEditorSnapshotScheduler({
       debounceMs: NOTE_EDITOR_SNAPSHOT_DEBOUNCE_MS,
       maxWaitMs: NOTE_EDITOR_SNAPSHOT_MAX_WAIT_MS,
-      onFlush: publishScheduledSnapshot
+      onFlush: publishSnapshot
     })
-    snapshotSchedulerRef.current = scheduler
-
-    return () => {
-      previewSerializationVersionRef.current += 1
-      scheduler.cancel()
-      scheduler.dispose()
-      snapshotSchedulerRef.current = null
-    }
-  }, [publishScheduledSnapshot])
-
-  const flushPublishedSnapshot = useCallback((): void => {
-    previewSerializationVersionRef.current += 1
-
-    if (modeRef.current !== 'preview') {
-      snapshotSchedulerRef.current?.flush()
-      return
-    }
-
-    snapshotSchedulerRef.current?.cancel()
-
-    const editor = editorRef.current
-    if (!editor || !editorReadyRef.current) {
-      return
-    }
-
-    const content = normalizeLatexEscapes(editor.getMarkdown())
-    contentRef.current = content
-    publishSnapshot(content)
+    return () => snapshotSchedulerRef.current?.dispose()
   }, [publishSnapshot])
 
-  const publishSnapshotNow = useCallback(
-    (content: string): void => {
-      const scheduler = snapshotSchedulerRef.current
-      if (!scheduler) {
-        publishSnapshot(content)
-        return
+  const completionSource = useCallback((context: CompletionContext) => {
+    const mention = context.matchBefore(/\[\[[^\]\n]*/)
+    if (mention) {
+      const query = mention.text.slice(2).trim().toLowerCase()
+      const options: Completion[] = notesRef.current
+        .filter((note) => {
+          const haystack =
+            `${getNoteDisplayName(note.relPath)} ${stripNoteExtension(note.relPath)}`.toLowerCase()
+          return !query || haystack.includes(query)
+        })
+        .slice(0, 100)
+        .map((note) => ({
+          label: getNoteDisplayName(note.relPath),
+          detail: stripNoteExtension(note.relPath),
+          type: 'text',
+          apply: (view, _completion, from, to) => {
+            const insert = `[[${note.relPath}]]`
+            view.dispatch({
+              changes: { from, to, insert },
+              selection: { anchor: from + insert.length }
+            })
+          }
+        }))
+      return { from: mention.from, options, filter: true }
+    }
+
+    const slash = context.matchBefore(/(?:^|\s)\/[a-z0-9-]*$/i)
+    if (!slash) return null
+    const slashOffset = slash.text.lastIndexOf('/')
+    const from = slash.from + slashOffset
+    const options: Completion[] = NOTE_SLASH_COMMANDS.map((command) => ({
+      label: command.label,
+      detail: command.keywords.join(', '),
+      type: 'keyword',
+      apply: (view, _completion, applyFrom, to) => {
+        const insert = slashCommandSource(command.id)
+        const cursorOffset = command.id === 'codeBlock' ? 4 : insert.length
+        view.dispatch({
+          changes: { from: applyFrom, to, insert },
+          selection: { anchor: applyFrom + cursorOffset }
+        })
       }
-
-      previewSerializationVersionRef.current += 1
-      scheduler.cancel()
-      contentRef.current = content
-      publishSnapshot(content)
-    },
-    [publishSnapshot]
-  )
-
-  const syncContent = useCallback((nextContent: string, dirty: boolean): void => {
-    if (contentRef.current === nextContent) {
-      return
-    }
-
-    contentRef.current = nextContent
-    snapshotSchedulerRef.current?.schedule(nextContent)
-    if (dirty) {
-      onDirtyRef.current()
-    }
+    }))
+    return { from, options, filter: true }
   }, [])
 
-  const syncRawContent = useCallback((nextContent: string): void => {
-    if (contentRef.current === nextContent) {
-      return
-    }
-
-    contentRef.current = nextContent
-    snapshotSchedulerRef.current?.schedule(nextContent)
-    onDirtyRef.current()
-  }, [])
-
-  const handleRawContentChange = useCallback(
-    (nextContent: string): void => {
-      syncRawContent(nextContent)
-    },
-    [syncRawContent]
-  )
-
-  const handleRawVimModeChange = useCallback((nextMode: NoteVimMode): void => {
+  const reportVimModeValue = useCallback((nextMode: NoteVimMode): void => {
+    if (currentVimModeRef.current === nextMode) return
+    currentVimModeRef.current = nextMode
     setVimMode(nextMode)
     onVimModeChangeRef.current?.(nextMode)
   }, [])
 
-  const isEditorTarget = useCallback((target: EventTarget | null): boolean => {
-    const root = rootRef.current
-    if (!root || !(target instanceof Node)) {
-      return false
-    }
-
-    const editable = root.querySelector<HTMLElement>('[contenteditable="true"]')
-    const rawEditor = root.parentElement?.querySelector<HTMLElement>(
-      '[data-note-raw-editor="true"]'
-    )
-    return Boolean(
-      (editable && editable.contains(target)) || (rawEditor && rawEditor.contains(target))
-    )
-  }, [])
-
-  const editorHasFocus = useCallback((): boolean => {
-    return isEditorTarget(document.activeElement)
-  }, [isEditorTarget])
-
-  const runEditorActionSafely = useCallback(
-    (runner: Parameters<Crepe['editor']['action']>[0]): boolean => {
-      const editor = editorRef.current
-      if (!editor || !editorReadyRef.current) {
-        return false
-      }
-
-      try {
-        editor.editor.action(runner)
-        return true
-      } catch (error) {
-        if (isMissingEditorViewError(error)) {
-          editorReadyRef.current = false
-          return false
-        }
-
-        throw error
-      }
+  const reportVimMode = useCallback(
+    (view: EditorView): void => {
+      reportVimModeValue(getVimMode(view, vimEnabledRef.current))
     },
+    [reportVimModeValue]
+  )
+
+  const getLivePreviewExtensions = useCallback(
+    (): Extension => (modeRef.current === 'live' ? noteLivePreview() : []),
     []
   )
 
-  const focus = useCallback((): void => {
-    hasFocusIntentRef.current = true
-    if (modeRef.current === 'raw') {
-      rawEditorRef.current?.focus()
-      return
-    }
+  const buildExtensions = useCallback((): Extension[] => {
+    return [
+      vimCompartmentRef.current.of(vimEnabledRef.current ? vim({ status: false }) : []),
+      Prec.highest(
+        EditorView.domEventHandlers({
+          keydown: handleVimMarkdownCodeBlockNavigation
+        })
+      ),
+      history(),
+      drawSelection(),
+      dropCursor(),
+      rectangularSelection(),
+      crosshairCursor(),
+      highlightActiveLine(),
+      highlightSelectionMatches(),
+      indentOnInput(),
+      bracketMatching(),
+      sharedEditorIndentation,
+      noteEditorTabWidth,
+      EditorState.allowMultipleSelections.of(true),
+      EditorView.lineWrapping,
+      noteMarkdownLanguage,
+      syntaxHighlighting(noteMarkdownHighlightStyle, { fallback: true }),
+      autocompletion({ override: [completionSource], activateOnTyping: true }),
+      placeholder('Type / for commands'),
+      keymap.of([
+        { key: 'ArrowUp', run: (view) => enterAdjacentMarkdownCodeBlock(view, 'up') },
+        { key: 'ArrowDown', run: (view) => enterAdjacentMarkdownCodeBlock(view, 'down') },
+        { key: 'ArrowLeft', run: (view) => enterAdjacentMarkdownCodeBlock(view, 'left') },
+        { key: 'ArrowRight', run: (view) => enterAdjacentMarkdownCodeBlock(view, 'right') },
+        { key: 'Enter', run: insertMarkdownCodeFenceOnEnter },
+        { key: 'Shift-Enter', run: insertHardBreak },
+        { key: 'Backspace', run: (view) => deleteMarkdownCodeBlock(view, 'backward') },
+        { key: 'Delete', run: (view) => deleteMarkdownCodeBlock(view, 'forward') },
+        indentWithTab,
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap
+      ]),
+      modeCompartmentRef.current.of(getLivePreviewExtensions()),
+      readOnlyCompartmentRef.current.of(EditorState.readOnly.of(readOnlyRef.current)),
+      editorTheme,
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          const content = update.state.doc.toString()
+          contentRef.current = content
+          snapshotSchedulerRef.current?.schedule(content)
+          if (!suppressDirtyRef.current) onDirtyRef.current()
+          suppressDirtyRef.current = false
 
-    if (
-      runEditorActionSafely((ctx) => {
-        ctx.get(editorViewCtx).focus()
+          if (update.transactions.some((transaction) => transaction.isUserEvent('input.type'))) {
+            queueMicrotask(() => {
+              if (viewRef.current === update.view) insertTypedMarkdownCodeFencePair(update.view)
+            })
+          }
+        }
+        reportVimMode(update.view)
+      }),
+      EditorView.domEventHandlers({
+        paste: (event, view) => {
+          const imageItem = Array.from(event.clipboardData?.items ?? []).find((item) =>
+            item.type.startsWith('image/')
+          )
+          const file = imageItem?.getAsFile()
+          const extension = file ? getImageFileExtension(file) : null
+          if (!file || !extension) return false
+          event.preventDefault()
+          void onPasteImageRef.current(file, extension).then((imageUrl) => {
+            if (!imageUrl) return
+            const position = view.state.selection.main.head
+            const insert = `\n![Pasted image](${imageUrl})\n`
+            view.dispatch({
+              changes: { from: position, insert },
+              selection: { anchor: position + insert.length }
+            })
+          })
+          return true
+        },
+        drop: (event, view) => {
+          const file = event.dataTransfer?.files.item(0) as (File & { path?: string }) | null
+          if (!file?.path) return false
+          event.preventDefault()
+          void onDropFileRef.current(file.path).then((markdownText) => {
+            if (!markdownText) return
+            const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+            const from = position ?? view.state.selection.main.head
+            view.dispatch({
+              changes: { from, insert: markdownText },
+              selection: { anchor: from + markdownText.length }
+            })
+          })
+          return true
+        }
       })
-    ) {
-      return
-    }
+    ]
+  }, [completionSource, getLivePreviewExtensions, reportVimMode])
 
-    rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()
-  }, [runEditorActionSafely])
-
-  const blur = useCallback((): void => {
-    hasFocusIntentRef.current = false
-    rootRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.blur()
-    rawEditorRef.current?.blur()
-  }, [])
-
-  const jumpToOutlineIndex = useCallback(
-    (index: number): void => {
-      const root = rootRef.current
-      if (!root || index < 0) {
+  const replaceDocument = useCallback(
+    (content: string, preserveFocus = false): void => {
+      const view = viewRef.current
+      if (!view) {
+        contentRef.current = content
         return
       }
-
-      if (modeRef.current === 'raw') {
-        rawEditorRef.current?.jumpToOutlineIndex(index)
-        return
-      }
-
-      const headings = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
-        )
-      )
-      const target = headings[index]
-      if (!target) {
-        return
-      }
-
-      focus()
-      target.scrollIntoView({
-        block: 'center',
-        behavior: 'auto'
-      })
+      const focused = preserveFocus && view.hasFocus
+      suppressDirtyRef.current = true
+      view.setState(EditorState.create({ doc: content, extensions: buildExtensions() }))
+      contentRef.current = content
+      snapshotSchedulerRef.current?.cancel()
+      publishSnapshot(content)
+      if (focused) view.focus()
     },
-    [focus]
-  )
-
-  const serializePreviewSnapshot = useCallback(async (): Promise<string> => {
-    const editor = editorRef.current
-    if (!editor || !editorReadyRef.current || modeRef.current !== 'preview') {
-      return contentRef.current
-    }
-
-    snapshotSchedulerRef.current?.cancel()
-    const serializationVersion = ++previewSerializationVersionRef.current
-
-    const serialization = await serializePreviewMarkdownInChunks(
-      editor,
-      previewMarkdownCacheRef.current,
-      () =>
-        serializationVersion !== previewSerializationVersionRef.current ||
-        modeRef.current !== 'preview'
-    )
-    if (serialization && serializationVersion === previewSerializationVersionRef.current) {
-      previewMarkdownCacheRef.current = serialization.cache
-      return serialization.content
-    }
-
-    try {
-      return editor.getMarkdown()
-    } catch {
-      return contentRef.current
-    }
-  }, [])
-
-  const createSnapshot = useCallback(async (): Promise<NoteEditorSnapshot> => {
-    if (modeRef.current === 'raw') {
-      const content = contentRef.current
-      publishSnapshotNow(content)
-      return { content }
-    }
-
-    const content = await serializePreviewSnapshot()
-
-    const normalizedContent = normalizeNoteMentionMarkdown(normalizeLatexEscapes(content))
-    syncContent(normalizedContent, false)
-    publishSnapshotNow(normalizedContent)
-    return { content: normalizedContent }
-  }, [publishSnapshotNow, serializePreviewSnapshot, syncContent])
-
-  const captureSnapshot = useCallback(
-    (): Promise<NoteEditorSnapshot> => createSnapshot(),
-    [createSnapshot]
-  )
-
-  const flushPendingChanges = useCallback(
-    (): Promise<NoteEditorSnapshot> => createSnapshot(),
-    [createSnapshot]
+    [buildExtensions, publishSnapshot]
   )
 
   useEffect(() => {
-    const previousMode = previousModeRef.current
-    if (previousMode !== mode) {
-      flushPublishedSnapshot()
-      if (mode === 'raw') {
-        setRawContent(contentRef.current)
-      }
-    }
+    const host = hostRef.current
+    if (!host) return
+    installVimMappings(vimMappingsRef.current)
+    const view = new EditorView({
+      state: EditorState.create({ doc: initialContentRef.current, extensions: buildExtensions() }),
+      parent: host
+    })
+    viewRef.current = view
+    contentRef.current = view.state.doc.toString()
+    loadedNotePathRef.current = initialNotePathRef.current
+    publishSnapshot(contentRef.current)
+    reportVimMode(view)
+    const frame = window.requestAnimationFrame(() => {
+      setReady(true)
+      onReadyRef.current?.()
+    })
 
+    return () => {
+      window.cancelAnimationFrame(frame)
+      snapshotSchedulerRef.current?.flush()
+      view.destroy()
+      viewRef.current = null
+    }
+  }, [buildExtensions, publishSnapshot, reportVimMode])
+
+  useEffect(() => {
+    vimMappingsRef.current = vimKeyMappings
+    installVimMappings(vimKeyMappings)
+  }, [vimKeyMappings])
+
+  useEffect(() => {
+    const view = viewRef.current
     modeRef.current = mode
-    previousModeRef.current = mode
-  }, [flushPublishedSnapshot, mode])
+    if (!view) return
+    view.dispatch({
+      effects: modeCompartmentRef.current.reconfigure(getLivePreviewExtensions())
+    })
+  }, [getLivePreviewExtensions, mode])
 
-  const capturePrintableDocument = useCallback((): {
-    html: string
-    images: NotePdfExportImage[]
-  } | null => {
-    if (modeRef.current === 'raw') {
-      const editor = editorRef.current
-      if (editor && editorReadyRef.current && editor.getMarkdown() !== contentRef.current) {
-        suppressNextDirtySyncRef.current = true
-        if (!runEditorActionSafely(replaceAll(contentRef.current))) {
-          suppressNextDirtySyncRef.current = false
-        }
-      }
+  useEffect(() => {
+    const view = viewRef.current
+    vimEnabledRef.current = vimModeEnabled
+    if (!view) return
+    view.dispatch({
+      effects: [
+        vimCompartmentRef.current.reconfigure(vimModeEnabled ? vim({ status: false }) : []),
+        modeCompartmentRef.current.reconfigure(getLivePreviewExtensions())
+      ]
+    })
+    reportVimMode(view)
+  }, [getLivePreviewExtensions, reportVimMode, vimModeEnabled])
+
+  useEffect(() => {
+    const view = viewRef.current
+    readOnlyRef.current = readOnly
+    if (!view) return
+    view.dispatch({
+      effects: [
+        readOnlyCompartmentRef.current.reconfigure(EditorState.readOnly.of(readOnly)),
+        modeCompartmentRef.current.reconfigure(getLivePreviewExtensions())
+      ]
+    })
+  }, [getLivePreviewExtensions, readOnly])
+
+  useEffect(() => {
+    const nextContent = initialContent ?? ''
+    if (loadedNotePathRef.current === currentNotePath && contentRef.current === nextContent) return
+    snapshotSchedulerRef.current?.flush()
+    loadedNotePathRef.current = currentNotePath
+    replaceDocument(nextContent, hasFocusIntentRef.current)
+  }, [currentNotePath, initialContent, replaceDocument])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const handleLinkOpen = (event: MouseEvent): void => {
+      if (event.type === 'auxclick' && !isMiddleMouseButton(event)) return
+      const element =
+        event.target instanceof HTMLElement
+          ? event.target.closest<HTMLElement>('[data-note-target], [data-note-href]')
+          : null
+      if (!element) return
+      const explicitTarget = element.dataset.noteTarget
+      const hrefTarget = parseNoteMentionHref(element.dataset.noteHref ?? '')
+      const target = explicitTarget
+        ? (noteResolverRef.current(explicitTarget) ?? explicitTarget)
+        : hrefTarget
+      if (!target) return
+      event.preventDefault()
+      event.stopPropagation()
+      onOpenNoteLinkRef.current?.(target, {
+        openInNewTab: isMiddleMouseButton(event) || isModifiedNotebookOpen(event)
+      })
     }
-
-    const renderedDocument = rootRef.current?.querySelector<HTMLElement>('.ProseMirror')
-    if (!renderedDocument) {
-      return null
+    host.addEventListener('click', handleLinkOpen, true)
+    host.addEventListener('auxclick', handleLinkOpen, true)
+    return () => {
+      host.removeEventListener('click', handleLinkOpen, true)
+      host.removeEventListener('auxclick', handleLinkOpen, true)
     }
-
-    const clone = renderedDocument.cloneNode(true) as HTMLElement
-    inlinePrintableStyles(renderedDocument, clone)
-    clone.removeAttribute('contenteditable')
-    clone.querySelectorAll('script, iframe, object, embed, form, button').forEach((element) => {
-      element.remove()
-    })
-    clone.querySelectorAll<HTMLElement>('*').forEach((element) => {
-      for (const attribute of element.getAttributeNames()) {
-        if (attribute.startsWith('on')) {
-          element.removeAttribute(attribute)
-        }
-      }
-      element.removeAttribute('contenteditable')
-    })
-
-    const images: NotePdfExportImage[] = []
-    clone.querySelectorAll<HTMLImageElement>('img').forEach((image, index) => {
-      const source = image.currentSrc || image.getAttribute('src')
-      if (!source) {
-        image.remove()
-        return
-      }
-
-      const id = `image-${index + 1}`
-      images.push({ id, src: source })
-      image.setAttribute('src', `${NOTE_PDF_IMAGE_URI_PREFIX}${id}`)
-      image.setAttribute('data-export-image-id', id)
-    })
-
-    clone.style.minHeight = 'auto'
-    clone.style.height = 'auto'
-    clone.style.paddingBottom = '0'
-
-    return { html: clone.innerHTML, images }
-  }, [runEditorActionSafely])
-
-  const hasFocusIntent = useCallback(
-    (): boolean => editorHasFocus() || hasFocusIntentRef.current,
-    [editorHasFocus]
-  )
-
-  const closeMentionPicker = useCallback((): void => {
-    setMentionPicker(null)
   }, [])
 
-  const closeSlashPicker = useCallback((): void => {
-    setSlashPicker(null)
+  const captureSnapshot = useCallback(async (): Promise<NoteEditorSnapshot> => {
+    return { content: viewRef.current?.state.doc.toString() ?? contentRef.current }
+  }, [])
+
+  const flushPendingChanges = useCallback(async (): Promise<NoteEditorSnapshot> => {
+    snapshotSchedulerRef.current?.flush()
+    const content = viewRef.current?.state.doc.toString() ?? contentRef.current
+    publishSnapshot(content)
+    return { content }
+  }, [publishSnapshot])
+
+  const migrateIndentationToTabs = useCallback((): MarkdownIndentationMigrationResult => {
+    const view = viewRef.current
+    const source = view?.state.doc.toString() ?? contentRef.current
+    const result = migrateMarkdownIndentationToTabs(source)
+
+    if (!view || view.state.readOnly || result.changes.length === 0) return result
+
+    const changes = view.state.changes(result.changes)
+    view.dispatch({
+      changes,
+      selection: view.state.selection.map(changes),
+      userEvent: 'input.indent'
+    })
+    return result
+  }, [])
+
+  const focus = useCallback((): void => {
+    hasFocusIntentRef.current = true
+    viewRef.current?.focus()
+  }, [])
+
+  const blur = useCallback((): void => {
+    hasFocusIntentRef.current = false
+    const active = document.activeElement
+    if (active instanceof HTMLElement && hostRef.current?.contains(active)) active.blur()
+  }, [])
+
+  const hasFocusIntent = useCallback((): boolean => hasFocusIntentRef.current, [])
+
+  const jumpToOutlineIndex = useCallback((index: number): void => {
+    const view = viewRef.current
+    if (!view) return
+    const headings: number[] = []
+    for (let lineNumber = 1; lineNumber <= view.state.doc.lines; lineNumber += 1) {
+      const line = view.state.doc.line(lineNumber)
+      if (/^#{1,6}\s+/.test(line.text)) headings.push(line.from)
+    }
+    const position = headings[index]
+    if (position === undefined) return
+    view.dispatch({
+      selection: { anchor: position },
+      effects: EditorView.scrollIntoView(position, { y: 'center' })
+    })
+    view.focus()
+  }, [])
+
+  const insertNoteLink = useCallback((targetRelPath: string): void => {
+    const view = viewRef.current
+    if (!view || view.state.readOnly) return
+    const selection = view.state.selection.main
+    const selectedText = view.state.sliceDoc(selection.from, selection.to)
+    const label = selectedText || getNoteDisplayName(targetRelPath)
+    const insert = `[${label}](${noteMentionHref(targetRelPath)})`
+    view.dispatch({
+      changes: { from: selection.from, to: selection.to, insert },
+      selection: { anchor: selection.from + insert.length }
+    })
+    view.focus()
   }, [])
 
   const loadDocument = useCallback(
     ({
-      content,
+      content = '',
       notePath,
       preserveFocus = false
-    }: {
-      content?: string | null
-      notePath?: string
-      preserveFocus?: boolean
-    }): void => {
-      flushPublishedSnapshot()
-      const nextContent = normalizeLatexEscapes(content ?? '')
-      const samePath = loadedNotePathRef.current === notePath
-      const sameContent = contentRef.current === nextContent
-
-      loadedNotePathRef.current = notePath
-      currentNotePathRef.current = notePath
-      initialContentRef.current = nextContent
-
-      if (!editorRef.current || !editorReadyRef.current) {
-        contentRef.current = nextContent
-        setRawContent(nextContent)
-        if (!sameContent) {
-          publishSnapshotNow(nextContent)
-        }
-        return
-      }
-
-      if (samePath && sameContent) {
-        return
-      }
-
-      suppressNextDirtySyncRef.current = true
-      if (!runEditorActionSafely(replaceAll(nextContent))) {
-        contentRef.current = nextContent
-        setRawContent(nextContent)
-        return
-      }
-      syncContent(nextContent, false)
-      setRawContent(nextContent)
-      publishSnapshotNow(nextContent)
-      dismissedMentionTriggerRef.current = null
-      closeMentionPicker()
-      closeSlashPicker()
-
-      if (preserveFocus) {
-        focus()
-      }
+    }: Parameters<NoteEditorHandle['loadDocument']>[0]) => {
+      snapshotSchedulerRef.current?.flush()
+      if (notePath !== undefined) loadedNotePathRef.current = notePath
+      replaceDocument(content ?? '', preserveFocus)
     },
-    [
-      closeMentionPicker,
-      closeSlashPicker,
-      focus,
-      flushPublishedSnapshot,
-      publishSnapshotNow,
-      runEditorActionSafely,
-      syncContent
-    ]
+    [replaceDocument]
   )
-
-  useEffect(() => {
-    if (mode !== 'preview') {
-      return
-    }
-
-    const editor = editorRef.current
-    if (!editor || !editorReadyRef.current) {
-      return
-    }
-
-    const nextContent = contentRef.current
-    if (editor.getMarkdown() === nextContent) {
-      return
-    }
-
-    suppressNextDirtySyncRef.current = true
-    if (!runEditorActionSafely(replaceAll(nextContent))) {
-      suppressNextDirtySyncRef.current = false
-    }
-  }, [mode, runEditorActionSafely])
-
-  const insertNoteLink = useCallback(
-    (targetRelPath: string): void => {
-      if (modeRef.current === 'raw') {
-        rawEditorRef.current?.insertText(`[[${stripNoteExtension(targetRelPath)}]]`)
-        return
-      }
-
-      const editor = editorRef.current
-      if (!editor || !editorReadyRef.current) {
-        return
-      }
-
-      const replacementRange = mentionPicker?.open
-        ? { from: mentionPicker.from, to: mentionPicker.to }
-        : null
-      const fallbackLabel = getNoteDisplayName(targetRelPath)
-      const href = noteMentionHref(targetRelPath)
-
-      if (
-        !runEditorActionSafely((ctx) => {
-          const view = ctx.get(editorViewCtx)
-          const { state } = view
-          const from = replacementRange?.from ?? state.selection.from
-          const to = replacementRange?.to ?? state.selection.to
-          const empty = from === to
-          const label = mentionPicker?.open
-            ? fallbackLabel
-            : empty
-              ? fallbackLabel
-              : state.doc.textBetween(from, to) || fallbackLabel
-          const markType = linkSchema.type(ctx)
-          const linkMark = markType.create({ href })
-          let tr = state.tr
-
-          if (mentionPicker?.open) {
-            tr = tr.insertText(label, from, to)
-            tr = tr.addMark(from, from + label.length, linkMark)
-            tr = tr.setSelection(TextSelection.create(tr.doc, from + label.length))
-          } else if (empty) {
-            tr = tr.insertText(label, from, to)
-            tr = tr.addMark(from, from + label.length, linkMark)
-            tr = tr.setSelection(TextSelection.create(tr.doc, from + label.length))
-          } else {
-            tr = tr.removeMark(from, to, markType)
-            tr = tr.addMark(from, to, linkMark)
-            tr = tr.setSelection(TextSelection.create(tr.doc, to))
-          }
-
-          view.dispatch(tr.scrollIntoView())
-          view.focus()
-        })
-      ) {
-        return
-      }
-      closeMentionPicker()
-    },
-    [closeMentionPicker, mentionPicker, runEditorActionSafely]
-  )
-
-  const runSlashCommand = useCallback(
-    (commandId: NoteSlashCommandId): void => {
-      const editor = editorRef.current
-      if (!editor || !editorReadyRef.current) {
-        return
-      }
-
-      const replacementRange = slashPicker?.open
-        ? { from: slashPicker.from, to: slashPicker.to }
-        : null
-
-      if (
-        !runEditorActionSafely((ctx) => {
-          const view = ctx.get(editorViewCtx)
-          const commands = ctx.get(commandsCtx)
-          const from = replacementRange?.from ?? view.state.selection.from
-          const to = replacementRange?.to ?? view.state.selection.to
-          let tr = view.state.tr.delete(from, to)
-
-          tr = tr.setSelection(TextSelection.create(tr.doc, from))
-          view.dispatch(tr.scrollIntoView())
-          commands.call(clearTextInCurrentBlockCommand.key)
-
-          switch (commandId) {
-            case 'text': {
-              commands.call(setBlockTypeCommand.key, {
-                nodeType: paragraphSchema.type(ctx)
-              })
-              break
-            }
-            case 'heading1':
-            case 'heading2':
-            case 'heading3': {
-              const heading = headingSchema.type(ctx)
-              const levelByCommand: Record<
-                Extract<NoteSlashCommandId, 'heading1' | 'heading2' | 'heading3'>,
-                number
-              > = {
-                heading1: 1,
-                heading2: 2,
-                heading3: 3
-              }
-
-              commands.call(setBlockTypeCommand.key, {
-                nodeType: heading,
-                attrs: {
-                  level: levelByCommand[commandId]
-                }
-              })
-              break
-            }
-            case 'bulletList':
-              commands.call(wrapInBlockTypeCommand.key, {
-                nodeType: bulletListSchema.type(ctx)
-              })
-              break
-            case 'numberedList':
-              commands.call(wrapInBlockTypeCommand.key, {
-                nodeType: orderedListSchema.type(ctx)
-              })
-              break
-            case 'taskList':
-              commands.call(wrapInBlockTypeCommand.key, {
-                nodeType: listItemSchema.type(ctx),
-                attrs: { checked: false }
-              })
-              break
-            case 'quote':
-              commands.call(wrapInBlockTypeCommand.key, {
-                nodeType: blockquoteSchema.type(ctx)
-              })
-              break
-            case 'codeBlock':
-              commands.call(setBlockTypeCommand.key, {
-                nodeType: codeBlockSchema.type(ctx)
-              })
-              break
-            case 'divider':
-              commands.call(addBlockTypeCommand.key, {
-                nodeType: hrSchema.type(ctx)
-              })
-              break
-            case 'table': {
-              const selectionFrom = view.state.selection.from
-              commands.call(addBlockTypeCommand.key, {
-                nodeType: createTable(ctx, 3, 3)
-              })
-              commands.call(selectTextNearPosCommand.key, { pos: selectionFrom })
-              break
-            }
-            default:
-              break
-          }
-
-          view.focus()
-        })
-      ) {
-        return
-      }
-
-      closeSlashPicker()
-    },
-    [closeSlashPicker, runEditorActionSafely, slashPicker]
-  )
-
-  const clearSlashTrigger = useCallback((): void => {
-    const picker = slashPickerRef.current
-    if (!picker?.open) {
-      closeSlashPicker()
-      return
-    }
-
-    if (
-      !runEditorActionSafely((ctx) => {
-        const view = ctx.get(editorViewCtx)
-        const { state } = view
-        const { from, empty, $from } = state.selection
-        if (!empty) {
-          view.focus()
-          return
-        }
-
-        const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\0')
-        const match = findNoteSlashTrigger(textBefore)
-        if (!match) {
-          view.focus()
-          return
-        }
-
-        const triggerStart = from - match.query.length - 1
-        const transaction = state.tr.delete(triggerStart, from)
-        transaction.setSelection(TextSelection.create(transaction.doc, triggerStart))
-        view.dispatch(transaction.scrollIntoView())
-        view.focus()
-      })
-    ) {
-      closeSlashPicker()
-      return
-    }
-
-    closeSlashPicker()
-  }, [closeSlashPicker, runEditorActionSafely])
-
-  const handleSlashCommandSelect = useCallback(
-    (commandId: string): void => {
-      slashCommandSelectionRef.current = true
-      runSlashCommand(commandId as NoteSlashCommandId)
-    },
-    [runSlashCommand]
-  )
-
-  const handleSlashSearchValueChange = useCallback((query: string): void => {
-    setSlashPicker((previous) => (previous ? { ...previous, query } : previous))
-  }, [])
-
-  const handleSlashPopoverOpenChange = useCallback(
-    (nextOpen: boolean): void => {
-      if (nextOpen) {
-        return
-      }
-
-      if (slashCommandSelectionRef.current) {
-        slashCommandSelectionRef.current = false
-        return
-      }
-
-      const picker = slashPickerRef.current
-      if (picker?.open) {
-        clearSlashTrigger()
-        return
-      }
-
-      closeSlashPicker()
-    },
-    [clearSlashTrigger, closeSlashPicker]
-  )
-
-  const handleSlashPopoverCloseAutoFocus = useCallback(
-    (event: Event): void => {
-      event.preventDefault()
-      focus()
-    },
-    [focus]
-  )
-
-  const handleMentionSelect = useCallback(
-    (targetRelPath: string): void => {
-      insertNoteLink(targetRelPath)
-    },
-    [insertNoteLink]
-  )
-
-  const handleMentionSearchValueChange = useCallback((query: string): void => {
-    setMentionPicker((previous) => (previous ? { ...previous, query } : previous))
-  }, [])
-
-  const handleMentionPopoverOpenChange = useCallback(
-    (nextOpen: boolean): void => {
-      if (!nextOpen) {
-        const picker = mentionPickerRef.current
-        if (picker?.open) {
-          dismissedMentionTriggerRef.current = {
-            from: picker.from,
-            to: picker.to,
-            query: picker.query
-          }
-        }
-        closeMentionPicker()
-      }
-    },
-    [closeMentionPicker]
-  )
-
-  const handleMentionPopoverCloseAutoFocus = useCallback(
-    (event: Event): void => {
-      event.preventDefault()
-      focus()
-    },
-    [focus]
-  )
-
-  const syncMentionPicker = useCallback((): void => {
-    const editor = editorRef.current
-    const root = rootRef.current
-    if (modeRef.current === 'raw' || !editor || !editorReadyRef.current || !root) {
-      closeMentionPicker()
-      return
-    }
-
-    if (mentionPickerRef.current?.open && !editorHasFocus()) {
-      return
-    }
-
-    if (
-      !runEditorActionSafely((ctx) => {
-        const view = ctx.get(editorViewCtx)
-        const { state } = view
-        const { from, empty, $from } = state.selection
-
-        if (!empty) {
-          dismissedMentionTriggerRef.current = null
-          closeMentionPicker()
-          return
-        }
-
-        const lookBehindStart = Math.max(0, $from.parentOffset - 100)
-        const textBefore = $from.parent.textBetween(lookBehindStart, $from.parentOffset, '\n', '\0')
-        const match = textBefore.match(/\[\[([^\]\n]*)$/)
-        if (!match) {
-          dismissedMentionTriggerRef.current = null
-          closeMentionPicker()
-          return
-        }
-
-        const query = match[1] ?? ''
-        const triggerStart = from - query.length - 2
-        const dismissedTrigger = dismissedMentionTriggerRef.current
-        if (
-          dismissedTrigger &&
-          dismissedTrigger.from === triggerStart &&
-          dismissedTrigger.to === from &&
-          dismissedTrigger.query === query
-        ) {
-          closeMentionPicker()
-          return
-        }
-
-        dismissedMentionTriggerRef.current = null
-        const caretRect = view.coordsAtPos(from)
-        const rootRect = root.getBoundingClientRect()
-
-        setMentionPicker({
-          open: true,
-          query,
-          from: triggerStart,
-          to: from,
-          top: caretRect.bottom - rootRect.top + 8,
-          left: Math.max(0, caretRect.left - rootRect.left)
-        })
-        closeSlashPicker()
-      })
-    ) {
-      closeMentionPicker()
-    }
-  }, [closeMentionPicker, closeSlashPicker, editorHasFocus, runEditorActionSafely])
-
-  const syncSlashPicker = useCallback((): void => {
-    const editor = editorRef.current
-    const root = rootRef.current
-    if (modeRef.current === 'raw' || !editor || !editorReadyRef.current || !root) {
-      closeSlashPicker()
-      return
-    }
-
-    if (
-      !runEditorActionSafely((ctx) => {
-        const view = ctx.get(editorViewCtx)
-        const { state } = view
-        const { from, empty, $from } = state.selection
-
-        if (!empty) {
-          closeSlashPicker()
-          return
-        }
-
-        const parent = $from.parent
-        if (!['paragraph', 'heading'].includes(parent.type.name)) {
-          closeSlashPicker()
-          return
-        }
-
-        const textBefore = parent.textBetween(0, $from.parentOffset, '\n', '\0')
-        const match = findNoteSlashTrigger(textBefore)
-        if (!match) {
-          closeSlashPicker()
-          return
-        }
-
-        const triggerStart = from - match.query.length - 1
-        const caretRect = view.coordsAtPos(from)
-        const rootRect = root.getBoundingClientRect()
-
-        setSlashPicker((previous) => {
-          return {
-            open: true,
-            query: previous?.open && previous.from === triggerStart ? previous.query : match.query,
-            from: triggerStart,
-            to: from,
-            top: caretRect.bottom - rootRect.top + 8,
-            left: Math.max(0, caretRect.left - rootRect.left)
-          }
-        })
-        closeMentionPicker()
-      })
-    ) {
-      closeSlashPicker()
-    }
-  }, [closeMentionPicker, closeSlashPicker, runEditorActionSafely])
 
   useImperativeHandle(
     ref,
     () => ({
       captureSnapshot,
       flushPendingChanges,
-      capturePrintableDocument,
+      migrateIndentationToTabs,
       focus,
       hasFocusIntent,
       blur,
@@ -1986,334 +910,15 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
     [
       blur,
       captureSnapshot,
-      capturePrintableDocument,
       flushPendingChanges,
       focus,
       hasFocusIntent,
-      jumpToOutlineIndex,
       insertNoteLink,
-      loadDocument
+      jumpToOutlineIndex,
+      loadDocument,
+      migrateIndentationToTabs
     ]
   )
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) {
-      return
-    }
-
-    let cancelled = false
-    let readyFrameId: number | null = null
-    root.replaceChildren()
-    previewMarkdownCacheRef.current.clear()
-    previewSerializationVersionRef.current += 1
-    const initialValue = normalizeLatexEscapes(initialContentRef.current)
-    const editor = new Crepe({
-      root,
-      defaultValue: initialValue,
-      features: {
-        [CrepeFeature.BlockEdit]: false,
-        [CrepeFeature.CodeMirror]: false,
-        [CrepeFeature.Cursor]: false,
-        [CrepeFeature.LinkTooltip]: true,
-        [CrepeFeature.Latex]: false
-      },
-      featureConfigs: {
-        [CrepeFeature.ListItem]: {
-          bulletIcon: '•'
-        },
-        [CrepeFeature.LinkTooltip]: {
-          inputPlaceholder: 'Paste link or select a note link'
-        },
-        [CrepeFeature.Placeholder]: {
-          text: 'Type / for commands'
-        }
-      }
-    })
-    editor.setReadonly(readOnlyRef.current)
-
-    editor.editor.config((ctx) => {
-      ensureEditorViewContext(ctx)
-      registerNoteCodeBlockView(ctx)
-      ctx.update(prosePluginsCtx, (plugins) => [
-        ...plugins,
-        new Plugin({
-          props: {
-            attributes: {
-              spellcheck: 'false'
-            }
-          },
-          view: () => ({
-            update: (view, previousState) => {
-              const docChanged = view.state.doc !== previousState.doc
-              const selectionChanged = !view.state.selection.eq(previousState.selection)
-              if (!docChanged && !selectionChanged) {
-                return
-              }
-
-              if (docChanged) {
-                const shouldMarkDirty = editorReadyRef.current && !suppressNextDirtySyncRef.current
-                suppressNextDirtySyncRef.current = false
-                previewSerializationVersionRef.current += 1
-                snapshotSchedulerRef.current?.schedule('preview')
-                if (shouldMarkDirty) {
-                  onDirtyRef.current()
-                }
-              }
-
-              syncMentionPicker()
-              syncSlashPicker()
-            }
-          })
-        }),
-        inlineLatexPreviewPlugin(),
-        noteCalloutPlugin(),
-        createNoteCodeBlockSyntaxPlugin(),
-        createNoteCodeBlockNavigationPlugin(),
-        createNoteVimModePlugin({
-          isEnabled: () => vimModeEnabledRef.current,
-          getKeyMappings: () => vimKeyMappingsRef.current,
-          getParser: () => ctx.get(parserCtx),
-          getSchema: () => ctx.get(schemaCtx),
-          getSerializer: () => ctx.get(serializerCtx),
-          shouldIgnoreKeyDown: () =>
-            Boolean(mentionPickerRef.current?.open || slashPickerRef.current?.open),
-          onModeChange: (mode) => {
-            setVimMode(mode)
-            onVimModeChangeRef.current?.(mode)
-          }
-        }),
-        noteArrowInputPlugin({
-          shouldIgnoreInput: () =>
-            Boolean(mentionPickerRef.current?.open || slashPickerRef.current?.open)
-        })
-      ])
-    })
-
-    editorRef.current = editor
-    editorReadyRef.current = false
-    contentRef.current = initialValue
-    setRawContent(initialValue)
-    onSnapshotChangeRef.current?.({ content: initialValue })
-    editor.editor.onStatusChange((status) => {
-      if (status === EditorStatus.Destroyed) {
-        ensureEditorViewContext(editor.editor.ctx)
-      }
-    })
-
-    void editor
-      .create()
-      .then(() => {
-        if (cancelled) {
-          return
-        }
-
-        const markEditorReady = (): void => {
-          if (cancelled) {
-            return
-          }
-
-          const view = editor.editor.action((ctx) => ctx.get(editorViewCtx))
-          if (!hasReadyEditorView(view)) {
-            readyFrameId = window.requestAnimationFrame(markEditorReady)
-            return
-          }
-
-          const nextContent = normalizeLatexEscapes(initialContentRef.current)
-
-          editorReadyRef.current = true
-          loadedNotePathRef.current = currentNotePathRef.current
-          syncContent(nextContent, false)
-          setIsEditorVisible(true)
-          onReadyRef.current?.()
-        }
-
-        markEditorReady()
-      })
-      .catch((error: unknown) => {
-        console.error('Failed to create Milkdown editor:', error)
-      })
-
-    return () => {
-      cancelled = true
-      if (readyFrameId !== null) {
-        window.cancelAnimationFrame(readyFrameId)
-      }
-      editorReadyRef.current = false
-      root.replaceChildren()
-      if (editorRef.current === editor) {
-        editorRef.current = null
-      }
-      void editor.destroy().catch((error: unknown) => {
-        console.error('Failed to destroy Milkdown editor:', error)
-      })
-    }
-  }, [syncContent, syncMentionPicker, syncSlashPicker])
-
-  useEffect(() => {
-    const nextContent = normalizeLatexEscapes(initialContent ?? '')
-    const previousPath = loadedNotePathRef.current
-    const previousContent = contentRef.current
-
-    if (previousPath !== currentNotePath || previousContent !== nextContent) {
-      flushPublishedSnapshot()
-    }
-
-    initialContentRef.current = nextContent
-    currentNotePathRef.current = currentNotePath
-    loadedNotePathRef.current = currentNotePath
-
-    if (previousPath === currentNotePath && previousContent === nextContent) {
-      return
-    }
-
-    if (!editorRef.current || !editorReadyRef.current) {
-      contentRef.current = nextContent
-      window.requestAnimationFrame(() => {
-        if (contentRef.current === nextContent) {
-          setRawContent(nextContent)
-        }
-      })
-      return
-    }
-
-    suppressNextDirtySyncRef.current = true
-    if (!runEditorActionSafely(replaceAll(nextContent))) {
-      contentRef.current = nextContent
-      window.requestAnimationFrame(() => {
-        if (contentRef.current === nextContent) {
-          setRawContent(nextContent)
-        }
-      })
-      return
-    }
-    contentRef.current = nextContent
-    window.requestAnimationFrame(() => {
-      if (contentRef.current === nextContent) {
-        setRawContent(nextContent)
-      }
-    })
-    publishSnapshotNow(nextContent)
-    if (hasFocusIntent()) {
-      focus()
-    }
-  }, [
-    currentNotePath,
-    focus,
-    hasFocusIntent,
-    initialContent,
-    flushPublishedSnapshot,
-    publishSnapshotNow,
-    runEditorActionSafely
-  ])
-
-  useEffect(() => {
-    const root = rootRef.current
-    const editorHost = root?.parentElement
-    if (!root || !editorHost) {
-      return
-    }
-
-    const handlePaste = (event: ClipboardEvent): void => {
-      const clipboardItems = Array.from(event.clipboardData?.items ?? [])
-      const imageItem = clipboardItems.find((item) => item.type.startsWith('image/'))
-      if (!imageItem) {
-        return
-      }
-
-      const imageFile = imageItem.getAsFile()
-      const fileExtension = imageFile ? getImageFileExtension(imageFile) : null
-      if (!imageFile || !fileExtension) {
-        return
-      }
-
-      event.preventDefault()
-
-      void (async () => {
-        const imageUrl = await onPasteImageRef.current(imageFile, fileExtension)
-        if (!imageUrl) {
-          return
-        }
-
-        if (modeRef.current === 'raw') {
-          rawEditorRef.current?.insertText(`\n![Pasted image](${imageUrl})\n`)
-          return
-        }
-
-        if (!editorRef.current || !editorReadyRef.current) {
-          return
-        }
-
-        if (!runEditorActionSafely(insert(`\n![Pasted image](${imageUrl})\n`))) {
-          return
-        }
-        root.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()
-      })()
-    }
-
-    editorHost.addEventListener('paste', handlePaste, true)
-    return () => {
-      editorHost.removeEventListener('paste', handlePaste, true)
-    }
-  }, [runEditorActionSafely])
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) {
-      return
-    }
-
-    const handleNoteLinkOpen = (event: MouseEvent): void => {
-      if (event.type === 'auxclick' && !isMiddleMouseButton(event)) {
-        return
-      }
-
-      const target = event.target
-      if (!(target instanceof HTMLElement)) {
-        return
-      }
-
-      const link = target.closest<HTMLAnchorElement>('a[href]')
-      if (!link) {
-        return
-      }
-
-      const noteTarget = parseNoteMentionHref(link.getAttribute('href') ?? '')
-      if (!noteTarget) {
-        return
-      }
-
-      const openInNewTab = isMiddleMouseButton(event) || isModifiedNotebookOpen(event)
-
-      event.preventDefault()
-      event.stopPropagation()
-      onOpenNoteLinkRef.current?.(noteTarget, { openInNewTab })
-    }
-
-    root.addEventListener('click', handleNoteLinkOpen, true)
-    root.addEventListener('auxclick', handleNoteLinkOpen, true)
-    return () => {
-      root.removeEventListener('click', handleNoteLinkOpen, true)
-      root.removeEventListener('auxclick', handleNoteLinkOpen, true)
-    }
-  }, [])
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) {
-      return
-    }
-
-    const handleSelectionChange = (): void => {
-      syncMentionPicker()
-      syncSlashPicker()
-    }
-
-    document.addEventListener('selectionchange', handleSelectionChange)
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange)
-    }
-  }, [syncMentionPicker, syncSlashPicker])
 
   return (
     <div
@@ -2321,123 +926,30 @@ export const Editor = forwardRef<NoteEditorHandle, EditorProps>(function Editor(
       data-vim-mode={vimModeEnabled ? vimMode : undefined}
       data-editor-mode={mode}
       data-editor-read-only={readOnly ? 'true' : undefined}
-      data-editor-ready={isEditorVisible ? 'true' : 'false'}
+      data-editor-ready={ready ? 'true' : 'false'}
       data-editor-density={density}
       data-editor-background={background}
       className={cn(
-        'motion-editor-surface relative',
-        mode === 'preview' ? 'h-full min-h-[10vh]' : 'h-full min-h-0',
+        'motion-editor-surface note-codemirror-editor relative h-full min-h-[10vh]',
         className
       )}
-      style={{ visibility: isEditorVisible ? 'visible' : 'hidden' }}
-      onFocusCapture={(event) => {
-        if (isEditorTarget(event.target)) {
-          hasFocusIntentRef.current = true
-        }
+      onFocusCapture={() => {
+        hasFocusIntentRef.current = true
       }}
-      onPointerDownCapture={(event) => {
-        if (isEditorTarget(event.target)) {
-          hasFocusIntentRef.current = true
-        }
+      onPointerDownCapture={() => {
+        hasFocusIntentRef.current = true
       }}
       onBlurCapture={(event) => {
-        if (!isEditorTarget(event.relatedTarget)) {
-          hasFocusIntentRef.current = false
-        }
+        if (!event.currentTarget.contains(event.relatedTarget)) hasFocusIntentRef.current = false
       }}
     >
       <div
-        ref={rootRef}
-        data-testid="note-milkdown-root"
-        className={cn('min-h-[10vh] h-full', mode === 'preview' ? undefined : 'hidden')}
-        aria-hidden={mode !== 'preview'}
-      />
-      <NoteRawEditor
-        ref={rawEditorRef}
-        value={rawContent}
-        active={mode === 'raw'}
-        readOnly={readOnly}
-        vimModeEnabled={vimModeEnabled}
-        vimKeyMappings={vimKeyMappings}
-        onChange={handleRawContentChange}
-        onVimModeChange={handleRawVimModeChange}
-        onEditorElementChange={onRawEditorElementChange}
-      />
-      <SelectionPopover
-        selectionMode="single"
-        value=""
-        options={slashOptions}
-        onValueChange={handleSlashCommandSelect}
-        label="Insert block"
-        searchPlaceholder="Search commands"
-        testId="note-slash-completion"
-        contentClassName="note-editor-popover w-72 p-1"
-        open={mode === 'preview' && Boolean(slashPicker?.open)}
-        onOpenChange={handleSlashPopoverOpenChange}
-        searchValue={slashPicker?.query ?? ''}
-        onSearchValueChange={handleSlashSearchValueChange}
-        onCloseAutoFocus={handleSlashPopoverCloseAutoFocus}
-        loop
-        hideTrigger
-        anchor={
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute h-px w-px"
-            style={{ top: slashPicker?.top ?? 0, left: slashPicker?.left ?? 0 }}
-          />
-        }
-      />
-      <SelectionPopover
-        selectionMode="single"
-        value=""
-        options={mentionOptions}
-        onValueChange={handleMentionSelect}
-        label="Link note"
-        searchPlaceholder="Search notes"
-        testId="note-link-completion"
-        contentClassName="note-editor-popover w-72 p-1"
-        open={mode === 'preview' && Boolean(mentionPicker?.open)}
-        onOpenChange={handleMentionPopoverOpenChange}
-        searchValue={mentionPicker?.query ?? ''}
-        onSearchValueChange={handleMentionSearchValueChange}
-        onCloseAutoFocus={handleMentionPopoverCloseAutoFocus}
-        loop
-        selectOnTab
-        hideTrigger
-        anchor={
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute h-px w-px"
-            style={{ top: mentionPicker?.top ?? 0, left: mentionPicker?.left ?? 0 }}
-          />
-        }
+        ref={hostRef}
+        data-testid="note-codemirror-root"
+        data-note-source-editor="true"
+        data-mode={mode}
+        className="h-full min-h-[10vh]"
       />
     </div>
   )
 })
-
-const IMAGE_MIME_EXTENSION_MAP: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/jpg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/svg+xml': 'svg',
-  'image/bmp': 'bmp'
-}
-
-function getImageFileExtension(file: File): string | null {
-  const mimeType = file.type.trim().toLowerCase()
-  const extensionFromMime = IMAGE_MIME_EXTENSION_MAP[mimeType]
-  if (extensionFromMime) {
-    return extensionFromMime
-  }
-
-  const fileName = file.name.trim()
-  const dotIndex = fileName.lastIndexOf('.')
-  if (dotIndex < 0 || dotIndex === fileName.length - 1) {
-    return null
-  }
-
-  return fileName.slice(dotIndex + 1).toLowerCase()
-}

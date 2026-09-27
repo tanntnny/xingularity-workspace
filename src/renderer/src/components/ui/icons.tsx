@@ -185,6 +185,90 @@ export const MarkdownFileIcon = forwardRef<SVGSVGElement, FilledIconProps>(
 
 MarkdownFileIcon.displayName = 'MarkdownFileIcon'
 
+export const ExcalidrawFileIcon = forwardRef<SVGSVGElement, FilledIconProps>(
+  ({ className, size = 24, title, children, stroke: _stroke, ...props }, ref) => {
+    void _stroke
+    const gradientId = useId().replace(/:/g, '')
+
+    return (
+      <svg
+        ref={ref}
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 36 36"
+        className={cn('tabler-icon icon-tabler-excalidraw-file', className)}
+        fill="none"
+        {...props}
+      >
+        {title ? <title>{title}</title> : null}
+        <defs>
+          <linearGradient
+            id={`excalidraw-file-hand-gradient-${gradientId}`}
+            x1="21"
+            y1="23"
+            x2="34"
+            y2="34"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stopColor="#eeeeee" />
+            <stop offset="1" stopColor="#999999" />
+          </linearGradient>
+          <linearGradient
+            id={`excalidraw-file-pencil-gradient-${gradientId}`}
+            x1="7"
+            y1="7"
+            x2="31"
+            y2="31"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stopColor="#f8f8f8" />
+            <stop offset="1" stopColor="#ababab" />
+          </linearGradient>
+          <linearGradient
+            id={`excalidraw-file-metal-gradient-${gradientId}`}
+            x1="2"
+            y1="2"
+            x2="15"
+            y2="15"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0" stopColor="#eeeeee" />
+            <stop offset="1" stopColor="#999999" />
+          </linearGradient>
+        </defs>
+        <path
+          fill="url(#excalidraw-file-hand-gradient-${gradientId})"
+          d="M35.222 33.598c-.647-2.101-1.705-6.059-2.325-7.566c-.501-1.216-.969-2.438-1.544-3.014c-.575-.575-1.553-.53-2.143.058c0 0-2.469 1.675-3.354 2.783c-1.108.882-2.785 3.357-2.785 3.357c-.59.59-.635 1.567-.06 2.143c.576.575 1.798 1.043 3.015 1.544c1.506.62 5.465 1.676 7.566 2.325c.359.11 1.74-1.271 1.63-1.63z"
+        />
+        <path
+          fill="#c7c7c7"
+          d="M13.643 5.308a2.946 2.946 0 0 1 0 4.167l-4.167 4.168a2.948 2.948 0 0 1-4.167 0L1.141 9.475a2.948 2.948 0 0 1 0-4.167l4.167-4.167a2.946 2.946 0 0 1 4.167 0l4.168 4.167z"
+        />
+        <path
+          fill="url(#excalidraw-file-pencil-gradient-${gradientId})"
+          d="M31.353 23.018l-4.17 4.17l-4.163 4.165L7.392 15.726l8.335-8.334l15.626 15.626z"
+        />
+        <path
+          fill="#292929"
+          d="M32.078 34.763s2.709 1.489 3.441.757c.732-.732-.765-3.435-.765-3.435s-2.566.048-2.676 2.678z"
+        />
+        <path
+          fill="url(#excalidraw-file-metal-gradient-${gradientId})"
+          d="M2.183 10.517l8.335-8.335l5.208 5.209l-8.334 8.335z"
+        />
+        <path
+          fill="#999999"
+          d="M3.225 11.558l8.334-8.334l1.042 1.042L4.267 12.6zm2.083 2.086l8.335-8.335l1.042 1.042l-8.335 8.334z"
+        />
+        {children}
+      </svg>
+    )
+  }
+)
+
+ExcalidrawFileIcon.displayName = 'ExcalidrawFileIcon'
+
 export const AlertCircle = IconAlertCircleFilled
 export const AlertCircleOutline = IconAlertCircle
 export const AntennaBars3 = IconAntennaBars3

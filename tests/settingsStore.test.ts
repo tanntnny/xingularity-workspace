@@ -31,6 +31,37 @@ afterEach(async () => {
 })
 
 describe('SettingsStore', () => {
+  it('defaults, validates, and round-trips the weekly calendar zoom per vault', async () => {
+    const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
+    const siblingRoot = trackTempRoot(
+      await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-'))
+    )
+    const store = new SettingsStore()
+
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({ calendarWeeklyHourHeightPx: 160 })
+    )
+
+    const updated = await store.updateVault(root, { calendarWeeklyHourHeightPx: 240 })
+
+    expect(updated.calendarWeeklyHourHeightPx).toBe(240)
+    await expect(store.readVault(root)).resolves.toEqual(
+      expect.objectContaining({ calendarWeeklyHourHeightPx: 240 })
+    )
+    await expect(store.readVault(siblingRoot)).resolves.toEqual(
+      expect.objectContaining({ calendarWeeklyHourHeightPx: 160 })
+    )
+
+    await fs.writeFile(
+      path.join(siblingRoot, 'settings.json'),
+      JSON.stringify({ calendarWeeklyHourHeightPx: 241 }),
+      'utf-8'
+    )
+    await expect(store.readVault(siblingRoot)).resolves.toEqual(
+      expect.objectContaining({ calendarWeeklyHourHeightPx: 160 })
+    )
+  })
+
   it('defaults and round-trips the independent note code font', async () => {
     const root = trackTempRoot(await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-settings-')))
     const store = new SettingsStore()

@@ -96,6 +96,7 @@ Key fields:
 - `profile.name`: display name shown in the app shell
 - `ai.mistralApiKey`: model provider key
 - `fontFamily`: active UI font family
+- `calendarWeeklyHourHeightPx`: per-vault weekly calendar zoom level in pixels per hour
 - `calendarTasks`: persisted task collection
 - `projectIcons`: icon overrides keyed by project id
 - `projects`: persisted project collection

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { remarkXingularityMarkdown } from '../../../../shared/markdownDialect'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
 
@@ -44,7 +45,9 @@ export function MessageResponse({
       )}
       {...props}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkXingularityMarkdown]}>
+        {children}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -56,11 +59,16 @@ export function MessageActions({
   return <div className={cn('mt-2 flex items-center gap-1.5 px-2', className)} {...props} />
 }
 
+type MessageActionProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'className'> & {
+  className?: string
+  label: string
+}
+
 export function MessageAction({
   className,
   label,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }): React.ReactElement {
+}: MessageActionProps): React.ReactElement {
   return (
     <Button
       type="button"

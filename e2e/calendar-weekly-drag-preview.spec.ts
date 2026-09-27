@@ -245,11 +245,17 @@ async function dragTaskToTimedColumn(
   )
 }
 
-async function launchWithFixture(vaultRoot: string): Promise<{
+async function launchWithFixture(
+  vaultRoot: string,
+  existingUserDataPath?: string
+): Promise<{
   electronApp: ElectronApplication
   page: Page
+  userDataPath: string
 }> {
-  const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-week-user-'))
+  const userDataPath =
+    existingUserDataPath ??
+    (await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-week-user-')))
   await fs.mkdir(userDataPath, { recursive: true })
   await fs.writeFile(
     path.join(userDataPath, 'settings.json'),
@@ -303,7 +309,7 @@ async function launchWithFixture(vaultRoot: string): Promise<{
     )
     .toBe('enabled')
 
-  return { electronApp, page }
+  return { electronApp, page, userDataPath: actualUserDataPath }
 }
 
 async function openWeeklyCalendar(page: Page): Promise<void> {
@@ -333,6 +339,76 @@ async function getResizeAffordanceStyles(locator: Locator): Promise<{
 }
 
 test.describe('calendar weekly drag preview', () => {
+  test('persists weekly zoom across view changes and app restart', async () => {
+    const { rootPath } = await createFixtureVault()
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'xingularity-calendar-week-user-'))
+    let firstElectronApp: ElectronApplication | null = null
+    let secondElectronApp: ElectronApplication | null = null
+
+    try {
+      const firstLaunch = await launchWithFixture(rootPath, userDataPath)
+      firstElectronApp = firstLaunch.electronApp
+
+      await openWeeklyCalendar(firstLaunch.page)
+      const scroller = firstLaunch.page.getByTestId('calendar-week-timed-scroller')
+      await expect(scroller).toHaveAttribute('data-weekly-hour-height', '160')
+
+      await firstLaunch.page.evaluate(() => {
+        const target = document.querySelector<HTMLElement>(
+          '[data-testid="calendar-week-timed-scroller"]'
+        )
+        if (!target) {
+          throw new Error('Weekly timed scroller is missing')
+        }
+        target.dispatchEvent(
+          new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            deltaY: -100,
+            metaKey: true
+          })
+        )
+      })
+      await expect(scroller).toHaveAttribute('data-weekly-hour-height', '180')
+
+      await expect
+        .poll(async () => {
+          try {
+            const raw = await fs.readFile(path.join(rootPath, 'settings.json'), 'utf8')
+            return (JSON.parse(raw) as { calendarWeeklyHourHeightPx?: number })
+              .calendarWeeklyHourHeightPx
+          } catch {
+            return null
+          }
+        })
+        .toBe(180)
+
+      await firstLaunch.page.getByText('Monthly', { exact: true }).click()
+      await expect(firstLaunch.page.getByTestId('calendar-month-shell')).toBeVisible()
+      await firstLaunch.page.getByText('Weekly', { exact: true }).click()
+      await expect(firstLaunch.page.getByTestId('calendar-week-view')).toBeVisible()
+      await expect(firstLaunch.page.getByTestId('calendar-week-timed-scroller')).toHaveAttribute(
+        'data-weekly-hour-height',
+        '180'
+      )
+
+      await firstElectronApp.close()
+      firstElectronApp = null
+      const secondLaunch = await launchWithFixture(rootPath, userDataPath)
+      secondElectronApp = secondLaunch.electronApp
+      await openWeeklyCalendar(secondLaunch.page)
+      await expect(secondLaunch.page.getByTestId('calendar-week-timed-scroller')).toHaveAttribute(
+        'data-weekly-hour-height',
+        '180'
+      )
+    } finally {
+      await firstElectronApp?.close()
+      await secondElectronApp?.close()
+      await fs.rm(rootPath, { recursive: true, force: true })
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
   test('keeps weekday headers visible while scrolling the time grid', async () => {
     const { rootPath } = await createFixtureVault()
     const { electronApp, page } = await launchWithFixture(rootPath)

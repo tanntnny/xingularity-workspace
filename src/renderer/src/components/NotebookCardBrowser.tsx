@@ -1,5 +1,5 @@
 import { KeyboardEvent, ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { FileDown, FileText, Pencil, PenTool, Plus, Trash2 } from './ui/icons'
+import { ExcalidrawFileIcon, FileDown, FileText, Pencil, Plus, Trash2 } from './ui/icons'
 import type { FolderColorMap } from '../../../shared/folderColors'
 import type { NoteTreeNode } from '../../../shared/types'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
@@ -196,7 +196,7 @@ function EmptyFolderState({
           className="gap-2"
           onClick={() => onCreateExcalidraw(parentDir)}
         >
-          <PenTool size={16} aria-hidden="true" />
+          <ExcalidrawFileIcon size={16} aria-hidden="true" />
           New drawing
         </Button>
         <Button
@@ -402,7 +402,7 @@ function NotebookCard({
             {
               id: 'create-excalidraw',
               label: 'New drawing',
-              icon: <PenTool aria-hidden="true" />,
+              icon: <ExcalidrawFileIcon aria-hidden="true" />,
               onSelect: () => onCreateExcalidraw(parentDir)
             },
             {
@@ -655,7 +655,7 @@ function NotebookCreateContextMenuItems({
             {
               id: 'create-excalidraw',
               label: 'New drawing',
-              icon: <PenTool aria-hidden="true" />,
+              icon: <ExcalidrawFileIcon aria-hidden="true" />,
               onSelect: () => onCreateExcalidraw(parentDir)
             },
             {
@@ -692,7 +692,7 @@ function NotebookCardIcon({
       {node.kind === 'folder' ? (
         <NotebookFolderIcon variant="closed" color={folderColor} size={48} />
       ) : node.kind === 'excalidraw' ? (
-        <PenTool size={48} strokeWidth={1.8} />
+        <ExcalidrawFileIcon size={48} />
       ) : (
         <FileText size={48} strokeWidth={1.8} />
       )}

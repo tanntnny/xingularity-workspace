@@ -6,6 +6,7 @@ import {
   SearchResult,
   VaultInfo
 } from '../../../shared/types'
+import { CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX } from '../../../shared/calendarPreferences'
 
 export interface Toast {
   id: string
@@ -65,6 +66,7 @@ export const useVaultStore = create<VaultState>((set) => ({
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
+    calendarWeeklyHourHeightPx: CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX,
     calendarTasks: [],
     tasks: [],
     folderColors: {},

@@ -1359,16 +1359,20 @@
     --note-editor-selection: var(--selection-background);
     --note-editor-selection-foreground: var(--selection-foreground);
     --note-editor-cursor: var(--note-editor-selection);
+    --note-editor-blinking-cursor: color-mix(in srgb, var(--accent) 45%, white);
     --note-editor-cursor-foreground: var(--note-editor-selection-foreground);
     --note-editor-body-font-size: 15px;
     --note-editor-body-line-height: 22px;
-    --note-editor-body-row-height: 26px;
-    --note-editor-list-gap: 8px;
-    --note-editor-block-gap: 8px;
-    --note-editor-separator-gap: 16px;
+    --note-editor-body-row-height: 24px;
+    --note-editor-list-gap: 4px;
+    --note-editor-block-gap: 4px;
+    --note-editor-separator-gap: 8px;
+    --note-editor-code-block-padding: 8px;
     --note-editor-code-line-height: 20px;
     --note-editor-raw-line-height: 24px;
+    --note-editor-tab-width: 1.5rem;
     --note-editor-list-marker-row-height: var(--note-editor-body-row-height);
+    --note-live-table-min-column-width: 8rem;
   }
 
   .note-editor-surface .milkdown {
@@ -1470,7 +1474,7 @@
     font-size: 0.875rem;
     line-height: var(--note-editor-raw-line-height);
     outline: none;
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
     resize: none;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1481,12 +1485,469 @@
     color: var(--note-editor-selection-foreground) !important;
   }
 
+  .note-codemirror-editor [data-mode='source'] .cm-editor,
+  .note-codemirror-editor [data-mode='source'] .cm-scroller {
+    font-family: var(--code-font-family);
+    font-size: 0.875rem;
+    line-height: var(--note-editor-raw-line-height);
+  }
+
+  .note-codemirror-editor .cm-placeholder {
+    color: var(--muted-foreground);
+    font-style: normal;
+  }
+
+  .note-codemirror-editor .note-live-heading,
+  .note-codemirror-editor .note-live-heading * {
+    box-sizing: border-box;
+    border-bottom: 0 !important;
+    text-decoration: none !important;
+  }
+
+  .note-codemirror-editor .note-live-heading {
+    position: relative;
+    border-bottom: 0 !important;
+    padding: 0 0 var(--note-editor-block-gap);
+    font-weight: 650;
+  }
+
+  .note-codemirror-editor .note-live-leading-source-marker {
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    white-space: pre;
+  }
+
+  .note-codemirror-editor .note-live-source-syntax {
+    color: var(--foreground) !important;
+  }
+
+  .note-codemirror-editor .note-live-heading-1 {
+    padding-top: 16px;
+    font-size: 26px;
+    line-height: 32px;
+  }
+
+  .note-codemirror-editor .note-live-heading-2 {
+    padding-top: 14px;
+    font-size: 23px;
+    line-height: 29px;
+  }
+
+  .note-codemirror-editor .note-live-heading-3 {
+    padding-top: 12px;
+    font-size: 20px;
+    line-height: 26px;
+  }
+
+  .note-codemirror-editor .note-live-heading-4 {
+    padding-top: 10px;
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .note-codemirror-editor .note-live-heading-5 {
+    padding-top: 8px;
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 550;
+  }
+
+  .note-codemirror-editor .note-live-heading-6 {
+    padding-top: 6px;
+    font-size: 16px;
+    line-height: 21px;
+    font-weight: 500;
+  }
+
+  .note-codemirror-editor .note-live-strong {
+    font-weight: 700;
+  }
+
+  .note-codemirror-editor .note-live-emphasis {
+    font-style: italic;
+  }
+
+  .note-codemirror-editor .note-live-underline {
+    font-style: normal;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .note-codemirror-editor .note-live-strike {
+    text-decoration: line-through;
+  }
+
+  .note-codemirror-editor .note-live-inline-code {
+    border: var(--border-width) solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--muted);
+    font-family: var(--code-font-family);
+    font-size: 0.9em;
+    padding: 1px 4px;
+  }
+
+  .note-codemirror-editor .note-live-link {
+    color: var(--primary);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .note-codemirror-editor .note-live-image {
+    display: block;
+    max-width: 100%;
+    max-height: 32rem;
+    margin: var(--note-editor-block-gap) 0;
+    border-radius: var(--radius);
+    object-fit: contain;
+  }
+
+  .note-codemirror-editor .note-live-latex {
+    color: var(--foreground);
+  }
+
+  .note-codemirror-editor .note-live-latex-block {
+    margin: var(--note-editor-block-gap) 0;
+    overflow-x: auto;
+  }
+
+  .note-codemirror-editor .note-live-latex-error {
+    color: var(--destructive);
+    text-decoration: underline wavy var(--destructive);
+    text-underline-offset: 2px;
+  }
+
+  .note-codemirror-editor .note-live-list-marker {
+    box-sizing: border-box;
+    color: var(--muted-foreground) !important;
+    display: inline-block;
+    min-width: var(--note-editor-tab-width);
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+  }
+
+  .note-codemirror-editor .note-live-list-marker-source {
+    color: var(--muted-foreground) !important;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    white-space: pre;
+  }
+
+  .note-codemirror-editor .note-live-task-checkbox {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--primary);
+    vertical-align: middle;
+  }
+
+  .note-codemirror-editor .note-live-blockquote {
+    border-left: 3px solid var(--border);
+    color: var(--muted-foreground);
+    padding-left: 8px;
+  }
+
+  .note-codemirror-editor > .cm-editor,
+  .note-codemirror-editor > .cm-editor > .cm-scroller,
+  .note-codemirror-editor > .cm-editor > .cm-scroller > .cm-content,
+  .note-codemirror-editor > .cm-editor .cm-widgetBuffer {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .note-codemirror-editor,
+  .note-codemirror-editor > .cm-editor > .cm-scroller,
+  .note-codemirror-editor > .cm-editor .cm-widgetBuffer {
+    contain: inline-size;
+  }
+
+  .note-codemirror-editor > .cm-editor .cm-line {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .note-codemirror-editor > .cm-editor > .cm-scroller > .cm-content {
+    box-sizing: border-box;
+  }
+
+  .note-codemirror-editor .note-live-code-widget-host {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    contain: inline-size;
+    overflow: hidden;
+  }
+
+  .note-codemirror-editor .note-live-code-block {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: var(--note-editor-block-gap) 0;
+    overflow: hidden;
+    background: transparent;
+    box-sizing: border-box;
+    border: var(--border-width) solid var(--note-block-border);
+    border-radius: var(--note-block-radius);
+    contain: inline-size;
+  }
+
+  .note-codemirror-editor > .cm-editor .cm-line.note-live-code-source-line {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: var(--note-editor-code-line-height) !important;
+    padding: 0
+      calc(var(--note-editor-code-block-padding) + var(--compact-control-height) + 4px)
+      0 var(--note-editor-code-block-padding) !important;
+    border-right: var(--border-width) solid var(--note-block-border);
+    border-left: var(--border-width) solid var(--note-block-border);
+    background: transparent;
+    font-family: var(--code-font-family);
+    font-size: 0.875rem;
+    line-height: var(--note-editor-code-line-height);
+  }
+
+  .note-codemirror-editor > .cm-editor .cm-line.note-live-code-source-line-start {
+    padding-top: var(--note-editor-code-block-padding) !important;
+    border-top: var(--border-width) solid var(--note-block-border);
+    border-top-left-radius: var(--note-block-radius);
+    border-top-right-radius: var(--note-block-radius);
+  }
+
+  .note-codemirror-editor > .cm-editor .cm-line.note-live-code-source-line-end {
+    padding-bottom: var(--note-editor-code-block-padding) !important;
+    border-bottom: var(--border-width) solid var(--note-block-border);
+    border-bottom-left-radius: var(--note-block-radius);
+    border-bottom-right-radius: var(--note-block-radius);
+  }
+
+  .note-codemirror-editor > .cm-editor .cm-line.note-live-code-source-line-single {
+    padding-top: var(--note-editor-code-block-padding) !important;
+    padding-bottom: var(--note-editor-code-block-padding) !important;
+    border-top: var(--border-width) solid var(--note-block-border);
+    border-bottom: var(--border-width) solid var(--note-block-border);
+    border-radius: var(--note-block-radius);
+  }
+
+  .note-codemirror-editor .note-live-code-source-copy-host {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 1;
+    display: block;
+    width: var(--compact-control-height);
+    height: var(--compact-control-height);
+  }
+
+  .note-codemirror-editor .note-live-code-source-copy-host .note-live-code-copy-button {
+    position: static;
+  }
+
+  .note-codemirror-editor .note-live-code-block-scroll {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .note-codemirror-editor .note-live-code-block-preview {
+    display: block;
+    box-sizing: border-box;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    min-height: var(--note-editor-code-line-height);
+    margin: 0;
+    padding: var(--note-editor-code-block-padding)
+      calc(var(--note-editor-code-block-padding) + var(--compact-control-height) + 4px)
+      var(--note-editor-code-block-padding) var(--note-editor-code-block-padding);
+    font-family: var(--code-font-family);
+    font-size: 0.875rem;
+    line-height: var(--note-editor-code-line-height);
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .note-codemirror-editor .note-live-code-preview-line {
+    display: block;
+    min-width: max-content;
+    min-height: var(--note-editor-code-line-height);
+  }
+
+  .note-codemirror-editor .note-live-code-copy-button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 1;
+    display: inline-flex;
+    width: var(--compact-control-height);
+    height: var(--compact-control-height);
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-button-pill);
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .note-codemirror-editor .note-live-code-copy-button:hover,
+  .note-codemirror-editor .note-live-code-copy-button:focus-visible {
+    background: var(--muted);
+    color: var(--foreground);
+  }
+
+  .note-codemirror-editor .note-live-code-copy-button:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .note-codemirror-editor .note-live-code-copy-button[data-state='copied'] {
+    color: var(--success);
+  }
+
+  .note-codemirror-editor .note-live-code-copy-button[data-state='error'] {
+    color: var(--destructive);
+  }
+
+  .note-codemirror-editor .note-live-code-copy-icon {
+    display: block;
+    width: var(--control-icon-size);
+    height: var(--control-icon-size);
+  }
+
+  .note-codemirror-editor .note-live-horizontal-rule {
+    display: block;
+    width: 100%;
+    border-top: var(--border-width) solid var(--border);
+    margin: var(--note-editor-separator-gap) 0;
+  }
+
+  .note-codemirror-editor .note-live-table {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    position: relative;
+    margin: var(--note-editor-block-gap) 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+  }
+
+  .note-codemirror-editor .note-live-table-surface {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    user-select: none;
+  }
+
+  .note-codemirror-editor .note-live-table table {
+    width: 100%;
+    min-width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .note-codemirror-editor .note-live-table th,
+  .note-codemirror-editor .note-live-table td {
+    min-width: var(--note-live-table-min-column-width);
+    border-right: var(--border-width) solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
+    padding: 0;
+    vertical-align: top;
+  }
+
+  .note-codemirror-editor .note-live-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .note-codemirror-editor .note-live-table :is(th, td):last-child {
+    border-right: 0;
+  }
+
+  .note-codemirror-editor .note-live-table-cell {
+    position: relative;
+    min-height: 32px;
+    padding: 4px 6px;
+    cursor: cell;
+    outline: none;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    user-select: none;
+    transition: box-shadow 120ms ease;
+  }
+
+  .note-codemirror-editor .note-live-table-cell[data-selected='true'] {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .note-codemirror-editor .note-live-table :is(th, td)[aria-selected='true'] {
+    background: color-mix(in srgb, var(--accent-hover) 24%, transparent);
+  }
+
+  .note-codemirror-editor .note-live-table-selection-rectangle {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid var(--accent);
+    border-radius: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .note-codemirror-editor .note-live-table-cell:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  .note-codemirror-editor .note-live-table-cell[data-selected='true']:focus-visible {
+    box-shadow: none;
+  }
+
+  .note-codemirror-editor .note-live-table-cell[data-editing='true'] {
+    cursor: text;
+    user-select: text;
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  .note-codemirror-editor .note-live-table-cell[data-editing='true']::selection {
+    background: var(--note-editor-selection);
+    color: var(--note-editor-selection-foreground);
+  }
+
+  .note-codemirror-editor
+    .note-live-table-surface[data-selection-mode='text']
+    .note-live-table-cell[data-editing='false'] {
+    background: transparent;
+    box-shadow: none;
+  }
+
   .motion-editor-surface[data-editor-density='compact'] .milkdown .ProseMirror {
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
   }
 
   .note-editor-surface .note-page-editor .milkdown .ProseMirror {
-    padding-bottom: 8rem;
+    padding-bottom: 4rem;
   }
 
   .motion-editor-surface .milkdown .crepe-placeholder::before {
@@ -1501,7 +1962,7 @@
 
   .note-editor-surface .milkdown .ProseMirror blockquote {
     margin: var(--note-editor-block-gap) 0;
-    padding-left: 34px;
+    padding-left: 28px;
   }
 
   .note-editor-surface .milkdown *::selection {
@@ -1579,7 +2040,7 @@
 }
 
 .note-editor-surface .note-fenced-code-block {
-  padding: 8px !important;
+  padding: 4px !important;
 }
 
 .note-editor-surface .milkdown .ProseMirror pre {
@@ -2021,54 +2482,54 @@
 }
 
 .motion-editor-surface .milkdown .ProseMirror p {
-  padding: 2px 0;
+  padding: 1px 0;
   min-height: var(--note-editor-body-row-height);
   font-size: var(--note-editor-body-font-size);
   line-height: var(--note-editor-body-line-height);
 }
 
 .motion-editor-surface .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
-  padding: 1px 0;
+  padding: 0;
   margin-bottom: var(--note-editor-block-gap);
 }
 
 .motion-editor-surface .milkdown .ProseMirror h1 {
-  margin-top: 24px;
+  margin-top: 16px;
   font-size: 26px;
   line-height: 32px;
   font-weight: 650;
 }
 
 .motion-editor-surface .milkdown .ProseMirror h2 {
-  margin-top: 20px;
+  margin-top: 14px;
   font-size: 23px;
   line-height: 29px;
   font-weight: 625;
 }
 
 .motion-editor-surface .milkdown .ProseMirror h3 {
-  margin-top: 16px;
+  margin-top: 12px;
   font-size: 20px;
   line-height: 26px;
   font-weight: 600;
 }
 
 .motion-editor-surface .milkdown .ProseMirror h4 {
-  margin-top: 14px;
+  margin-top: 10px;
   font-size: 18px;
   line-height: 24px;
   font-weight: 575;
 }
 
 .motion-editor-surface .milkdown .ProseMirror h5 {
-  margin-top: 12px;
+  margin-top: 8px;
   font-size: 17px;
   line-height: 22px;
   font-weight: 550;
 }
 
 .motion-editor-surface .milkdown .ProseMirror h6 {
-  margin-top: 10px;
+  margin-top: 6px;
   font-size: 16px;
   line-height: 21px;
   font-weight: 500;

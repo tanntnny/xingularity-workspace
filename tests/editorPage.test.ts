@@ -27,25 +27,25 @@ describe('note editor page composition', () => {
     )
 
     expect(markup).toContain('data-testid="note-block-editor"')
-    expect(markup).toContain('data-editor-mode="preview"')
-    expect(markup).toContain('data-testid="note-raw-editor-surface"')
-    expect(markup).toContain('data-testid="note-raw-editor"')
+    expect(markup).toContain('data-editor-mode="live"')
+    expect(markup).toContain('data-testid="note-codemirror-root"')
     expect(markup).toContain('data-editor-density="compact"')
     expect(markup).toContain('data-testid="note-editor-page-content"')
     expect(markup).toContain('data-testid="note-title-content"')
+    expect(markup).not.toContain('border-b border-border pb-5')
     expect(markup).toContain('data-scroll-state="visible"')
-    expect(markup).toContain('class="shrink-0 bg-workspace"')
+    expect(markup).toContain('class="note-title-area shrink-0 border-b-0 bg-workspace"')
     expect(markup).not.toContain('sticky top-0')
     expect(markup).toContain('data-testid="note-editor-content"')
     expect(markup).toContain('note-page-editor')
     expect(markup.match(/max-w-5xl/g) ?? []).toHaveLength(1)
   })
 
-  it('keeps the raw source surface mounted alongside the preview editor', () => {
+  it('uses the same source-owned CodeMirror surface in source mode', () => {
     const markup = renderToStaticMarkup(
       createElement(Editor, {
         initialContent: '# Launch brief\n\nDraft',
-        mode: 'raw',
+        mode: 'source',
         onDirty: () => undefined,
         onPasteImage: async () => null,
         onDropFile: async () => null,
@@ -55,10 +55,8 @@ describe('note editor page composition', () => {
       })
     )
 
-    expect(markup).toContain('data-editor-mode="raw"')
-    expect(markup).toContain('data-testid="note-milkdown-root" class="min-h-[10vh] h-full hidden"')
-    expect(markup).toContain('data-testid="note-raw-editor-surface"')
-    expect(markup).toContain('data-note-raw-scroll="bounded"')
-    expect(markup).toContain('data-testid="note-raw-editor"')
+    expect(markup).toContain('data-editor-mode="source"')
+    expect(markup).toContain('data-testid="note-codemirror-root"')
+    expect(markup).toContain('data-note-source-editor="true"')
   })
 })

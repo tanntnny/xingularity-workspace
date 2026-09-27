@@ -127,7 +127,7 @@ describe('task page composition', () => {
 
     expect(markup).toContain('data-testid="task-page"')
     expect(markup).toContain('data-testid="note-block-editor"')
-    expect(markup).toContain('data-vim-mode="insert"')
+    expect(markup).toContain('data-vim-mode="normal"')
     expect(markup).toContain('Description saved')
   })
 })

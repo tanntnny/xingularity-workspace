@@ -32,6 +32,7 @@ function createDefaultSettings(): AppSettings {
     pythonCondaExecutablePath: null,
     editorVimModeEnabled: false,
     editorVimKeyMappings: [],
+    calendarWeeklyHourHeightPx: 160,
     calendarTasks: [],
     workspaceViews: [],
     folderColors: {},

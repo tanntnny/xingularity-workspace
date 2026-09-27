@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { Button } from './ui/button'
-import { FileText, PenTool, Plus } from './ui/icons'
+import { ExcalidrawFileIcon, FileText, Plus } from './ui/icons'
 import { EmptyState } from './ui/empty-state'
 import { stripNotebookFileExtension } from '../../../shared/excalidrawFile'
 import { APP_PAGE_ICONS } from '../lib/pageIcons'
@@ -45,7 +45,7 @@ export function NotebookEmptyState({
             <ul className="space-y-1" aria-label="Recent notebook files">
               {recentFiles.map((file) => {
                 const displayName = stripNotebookFileExtension(file.relPath.split('/').pop() ?? '')
-                const FileIcon = file.kind === 'excalidraw' ? PenTool : FileText
+                const FileIcon = file.kind === 'excalidraw' ? ExcalidrawFileIcon : FileText
 
                 return (
                   <li key={file.relPath}>

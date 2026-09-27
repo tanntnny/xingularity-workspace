@@ -592,7 +592,7 @@ describe('Projects workspace list UI', () => {
     expect(markup).toContain('aria-label="Project description"')
     expect(markup).toContain('data-testid="note-block-editor"')
     expect(markup).toContain('data-editor-density="compact"')
-    expect(markup).toContain('data-vim-mode="insert"')
+    expect(markup).toContain('data-vim-mode="normal"')
     expect(markup).not.toContain('data-testid="project-main-detail-description-editor-status"')
     expect(markup).not.toContain('data-testid="project-main-detail-description-editor-count"')
     expect(markup).not.toContain('border border-border')

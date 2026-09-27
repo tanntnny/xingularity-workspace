@@ -1,17 +1,24 @@
 import type { WeeklyHeightMode } from '../../../shared/types'
+import {
+  CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX,
+  CALENDAR_WEEKLY_HOUR_HEIGHT_MAX_PX,
+  CALENDAR_WEEKLY_HOUR_HEIGHT_MIN_PX,
+  CALENDAR_WEEKLY_HOUR_HEIGHT_STEP_PX,
+  clampCalendarWeeklyHourHeight
+} from '../../../shared/calendarPreferences'
 
 export const WEEKLY_SNAP_MINUTES = 10
 export const WEEKLY_MIN_DURATION_MINUTES = 10
-export const WEEKLY_HOUR_HEIGHT_PX = 160
-export const WEEKLY_HOUR_HEIGHT_MIN_PX = 80
-export const WEEKLY_HOUR_HEIGHT_MAX_PX = 320
-export const WEEKLY_HOUR_HEIGHT_STEP_PX = 20
+export const WEEKLY_HOUR_HEIGHT_PX = CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX
+export const WEEKLY_HOUR_HEIGHT_MIN_PX = CALENDAR_WEEKLY_HOUR_HEIGHT_MIN_PX
+export const WEEKLY_HOUR_HEIGHT_MAX_PX = CALENDAR_WEEKLY_HOUR_HEIGHT_MAX_PX
+export const WEEKLY_HOUR_HEIGHT_STEP_PX = CALENDAR_WEEKLY_HOUR_HEIGHT_STEP_PX
 export const WEEKLY_DAY_HEIGHT_PX = 24 * WEEKLY_HOUR_HEIGHT_PX
 export const WEEKLY_MAX_END_MINUTES = 23 * 60 + 50
 export const WEEKLY_PROJECT_ROW_MIN_HEIGHT_PX = 64
 
 export function clampWeeklyHourHeight(heightPx: number): number {
-  return Math.min(WEEKLY_HOUR_HEIGHT_MAX_PX, Math.max(WEEKLY_HOUR_HEIGHT_MIN_PX, heightPx))
+  return clampCalendarWeeklyHourHeight(heightPx)
 }
 
 export function getWeeklyDayHeightPx(hourHeightPx = WEEKLY_HOUR_HEIGHT_PX): number {

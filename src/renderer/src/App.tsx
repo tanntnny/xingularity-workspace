@@ -14,8 +14,8 @@ import {
   ChevronUp,
   Star,
   StarOutline,
+  ExcalidrawFileIcon,
   FileText,
-  PenTool,
   ListTodo,
   RefreshCw
 } from './components/ui/icons'
@@ -58,6 +58,10 @@ import {
   WorkspaceViewSource
 } from '../../shared/types'
 import { isExcalidrawPath, stripNotebookFileExtension } from '../../shared/excalidrawFile'
+import {
+  CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX,
+  clampCalendarWeeklyHourHeight
+} from '../../shared/calendarPreferences'
 import { normalizeProjectIcon } from '../../shared/projectIcons'
 import type { FolderColorMap } from '../../shared/folderColors'
 import { createWorkspaceView } from '../../shared/workspaceViews'
@@ -248,6 +252,10 @@ import {
 import { APP_PAGE_ICONS } from './lib/pageIcons'
 import { DEFAULT_DESIGN_AUDIT_TAB, type DesignAuditTabId } from './lib/designAuditCatalog'
 import { type NoteEditorSnapshot, type NoteEditorSessionSnapshot } from './lib/noteEditorSession'
+import {
+  migrateMarkdownIndentationToTabs,
+  type MarkdownIndentationMigrationResult
+} from './lib/noteIndentationMigration'
 import { extractNoteOutlineFromMarkdown } from './lib/noteOutline'
 import { createLatestRefreshCoordinator } from './lib/latestRefreshCoordinator'
 import { createNoteSaveCoordinator, NoteSaveConflictError } from './lib/noteSaveCoordinator'
@@ -618,6 +626,7 @@ const CALENDAR_VIEW_MODE_OPTIONS = [
 ]
 
 const NOTE_AUTOSAVE_DELAY_MS = 1200
+const CALENDAR_WEEKLY_HOUR_HEIGHT_SAVE_DEBOUNCE_MS = 200
 const EMPTY_FEATURE_FLAGS: Partial<WorkspaceFeatureFlags> = {}
 
 function App(): ReactElement {
@@ -632,6 +641,9 @@ function App(): ReactElement {
   const commandPaletteOpen = useVaultStore((state) => state.commandPaletteOpen)
   const settingsProjects = useVaultStore((state) => state.settings.projects)
   const calendarTasks = useVaultStore((state) => state.settings.calendarTasks)
+  const calendarWeeklyHourHeightPx = useVaultStore(
+    (state) => state.settings.calendarWeeklyHourHeightPx
+  )
   const stickyNoteBoard = useVaultStore((state) => state.settings.stickyNoteBoard)
   const workspaceViews = useVaultStore((state) => state.settings.workspaceViews ?? [])
   const lastOpenedNotePath = useVaultStore((state) => state.settings.lastOpenedNotePath)
@@ -793,6 +805,14 @@ function App(): ReactElement {
     }
   }, [vault?.rootPath, vaultApi])
   const settingsMutationVersionRef = useRef(0)
+  const calendarWeeklyHourHeightSaveTimerRef = useRef<number | null>(null)
+  const calendarWeeklyHourHeightPendingRef = useRef<{
+    value: number
+    vaultRoot: string
+    version: number
+  } | null>(null)
+  const calendarWeeklyHourHeightSaveInFlightRef = useRef<Promise<void> | null>(null)
+  const calendarWeeklyHourHeightWriteVersionRef = useRef(0)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toIsoDate(new Date()))
   const [calendarViewMode, setCalendarViewMode] = usePersistentState<CalendarViewMode>(
     'calendar-view-mode',
@@ -815,6 +835,88 @@ function App(): ReactElement {
         Array.isArray(value) && value.every((tag) => typeof tag === 'string')
     }
   )
+  const flushCalendarWeeklyHourHeightSave = useCallback(async (): Promise<void> => {
+    if (calendarWeeklyHourHeightSaveTimerRef.current) {
+      window.clearTimeout(calendarWeeklyHourHeightSaveTimerRef.current)
+      calendarWeeklyHourHeightSaveTimerRef.current = null
+    }
+
+    const pending = calendarWeeklyHourHeightPendingRef.current
+    if (!pending) {
+      await calendarWeeklyHourHeightSaveInFlightRef.current
+      return
+    }
+
+    calendarWeeklyHourHeightPendingRef.current = null
+    if (!vaultApi || vault?.rootPath !== pending.vaultRoot) {
+      return
+    }
+
+    const savePromise = vaultApi.settings
+      .update({ calendarWeeklyHourHeightPx: pending.value }, { history: false })
+      .then((nextSettings) => {
+        if (
+          pending.version === calendarWeeklyHourHeightWriteVersionRef.current &&
+          vault?.rootPath === pending.vaultRoot
+        ) {
+          setSettings(nextSettings)
+        }
+      })
+      .catch(async (error: unknown) => {
+        if (
+          pending.version !== calendarWeeklyHourHeightWriteVersionRef.current ||
+          vault?.rootPath !== pending.vaultRoot
+        ) {
+          return
+        }
+
+        try {
+          setSettings(await vaultApi.settings.get())
+        } catch {
+          // Keep the optimistic value if the recovery read also fails.
+        }
+        pushToast('error', String(error))
+      })
+
+    calendarWeeklyHourHeightSaveInFlightRef.current = savePromise
+    try {
+      await savePromise
+    } finally {
+      if (calendarWeeklyHourHeightSaveInFlightRef.current === savePromise) {
+        calendarWeeklyHourHeightSaveInFlightRef.current = null
+      }
+    }
+  }, [pushToast, setSettings, vault?.rootPath, vaultApi])
+
+  const queueCalendarWeeklyHourHeightSave = useCallback(
+    (heightPx: number): void => {
+      if (!vaultApi || !vault?.rootPath || !settingsLoaded) {
+        return
+      }
+
+      const nextHeight = clampCalendarWeeklyHourHeight(heightPx)
+      const vaultRoot = vault.rootPath
+      const currentSettings = useVaultStore.getState().settings
+      if (currentSettings.calendarWeeklyHourHeightPx !== nextHeight) {
+        patchSettings({ calendarWeeklyHourHeightPx: nextHeight })
+      }
+      const version = ++calendarWeeklyHourHeightWriteVersionRef.current
+      calendarWeeklyHourHeightPendingRef.current = {
+        value: nextHeight,
+        vaultRoot,
+        version
+      }
+
+      if (calendarWeeklyHourHeightSaveTimerRef.current) {
+        window.clearTimeout(calendarWeeklyHourHeightSaveTimerRef.current)
+      }
+      calendarWeeklyHourHeightSaveTimerRef.current = window.setTimeout(() => {
+        calendarWeeklyHourHeightSaveTimerRef.current = null
+        void flushCalendarWeeklyHourHeightSave()
+      }, CALENDAR_WEEKLY_HOUR_HEIGHT_SAVE_DEBOUNCE_MS)
+    },
+    [flushCalendarWeeklyHourHeightSave, patchSettings, settingsLoaded, vault?.rootPath, vaultApi]
+  )
   const restoreTaskOrigin = useCallback((): void => {
     const origin = taskOriginRef.current
     if (!origin || origin.source !== 'calendar') {
@@ -836,6 +938,12 @@ function App(): ReactElement {
   }>({ resources: [], relations: [], locators: [] })
   const [currentNoteTagsState, setCurrentNoteTagsState] = useState<string[]>([])
   const [currentNoteEditorDraft, setCurrentNoteEditorDraft] = useState<string | null>(null)
+  const [indentationMigrationPreview, setIndentationMigrationPreview] =
+    useState<MarkdownIndentationMigrationResult | null>(null)
+  const [indentationMigrationNotePath, setIndentationMigrationNotePath] = useState<string | null>(
+    null
+  )
+  const [isIndentationMigrationDialogOpen, setIsIndentationMigrationDialogOpen] = useState(false)
   const [currentExcalidrawPath, setCurrentExcalidrawPath] = useState<string | null>(null)
   const [noteTitleEditTarget, setNoteTitleEditTarget] = useState<{
     relPath: string
@@ -2869,8 +2977,9 @@ function App(): ReactElement {
   const prepareToDiscardWorkspace = useCallback(async (): Promise<void> => {
     stickyNoteTextFlushRef.current?.()
     await stickyNoteSaveCoordinator.flush()
+    await flushCalendarWeeklyHourHeightSave()
     await prepareToDiscardCurrentNote()
-  }, [prepareToDiscardCurrentNote, stickyNoteSaveCoordinator])
+  }, [flushCalendarWeeklyHourHeightSave, prepareToDiscardCurrentNote, stickyNoteSaveCoordinator])
 
   const navigateToPage = useCallback(
     async (page: AppPage, workspaceViewId: string | null = null): Promise<void> => {
@@ -3657,6 +3766,7 @@ function App(): ReactElement {
     const flushPendingWorkspaceSaves = (): void => {
       stickyNoteTextFlushRef.current?.()
       void stickyNoteSaveCoordinator.flush()
+      void flushCalendarWeeklyHourHeightSave()
       void flushCurrentNote({ force: true }).catch(() => undefined)
     }
 
@@ -3671,7 +3781,7 @@ function App(): ReactElement {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [flushCurrentNote, stickyNoteSaveCoordinator])
+  }, [flushCalendarWeeklyHourHeightSave, flushCurrentNote, stickyNoteSaveCoordinator])
 
   const updateEditorVimMode = async (enabled: boolean): Promise<void> => {
     if (!vaultApi) {
@@ -4550,6 +4660,62 @@ function App(): ReactElement {
       pushToast('error', `Could not create a vault backup: ${String(error)}`)
     }
   }, [pushToast, vault?.rootPath, vaultApi])
+
+  const openIndentationMigrationFromCommandPalette = useCallback(async (): Promise<void> => {
+    const editor = currentNoteEditorRef.current
+    if (!currentNotePathRef.current || !editor) {
+      pushToast('error', 'Open a note before converting indentation')
+      return
+    }
+
+    const snapshot = await editor.captureSnapshot()
+    const preview = migrateMarkdownIndentationToTabs(snapshot.content)
+    if (preview.changedLineCount === 0) {
+      pushToast('info', 'The current note has no eligible two-space indentation to convert')
+      return
+    }
+
+    setIndentationMigrationPreview(preview)
+    setIndentationMigrationNotePath(currentNotePathRef.current)
+    setIsIndentationMigrationDialogOpen(true)
+  }, [pushToast])
+
+  const confirmIndentationMigration = useCallback((): void => {
+    setIsIndentationMigrationDialogOpen(false)
+    setIndentationMigrationPreview(null)
+
+    const editor = currentNoteEditorRef.current
+    if (
+      !editor ||
+      !currentNotePathRef.current ||
+      currentNotePathRef.current !== indentationMigrationNotePath
+    ) {
+      setIndentationMigrationNotePath(null)
+      pushToast('error', 'Open a note before converting indentation')
+      return
+    }
+    setIndentationMigrationNotePath(null)
+
+    const result = editor.migrateIndentationToTabs()
+    if (result.changedLineCount === 0) {
+      pushToast('info', 'The note changed before conversion and has no eligible indentation now')
+      return
+    }
+
+    void editor
+      .flushPendingChanges()
+      .then(() => {
+        pushToast(
+          'success',
+          `Converted ${result.convertedUnitCount} indentation ${
+            result.convertedUnitCount === 1 ? 'unit' : 'units'
+          } to tabs`
+        )
+      })
+      .catch((error) => {
+        pushToast('error', `Could not save the indentation conversion: ${String(error)}`)
+      })
+  }, [indentationMigrationNotePath, pushToast])
 
   const applyOpenNoteSession = useCallback(
     (relPath: string, session: NoteEditorSessionSnapshot): void => {
@@ -5933,16 +6099,8 @@ function App(): ReactElement {
         return
       }
 
-      const printableDocument = currentNoteEditorRef.current?.capturePrintableDocument()
-      if (!printableDocument) {
-        pushToast('error', 'The note editor is not ready for PDF export')
-        return
-      }
-
       const result = await vaultApi.files.exportNotePdf({
-        relPath: currentNotePath,
-        title: getNoteDisplayName(currentNotePath),
-        ...printableDocument
+        relPath: currentNotePath
       })
       if (!result.path) {
         return
@@ -8227,7 +8385,7 @@ function App(): ReactElement {
         return {
           label: getNoteDisplayName(notePath),
           icon: isDrawing ? (
-            <PenTool size={16} strokeWidth={1.8} aria-hidden="true" />
+            <ExcalidrawFileIcon size={16} aria-hidden="true" />
           ) : (
             <FileText size={16} strokeWidth={1.8} aria-hidden="true" />
           )
@@ -8312,7 +8470,7 @@ function App(): ReactElement {
           label: getNoteDisplayName(target.path),
           icon:
             target.kind === 'drawing' ? (
-              <PenTool size={16} strokeWidth={1.8} aria-hidden="true" />
+              <ExcalidrawFileIcon size={16} aria-hidden="true" />
             ) : (
               <FileText size={16} strokeWidth={1.8} aria-hidden="true" />
             )
@@ -9328,9 +9486,8 @@ function App(): ReactElement {
                                               <BreadcrumbIconLabel
                                                 icon={
                                                   currentExcalidrawPath ? (
-                                                    <PenTool
+                                                    <ExcalidrawFileIcon
                                                       size={14}
-                                                      strokeWidth={1.8}
                                                       aria-hidden="true"
                                                     />
                                                   ) : (
@@ -9629,12 +9786,12 @@ function App(): ReactElement {
                                   ? '!overflow-hidden'
                                   : activePage === 'stickyNote'
                                     ? '!overflow-hidden'
-                                  : activePage === 'notes' &&
-                                      !searchQuery.trim() &&
-                                      noteIsOpen &&
-                                      !currentExcalidrawPath
-                                    ? '!overflow-hidden'
-                                    : undefined
+                                    : activePage === 'notes' &&
+                                        !searchQuery.trim() &&
+                                        noteIsOpen &&
+                                        !currentExcalidrawPath
+                                      ? '!overflow-hidden'
+                                      : undefined
                           }
                         >
                           <div
@@ -9992,7 +10149,13 @@ function App(): ReactElement {
                                         selectedDate={selectedCalendarDate}
                                         tasks={visibleCalendarTasks}
                                         projects={projects}
+                                        weeklyHourHeightPx={
+                                          settingsLoaded && vault?.rootPath
+                                            ? calendarWeeklyHourHeightPx
+                                            : CALENDAR_WEEKLY_HOUR_HEIGHT_DEFAULT_PX
+                                        }
                                         onSelectDate={setSelectedCalendarDate}
+                                        onWeeklyHourHeightChange={queueCalendarWeeklyHourHeightSave}
                                         onCreateTask={createTaskForWeeklyTime}
                                         onOpenTask={(taskId, options) => {
                                           void openTaskTarget(
@@ -10273,7 +10436,9 @@ function App(): ReactElement {
                                                     {
                                                       id: 'new-drawing',
                                                       label: 'New drawing',
-                                                      icon: <PenTool aria-hidden="true" />,
+                                                      icon: (
+                                                        <ExcalidrawFileIcon aria-hidden="true" />
+                                                      ),
                                                       onSelect: () => {
                                                         void createExcalidrawFromTree()
                                                       }
@@ -10667,6 +10832,55 @@ function App(): ReactElement {
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog
+        open={isIndentationMigrationDialogOpen}
+        onOpenChange={(open) => {
+          setIsIndentationMigrationDialogOpen(open)
+          if (!open) {
+            setIndentationMigrationPreview(null)
+            setIndentationMigrationNotePath(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Convert note indentation to tabs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {indentationMigrationPreview
+                ? `This will convert ${indentationMigrationPreview.convertedUnitCount} two-space ${
+                    indentationMigrationPreview.convertedUnitCount === 1
+                      ? 'indentation unit'
+                      : 'indentation units'
+                  } across ${indentationMigrationPreview.changedLineCount} ${
+                    indentationMigrationPreview.changedLineCount === 1 ? 'line' : 'lines'
+                  } to literal tabs displayed at four columns.${
+                    indentationMigrationPreview.skippedCodeBlockLineCount > 0
+                      ? ` ${indentationMigrationPreview.skippedCodeBlockLineCount} code-block ${
+                          indentationMigrationPreview.skippedCodeBlockLineCount === 1
+                            ? 'line will'
+                            : 'lines will'
+                        } remain unchanged.`
+                      : ''
+                  }${
+                    indentationMigrationPreview.skippedAmbiguousLineCount > 0
+                      ? ` ${indentationMigrationPreview.skippedAmbiguousLineCount} ambiguous ${
+                          indentationMigrationPreview.skippedAmbiguousLineCount === 1
+                            ? 'line will'
+                            : 'lines will'
+                        } remain unchanged.`
+                      : ''
+                  } The conversion is one undoable edit.`
+                : 'The current note will be converted to literal-tab indentation.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmIndentationMigration}>
+              Convert indentation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={Boolean(noteConflict && noteConflict.workspaceTabId === activeWorkspaceTabId)}
         onOpenChange={() => undefined}
       >
@@ -10819,6 +11033,7 @@ function App(): ReactElement {
         onOpenVaultTerminal={openVaultRootInTerminal}
         onReconcileVault={reconcileVaultFromCommandPalette}
         onCreateVaultBackup={createVaultBackupFromCommandPalette}
+        onConvertIndentationToTabs={openIndentationMigrationFromCommandPalette}
         onManageVaults={() => {
           setCommandPaletteOpen(false)
           openVaultSwapper()
